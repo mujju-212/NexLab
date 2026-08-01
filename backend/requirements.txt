@@ -1,0 +1,52 @@
+# ── Core Framework ──────────────────────────────────────────────────────────
+flask==3.0.3
+flask-sqlalchemy==3.1.1
+flask-migrate==4.0.7
+flask-jwt-extended==4.6.0
+flask-cors==4.0.1
+flask-socketio==5.3.6
+flask-limiter==3.7.0
+
+# ── Database ─────────────────────────────────────────────────────────────────
+psycopg2-binary==2.9.9
+sqlalchemy==2.0.36
+
+# ── Server ───────────────────────────────────────────────────────────────────
+gunicorn==22.0.0
+eventlet==0.36.1
+
+# ── Background Jobs ──────────────────────────────────────────────────────────
+apscheduler==3.10.4
+
+# ── HTTP Requests (Judge0, Groq) ──────────────────────────────────────────────
+requests==2.32.3
+tenacity==8.3.0
+
+# ── AI / LLM ─────────────────────────────────────────────────────────────────
+groq==0.9.0
+
+# ── ML Models (Python 3.13 compatible wheels) ────────────────────────────────
+scikit-learn==1.6.1
+pandas==2.2.3
+numpy==2.2.6
+joblib==1.4.2
+
+# ── Code Quality Metrics ─────────────────────────────────────────────────────
+radon==6.0.1
+
+# ── File Storage ─────────────────────────────────────────────────────────────
+cloudinary==1.45.0
+
+# ── Security & Auth ──────────────────────────────────────────────────────────
+bcrypt==4.1.3
+python-dotenv==1.0.1
+
+# ── Utilities ────────────────────────────────────────────────────────────────
+python-dateutil==2.9.0
+
+# ── Dev / Testing ────────────────────────────────────────────────────────────
+pytest==8.2.2
+pytest-flask==1.3.0
+
+# ── WeasyPrint (PDF) — install separately if needed ──────────────────────────
+# pip install weasyprint

@@ -1,0 +1,58 @@
+# ── Folders to EXCLUDE from git entirely ──────────────────────────────
+# (docs, planning, research papers are local working notes only)
+docs/
+planning/
+research papers/
+INDEX.md
+
+# ── Python ─────────────────────────────────────────────────────────────
+__pycache__/
+*.py[cod]
+*.pyo
+*.pyd
+*.egg-info/
+*.egg
+dist/
+build/
+
+# ── Virtual environment ─────────────────────────────────────────────────
+backend/venv/
+backend/env/
+frontend/node_modules/
+
+# ── Secrets — NEVER commit ─────────────────────────────────────────────
+backend/.env
+*.env.local
+*.env.production
+
+# ── ML Models — rebuilt from training ──────────────────────────────────
+backend/ml_models/*.pkl
+backend/ml_models/*.joblib
+
+# ── Datasets — raw data, often large ───────────────────────────────────
+backend/ml_training/datasets/
+
+# ── Database ────────────────────────────────────────────────────────────
+*.db
+*.sqlite3
+backend/instance/
+
+# ── Docker generated volumes ────────────────────────────────────────────
+backend/docker/postgres_data/
+backend/docker/redis_data/
+
+# ── Logs ────────────────────────────────────────────────────────────────
+*.log
+logs/
+
+# ── IDE ─────────────────────────────────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+
+# ── Test artifacts ───────────────────────────────────────────────────────
+.coverage
+htmlcov/
+.pytest_cache/
