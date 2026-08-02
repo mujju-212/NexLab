@@ -1,0 +1,27 @@
+services:
+
+  # Flask application database (separate from Judge0's postgres)
+  app_db:
+    image: postgres:15
+    container_name: vlab_app_db
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: vlabpass
+      POSTGRES_DB: virtuallab
+    ports:
+      - "5433:5432"         # 5433 on host → 5432 inside container
+                             # 5432 is already used by Judge0's postgres (internal)
+    volumes:
+      - vlab_app_pgdata:/var/lib/postgresql/data
+    restart: unless-stopped
+
+  # Flask Redis (for rate limiting and optional quota tracking)
+  app_redis:
+    image: redis:7-alpine
+    container_name: vlab_app_redis
+    ports:
+      - "6380:6379"         # 6380 on host (6379 is Judge0's redis)
+    restart: unless-stopped
+
+volumes:
+  vlab_app_pgdata:

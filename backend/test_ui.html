@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virtual Lab — Code Runner</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  :root {
+    --bg:       #0d1117;
+    --surface:  #161b22;
+    --border:   #30363d;
+    --accent:   #58a6ff;
+    --green:    #3fb950;
+    --red:      #f85149;
+    --yellow:   #d29922;
+    --text:     #e6edf3;
+    --muted:    #8b949e;
+    --font-ui:  'Inter', sans-serif;
+    --font-code:'JetBrains Mono', monospace;
+  }
+  body { background: var(--bg); color: var(--text); font-family: var(--font-ui); min-height: 100vh; display: flex; flex-direction: column; }
+  header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 0 24px; height: 52px; display: flex; align-items: center; justify-content: space-between; }
+  .logo { font-weight: 700; font-size: 16px; color: var(--accent); }
+  .logo span { color: var(--text); }
+  .badge { font-size: 11px; background: #1c2128; border: 1px solid var(--border); border-radius: 12px; padding: 2px 10px; color: var(--muted); }
+  .layout { display: grid; grid-template-columns: 1fr 1fr; flex: 1; overflow: hidden; height: calc(100vh - 52px); }
+  .editor-panel { display: flex; flex-direction: column; border-right: 1px solid var(--border); }
+  .toolbar { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; align-items: center; gap: 10px; }
+  select { background: #1c2128; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-family: var(--font-ui); font-size: 13px; cursor: pointer; outline: none; }
+  select:focus { border-color: var(--accent); }
+  .run-btn { margin-left: auto; background: var(--green); color: #000; border: none; border-radius: 6px; padding: 6px 18px; font-weight: 600; font-size: 13px; cursor: pointer; display: flex; align-items: center; gap: 6px; transition: opacity .15s; font-family: var(--font-ui); }
+  .run-btn:hover { opacity: .85; }
+  .run-btn:disabled { opacity: .4; cursor: not-allowed; }
+  .run-btn.running { background: var(--yellow); }
+  textarea#code { flex: 1; background: var(--bg); color: var(--text); border: none; resize: none; font-family: var(--font-code); font-size: 13.5px; line-height: 1.6; padding: 16px 20px; outline: none; tab-size: 4; }
+  .stdin-bar { background: var(--surface); border-top: 1px solid var(--border); padding: 8px 16px; display: flex; align-items: center; gap: 10px; }
+  .stdin-bar label { font-size: 12px; color: var(--muted); white-space: nowrap; }
+  input#stdin { flex: 1; background: #1c2128; color: var(--text); border: 1px solid var(--border); border-radius: 6px; padding: 5px 10px; font-family: var(--font-code); font-size: 12px; outline: none; }
+  input#stdin:focus { border-color: var(--accent); }
+  .output-panel { display: flex; flex-direction: column; }
+  .out-header { background: var(--surface); border-bottom: 1px solid var(--border); padding: 10px 16px; display: flex; align-items: center; gap: 12px; min-height: 43px; flex-wrap: wrap; }
+  .out-title { font-size: 12px; font-weight: 600; text-transform: uppercase; letter-spacing: .6px; color: var(--muted); }
+  .stat { font-size: 12px; color: var(--muted); padding: 2px 8px; background: #1c2128; border: 1px solid var(--border); border-radius: 4px; }
+  .stat.ok { color: var(--green); border-color: #1a4731; background: #0d2818; }
+  #output { flex: 1; overflow-y: auto; background: var(--bg); font-family: var(--font-code); font-size: 13px; line-height: 1.65; }
+  .out-block { padding: 16px 20px; }
+  .out-ok  { color: var(--text); white-space: pre-wrap; word-break: break-all; }
+  .out-err { color: var(--red);  white-space: pre-wrap; }
+  .out-warn{ color: var(--yellow); white-space: pre-wrap; }
+  .out-section { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .5px; color: var(--muted); margin-bottom: 6px; }
+  .idle-msg { color: var(--muted); padding: 24px 20px; font-size: 13px; }
+  .pill { font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .5px; padding: 2px 9px; border-radius: 10px; }
+  .pill-ok  { background: #0d2818; color: var(--green); }
+  .pill-err { background: #1e0d0d; color: var(--red); }
+  .spinner { display: inline-block; width: 13px; height: 13px; border: 2px solid #333; border-top-color: var(--accent); border-radius: 50%; animation: spin .7s linear infinite; }
+  @keyframes spin { to { transform: rotate(360deg); } }
+  .loading-msg { color: var(--accent); padding: 16px 20px; display: flex; align-items: center; gap: 10px; }
+  #debugRaw { display:none; position:fixed; bottom:0; left:0; right:0; max-height:150px; overflow:auto; background:#0d1117; border-top:2px solid #f85149; color:#f0883e; font-family:'JetBrains Mono',monospace; font-size:11px; padding:10px 16px; z-index:999; white-space:pre; }
+  ::-webkit-scrollbar { width: 6px; } ::-webkit-scrollbar-thumb { background: #30363d; border-radius: 3px; }
+</style>
+</head>
+<body>
+
+<header>
+  <div class="logo">Virtual<span>Lab</span> <span style="color:var(--muted);font-weight:400;font-size:13px">Code Runner</span></div>
+  <div class="badge">Judge0 direct · dev mode</div>
+</header>
+
+<div class="layout">
+  <div class="editor-panel">
+    <div class="toolbar">
+      <select id="lang" onchange="onLangChange()">
+        <option value="python">🐍 Python 3</option>
+        <option value="c">⚙️ C (GCC)</option>
+        <option value="cpp">🔵 C++ 17</option>
+        <option value="java">☕ Java 13</option>
+        <option value="javascript">🟨 JavaScript</option>
+        <option value="r">📊 R</option>
+        <option value="octave">📐 Octave</option>
+      </select>
+      <button class="run-btn" id="runBtn" onclick="runCode()">
+        <span id="btnIcon">▶</span> <span id="btnText">Run</span>
+      </button>
+    </div>
+    <textarea id="code" spellcheck="false" placeholder="Write your code here…"></textarea>
+    <div class="stdin-bar">
+      <label>stdin:</label>
+      <input id="stdin" type="text" placeholder="Optional input…">
+    </div>
+  </div>
+
+  <div class="output-panel">
+    <div class="out-header" id="outHeader">
+      <span class="out-title">Output</span>
+    </div>
+    <div id="output">
+      <div class="idle-msg">Press <strong>Run</strong> to execute your code. (<kbd>Ctrl+Enter</kbd>)</div>
+    </div>
+  </div>
+</div>
+
+<!-- raw debug bar -->
+<div id="debugRaw"></div>
+
+<script>
+// ── Config ─────────────────────────────────────────────────────────────
+// Call Judge0 directly — no Flask proxy needed for test UI
+// Flask+eventlet interferes with outbound HTTP polling; direct call is reliable
+const JUDGE0_URL = 'http://localhost:2358';
+
+const LANG_IDS = {
+  python: 71, c: 49, cpp: 54, java: 62,
+  javascript: 63, r: 80, octave: 66
+};
+
+const TEMPLATES = {
+  python:
+`print("Hello, World!")
+x = [1, 2, 3, 4, 5]
+print("Sum:", sum(x))
+print("Squares:", [i**2 for i in x])`,
+
+  c:
+`#include <stdio.h>
+int main() {
+    int i, sum = 0;
+    for (i = 1; i <= 10; i++) sum += i;
+    printf("Sum 1 to 10 = %d\\n", sum);
+    return 0;
+}`,
+
+  cpp:
+`#include <iostream>
+#include <vector>
+using namespace std;
+int main() {
+    vector<int> v = {1,2,3,4,5};
+    int sum = 0;
+    for (int x : v) sum += x;
+    cout << "C++ Sum = " << sum << endl;
+    return 0;
+}`,
+
+  java:
+`public class Main {
+    public static void main(String[] args) {
+        System.out.println("Hello from Java!");
+        int sum = 0;
+        for (int i = 1; i <= 10; i++) sum += i;
+        System.out.println("Sum 1-10 = " + sum);
+        System.out.println("JVM max mem: " + Runtime.getRuntime().maxMemory()/1024/1024 + " MB");
+    }
+}`,
+
+  javascript:
+`const nums = [1,2,3,4,5];
+const sum = nums.reduce((a,b) => a+b, 0);
+console.log("Hello from JavaScript!");
+console.log("Sum:", sum);
+console.log("Squares:", nums.map(n => n*n));`,
+
+  r:
+`x <- 1:10
+cat("Mean:", mean(x), "\\n")
+cat("Sum:", sum(x), "\\n")`,
+
+  octave:
+`x = 1:5;
+printf("Sum = %d\\n", sum(x));
+printf("Product = %d\\n", prod(x));`
+};
+
+// ── Init ───────────────────────────────────────────────────────────────
+window.onload = () => onLangChange();
+
+function onLangChange() {
+  const lang = document.getElementById('lang').value;
+  const ta   = document.getElementById('code');
+  const vals = Object.values(TEMPLATES);
+  if (!ta.value.trim() || vals.includes(ta.value)) {
+    ta.value = TEMPLATES[lang] || '';
+  }
+  setIdle();
+}
+
+function setIdle() {
+  document.getElementById('output').innerHTML =
+    '<div class="idle-msg">Press <strong>Run</strong> to execute your code.</div>';
+  document.getElementById('outHeader').innerHTML = '<span class="out-title">Output</span>';
+  document.getElementById('debugRaw').style.display = 'none';
+}
+
+function setRunning(on) {
+  const btn = document.getElementById('runBtn');
+  btn.disabled = on;
+  btn.className = on ? 'run-btn running' : 'run-btn';
+  document.getElementById('btnIcon').textContent = on ? '⏳' : '▶';
+  document.getElementById('btnText').textContent = on ? 'Running…' : 'Run';
+}
+
+// ── Main run logic ─────────────────────────────────────────────────────
+async function runCode() {
+  const code  = document.getElementById('code').value;
+  const lang  = document.getElementById('lang').value;
+  const stdin = document.getElementById('stdin').value;
+  const langId = LANG_IDS[lang];
+
+  if (!code.trim()) return;
+  setRunning(true);
+
+  document.getElementById('output').innerHTML =
+    '<div class="loading-msg"><div class="spinner"></div> Submitting to Judge0…</div>';
+  document.getElementById('outHeader').innerHTML = '<span class="out-title">Output</span>';
+
+  try {
+    // Step 1: submit with base64_encoded=true (required by this Judge0 instance)
+    const submitResp = await fetch(`${JUDGE0_URL}/submissions?base64_encoded=true`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ source_code: btoa(unescape(encodeURIComponent(code))), language_id: langId, stdin: btoa(stdin) })
+    });
+    if (!submitResp.ok) {
+      const t = await submitResp.text();
+      showError(`Submit failed HTTP ${submitResp.status}: ${t.slice(0,200)}`);
+      setRunning(false); return;
+    }
+    const { token } = await submitResp.json();
+    if (!token) { showError('No token returned from Judge0'); setRunning(false); return; }
+
+    // Step 2: poll until done (base64_encoded=true required)
+    document.getElementById('output').innerHTML =
+      `<div class="loading-msg"><div class="spinner"></div> Executing… (token: ${token.slice(0,8)}…)</div>`;
+
+    let result = null;
+    for (let i = 0; i < 60; i++) {
+      await sleep(500);
+      const pr = await fetch(
+        `${JUDGE0_URL}/submissions/${token}?base64_encoded=true&fields=status,stdout,stderr,compile_output,time,memory`
+      );
+      if (!pr.ok) continue;  // skip transient errors
+      const pd = await pr.json();
+      const sid = (pd.status || {}).id;
+      if (sid && sid !== 1 && sid !== 2) { result = pd; break; }
+    }
+
+    if (!result) { showError('Timed out waiting for execution (30s)'); setRunning(false); return; }
+
+    // Show raw debug
+    const dbg = document.getElementById('debugRaw');
+    dbg.style.display = 'block';
+    dbg.textContent = 'Judge0 raw → ' + JSON.stringify(result, null, 2).slice(0, 600);
+
+    renderResult(result, lang, langId);
+
+  } catch(err) {
+    showError(`Network error: ${err.message}\n\nIs Judge0 running on port 2358?`);
+  }
+  setRunning(false);
+}
+
+// ── Render ─────────────────────────────────────────────────────────────
+function renderResult(d, lang, langId) {
+  const b64d = s => { try { return s ? decodeURIComponent(escape(atob(s))) : ''; } catch(e) { return s||''; } };
+  const sid    = (d.status || {}).id || 0;
+  const desc   = (d.status || {}).description || 'Unknown';
+  const ok     = sid === 3;
+  const stdout = b64d(d.stdout);
+  const stderr = b64d(d.stderr);
+  const cerr   = b64d(d.compile_output);
+
+  // Header
+  const pClass = ok ? 'pill-ok' : 'pill-err';
+  let hdr = `<span class="out-title">Output</span>
+    <span class="pill ${pClass}">${esc(desc)}</span>`;
+  if (d.time)   hdr += `<span class="stat ${ok?'ok':''}">⏱ ${parseFloat(d.time).toFixed(3)}s</span>`;
+  if (d.memory) hdr += `<span class="stat">🧠 ${(d.memory/1024).toFixed(1)} MB</span>`;
+  hdr += `<span class="stat">${lang.toUpperCase()} · id=${langId}</span>`;
+  document.getElementById('outHeader').innerHTML = hdr;
+
+  // Body
+  let html = '';
+
+  if (cerr) {
+    html += `<div class="out-block">
+      <div class="out-section">Compilation Error</div>
+      <div class="out-err">${esc(cerr)}</div>
+    </div>`;
+  }
+
+  if (stdout) {
+    // Handle \r for animation-style outputs
+    const clean = stdout.split('\n').map(l => l.split('\r').pop()).join('\n').trimEnd();
+    html += `<div class="out-block">
+      ${cerr ? '<div class="out-section" style="margin-top:8px">Output</div>' : ''}
+      <div class="out-ok">${esc(clean)}</div>
+    </div>`;
+  }
+
+  if (stderr) {
+    html += `<div class="out-block">
+      <div class="out-section">Stderr</div>
+      <div class="out-warn">${esc(stderr)}</div>
+    </div>`;
+  }
+
+  if (!stdout && !stderr && !cerr) {
+    html += ok
+      ? `<div class="out-block" style="color:var(--muted)">✓ Ran successfully with no output.</div>`
+      : `<div class="out-block out-err">❌ ${esc(desc)} (status id=${sid})</div>`;
+  }
+
+  document.getElementById('output').innerHTML = html;
+}
+
+// ── Helpers ────────────────────────────────────────────────────────────
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+
+function showError(msg) {
+  document.getElementById('output').innerHTML =
+    `<div class="out-block out-err">❌ ${esc(msg)}</div>`;
+}
+
+function esc(s) {
+  return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+}
+
+// Tab key & Ctrl+Enter
+document.getElementById('code').addEventListener('keydown', e => {
+  if (e.key === 'Tab') {
+    e.preventDefault();
+    const ta = e.target, s = ta.selectionStart;
+    ta.value = ta.value.slice(0,s) + '    ' + ta.value.slice(ta.selectionEnd);
+    ta.selectionStart = ta.selectionEnd = s + 4;
+  }
+  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) { e.preventDefault(); runCode(); }
+});
+</script>
+</body>
+</html>

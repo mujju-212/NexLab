@@ -1,0 +1,63 @@
+services:
+
+  judge0_server:
+    image: judge0/judge0:1.13.0
+    container_name: vlab_judge0
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+      - ./patch_isolate.py:/patch_isolate.py:ro
+    ports:
+      - "2358:2358"
+    depends_on:
+      - judge0_db
+      - judge0_redis
+    privileged: true
+    restart: always
+    environment:
+      REDIS_HOST: judge0_redis
+      POSTGRES_HOST: judge0_db
+      POSTGRES_DB: judge0
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: judge0pass
+    # Apply the isolate patch on startup, then launch normally
+    entrypoint: >
+      bash -c "python3 /patch_isolate.py && ./scripts/server"
+
+  judge0_workers:
+    image: judge0/judge0:1.13.0
+    container_name: vlab_judge0_workers
+    volumes:
+      - ./judge0.conf:/judge0.conf:ro
+      - ./patch_isolate.py:/patch_isolate.py:ro
+    depends_on:
+      - judge0_db
+      - judge0_redis
+    privileged: true
+    restart: always
+    environment:
+      REDIS_HOST: judge0_redis
+      POSTGRES_HOST: judge0_db
+      POSTGRES_DB: judge0
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: judge0pass
+      WORKERS: "8"
+    entrypoint: >
+      bash -c "python3 /patch_isolate.py && ./scripts/workers"
+
+  judge0_db:
+    image: postgres:13
+    container_name: vlab_judge0_db
+    environment:
+      POSTGRES_PASSWORD: judge0pass
+      POSTGRES_DB: judge0
+    volumes:
+      - judge0pgdata:/var/lib/postgresql/data
+    restart: always
+
+  judge0_redis:
+    image: redis:5.0.9
+    container_name: vlab_judge0_redis
+    restart: always
+
+volumes:
+  judge0pgdata:
