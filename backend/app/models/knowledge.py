@@ -63,30 +63,23 @@ class StudentRanking(db.Model):
 class FocusScore(db.Model):
     """Focus score records per student per 30-second interval"""
     __tablename__ = 'focus_scores'
-    id                  = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    student_id          = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
-    session_id          = db.Column(db.String(36), db.ForeignKey('lab_sessions.id'), nullable=False)
+    id          = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    student_id  = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
+    session_id  = db.Column(db.String(36), db.ForeignKey('lab_sessions.id'), nullable=False)
 
-    # Raw signals from client
-    tab_switches        = db.Column(db.Integer, default=0)
-    window_blurs        = db.Column(db.Integer, default=0)
-    idle_seconds        = db.Column(db.Integer, default=0)
-    copy_paste_count    = db.Column(db.Integer, default=0)
-    face_present_pct    = db.Column(db.Float, default=1.0)
-    gaze_score          = db.Column(db.Float, default=1.0)
-    large_paste_detected = db.Column(db.Boolean, default=False)
-    typing_speed_avg    = db.Column(db.Float, default=0.0)
+    # All 6 behavioral signals stored as JSON
+    # {tab_switches_per_min, idle_seconds, typing_speed_wpm,
+    #  backspace_ratio, copy_paste_count, window_focus_ratio}
+    signals     = db.Column(db.JSON, default=dict)
 
-    focus_score         = db.Column(db.Float)       # 0–100 from RF model
-    recorded_at         = db.Column(db.DateTime, default=datetime.utcnow)
+    focus_score = db.Column(db.Float)     # 0-100 from RF model
+    recorded_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self):
         return {
+            'student_id':  self.student_id,
             'focus_score': self.focus_score,
+            'signals':     self.signals or {},
             'recorded_at': self.recorded_at.isoformat() if self.recorded_at else None,
-            'signals': {
-                'tab_switches': self.tab_switches,
-                'face_present_pct': self.face_present_pct,
-                'large_paste_detected': self.large_paste_detected,
-            }
         }
+

@@ -70,3 +70,29 @@ class SectionSubject(db.Model):
             'subject_id': self.subject_id,
             'instructor_id': self.instructor_id,
         }
+
+
+class AuditLog(db.Model):
+    """Admin action history — tracks all sensitive operations per institution"""
+    __tablename__ = 'audit_logs'
+    id             = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    institution_id = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
+    actor_id       = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
+    action         = db.Column(db.String(50), nullable=False)
+    # actions: force_logout | create_user | deactivate_user | bulk_upload
+    #          send_announcement | assign_instructor | enroll_students | delete_experiment
+    target_type    = db.Column(db.String(30))   # user | session | experiment | section
+    target_id      = db.Column(db.String(36))
+    detail         = db.Column(db.Text)         # human-readable description
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id':          self.id,
+            'actor_id':    self.actor_id,
+            'action':      self.action,
+            'target_type': self.target_type,
+            'target_id':   self.target_id,
+            'detail':      self.detail,
+            'created_at':  self.created_at.isoformat() if self.created_at else None,
+        }

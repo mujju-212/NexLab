@@ -22,6 +22,7 @@ class User(db.Model):
     is_active       = db.Column(db.Boolean, default=True)
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)
     last_login      = db.Column(db.DateTime)
+    force_logout_at = db.Column(db.DateTime)   # set by admin — invalidates all older tokens
 
     def to_dict(self, include_sensitive=False):
         data = {
