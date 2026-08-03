@@ -1,0 +1,64 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&display=swap');
+
+.layout { display: grid; grid-template-columns: 280px 1fr; gap: 22px; }
+.leftCol { display: flex; flex-direction: column; gap: 18px; }
+.rightCol { display: flex; flex-direction: column; gap: 18px; }
+
+/* Avatar Card */
+.avatarCard {
+  background: rgba(255,255,255,.55); border: 1.5px solid rgba(255,255,255,.7);
+  border-radius: 22px; padding: 28px 22px; text-align: center;
+  box-shadow: 0 8px 24px rgba(20,20,30,.06);
+}
+.avatarCircle {
+  width: 90px; height: 90px; border-radius: 50%; margin: 0 auto 14px;
+  font-size: 30px; font-weight: 700; color: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-family: 'Space Grotesk', sans-serif;
+  box-shadow: 0 8px 24px rgba(139,92,246,.35);
+}
+.userName { margin: 0 0 4px; font-size: 20px; font-weight: 700; color: #201b2e; font-family: 'Space Grotesk', sans-serif; }
+.userRole { margin: 0 0 16px; font-size: 13px; color: #9891a6; font-weight: 500; }
+.infoPills { display: flex; flex-direction: column; gap: 7px; }
+.pill { background: rgba(255,255,255,.6); border-radius: 999px; padding: 5px 14px; font-size: 12.5px; font-weight: 600; color: #463f57; }
+
+/* Stats Card */
+.statsCard { background: rgba(255,255,255,.55); border: 1.5px solid rgba(255,255,255,.7); border-radius: 20px; padding: 20px 22px; box-shadow: 0 6px 20px rgba(20,20,30,.05); }
+.statsTitle { margin: 0 0 16px; font-size: 15px; font-weight: 700; color: #201b2e; font-family: 'Space Grotesk', sans-serif; }
+.statRow { display: flex; justify-content: space-between; align-items: center; padding: 9px 0; border-bottom: 1px solid rgba(255,255,255,.5); }
+.statRow:last-child { border-bottom: none; }
+.statLabel { font-size: 13.5px; color: #615a72; font-weight: 500; }
+.statValue { font-size: 15px; font-weight: 700; color: #201b2e; font-family: 'Space Grotesk', sans-serif; }
+
+/* Form Card */
+.formCard { background: rgba(255,255,255,.55); border: 1.5px solid rgba(255,255,255,.7); border-radius: 22px; padding: 24px 26px; box-shadow: 0 6px 20px rgba(20,20,30,.05); }
+.formCardHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 22px; }
+.formCardTitle { margin: 0; font-size: 17px; font-weight: 700; color: #201b2e; font-family: 'Space Grotesk', sans-serif; }
+.editBtn { background: rgba(139,92,246,.1); border: 1px solid rgba(139,92,246,.2); color: #7c3aed; border-radius: 10px; padding: 8px 18px; font-size: 13.5px; font-weight: 700; cursor: pointer; font-family: 'Space Grotesk', sans-serif; transition: all .15s; }
+.editBtn:hover { background: rgba(139,92,246,.18); }
+.formBtns { display: flex; gap: 8px; }
+.cancelBtn { background: rgba(255,255,255,.7); border: 1px solid rgba(255,255,255,.7); border-radius: 10px; padding: 8px 16px; font-size: 13.5px; font-weight: 700; color: #615a72; cursor: pointer; }
+.saveBtn { background: linear-gradient(95deg,#7c3aed,#8b5cf6); color: #fff; border: none; border-radius: 10px; padding: 8px 18px; font-size: 13.5px; font-weight: 700; cursor: pointer; font-family: 'Space Grotesk', sans-serif; transition: all .15s; }
+.saveBtn:hover { transform: translateY(-1px); box-shadow: 0 6px 16px rgba(124,58,237,.28); }
+
+.formGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+.formField {}
+.fieldFull { grid-column: 1/-1; }
+.fieldLabel { display: block; font-size: 12.5px; font-weight: 700; color: #615a72; margin-bottom: 6px; font-family: 'Space Grotesk', sans-serif; }
+.fieldValue { margin: 0; font-size: 14.5px; font-weight: 600; color: #201b2e; padding: 10px 0; border-bottom: 1px solid rgba(255,255,255,.5); }
+.fieldInput {
+  width: 100%; padding: 10px 14px; border: 1.5px solid rgba(139,92,246,.2); border-radius: 10px;
+  font-size: 14px; font-family: 'Manrope', sans-serif; color: #201b2e;
+  background: rgba(255,255,255,.7); outline: none; box-sizing: border-box; transition: border-color .18s;
+}
+.fieldInput:focus { border-color: #8b5cf6; box-shadow: 0 0 0 3px rgba(139,92,246,.12); }
+.fieldTextarea { width: 100%; padding: 10px 14px; border: 1.5px solid rgba(139,92,246,.2); border-radius: 10px; font-size: 14px; font-family: 'Manrope', sans-serif; color: #201b2e; background: rgba(255,255,255,.7); outline: none; resize: vertical; box-sizing: border-box; }
+.fieldTextarea:focus { border-color: #8b5cf6; }
+
+/* Subjects */
+.subjectsCard { background: rgba(255,255,255,.55); border: 1.5px solid rgba(255,255,255,.7); border-radius: 22px; padding: 24px 26px; box-shadow: 0 6px 20px rgba(20,20,30,.05); }
+.subGrid { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 16px; }
+.subChip { display: flex; align-items: center; gap: 12px; background: rgba(255,255,255,.6); border-radius: 14px; padding: 14px 16px; }
+.subChipDot { width: 10px; height: 10px; border-radius: 50%; flex-shrink: 0; }
+.subChipCode { margin: 0 0 2px; font-size: 11.5px; font-weight: 700; color: #9891a6; letter-spacing: .04em; }
+.subChipName { margin: 0; font-size: 13px; font-weight: 700; color: #201b2e; font-family: 'Space Grotesk', sans-serif; }

@@ -1,0 +1,42 @@
+@import url('https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500&display=swap');
+
+/* ── Tabs ────────────────────────────────────────────────────────────────── */
+.tabs { display:flex; gap:4px; background:rgba(255,255,255,.4); border-radius:14px; padding:4px; margin-bottom:24px; width:fit-content; }
+.tab { display:flex; align-items:center; gap:7px; padding:9px 20px; border-radius:10px; font-size:13.5px; font-weight:700; color:#615a72; cursor:pointer; border:none; background:transparent; transition:all .15s; font-family:'Manrope',sans-serif; }
+.tabActive { background:rgba(255,255,255,.85); color:#201b2e; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+
+/* ── Roles ───────────────────────────────────────────────────────────────── */
+.roleGrid { display:grid; grid-template-columns:repeat(2,1fr); gap:18px; }
+.roleCard { background:rgba(255,255,255,.45); border:1px solid rgba(255,255,255,.7); border-radius:20px; padding:22px; box-shadow:0 8px 24px rgba(20,20,30,.06); }
+.roleHeader { display:flex; align-items:center; gap:14px; margin-bottom:16px; }
+.roleIcon { width:44px; height:44px; border-radius:13px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.roleTitle { font-size:16px; font-weight:700; color:#201b2e; font-family:'Space Grotesk',sans-serif; margin:0 0 3px; }
+.roleCount { font-size:13px; color:#9891a6; font-weight:600; margin:0; }
+.permsList { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:16px; }
+.permTag { display:flex; align-items:center; gap:5px; font-size:12px; font-weight:700; color:#463f57; background:rgba(255,255,255,.6); border:1px solid rgba(255,255,255,.7); border-radius:999px; padding:3px 10px; }
+.editRoleBtn { width:100%; padding:9px; border-radius:10px; font-size:13px; font-weight:700; color:#7c3aed; background:rgba(233,213,255,.3); border:1px solid rgba(139,92,246,.2); cursor:pointer; transition:all .15s; font-family:'Manrope',sans-serif; }
+.editRoleBtn:hover { background:rgba(233,213,255,.5); }
+
+/* ── Table ───────────────────────────────────────────────────────────────── */
+.tableWrap { background:rgba(255,255,255,.42); border:1px solid rgba(255,255,255,.7); border-radius:20px; overflow:hidden; box-shadow:0 10px 30px rgba(20,20,30,.07); }
+.table { width:100%; border-collapse:collapse; }
+.table thead { background:rgba(255,255,255,.3); }
+.table th { padding:12px 18px; text-align:left; font-size:11.5px; font-weight:700; text-transform:uppercase; letter-spacing:.07em; color:#9891a6; border-bottom:1px solid rgba(255,255,255,.6); }
+.table td { padding:13px 18px; font-size:13.5px; font-weight:600; color:#463f57; border-bottom:1px solid rgba(255,255,255,.4); vertical-align:middle; }
+.table tbody tr:hover { background:rgba(255,255,255,.35); }
+.table tbody tr:last-child td { border-bottom:none; }
+.code { font-family:'JetBrains Mono',monospace; font-size:12px; background:rgba(255,255,255,.6); padding:2px 8px; border-radius:6px; color:#615a72; }
+.tableFooter { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-top:1px solid rgba(255,255,255,.5); font-size:13px; font-weight:600; color:#9891a6; }
+.exportBtn { padding:7px 14px; border-radius:10px; font-size:13px; font-weight:700; color:#7c3aed; background:rgba(233,213,255,.3); border:1px solid rgba(139,92,246,.2); cursor:pointer; font-family:'Manrope',sans-serif; }
+.editBtn { padding:6px 14px; border-radius:8px; font-size:12.5px; font-weight:700; color:#463f57; background:rgba(255,255,255,.6); border:1px solid rgba(255,255,255,.6); cursor:pointer; transition:all .12s; font-family:'Manrope',sans-serif; }
+.editBtn:hover { background:rgba(255,255,255,.9); color:#201b2e; }
+
+/* ── Danger Zone ─────────────────────────────────────────────────────────── */
+.authWrap { display:flex; flex-direction:column; gap:20px; }
+.dangerZone { background:rgba(254,226,226,.3); border:1px solid rgba(239,68,68,.2); border-radius:18px; padding:20px 24px; }
+.dangerTitle { display:flex; align-items:center; gap:9px; font-size:16px; font-weight:700; color:#ef4444; font-family:'Space Grotesk',sans-serif; margin:0 0 16px; }
+.dangerActions { display:flex; gap:12px; flex-wrap:wrap; }
+.dangerBtn { display:flex; align-items:center; gap:7px; padding:10px 16px; border-radius:12px; font-size:13.5px; font-weight:700; cursor:pointer; border:1px solid rgba(239,68,68,.3); background:rgba(254,226,226,.5); color:#b91c1c; transition:all .15s; font-family:'Manrope',sans-serif; }
+.dangerBtn:hover { background:rgba(254,226,226,.8); }
+.dangerBtnSafe { display:flex; align-items:center; gap:7px; padding:10px 16px; border-radius:12px; font-size:13.5px; font-weight:700; cursor:pointer; border:1px solid rgba(255,255,255,.6); background:rgba(255,255,255,.55); color:#463f57; transition:all .15s; font-family:'Manrope',sans-serif; }
+.dangerBtnSafe:hover { background:rgba(255,255,255,.8); }

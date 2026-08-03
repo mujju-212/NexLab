@@ -56,3 +56,8 @@ Thumbs.db
 .coverage
 htmlcov/
 .pytest_cache/
+
+# ── Dev tools — not part of the project ─────────────────────────────────
+graphify-out/
+graphify_step_*.py
+.agents/
