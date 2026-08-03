@@ -33,21 +33,25 @@ def create_app(config_name=None):
     # ── Register blueprints ───────────────────────────────────────────────
     from app.auth.routes import auth_bp
     from app.admin.routes import admin_bp
+    from app.admin.platform import platform_bp
     from app.institution.routes import institution_bp
+    from app.institution.extended import institution_ext_bp
     from app.instructor.routes import instructor_bp
     from app.student.routes import student_bp
     from app.execution.routes import execution_bp
     from app.ai.routes import ai_bp
     from app.ml.routes import ml_bp
 
-    app.register_blueprint(auth_bp,        url_prefix='/api/auth')
-    app.register_blueprint(admin_bp,       url_prefix='/api/admin')
-    app.register_blueprint(institution_bp, url_prefix='/api/institution')
-    app.register_blueprint(instructor_bp,  url_prefix='/api/instructor')
-    app.register_blueprint(student_bp,     url_prefix='/api/student')
-    app.register_blueprint(execution_bp,   url_prefix='/api/execution')
-    app.register_blueprint(ai_bp,          url_prefix='/api/ai')
-    app.register_blueprint(ml_bp,          url_prefix='/api/ml')
+    app.register_blueprint(auth_bp,            url_prefix='/api/auth')
+    app.register_blueprint(admin_bp,           url_prefix='/api/admin')
+    app.register_blueprint(platform_bp,        url_prefix='/api/platform')
+    app.register_blueprint(institution_bp,     url_prefix='/api/institution')
+    app.register_blueprint(institution_ext_bp, url_prefix='/api/institution')
+    app.register_blueprint(instructor_bp,      url_prefix='/api/instructor')
+    app.register_blueprint(student_bp,         url_prefix='/api/student')
+    app.register_blueprint(execution_bp,       url_prefix='/api/execution')
+    app.register_blueprint(ai_bp,              url_prefix='/api/ai')
+    app.register_blueprint(ml_bp,              url_prefix='/api/ml')
 
     # ── Register Socket.io event handlers ────────────────────────────────
     from app.sockets import events  # noqa — registers handlers on import
@@ -57,6 +61,14 @@ def create_app(config_name=None):
     if not app.testing:
         jobs.init_app(app)
         jobs.start()
+
+    # ── Seed platform config defaults ─────────────────────────────────────
+    with app.app_context():
+        try:
+            from app.models.institution import PlatformConfig
+            PlatformConfig.seed_defaults()
+        except Exception:
+            pass  # Table may not exist yet (before first migration)
 
     # ── Health check route ─────────────────────────────────────────────────
     @app.route('/health')
