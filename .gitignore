@@ -61,3 +61,4 @@ htmlcov/
 graphify-out/
 graphify_step_*.py
 .agents/
+frontend/
