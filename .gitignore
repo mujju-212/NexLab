@@ -20,6 +20,12 @@ backend/venv/
 backend/env/
 frontend/node_modules/
 
+# ── Next.js build output & caches ───────────────────────────────────────
+frontend/.next/
+frontend/out/
+*.tsbuildinfo
+next-env.d.ts
+
 # ── Secrets — NEVER commit ─────────────────────────────────────────────
 backend/.env
 *.env.local
@@ -61,4 +67,4 @@ htmlcov/
 graphify-out/
 graphify_step_*.py
 .agents/
-frontend/
+.qoder/
