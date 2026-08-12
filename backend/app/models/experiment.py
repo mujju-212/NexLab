@@ -18,8 +18,8 @@ class Experiment(db.Model):
     input_format    = db.Column(db.Text)
     output_format   = db.Column(db.Text)
 
-    difficulty_level    = db.Column(db.Integer, default=1)   # 1-4
-    concept_tags        = db.Column(db.JSON)                 # ["arrays", "sorting"]
+    difficulty_level    = db.Column(db.Integer, default=1)   # 1-4 (DPKT paper framework)
+    concept_tags        = db.Column(db.JSON)                 # REQUIRED: ["arrays", "sorting"]
     allowed_languages   = db.Column(db.JSON)                 # ["python", "cpp", "java", "c"]
 
     # Multi-file support
@@ -35,8 +35,13 @@ class Experiment(db.Model):
 
     enable_viva         = db.Column(db.Boolean, default=False)
     enable_lockdown     = db.Column(db.Boolean, default=False)  # full browser lockdown
+    allow_ai_hints      = db.Column(db.Boolean, default=True)   # instructor can disable AI hints
     time_limit_sec      = db.Column(db.Integer, default=10)
     memory_limit_kb     = db.Column(db.Integer, default=262144)
+
+    # Simulation upload
+    simulation_entry    = db.Column(db.Text)    # filename of entry point (index.html)
+    simulation_files    = db.Column(db.Text)    # JSON list of uploaded files
 
     is_published        = db.Column(db.Boolean, default=False)
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)
@@ -46,18 +51,52 @@ class Experiment(db.Model):
     content_modules = db.relationship('ContentModule', backref='experiment',
                                       order_by='ContentModule.display_order', lazy='dynamic')
 
+    def validate(self):
+        """Returns list of validation error strings. Empty list = valid."""
+        errors = []
+        # Rule 1: concept_tags must be a non-empty list
+        if not self.concept_tags or not isinstance(self.concept_tags, list) or len(self.concept_tags) == 0:
+            errors.append('concept_tags is required and must be a non-empty list (e.g. ["arrays", "sorting"])')
+        # Rule 2: difficulty_level must be 1-4
+        if self.difficulty_level not in (1, 2, 3, 4):
+            errors.append(f'difficulty_level must be 1, 2, 3, or 4 — got {self.difficulty_level}')
+        # Rule 3: rubric weights must sum to 100
+        rubric_sum = (self.rubric_test_cases + self.rubric_lab_report +
+                      self.rubric_code_quality + self.rubric_viva)
+        if rubric_sum != 100:
+            errors.append(f'Rubric weights must sum to 100 — got {rubric_sum} '
+                          f'(test_cases={self.rubric_test_cases}, lab_report={self.rubric_lab_report}, '
+                          f'code_quality={self.rubric_code_quality}, viva={self.rubric_viva})')
+        return errors
+
     def to_dict(self):
         return {
             'id': self.id, 'exp_number': self.exp_number,
             'title': self.title, 'aim': self.aim,
+            'subject_id': self.subject_id,
+            'theory': self.theory,
+            'problem_statement': self.problem_statement,
+            'input_format': self.input_format,
+            'output_format': self.output_format,
             'difficulty_level': self.difficulty_level,
-            'concept_tags': self.concept_tags,
+            'concept_tags': self.concept_tags or [],
             'allowed_languages': self.allowed_languages,
             'is_multi_file': self.is_multi_file,
             'file_structure': self.file_structure,
             'enable_viva': self.enable_viva,
             'enable_lockdown': self.enable_lockdown,
+            'allow_ai_hints': self.allow_ai_hints,
+            'time_limit_sec': self.time_limit_sec,
             'is_published': self.is_published,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'rubric': {
+                'test_cases':   self.rubric_test_cases,
+                'lab_report':   self.rubric_lab_report,
+                'code_quality': self.rubric_code_quality,
+                'viva':         self.rubric_viva,
+                'sum':          self.rubric_test_cases + self.rubric_lab_report +
+                                self.rubric_code_quality + self.rubric_viva,
+            },
         }
 
 
