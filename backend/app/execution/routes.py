@@ -10,6 +10,27 @@ from datetime import datetime
 
 execution_bp = Blueprint('execution', __name__)
 
+# ── Judge0 safe value parsers ─────────────────────────────────────────────────
+# Judge0 sometimes returns time as a repeated string e.g. "0.0860.086"
+# This happens when polling returns the value multiple times concatenated.
+# We take the FIRST valid float in the string.
+def _safe_float(val, default=0.0):
+    """Parse first float from a possibly-repeated string like '0.0860.086'"""
+    if val is None:
+        return default
+    try:
+        return float(val)
+    except (ValueError, TypeError):
+        s = str(val)
+        # Find first valid float prefix
+        import re
+        m = re.match(r'[-+]?\d*\.?\d+', s)
+        return float(m.group()) if m else default
+
+def _safe_int(val, default=0):
+    """Parse first int from a possibly-repeated string"""
+    return int(_safe_float(val, default))
+
 LANGUAGE_IDS = {
     'python':     71,
     'cpp':        54,
@@ -80,8 +101,8 @@ def run_code():
             stderr=result.get('stderr'),
             test_cases_passed=result.get('test_cases_passed', 0),
             test_cases_total=result.get('test_cases_total', 0),
-            execution_time_ms=int((result.get('time') or 0) * 1000),
-            memory_used_kb=result.get('memory'),
+            execution_time_ms=_safe_int((result.get('time') or 0), 0) * 1000,
+            memory_used_kb=_safe_int(result.get('memory'), 0) or None,
             loc=quality_metrics.get('loc'),
             cyclomatic_complexity=quality_metrics.get('cyclomatic_complexity'),
             quality_grade=quality_metrics.get('quality_grade'),

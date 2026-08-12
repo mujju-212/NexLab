@@ -27,7 +27,7 @@ def create_app(config_name=None):
     if config_name == 'development':
         cors_origins = '*'   # allow any origin in dev (HTML file, localhost:8765, etc.)
     cors.init_app(app, resources={r"/api/*": {"origins": cors_origins}})
-    socketio.init_app(app, cors_allowed_origins='*', async_mode='eventlet')
+    socketio.init_app(app, cors_allowed_origins='*', async_mode='threading')
     limiter.init_app(app)
 
     # ── Register blueprints ───────────────────────────────────────────────
@@ -37,10 +37,14 @@ def create_app(config_name=None):
     from app.institution.routes import institution_bp
     from app.institution.extended import institution_ext_bp
     from app.instructor.routes import instructor_bp
+    from app.instructor.content import content_bp
+    from app.instructor.simulation import simulation_bp
+    from app.instructor.attendance import attendance_bp
     from app.student.routes import student_bp
     from app.execution.routes import execution_bp
     from app.ai.routes import ai_bp
     from app.ml.routes import ml_bp
+    from app.free.routes import free_bp
 
     app.register_blueprint(auth_bp,            url_prefix='/api/auth')
     app.register_blueprint(admin_bp,           url_prefix='/api/admin')
@@ -48,10 +52,14 @@ def create_app(config_name=None):
     app.register_blueprint(institution_bp,     url_prefix='/api/institution')
     app.register_blueprint(institution_ext_bp, url_prefix='/api/institution')
     app.register_blueprint(instructor_bp,      url_prefix='/api/instructor')
+    app.register_blueprint(content_bp,         url_prefix='/api/instructor')
+    app.register_blueprint(simulation_bp,      url_prefix='/api/instructor')
+    app.register_blueprint(attendance_bp,      url_prefix='/api/instructor')
     app.register_blueprint(student_bp,         url_prefix='/api/student')
     app.register_blueprint(execution_bp,       url_prefix='/api/execution')
     app.register_blueprint(ai_bp,              url_prefix='/api/ai')
     app.register_blueprint(ml_bp,              url_prefix='/api/ml')
+    app.register_blueprint(free_bp,            url_prefix='/api/free')
 
     # ── Register Socket.io event handlers ────────────────────────────────
     from app.sockets import events  # noqa — registers handlers on import
@@ -82,6 +90,35 @@ def create_app(config_name=None):
         from flask import send_file
         ui_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'test_ui.html')
         return send_file(ui_path)
+
+    @app.route('/student-test')
+    def student_test():
+        from flask import send_file
+        p = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'test_live_student.html')
+        return send_file(p)
+
+    @app.route('/instructor-test')
+    def instructor_test():
+        from flask import send_file
+        p = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'test_live_instructor.html')
+        return send_file(p)
+
+    # ── Serve workspace (free courses) as static files ────────────────────
+    @app.route('/workspace/')
+    @app.route('/workspace/<path:filename>')
+    def serve_workspace(filename='index.html'):
+        from flask import send_from_directory
+        ws_dir = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'workspace')
+        return send_from_directory(ws_dir, filename)
+
+    # ── Local lab record PDF serving (dev mode — no Cloudinary) ──────────
+    @app.route('/lab_records/<path:filename>')
+    def serve_lab_record(filename):
+        from flask import send_from_directory, abort
+        lab_dir = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'lab_records')
+        if not _os.path.exists(_os.path.join(lab_dir, filename)):
+            abort(404)
+        return send_from_directory(lab_dir, filename, mimetype='application/pdf')
 
     # ── Global error handlers ─────────────────────────────────────────────
     @app.errorhandler(404)

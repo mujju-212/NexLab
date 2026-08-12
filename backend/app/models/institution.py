@@ -80,7 +80,7 @@ class PlatformConfig(db.Model):
         'max_students_free':        '100',
         'max_students_pro':         '500',
         'max_students_enterprise':  '99999',
-        'allow_self_registration':  'false',
+        'allow_self_registration':  'true',
     }
 
     def to_dict(self):

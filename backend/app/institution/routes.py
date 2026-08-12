@@ -496,12 +496,20 @@ def analytics_overview():
         at_risk_subq.c.avg_mastery < 40
     ).count()
 
-    # Active instructors this month
-    active_instructors = db.session.query(
-        func.count(func.distinct(LabSession.instructor_id))
+    # Active instructors this month — via SectionSubject join
+    from app.models.academic import SectionSubject
+    active_session_ssids = db.session.query(
+        func.distinct(LabSession.section_subject_id)
     ).filter(
         LabSession.institution_id == iid,
         LabSession.scheduled_at >= since
+    ).all()
+
+    active_ssids = [r[0] for r in active_session_ssids if r[0]]
+    active_instructors = db.session.query(
+        func.count(func.distinct(SectionSubject.instructor_id))
+    ).filter(
+        SectionSubject.id.in_(active_ssids)
     ).scalar() or 0
 
     # Peak usage: count sessions per hour-of-day
@@ -588,12 +596,18 @@ def section_comparison():
     result = []
 
     for sec in sections:
-        # Get all rankings for this section
-        rankings = StudentRanking.query.filter_by(section_id=sec.id).all()
+        rankings = StudentRanking.query.filter_by(section_subject_id=None).all()  # placeholder
+        # Use section's section_subjects to find rankings
+        from app.models.academic import SectionSubject
+        ss_ids = [ss.id for ss in SectionSubject.query.filter_by(section_id=sec.id).all()]
+        rankings = StudentRanking.query.filter(
+            StudentRanking.section_subject_id.in_(ss_ids)
+        ).all() if ss_ids else []
         if not rankings:
             avg_score = 0
         else:
-            avg_score = sum(r.holistic_score for r in rankings if r.holistic_score) / len(rankings)
+            scores = [r.rank_score for r in rankings if r.rank_score is not None]
+            avg_score = sum(scores) / len(scores) if scores else 0
 
         enrolled = SectionStudent.query.filter_by(section_id=sec.id).count()
         result.append({

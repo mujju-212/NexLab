@@ -72,3 +72,71 @@ def change_password():
     user.password_hash = bcrypt.hashpw(new_pw.encode(), bcrypt.gensalt()).decode()
     db.session.commit()
     return jsonify({'message': 'Password updated successfully'}), 200
+
+
+@auth_bp.route('/register', methods=['POST'])
+@limiter.limit("5 per minute")
+def register():
+    """
+    Self-registration for free/individual users.
+    Creates a free_user account with no institution affiliation.
+    Requires: PlatformConfig allow_self_registration = 'true'
+    """
+    from app.models.institution import PlatformConfig
+
+    # Check if self-registration is enabled
+    allow = PlatformConfig.get('allow_self_registration', 'false')
+    if allow != 'true':
+        return jsonify({
+            'error': 'Self-registration is currently disabled. Contact a platform admin.',
+        }), 403
+
+    data     = request.get_json()
+    email    = (data.get('email', '') or '').strip().lower()
+    password = data.get('password', '')
+    full_name= (data.get('full_name', '') or '').strip()
+
+    # Validation
+    if not email or not password or not full_name:
+        return jsonify({'error': 'full_name, email, and password are required'}), 400
+
+    if len(password) < 8:
+        return jsonify({'error': 'Password must be at least 8 characters'}), 400
+
+    if '@' not in email:
+        return jsonify({'error': 'Invalid email address'}), 400
+
+    if User.query.filter_by(email=email).first():
+        return jsonify({'error': 'An account with this email already exists'}), 409
+
+    # Create free_user account (no institution_id)
+    user = User(
+        institution_id=None,
+        email=email,
+        password_hash=bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode(),
+        full_name=full_name,
+        role='free_user',
+        phone=data.get('phone'),
+    )
+    db.session.add(user)
+    db.session.commit()
+
+    # Auto-login: return token immediately
+    additional_claims = build_jwt_claims(user)
+    token = create_access_token(identity=user.id, additional_claims=additional_claims)
+
+    return jsonify({
+        'message': 'Account created successfully!',
+        'token': token,
+        'user': user.to_dict(),
+    }), 201
+
+
+@auth_bp.route('/logout', methods=['POST'])
+def logout():
+    """
+    Stateless JWT logout — client drops the token.
+    Endpoint exists for future token blacklisting.
+    """
+    return jsonify({'message': 'Logged out successfully'}), 200
+

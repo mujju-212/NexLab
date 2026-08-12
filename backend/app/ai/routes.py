@@ -14,7 +14,7 @@ import os
 ai_bp = Blueprint('ai', __name__)
 
 # Groq model selection
-MODEL_HINTS = 'gemma2-9b-it'          # fast, generous free tier
+MODEL_HINTS = 'llama-3.1-8b-instant'     # fast, generous free tier
 MODEL_CHAT  = 'llama-3.3-70b-versatile'  # better reasoning for chat
 MODEL_VIVA  = 'llama-3.3-70b-versatile'  # code-specific questions need quality
 
@@ -223,6 +223,87 @@ Score guidelines: 9-10=excellent, 7-8=good, 5-6=partial, 3-4=weak, 0-2=incorrect
     db.session.commit()
 
     return jsonify(result), 200
+
+
+@ai_bp.route('/viva/<viva_session_id>/finish', methods=['POST'])
+@require_auth
+@require_role('instructor', 'institution_admin')
+def finish_viva(viva_session_id):
+    """
+    Finish a viva session: compute average score → update Grade.viva_grade → recalculate final.
+    Called by instructor after all questions are evaluated.
+    """
+    viva = VivaSession.query.filter_by(id=viva_session_id).first_or_404()
+
+    if viva.status == 'completed':
+        return jsonify({'error': 'Viva already completed'}), 400
+
+    answers = VivaAnswer.query.filter_by(viva_session_id=viva_session_id).all()
+    if not answers:
+        return jsonify({'error': 'No answers submitted yet'}), 400
+
+    # Average score of all answers (scale 0–10 → 0–100)
+    avg_score = sum(a.score or 0 for a in answers) / len(answers)
+    total_score_pct = round(avg_score * 10, 1)   # convert 0–10 → 0–100
+
+    viva.total_score  = total_score_pct
+    viva.status       = 'completed'
+    viva.completed_at = datetime.utcnow()
+    db.session.flush()
+
+    # Push to Grade and recalculate final
+    if viva.grade_id:
+        from app.models.grading import Grade as GradeModel
+        from app.models.experiment import Experiment as ExpModel
+        grade = GradeModel.query.get(viva.grade_id)
+        if grade and not grade.is_locked:
+            grade.viva_grade = total_score_pct
+            exp = ExpModel.query.get(viva.experiment_id)
+            if exp:
+                rubric = {
+                    'test_cases':   exp.rubric_test_cases,
+                    'lab_report':   exp.rubric_lab_report,
+                    'code_quality': exp.rubric_code_quality,
+                    'viva':         exp.rubric_viva,
+                }
+                grade.calculate_final(rubric)
+
+    db.session.commit()
+
+    return jsonify({
+        'viva_session_id': viva_session_id,
+        'status':          'completed',
+        'total_score_pct': total_score_pct,
+        'answers_scored':  len(answers),
+    }), 200
+
+
+@ai_bp.route('/viva/<viva_session_id>', methods=['GET'])
+@require_auth
+def get_viva_session(viva_session_id):
+    """Get full viva session record with all answers and scores."""
+    viva    = VivaSession.query.filter_by(id=viva_session_id).first_or_404()
+    answers = VivaAnswer.query.filter_by(
+        viva_session_id=viva_session_id
+    ).order_by(VivaAnswer.question_index).all()
+
+    return jsonify({
+        'id':            viva.id,
+        'student_id':    viva.student_id,
+        'experiment_id': viva.experiment_id,
+        'status':        viva.status,
+        'total_score':   viva.total_score,
+        'questions':     viva.questions,
+        'started_at':    viva.started_at.isoformat() if viva.started_at else None,
+        'completed_at':  viva.completed_at.isoformat() if viva.completed_at else None,
+        'answers': [{
+            'question_index': a.question_index,
+            'question_text':  a.question_text,
+            'answer_text':    a.answer_text,
+            'score':          a.score,
+            'ai_feedback':    a.ai_feedback,
+        } for a in answers],
+    }), 200
 
 
 # ── Groq helpers ────────────────────────────────────────────────────────────

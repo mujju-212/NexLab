@@ -54,7 +54,7 @@ def _send_session_reminders():
     with scheduler.app.app_context():
         from app.models.session import LabSession
         from app.models.feedback import Notification
-        from app.models.academic import SectionStudent
+        from app.models.academic import SectionSubject, SectionStudent, Section
         from app.extensions import db
 
         now = datetime.utcnow()
@@ -71,16 +71,19 @@ def _send_session_reminders():
             ).all()
 
             for session in sessions:
-                # Get all students in section
-                from app.models.academic import SectionSubject
                 ss = SectionSubject.query.get(session.section_subject_id)
                 if not ss:
                     continue
+
+                # Section has institution_id directly — no chained relationship needed
+                section = Section.query.get(ss.section_id)
+                institution_id = section.institution_id if section else ss.institution_id
+
                 students = SectionStudent.query.filter_by(section_id=ss.section_id).all()
                 for enrollment in students:
                     notif = Notification(
                         user_id=enrollment.student_id,
-                        institution_id=ss.section.batch.academic_year.institution_id if hasattr(ss, 'section') else None,
+                        institution_id=institution_id,
                         notif_type='session_reminder',
                         title=f'Lab Session in {label}',
                         body=f'Your lab session starts in {label}. Complete pre-lab if not done.'

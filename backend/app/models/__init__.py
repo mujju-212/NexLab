@@ -11,6 +11,7 @@ from app.models.submission import CodeVersion, CodeAttempt
 from app.models.grading import Grade, InlineComment, VivaSession, VivaAnswer, HintLog
 from app.models.knowledge import ConceptMastery, StudentRanking, FocusScore
 from app.models.feedback import SessionFeedback, PlagiarismFlag
+from app.models.free import FreeCourse, FreeExercise, FreeProgress
 
 __all__ = [
     'User', 'Institution',
@@ -22,4 +23,5 @@ __all__ = [
     'Grade', 'InlineComment', 'VivaSession', 'VivaAnswer', 'HintLog',
     'ConceptMastery', 'StudentRanking', 'FocusScore',
     'SessionFeedback', 'PlagiarismFlag',
+    'FreeCourse', 'FreeExercise', 'FreeProgress',
 ]
