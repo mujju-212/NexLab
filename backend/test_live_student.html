@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8"><meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>NexLab — Student Live Session</title>
+<script src="https://cdn.socket.io/4.7.5/socket.io.min.js"></script>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{--ga:#7c3aed;--gb:#d6409f;--gc:#f2994a;--acc:#8b5cf6;--bg-glass:rgba(255,255,255,.45);--border:rgba(255,255,255,.55);--t1:#201b2e;--t2:#615a72;--t3:#9891a6;--green-bg:rgba(209,250,223,.85);--green:#0f8a3f;--red-bg:rgba(255,220,220,.85);--red:#c62828;--warn-bg:rgba(255,245,180,.85);--warn:#b45309;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;font-family:'Manrope',sans-serif}
+.stage{position:relative;min-height:100vh;background:linear-gradient(150deg,#fff 0%,#f4f5f7 45%,#eef0f3 75%,#fff 100%);overflow:hidden;padding:16px;display:flex;flex-direction:column;gap:12px}
+.blob{position:absolute;border-radius:50%;filter:blur(80px);pointer-events:none}
+.b1{width:500px;height:500px;top:-200px;left:200px;background:radial-gradient(circle,#fff,#e2e5eb 70%);opacity:.9}
+.b2{width:400px;height:400px;bottom:-180px;left:-140px;background:radial-gradient(circle,#fff,#e7e9ee 70%);opacity:.8}
+.b3{width:360px;height:360px;top:40px;right:-120px;background:radial-gradient(circle,#fff,#eceef2 70%);opacity:.7}
+.glass{background:var(--bg-glass);backdrop-filter:blur(28px) saturate(160%);-webkit-backdrop-filter:blur(28px) saturate(160%);border:1px solid var(--border);border-radius:16px;box-shadow:0 16px 48px -16px rgba(30,30,40,.12),inset 0 1px 0 rgba(255,255,255,.8)}
+/* Topbar */
+.topbar{display:flex;align-items:center;gap:12px;padding:10px 18px;position:relative;z-index:10;flex-shrink:0}
+.logo{display:flex;align-items:center;gap:8px}
+.logo-icon{width:34px;height:34px;border-radius:9px;background:linear-gradient(135deg,var(--ga),var(--gb));display:flex;align-items:center;justify-content:center;font-size:15px;flex-shrink:0}
+.logo-text{font-family:'Space Grotesk',sans-serif;font-size:16px;font-weight:700;color:var(--t1)}
+.logo-text span{color:var(--acc)}
+.chip{font-size:11px;font-weight:700;padding:3px 10px;border-radius:999px;background:rgba(255,255,255,.6);border:1px solid var(--border);color:var(--t2);transition:background .2s}
+.chip.ok{background:var(--green-bg);color:var(--green)}
+.chip.err{background:var(--red-bg);color:var(--red)}
+/* Layout */
+.layout{display:grid;grid-template-columns:260px 1fr 280px;gap:12px;flex:1;position:relative;z-index:10;min-height:0;height:calc(100vh - 84px)}
+.panel{display:flex;flex-direction:column;gap:10px;padding:14px;overflow-y:auto}
+/* Sections */
+.sec-label{font-family:'Space Grotesk',sans-serif;font-size:10px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;color:var(--t3);margin-bottom:2px}
+.sep{border:none;border-top:1px solid rgba(255,255,255,.6);margin:2px 0}
+/* Inputs */
+input,select,textarea{width:100%;background:rgba(255,255,255,.55);border:1px solid var(--border);border-radius:8px;padding:7px 11px;font-family:'Manrope',sans-serif;font-size:12.5px;color:var(--t1);outline:none}
+input:focus,textarea:focus{border-color:var(--acc)}
+textarea{resize:none;font-family:'JetBrains Mono',monospace;font-size:12px}
+/* Buttons */
+.btn{width:100%;padding:7px 12px;border:none;border-radius:8px;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:12px;font-weight:700;transition:opacity .15s,transform .1s}
+.btn:hover{opacity:.88;transform:translateY(-1px)}
+.btn-pri{background:linear-gradient(135deg,var(--ga),var(--gb));color:#fff;box-shadow:0 4px 12px rgba(124,58,237,.3)}
+.btn-grn{background:linear-gradient(135deg,#16a34a,#15803d);color:#fff}
+.btn-red{background:linear-gradient(135deg,#dc2626,#b91c1c);color:#fff}
+.btn-warn{background:linear-gradient(135deg,#d97706,#b45309);color:#fff}
+.btn-ghost{background:rgba(255,255,255,.55);border:1px solid var(--border);color:var(--t2)}
+/* Status badge */
+.st{padding:5px 9px;border-radius:8px;font-size:11.5px;font-weight:600}
+.st-ok{background:var(--green-bg);color:var(--green)}
+.st-er{background:var(--red-bg);color:var(--red)}
+.st-in{background:rgba(139,92,246,.08);color:var(--acc);border:1px solid rgba(139,92,246,.2)}
+.st-wa{background:var(--warn-bg);color:var(--warn)}
+/* Log */
+.log{background:rgba(255,255,255,.3);border:1px solid var(--border);border-radius:10px;padding:8px;overflow-y:auto;font-size:11px;font-family:'JetBrains Mono',monospace;flex:1;min-height:60px}
+.log p{padding:1px 0;border-bottom:1px solid rgba(255,255,255,.4);color:var(--t2)}
+.lc{color:#c62828!important}.fc{color:#16a34a!important}.wc{color:#b45309!important}.tc{color:var(--acc)!important}.ic{color:var(--t3)!important}
+/* Focus bar */
+.bar-wrap{height:8px;background:rgba(255,255,255,.5);border-radius:999px;overflow:hidden}
+.bar-inner{height:100%;border-radius:999px;background:linear-gradient(90deg,var(--ga),var(--gb));transition:width .4s}
+.tab-big{font-family:'Space Grotesk',sans-serif;font-size:28px;font-weight:700;color:#c62828;text-align:center}
+/* Jitsi */
+#jitsi-wrap{background:rgba(0,0,0,.05);border-radius:12px;overflow:hidden;flex:1;min-height:220px;display:flex;flex-direction:column}
+#jitsi-wrap iframe{width:100%;height:100%;border:0;flex:1}
+.jitsi-ph{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:6px;color:var(--t3);font-size:13px;padding:30px}
+.jitsi-ph .icon-big{font-size:36px}
+/* Grid helpers */
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:6px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px}
+::-webkit-scrollbar{width:5px}::-webkit-scrollbar-thumb{background:rgba(139,92,246,.2);border-radius:999px}
+/* TABS */
+.tab-bar{display:flex;gap:4px;padding:10px 14px 0;flex-shrink:0;border-bottom:1px solid rgba(255,255,255,.55)}
+.tab-btn{padding:6px 12px;border:none;border-radius:8px 8px 0 0;background:transparent;cursor:pointer;font-family:'Space Grotesk',sans-serif;font-size:11px;font-weight:700;color:var(--t3);transition:all .15s}
+.tab-btn.active{background:rgba(255,255,255,.7);color:var(--acc);box-shadow:0 -2px 0 var(--acc) inset}
+.tab-pane{display:none;flex-direction:column;gap:10px;padding:14px;overflow-y:auto;flex:1}
+.tab-pane.active{display:flex}
+.panel-tabbed{display:flex;flex-direction:column;padding:0!important;gap:0!important}
+</style>
+</head>
+<body>
+<div class="stage">
+  <div class="blob b1"></div><div class="blob b2"></div><div class="blob b3"></div>
+
+  <!-- Topbar -->
+  <div class="glass topbar">
+    <div class="logo">
+      <div class="logo-icon">🎓</div>
+      <span class="logo-text">Nex<span>Lab</span></span>
+    </div>
+    <span style="font-size:12px;color:var(--t3);font-weight:600">Student · Live Session Tester</span>
+    <span class="chip" id="loginChip">Not logged in</span>
+    <span class="chip" id="sockChip">Socket: Off</span>
+    <span class="chip" id="sessChip">No Session</span>
+  </div>
+
+  <!-- Layout -->
+  <div class="layout">
+
+    <!-- LEFT: Tabbed Controls -->
+    <div class="glass panel-tabbed">
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('left','t-session',this)">🔐 Session</button>
+        <button class="tab-btn" onclick="switchTab('left','t-code',this)">💻 Code</button>
+        <button class="tab-btn" onclick="switchTab('left','t-proctor',this)">👁 Proctor</button>
+      </div>
+      <!-- Tab: Session -->
+      <div id="t-session" class="tab-pane active">
+        <span class="sec-label">Login</span>
+        <input id="email" value="stud@tinstrc.edu" placeholder="Email">
+        <input id="pw" type="password" value="Test@1234" placeholder="Password">
+        <button class="btn btn-pri" onclick="doLogin()">🔑 Login</button>
+        <div id="loginSt" class="st st-in">Not logged in</div>
+        <hr class="sep">
+        <span class="sec-label">Join Session</span>
+        <input id="sid" placeholder="Session ID from instructor">
+        <input id="displayName" value="Test Student" placeholder="Display name">
+        <button class="btn btn-warn" onclick="grantPerms()">🎤 Allow Camera + Mic</button>
+        <div id="permSt" class="st st-in">Grant permission first</div>
+        <button class="btn btn-pri" onclick="joinSession()">📡 Join + Start Video</button>
+        <button class="btn btn-ghost" onclick="leaveSession()">🚪 Leave Session</button>
+        <div id="sessSt" class="st st-er">Not joined</div>
+      </div>
+      <!-- Tab: Code -->
+      <div id="t-code" class="tab-pane">
+        <span class="sec-label">Code Editor</span>
+        <textarea id="code" rows="10">def bubble_sort(arr):
+    n = len(arr)
+    for i in range(n):
+        for j in range(0, n-i-1):
+            if arr[j] > arr[j+1]:
+                arr[j], arr[j+1] = arr[j+1], arr[j]
+    return arr
+print(bubble_sort([5,3,8,1,2]))</textarea>
+        <div class="g2">
+          <select id="lang"><option value="71">Python 3</option><option value="62">Java</option><option value="54">C++</option></select>
+          <input id="eid" placeholder="Experiment ID">
+        </div>
+        <div class="g3">
+          <button class="btn btn-ghost" onclick="runCode()">▶ Run</button>
+          <button class="btn btn-pri" onclick="saveCode()">💾 Save</button>
+          <button class="btn btn-grn" onclick="submitCode()">✅ Submit</button>
+        </div>
+        <div id="codeOut" class="st st-in" style="font-family:'JetBrains Mono',monospace;white-space:pre-wrap;min-height:44px">Output here…</div>
+        <hr class="sep">
+        <span class="sec-label">AI Hints</span>
+        <div class="g3">
+          <button class="btn btn-ghost" onclick="getHint(1)">💡 L1</button>
+          <button class="btn btn-warn" onclick="getHint(2)">💡 L2</button>
+          <button class="btn btn-red" onclick="getHint(3)">💡 L3</button>
+        </div>
+        <div id="hintOut" class="st st-in" style="min-height:36px">Hint here…</div>
+      </div>
+      <!-- Tab: Proctoring -->
+      <div id="t-proctor" class="tab-pane">
+        <span class="sec-label">Lockdown</span>
+        <div class="g2">
+          <button class="btn btn-warn" onclick="doFullscreen()">⛶ Fullscreen</button>
+          <button class="btn btn-ghost" onclick="shareScreen()">🖥 Screen</button>
+        </div>
+        <div class="g3">
+          <button class="btn btn-red" onclick="sendViol('copy')">📋 Copy</button>
+          <button class="btn btn-red" onclick="sendViol('paste')">📋 Paste</button>
+          <button class="btn btn-red" onclick="sendViol('right_click')">🖱 R-Click</button>
+        </div>
+        <hr class="sep">
+        <span class="sec-label">Focus Monitor</span>
+        <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:6px">
+          <span style="font-size:12px;color:var(--t2);font-weight:600">Tab Switches</span>
+          <span class="tab-big" id="tabNum">0</span>
+        </div>
+        <div style="font-size:12px;color:var(--t2);font-weight:600;margin-bottom:6px">Focus: <strong id="focusVal">80</strong>/100</div>
+        <div class="bar-wrap"><div class="bar-inner" id="focusBar" style="width:80%"></div></div>
+        <button class="btn btn-ghost" onclick="sendSignals()" style="margin-top:6px">📊 Send Signals</button>
+        <hr class="sep">
+        <div class="st st-wa" style="font-size:11px;line-height:1.5">⚠️ Camera black?<br>Chrome → 🔒 → Allow camera<br>Screen share: use 📺 in Jitsi toolbar</div>
+      </div>
+    </div>
+
+    <!-- MIDDLE: Video always visible -->
+    <div class="glass panel">
+      <span class="sec-label">Live Video</span>
+      <div id="jitsi-wrap">
+        <div class="jitsi-ph">
+          <div class="icon-big">📹</div>
+          <div>Join a session to start video</div>
+          <div style="font-size:11px;opacity:.6">Camera · Mic · Screen Share</div>
+        </div>
+      </div>
+      <hr class="sep">
+      <span class="sec-label">Instructor Messages</span>
+      <div id="instrMsgs" class="log" style="max-height:80px"></div>
+      <span class="sec-label">Lockdown Warnings</span>
+      <div id="lockWarn" class="log" style="max-height:60px"></div>
+    </div>
+
+    <!-- RIGHT: Tabbed -->
+    <div class="glass panel-tabbed">
+      <div class="tab-bar">
+        <button class="tab-btn active" onclick="switchTab('right','r-log',this)">📋 Log</button>
+        <button class="tab-btn" onclick="switchTab('right','r-info',this)">ℹ️ Info</button>
+      </div>
+      <div id="r-log" class="tab-pane active">
+        <span class="sec-label">Event Log</span>
+        <div id="elog" class="log" style="flex:1;min-height:200px"></div>
+        <button class="btn btn-ghost" onclick="document.getElementById('elog').innerHTML=''">🗑 Clear Log</button>
+      </div>
+      <div id="r-info" class="tab-pane">
+        <span class="sec-label">Dashboard</span>
+        <button class="btn btn-ghost" onclick="fetchDashboard()">📊 Load Dashboard</button>
+        <div id="dashOut" class="log" style="max-height:160px"></div>
+        <hr class="sep">
+        <span class="sec-label">Session Info</span>
+        <div id="sessInfo" class="log" style="max-height:120px"><p class="ic">Join a session to see info</p></div>
+        <hr class="sep">
+        <span class="sec-label">📚 Free Courses</span>
+        <a href="http://localhost:5000/workspace/" target="_blank" class="btn btn-pri" style="text-decoration:none;text-align:center;display:block;padding:8px">
+          🚀 Open Learning Portal
+        </a>
+        <div style="display:flex;flex-direction:column;gap:6px;margin-top:4px">
+          <a href="http://localhost:5000/workspace/courses/python course basic/" target="_blank" class="btn btn-ghost" style="text-decoration:none;text-align:center">🐍 Python Basics</a>
+          <a href="http://localhost:5000/workspace/courses/Data structure - 1/" target="_blank" class="btn btn-ghost" style="text-decoration:none;text-align:center">🗂 Data Structures 1</a>
+          <a href="http://localhost:5000/workspace/courses/Data structure - 2/" target="_blank" class="btn btn-ghost" style="text-decoration:none;text-align:center">🗂 Data Structures 2</a>
+          <a href="http://localhost:5000/workspace/courses/Artificial intelligence/" target="_blank" class="btn btn-ghost" style="text-decoration:none;text-align:center">🤖 Artificial Intelligence</a>
+          <a href="http://localhost:5000/workspace/courses/Machine learning virtual lab/" target="_blank" class="btn btn-ghost" style="text-decoration:none;text-align:center">🧠 ML Virtual Lab</a>
+          <a href="http://localhost:5000/workspace/courses/Object oriented programming (OOP)/" target="_blank" class="btn btn-ghost" style="text-decoration:none;text-align:center">🔷 OOP</a>
+          <a href="http://localhost:5000/workspace/courses/python programming lab - advanced/" target="_blank" class="btn btn-ghost" style="text-decoration:none;text-align:center">⚡ Python Advanced</a>
+        </div>
+        <hr class="sep">
+        <div class="st st-wa" style="font-size:11px;line-height:1.5">⚠️ Camera black?<br>Chrome → 🔒 → Allow camera<br>Screen: use 📺 in Jitsi toolbar</div>
+      </div>
+    </div>
+
+      <hr class="sep">
+      <span class="sec-label">Session Info</span>
+      <div id="sessInfo" class="log" style="max-height:100px"><p class="ic">Join a session to see info</p></div>
+
+      <hr class="sep">
+      <span class="sec-label">Event Log</span>
+      <div id="elog" class="log" style="flex:1;min-height:100px"></div>
+      <button class="btn btn-ghost" onclick="document.getElementById('elog').innerHTML=''">🗑 Clear Log</button>
+
+      <hr class="sep">
+      <div class="st st-wa" style="font-size:11px;line-height:1.5">
+        ⚠️ Camera black? Chrome → 🔒 → Allow camera<br>
+        Screen share: use 📺 icon inside Jitsi toolbar
+      </div>
+    </div>
+
+  </div>
+</div>
+
+<script>
+const API='http://localhost:5000/api';
+let token=null,socket=null,japi=null,tabCount=0,permGranted=false;
+const sid=()=>document.getElementById('sid').value.trim();
+
+function switchTab(group,paneId,btn){
+  const allPanes=document.querySelectorAll('[id^="'+paneId.split('-')[0]+'"]');
+  // hide all panes that start with same prefix
+  document.querySelectorAll('.tab-pane').forEach(p=>{
+    if(group==='left'&&['t-session','t-code','t-proctor'].includes(p.id)){p.classList.remove('active');}
+    if(group==='right'&&['r-log','r-info'].includes(p.id)){p.classList.remove('active');}
+  });
+  document.getElementById(paneId).classList.add('active');
+  // update tab buttons in same bar
+  btn.closest('.tab-bar').querySelectorAll('.tab-btn').forEach(b=>b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
+function log(msg,c='ic'){const b=document.getElementById('elog');b.innerHTML+=`<p class="${c}">[${new Date().toLocaleTimeString()}] ${msg}</p>`;b.scrollTop=b.scrollHeight;}
+function chip(id,txt,ok){const el=document.getElementById(id);el.textContent=txt;el.className='chip'+(ok?' ok':' err');}
+
+async function api(m,p,b){const o={method:m,headers:{'Content-Type':'application/json'}};if(token)o.headers.Authorization='Bearer '+token;if(b)o.body=JSON.stringify(b);const r=await fetch(API+p,o);return{status:r.status,data:await r.json().catch(()=>({}))};}
+
+async function doLogin(){const r=await api('POST','/auth/login',{email:document.getElementById('email').value,password:document.getElementById('pw').value});if(r.status===200){token=r.data.token||r.data.access_token;const u=r.data.user||{};document.getElementById('loginSt').textContent='✓ '+u.full_name+' ('+u.role+')';document.getElementById('loginSt').className='st st-ok';document.getElementById('displayName').value=u.full_name||'Student';chip('loginChip',u.full_name||u.email,true);log('Logged in: '+u.full_name,'fc');fetchDashboard();}else{document.getElementById('loginSt').textContent='✗ '+JSON.stringify(r.data);document.getElementById('loginSt').className='st st-er';log('Login failed','lc');}}
+
+async function grantPerms(){try{const s=await navigator.mediaDevices.getUserMedia({video:true,audio:true});s.getTracks().forEach(t=>t.stop());permGranted=true;document.getElementById('permSt').textContent='✓ Camera + mic granted';document.getElementById('permSt').className='st st-ok';log('Permissions granted ✓','fc');}catch(e){document.getElementById('permSt').textContent='✗ Denied: '+e.message;document.getElementById('permSt').className='st st-er';log('Permission denied: '+e.message,'lc');}}
+
+async function joinSession(){if(!token){alert('Login first');return;}const s=sid();if(!s){alert('Enter session ID');return;}if(!permGranted){const go=confirm('Camera not granted yet. Continue?');if(!go)return;}connectSocket(s);const room='nexlab-'+s.replace(/-/g,'').slice(0,10);launchJitsi(room);const r=await api('GET','/instructor/sessions/'+s+'/dashboard');const info=document.getElementById('sessInfo');if(r.status===200){const d=r.data;info.innerHTML=`<p class="fc">Session active ✓</p><p class="ic">Students: ${(d.students||[]).length}</p>`;}document.getElementById('sessSt').textContent='✓ Joined: '+s.slice(0,12)+'...';document.getElementById('sessSt').className='st st-ok';chip('sessChip','Session: '+s.slice(0,8)+'...',true);}
+
+function leaveSession(){if(socket)socket.emit('leave_session',{session_id:sid()});if(japi){try{japi.dispose();}catch(_){}japi=null;}document.getElementById('jitsi-wrap').innerHTML='<div class="jitsi-ph"><div class="icon-big">📹</div><div>Left session</div></div>';document.getElementById('sessSt').textContent='Left session';document.getElementById('sessSt').className='st st-er';chip('sessChip','No Session',false);log('Left session','wc');}
+
+function connectSocket(sessionId){if(socket)socket.disconnect();socket=io('http://localhost:5000',{auth:{token},transports:['websocket','polling']});socket.on('connect',()=>{chip('sockChip','Socket: ✓',true);log('SocketIO connected','fc');socket.emit('join_session',{session_id:sessionId});});socket.on('disconnect',()=>{chip('sockChip','Socket: Off',false);log('SocketIO disconnected','lc');});socket.on('joined',d=>log('Joined room: '+d.room,'ic'));socket.on('instructor_message',d=>{const b=document.getElementById('instrMsgs');b.innerHTML+=`<p class="wc">📢 ${d.from}: ${d.message}</p>`;b.scrollTop=b.scrollHeight;log('Broadcast: "'+d.message+'"','wc');});socket.on('lockdown_warning',d=>{const b=document.getElementById('lockWarn');b.innerHTML+=`<p class="lc">⚠️ ${d.message}</p>`;b.scrollTop=b.scrollHeight;alert('⚠️ WARNING:\n'+d.message);});socket.on('reshare_screen_request',d=>{alert('📹 '+d.message);});socket.on('force_submission',d=>{alert('⏰ Force submit: '+d.reason);});socket.on('session_time_extended',d=>log('Extended +'+d.added_minutes+' min','fc'));socket.on('connect_error',e=>log('Socket error: '+e.message,'lc'));}
+
+function launchJitsi(room){const name=document.getElementById('displayName').value.trim()||'Student';const wrap=document.getElementById('jitsi-wrap');const url='https://meet.jit.si/'+encodeURIComponent(room)+'#config.startWithVideoMuted=false&config.startWithAudioMuted=false&config.prejoinPageEnabled=false&config.disableDeepLinking=true&config.resolution=360&userInfo.displayName='+encodeURIComponent(name);wrap.innerHTML='';const f=document.createElement('iframe');f.src=url;f.style.cssText='width:100%;height:100%;border:0;border-radius:12px;min-height:280px';f.allow='camera *; microphone *; display-capture *; fullscreen *; autoplay *; clipboard-write';f.setAttribute('allowfullscreen','');wrap.appendChild(f);log('Jitsi launched: '+room,'fc');}
+
+function shareScreen(){log('Use the 📺 icon in Jitsi toolbar to share screen','wc');}
+function doFullscreen(){document.documentElement.requestFullscreen().catch(e=>log('FS: '+e,'lc'));}
+
+document.addEventListener('fullscreenchange',()=>{if(!document.fullscreenElement){log('FULLSCREEN EXIT','lc');if(socket&&sid())socket.emit('fullscreen_exit',{session_id:sid()});}});
+document.addEventListener('visibilitychange',()=>{if(document.hidden){tabCount++;document.getElementById('tabNum').textContent=tabCount;log('TAB SWITCH #'+tabCount,'tc');if(socket&&sid())socket.emit('tab_switch',{session_id:sid(),count:tabCount});}});
+document.addEventListener('copy',e=>{if(sid()){e.preventDefault();sendViol('copy');}});
+document.addEventListener('paste',e=>{if(sid()){e.preventDefault();sendViol('paste');}});
+document.addEventListener('contextmenu',e=>{if(sid()){e.preventDefault();sendViol('right_click');}});
+
+function sendViol(a){log('Violation: '+a,'lc');if(socket&&sid())socket.emit('lockdown_violation',{session_id:sid(),action:a});}
+
+function sendSignals(){if(!socket||!sid()){log('Join session first','wc');return;}const wpm=Math.min(Math.round(document.getElementById('code').value.length/5/2),80);const p={session_id:sid(),tab_switches_per_min:tabCount/Math.max(1,performance.now()/60000),idle_seconds:0,typing_speed_wpm:wpm,backspace_ratio:0.05,copy_paste_count:0,window_focus_ratio:document.hasFocus()?0.95:0.3};socket.emit('behavioral_signals',p);log('Signals sent (wpm='+wpm+')','fc');}
+
+async function runCode(){document.getElementById('codeOut').textContent='Running…';const r=await api('POST','/execution/run',{experiment_id:document.getElementById('eid').value||null,source_code:document.getElementById('code').value,language_id:parseInt(document.getElementById('lang').value)});if(r.status===200){const d=r.data;document.getElementById('codeOut').textContent='stdout: '+(d.stdout||'')+(d.stderr?'\nstderr: '+d.stderr:'')+'\n['+d.status+'] '+d.time_ms+'ms';log('Run: '+d.status+' '+d.time_ms+'ms','fc');}else{document.getElementById('codeOut').textContent=JSON.stringify(r.data);log('Run failed','lc');}}
+
+async function saveCode(){const eid=document.getElementById('eid').value;if(!eid||!sid()){log('Need experiment ID + session ID','wc');return;}const r=await api('POST','/execution/autosave',{experiment_id:eid,session_id:sid(),files:{'main.py':document.getElementById('code').value},save_type:'auto'});log(r.status===200?'Saved ✓':'Save failed: '+r.status,r.status===200?'fc':'lc');}
+
+async function submitCode(){const eid=document.getElementById('eid').value;if(!eid){alert('Enter experiment ID');return;}const r=await api('POST','/execution/submit',{experiment_id:eid,session_id:sid()||null,source_code:document.getElementById('code').value,language_id:parseInt(document.getElementById('lang').value),is_final:true});if(r.status===200){const d=r.data;document.getElementById('codeOut').textContent='SUBMITTED ✓\nTests: '+d.test_cases_passed+'/'+d.test_cases_total+'\nQuality: '+d.quality_grade;log('Submitted: '+d.test_cases_passed+'/'+d.test_cases_total+' tests','fc');if(socket&&sid())socket.emit('checkpoint_passed',{session_id:sid(),checkpoint_number:1,test_cases_passed:d.test_cases_passed});}else{document.getElementById('codeOut').textContent=JSON.stringify(r.data);log('Submit failed','lc');}}
+
+async function getHint(level){const eid=document.getElementById('eid').value;if(!eid){alert('Enter experiment ID');return;}document.getElementById('hintOut').textContent='Loading…';const r=await api('POST','/ai/hint',{experiment_id:eid,session_id:sid()||null,code:document.getElementById('code').value,hint_level:level,language:'python'});if(r.status===200){document.getElementById('hintOut').textContent='[L'+level+'] '+r.data.hint;log('Hint L'+level+' received','wc');}else{document.getElementById('hintOut').textContent=JSON.stringify(r.data);}}
+
+async function fetchDashboard(){const r=await api('GET','/student/dashboard');const b=document.getElementById('dashOut');if(r.status===200){const d=r.data;b.innerHTML=`<p class="fc">Subjects: ${d.subjects_enrolled}</p><p class="ic">Avg Grade: ${d.avg_grade??'N/A'}</p><p class="ic">Submissions: ${d.total_submissions}</p><p class="wc">Notifications: ${d.unread_notifications}</p><p class="tc">Hints today: ${d.hints_used_today}</p>`;log('Dashboard OK','fc');}else b.innerHTML='<p class="lc">Error: '+r.status+'</p>';}
+
+setInterval(()=>{if(socket&&sid())sendSignals();},30000);
+</script>
+</body>
+</html>
