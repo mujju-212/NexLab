@@ -1,6 +1,30 @@
+from datetime import datetime
 from functools import wraps
 from flask import g, jsonify
 from flask_jwt_extended import verify_jwt_in_request, get_jwt
+
+
+def _is_force_logged_out(claims: dict) -> bool:
+    """
+    True when an admin force-logged-out this user AFTER the presented
+    token was issued — i.e. the token predates force_logout_at and must
+    be rejected (there is no blacklist, so we compare timestamps).
+    """
+    iat = claims.get('iat')
+    if not iat:
+        return False
+    from app.extensions import db
+    from app.models.user import User
+    user = db.session.get(User, claims.get('sub'))
+    if user is None or user.force_logout_at is None:
+        return False
+    return user.force_logout_at > datetime.utcfromtimestamp(int(iat))
+
+
+def _force_logout_response():
+    return jsonify({
+        'error': 'Your session was terminated by an administrator. Please log in again.'
+    }), 401
 
 
 def require_auth(f):
@@ -9,6 +33,8 @@ def require_auth(f):
     def decorated(*args, **kwargs):
         verify_jwt_in_request()
         claims = get_jwt()
+        if _is_force_logged_out(claims):
+            return _force_logout_response()
         g.user_id        = claims['sub']
         g.institution_id = claims.get('institution_id')
         g.role           = claims.get('role')
@@ -23,6 +49,8 @@ def require_role(*roles):
         def decorated(*args, **kwargs):
             verify_jwt_in_request()
             claims = get_jwt()
+            if _is_force_logged_out(claims):
+                return _force_logout_response()
             if claims.get('role') not in roles:
                 return jsonify({'error': 'Insufficient permissions'}), 403
             g.user_id        = claims['sub']
@@ -39,6 +67,8 @@ def require_institution(f):
     def decorated(*args, **kwargs):
         verify_jwt_in_request()
         claims = get_jwt()
+        if _is_force_logged_out(claims):
+            return _force_logout_response()
         if not claims.get('institution_id'):
             return jsonify({'error': 'Institution context required'}), 403
         g.user_id        = claims['sub']

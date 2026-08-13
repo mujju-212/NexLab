@@ -47,6 +47,7 @@ class StudentRanking(db.Model):
 
     def to_dict(self):
         return {
+            'section_subject_id': self.section_subject_id,
             'rank_score': round(self.rank_score, 1),
             'rank_position': self.rank_position,
             'components': {

@@ -17,6 +17,10 @@ def get_user_from_token(token):
     """Extract user claims from JWT token passed in Socket.io auth"""
     try:
         decoded = decode_token(token)
+        # Honor admin force-logout: reject tokens issued before force_logout_at
+        from app.auth.utils import _is_force_logged_out
+        if _is_force_logged_out(decoded):
+            return None
         return {
             'user_id': decoded['sub'],
             'institution_id': decoded.get('institution_id'),

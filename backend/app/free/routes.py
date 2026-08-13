@@ -7,7 +7,7 @@ from flask import Blueprint, request, jsonify, g
 from app.extensions import db
 from app.models.free import FreeCourse, FreeExercise, FreeProgress
 from app.models.user import User
-from app.auth.utils import require_auth
+from app.auth.utils import require_auth, require_role
 from datetime import datetime
 import requests as req
 from flask import current_app
@@ -326,19 +326,9 @@ def leaderboard(course_id):
 # ── Platform Admin: Manage Free Courses ──────────────────────────────────────
 
 @free_bp.route('/admin/courses', methods=['POST'])
+@require_role('platform_admin')
 def create_course():
     """Platform admin creates a free course."""
-    from app.auth.utils import require_role
-    # inline check
-    from flask_jwt_extended import verify_jwt_in_request, get_jwt
-    try:
-        verify_jwt_in_request()
-        claims = get_jwt()
-        if claims.get('role') != 'platform_admin':
-            return jsonify({'error': 'Platform admin only'}), 403
-    except Exception:
-        return jsonify({'error': 'Authentication required'}), 401
-
     data = request.get_json()
     if not data.get('title') or not data.get('slug'):
         return jsonify({'error': 'title and slug required'}), 400
@@ -362,16 +352,9 @@ def create_course():
 
 
 @free_bp.route('/admin/courses/<course_id>/exercises', methods=['POST'])
+@require_role('platform_admin')
 def create_exercise(course_id):
     """Add an exercise to a free course."""
-    from flask_jwt_extended import verify_jwt_in_request, get_jwt
-    try:
-        verify_jwt_in_request()
-        if get_jwt().get('role') != 'platform_admin':
-            return jsonify({'error': 'Platform admin only'}), 403
-    except Exception:
-        return jsonify({'error': 'Authentication required'}), 401
-
     course = FreeCourse.query.get_or_404(course_id)
     data = request.get_json()
 
@@ -399,16 +382,9 @@ def create_exercise(course_id):
 
 
 @free_bp.route('/admin/courses/<course_id>/publish', methods=['POST'])
+@require_role('platform_admin')
 def publish_course(course_id):
     """Publish or unpublish a free course."""
-    from flask_jwt_extended import verify_jwt_in_request, get_jwt
-    try:
-        verify_jwt_in_request()
-        if get_jwt().get('role') != 'platform_admin':
-            return jsonify({'error': 'Platform admin only'}), 403
-    except Exception:
-        return jsonify({'error': 'Authentication required'}), 401
-
     course = FreeCourse.query.get_or_404(course_id)
     published = request.get_json().get('published', True)
     course.is_published = published

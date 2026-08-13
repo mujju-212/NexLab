@@ -37,6 +37,9 @@ class Config:
     GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
     GROQ_DAILY_LIMIT_PER_INSTITUTION = int(os.environ.get('GROQ_DAILY_LIMIT_PER_INSTITUTION', 500))
 
+    # ── Gemini API (fallback when all Groq models are rate-limited) ───────
+    GEMINI_API_KEY = os.environ.get('GEMINI_API_KEY', '')
+
     # ── Cloudinary ────────────────────────────────────────────────────────
     CLOUDINARY_CLOUD_NAME = os.environ.get('CLOUDINARY_CLOUD_NAME', '')
     CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '')

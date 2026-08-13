@@ -10,7 +10,7 @@ from app.models.session import LabSession, SessionAttendance
 from app.models.submission import CodeAttempt, CodeVersion
 from app.models.grading import Grade, InlineComment, VivaSession
 from app.models.knowledge import StudentRanking, ConceptMastery, FocusScore
-from app.models.feedback import PlagiarismFlag
+from app.models.feedback import PlagiarismFlag, SessionFeedback
 from app.models.academic import SectionSubject, Section, SectionStudent
 from app.models.subject import Subject
 from app.models.user import User
@@ -335,11 +335,9 @@ def add_test_case(exp_id):
 def generate_test_cases(exp_id):
     """Use Groq to auto-generate test cases from problem statement"""
     exp = Experiment.query.filter_by(id=exp_id, institution_id=g.institution_id).first_or_404()
-    from groq import Groq
-    from flask import current_app
+    from app.ai.groq_client import groq_single
     import json, re
 
-    client = Groq(api_key=current_app.config['GROQ_API_KEY'])
     count  = request.get_json().get('count', 6)
 
     prompt = f"""Generate {count} test cases for this programming problem.
@@ -351,14 +349,14 @@ Problem: {exp.problem_statement}
 Input format: {exp.input_format}
 Output format: {exp.output_format}"""
 
-    resp = client.chat.completions.create(
-        model='llama-3.3-70b-versatile',
-        messages=[{'role': 'user', 'content': prompt}],
-        max_tokens=800, temperature=0.3
+    content, model_used, is_fallback = groq_single(
+        prompt, pool='quality', max_tokens=800, temperature=0.3
     )
+    if is_fallback or content is None:
+        return jsonify({'error': 'AI generator temporarily unavailable (all Groq models rate-limited). Try again in a minute.'}), 503
 
     try:
-        json_match = re.search(r'\[.*\]', resp.choices[0].message.content, re.DOTALL)
+        json_match = re.search(r'\[.*\]', content, re.DOTALL)
         test_cases = json.loads(json_match.group()) if json_match else []
     except Exception:
         return jsonify({'error': 'Could not parse generated test cases'}), 500
@@ -766,3 +764,183 @@ def section_analytics(section_subject_id):
 def student_mastery(student_id):
     masteries = ConceptMastery.query.filter_by(student_id=student_id).all()
     return jsonify({'mastery': [m.to_dict() for m in masteries]}), 200
+
+
+# ── Session Feedback (anonymous) ────────────────────────────────────────────────
+
+@instructor_bp.route('/sessions/<session_id>/feedback', methods=['GET'])
+@require_role('instructor', 'institution_admin')
+def session_feedback(session_id):
+    """Anonymous student feedback for a session + aggregate averages."""
+    LabSession.query.filter_by(
+        id=session_id, institution_id=g.institution_id
+    ).first_or_404()
+
+    rows = SessionFeedback.query.filter_by(
+        session_id=session_id, institution_id=g.institution_id
+    ).order_by(SessionFeedback.submitted_at.desc()).all()
+
+    def avg(field):
+        vals = [getattr(f, field) for f in rows if getattr(f, field) is not None]
+        return round(sum(vals) / len(vals), 2) if vals else None
+
+    return jsonify({
+        'session_id': session_id,
+        'total': len(rows),
+        'averages': {
+            'experiment_clarity':  avg('experiment_clarity'),
+            'session_pacing':      avg('session_pacing'),
+            'ai_hint_helpfulness': avg('ai_hint_helpfulness'),
+            'overall_rating':      avg('overall_rating'),
+        },
+        'feedback': [{
+            'id':                  f.id,
+            'experiment_clarity':  f.experiment_clarity,
+            'session_pacing':      f.session_pacing,
+            'ai_hint_helpfulness': f.ai_hint_helpfulness,
+            'overall_rating':      f.overall_rating,
+            'comment':             f.comment,
+            'submitted_at':        f.submitted_at.isoformat() if f.submitted_at else None,
+        } for f in rows],
+    }), 200
+
+
+# ── Viva Review ────────────────────────────────────────────────────────────────
+
+@instructor_bp.route('/vivas', methods=['GET'])
+@require_role('instructor', 'institution_admin')
+def list_vivas():
+    """All viva sessions for this instructor's experiments, with student names."""
+    status = request.args.get('status')
+
+    my_exp_ids = [e.id for e in Experiment.query.filter_by(
+        institution_id=g.institution_id, instructor_id=g.user_id
+    ).all()]
+    if not my_exp_ids:
+        return jsonify({'vivas': []}), 200
+
+    query = VivaSession.query.filter(VivaSession.experiment_id.in_(my_exp_ids))
+    if status:
+        query = query.filter_by(status=status)
+    vivas = query.order_by(VivaSession.created_at.desc()).limit(200).all()
+
+    student_ids = {v.student_id for v in vivas}
+    students = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
+    exps = {e.id: e for e in Experiment.query.filter(Experiment.id.in_(my_exp_ids)).all()}
+
+    result = []
+    for v in vivas:
+        u = students.get(v.student_id)
+        exp = exps.get(v.experiment_id)
+        result.append({
+            'id':            v.id,
+            'student_id':    v.student_id,
+            'full_name':     u.full_name if u else 'Unknown',
+            'roll_number':   u.roll_number if u else '',
+            'experiment_id': v.experiment_id,
+            'experiment':    exp.title if exp else 'Unknown',
+            'total_score':   v.total_score,
+            'status':        v.status,
+            'question_count': len(v.questions) if v.questions else 0,
+            'started_at':    v.started_at.isoformat() if v.started_at else None,
+            'completed_at':  v.completed_at.isoformat() if v.completed_at else None,
+        })
+    return jsonify({'vivas': result}), 200
+
+
+@instructor_bp.route('/vivas/<viva_id>', methods=['GET'])
+@require_role('instructor', 'institution_admin')
+def viva_detail(viva_id):
+    """Viva session with questions + each student answer and AI feedback."""
+    viva = VivaSession.query.get_or_404(viva_id)
+    exp = Experiment.query.get(viva.experiment_id)
+    if not exp or exp.instructor_id != g.user_id:
+        return jsonify({'error': 'Not your experiment'}), 403
+
+    student = User.query.get(viva.student_id)
+    answers = sorted(viva.answers.all(), key=lambda a: a.question_index)
+
+    return jsonify({
+        'viva': {
+            'id':           viva.id,
+            'student_id':   viva.student_id,
+            'full_name':    student.full_name if student else 'Unknown',
+            'experiment':   exp.title,
+            'questions':    viva.questions,
+            'total_score':  viva.total_score,
+            'status':       viva.status,
+            'completed_at': viva.completed_at.isoformat() if viva.completed_at else None,
+        },
+        'answers': [{
+            'question_index': a.question_index,
+            'question_text':  a.question_text,
+            'answer_text':    a.answer_text,
+            'score':          a.score,
+            'ai_feedback':    a.ai_feedback,
+            'submitted_at':   a.submitted_at.isoformat() if a.submitted_at else None,
+        } for a in answers],
+    }), 200
+
+
+# ── Catch-Up Overview ──────────────────────────────────────────────────────────
+
+@instructor_bp.route('/catchups', methods=['GET'])
+@require_role('instructor', 'institution_admin')
+def catchup_overview():
+    """Catch-up attempts + catch-up-enabled sessions for this instructor."""
+    # Sessions taught by this instructor (via their section-subjects)
+    ss_ids = [ss.id for ss in SectionSubject.query.filter_by(
+        institution_id=g.institution_id, instructor_id=g.user_id
+    ).all()]
+    if not ss_ids:
+        return jsonify({'enabled_sessions': [], 'attempts': []}), 200
+
+    sessions = LabSession.query.filter(
+        LabSession.section_subject_id.in_(ss_ids)
+    ).all()
+
+    exp_ids = {s.experiment_id for s in sessions}
+    exps = {e.id: e for e in Experiment.query.filter(Experiment.id.in_(exp_ids)).all()} if exp_ids else {}
+
+    enabled_sessions = []
+    for s in sessions:
+        if not s.catchup_enabled:
+            continue
+        exp = exps.get(s.experiment_id)
+        attempts = SessionAttendance.query.filter_by(session_id=s.id, is_catchup=True).count()
+        expired = bool(s.catchup_deadline and datetime.utcnow() > s.catchup_deadline)
+        enabled_sessions.append({
+            'session_id':       s.id,
+            'experiment':       exp.title if exp else 'Unknown',
+            'scheduled_at':     s.scheduled_at.isoformat() if s.scheduled_at else None,
+            'catchup_deadline': s.catchup_deadline.isoformat() if s.catchup_deadline else None,
+            'expired':          expired,
+            'attempts':         attempts,
+        })
+
+    # Individual attempts
+    session_ids = [s.id for s in sessions]
+    attempts_q = SessionAttendance.query.filter(
+        SessionAttendance.session_id.in_(session_ids),
+        SessionAttendance.is_catchup == True  # noqa: E712
+    ).all()
+    student_ids = {a.student_id for a in attempts_q}
+    students = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
+    sess_by_id = {s.id: s for s in sessions}
+
+    attempts = []
+    for a in attempts_q:
+        u = students.get(a.student_id)
+        sess = sess_by_id.get(a.session_id)
+        exp = exps.get(sess.experiment_id) if sess else None
+        attempts.append({
+            'student_id':    a.student_id,
+            'full_name':     u.full_name if u else 'Unknown',
+            'roll_number':   u.roll_number if u else '',
+            'session_id':    a.session_id,
+            'experiment':    exp.title if exp else 'Unknown',
+            'status':        a.status,
+            'started_at':    a.joined_at.isoformat() if a.joined_at else None,
+        })
+
+    return jsonify({'enabled_sessions': enabled_sessions, 'attempts': attempts}), 200

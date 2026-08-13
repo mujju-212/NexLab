@@ -13,10 +13,11 @@ import os
 
 ai_bp = Blueprint('ai', __name__)
 
-# Groq model selection
-MODEL_HINTS = 'llama-3.1-8b-instant'     # fast, generous free tier
-MODEL_CHAT  = 'llama-3.3-70b-versatile'  # better reasoning for chat
-MODEL_VIVA  = 'llama-3.3-70b-versatile'  # code-specific questions need quality
+# Groq model pools — rotation across models on rate limits is handled
+# by app.ai.groq_client (429 → next model in pool automatically)
+POOL_HINTS = 'fast'      # fast, generous free tier
+POOL_CHAT  = 'quality'   # better reasoning for chat
+POOL_VIVA  = 'quality'   # code-specific questions need quality
 
 # Hint deduction schedule
 HINT_DEDUCTIONS = {0: 0.0, 1: 3.0, 2: 7.0, 3: 12.0}
@@ -73,9 +74,9 @@ STRICT RULES:
 
     user_message = f"Language: {language}\nError: {error or 'None'}\nCode:\n{code[-1500:]}"
 
-    # ── Call Groq ─────────────────────────────────────────────────────────
+    # ── Call Groq (auto-rotates models on rate limits) ───────────────────
     start_time = time.time()
-    hint_text, is_fallback = _call_groq(system_prompt, user_message, MODEL_HINTS, max_tokens=120)
+    hint_text, model_used, is_fallback = _call_groq(system_prompt, user_message, POOL_HINTS, max_tokens=120)
     latency_ms = int((time.time() - start_time) * 1000)
 
     # ── Log hint ──────────────────────────────────────────────────────────
@@ -86,7 +87,7 @@ STRICT RULES:
         hint_level=hint_level,
         prompt_sent=f"{system_prompt}\n---\n{user_message}",
         response_received=hint_text,
-        model_used=MODEL_HINTS,
+        model_used=model_used or 'fallback',
         latency_ms=latency_ms,
         is_fallback=is_fallback
     )
@@ -105,6 +106,7 @@ STRICT RULES:
         'hints_used': total_hints,
         'deduction_pct': deduction,
         'is_fallback': is_fallback,
+        'model_used': model_used,
         'latency_ms': latency_ms,
     }), 200
 
@@ -133,7 +135,7 @@ Be encouraging. Use simple language. Ask guiding questions."""
     groq_messages = [{'role': 'system', 'content': system_prompt}]
     groq_messages.extend(messages[-10:])   # last 10 messages for context
 
-    response, _ = _call_groq_messages(groq_messages, MODEL_CHAT, max_tokens=400)
+    response, _, _ = _call_groq_messages(groq_messages, POOL_CHAT, max_tokens=400)
     _increment_quota(g.institution_id)
 
     return jsonify({'response': response}), 200
@@ -159,7 +161,10 @@ Requirements:
 - Return a JSON array: [{"question": "...", "expected_topics": ["..."]}]"""
 
     user_message = f"Student's submitted code:\n{code[:3000]}"
-    response, _ = _call_groq(system_prompt, user_message, MODEL_VIVA, max_tokens=600)
+    response, _, is_fallback = _call_groq(system_prompt, user_message, POOL_VIVA, max_tokens=600)
+
+    if is_fallback:
+        return jsonify({'error': 'AI is temporarily unavailable (all models rate-limited). Try again in a minute.'}), 503
 
     # Parse questions from response
     import json, re
@@ -200,7 +205,7 @@ Return ONLY valid JSON: {"score": <0-10>, "feedback": "<one sentence>"}
 Score guidelines: 9-10=excellent, 7-8=good, 5-6=partial, 3-4=weak, 0-2=incorrect"""
 
     user_message = f"Code: {code[:1000]}\nQuestion: {question_text}\nAnswer: {answer_text}"
-    response, _ = _call_groq(system_prompt, user_message, MODEL_HINTS, max_tokens=80)
+    response, _, _ = _call_groq(system_prompt, user_message, POOL_HINTS, max_tokens=80)
 
     import json, re
     try:
@@ -308,49 +313,27 @@ def get_viva_session(viva_session_id):
 
 # ── Groq helpers ────────────────────────────────────────────────────────────
 
-def _call_groq(system_prompt: str, user_message: str, model: str, max_tokens: int = 200):
-    """Single-turn Groq call with retry and fallback"""
-    from groq import Groq, RateLimitError
-    client = Groq(api_key=current_app.config['GROQ_API_KEY'])
-
-    for attempt in range(3):
-        try:
-            resp = client.chat.completions.create(
-                model=model,
-                messages=[
-                    {'role': 'system', 'content': system_prompt},
-                    {'role': 'user',   'content': user_message}
-                ],
-                max_tokens=max_tokens,
-                temperature=0.3
-            )
-            return resp.choices[0].message.content, False
-        except RateLimitError:
-            if attempt < 2:
-                time.sleep(10)
-            else:
-                return _get_fallback_hint(), True
-        except Exception as e:
-            current_app.logger.error(f"Groq call failed: {e}")
-            if attempt == 2:
-                return _get_fallback_hint(), True
-            time.sleep(2)
-
-    return _get_fallback_hint(), True
+def _call_groq(system_prompt: str, user_message: str, pool: str, max_tokens: int = 200):
+    """Single-turn Groq call with automatic model rotation on rate limits."""
+    from app.ai.groq_client import groq_single
+    text, model, is_fallback = groq_single(
+        user_message, pool=pool, system_prompt=system_prompt,
+        max_tokens=max_tokens, temperature=0.3
+    )
+    if text is None:
+        return _get_fallback_hint(), None, True
+    return text, model, is_fallback
 
 
-def _call_groq_messages(messages: list, model: str, max_tokens: int = 400):
-    """Multi-turn Groq call"""
-    from groq import Groq
-    client = Groq(api_key=current_app.config['GROQ_API_KEY'])
-    try:
-        resp = client.chat.completions.create(
-            model=model, messages=messages, max_tokens=max_tokens, temperature=0.5
-        )
-        return resp.choices[0].message.content, False
-    except Exception as e:
-        current_app.logger.error(f"Groq chat failed: {e}")
-        return "I'm temporarily unavailable. Please try again in a moment.", True
+def _call_groq_messages(messages: list, pool: str, max_tokens: int = 400):
+    """Multi-turn Groq call with automatic model rotation on rate limits."""
+    from app.ai.groq_client import groq_chat
+    text, model, is_fallback = groq_chat(
+        messages, pool=pool, max_tokens=max_tokens, temperature=0.5
+    )
+    if text is None:
+        return "I'm temporarily unavailable. Please try again in a moment.", None, True
+    return text, model, is_fallback
 
 
 def _get_fallback_hint() -> str:
