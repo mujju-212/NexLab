@@ -290,7 +290,7 @@ export default function RegisterPage() {
           </div>
 
           {/* Account type toggle */}
-          <div style={{ display:'flex', gap:8, marginBottom:22, background:'rgba(245,243,255,.7)', borderRadius:12, padding:4, border:'1px solid rgba(255,255,255,.9)' }}>
+          <div style={{ display:'flex', gap:8, marginBottom:22, background:'rgba(243,232,255,.7)', borderRadius:12, padding:4, border:'1px solid rgba(255,255,255,.9)' }}>
             {(['individual', 'institution'] as const).map(type => (
               <button
                 key={type}

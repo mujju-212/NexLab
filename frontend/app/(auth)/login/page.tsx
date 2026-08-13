@@ -157,13 +157,20 @@ export default function LoginPageClient() {
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sIdx]);
 
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
-    if (loading || !email || !password) return;
+    if (loading) return;
+    // Read live DOM values so browser-autofilled credentials work too
+    const fd = new FormData(e.currentTarget);
+    const em = String(fd.get('email') ?? '').trim();
+    const pw = String(fd.get('password') ?? '');
+    if (!em || !pw) { setError('Please enter your email and password.'); return; }
+    setEmail(em);
+    setPassword(pw);
     setError(null);
     setLoading(true);
     try {
-      const data = await authService.login({ email, password });
+      const data = await authService.login({ email: em, password: pw });
       setUser(data.user);
       const route = ROLE_ROUTES[data.user.role] ?? '/student/dashboard';
       router.push(route);
@@ -314,7 +321,7 @@ export default function LoginPageClient() {
                     <svg className={styles.icon}><use href="#i-mail" /></svg>
                   </span>
                   <input
-                    id="login-email" type="email"
+                    id="login-email" type="email" name="email"
                     className={styles.textInput} placeholder="you@example.com"
                     autoComplete="username" value={email}
                     onChange={(e) => setEmail(e.target.value)}
@@ -329,7 +336,7 @@ export default function LoginPageClient() {
                     <svg className={styles.icon}><use href="#i-lock" /></svg>
                   </span>
                   <input
-                    id="login-password" type={showPw ? 'text' : 'password'}
+                    id="login-password" type={showPw ? 'text' : 'password'} name="password"
                     className={styles.textInput} placeholder="Enter your password"
                     autoComplete="current-password" value={password}
                     onChange={(e) => setPassword(e.target.value)}
@@ -350,7 +357,7 @@ export default function LoginPageClient() {
 
               <div className={styles.formActions}>
                 <button type="submit" id="signInBtn"
-                  disabled={loading || !email || !password}
+                  disabled={loading}
                   className={`${styles.btnPrimary} ${loading ? styles.btnLoading : ''}`}>
                   <span className={styles.btnLabel}>{loading ? 'Signing in…' : 'Sign In'}</span>
                   <span className={styles.spinner} />
@@ -362,7 +369,7 @@ export default function LoginPageClient() {
               <a href="#">Forgot Password?</a>
             </p>
 
-            <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(245,243,255,.9)', display:'flex', flexDirection:'column', gap:7 }}>
+            <div style={{ marginTop: 16, paddingTop: 14, borderTop: '1px solid rgba(243,232,255,.9)', display:'flex', flexDirection:'column', gap:7 }}>
               <p className={styles.formFoot}>
                 New to NexLab?{' '}
                 <a href="/register" style={{ color:'#7c3aed', fontWeight:700 }}>
