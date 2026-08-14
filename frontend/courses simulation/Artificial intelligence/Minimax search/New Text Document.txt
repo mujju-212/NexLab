@@ -1,0 +1,162 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Lab: Minimax Search - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .tab-content { transition: opacity 0.3s ease; }
+        .tab-content.hidden { display: none; }
+        .node { width: 50px; height: 50px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid #475569; transition: all 0.3s; font-size: 10px; background: #1e293b; }
+        .max-node { border-color: #3b82f6; }
+        .min-node { border-color: #ec4899; }
+        .leaf-node { border-color: #10b981; background: #064e3b; }
+        .active-node { border-color: #f59e0b; box-shadow: 0 0 10px #f59e0b; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-chess"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Artificial Intelligence</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 6: Minimax Search</p>
+            </div>
+        </div>
+    </header>
+
+    <nav class="bg-slate-800/80 border-b border-slate-700 px-6 py-2">
+        <div class="flex gap-4 text-sm font-medium">
+            <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-lg text-indigo-400 bg-slate-700/60 border border-slate-600">
+                <i class="fa-solid fa-book-open"></i> Theory
+            </button>
+            <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-white">
+                <i class="fa-solid fa-list-check"></i> Procedure
+            </button>
+            <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-white">
+                <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+            </button>
+            <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-white">
+                <i class="fa-solid fa-flask"></i> Simulation
+            </button>
+            <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-white">
+                <i class="fa-solid fa-graduation-cap"></i> Post-Test
+            </button>
+            <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-white">
+                <i class="fa-solid fa-robot"></i> AI Socratic Assistant
+            </button>
+        </div>
+    </nav>
+
+    <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
+        <div id="content-theory" class="tab-content bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400">Theory: Minimax Search</h2>
+            <p class="text-sm text-slate-300">Minimax is a decision-making algorithm for two-player zero-sum games. It maximizes the score for the player (MAX) and minimizes the score for the opponent (MIN).</p>
+        </div>
+
+        <div id="content-procedure" class="tab-content hidden bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Procedure</h2>
+            <ul class="list-decimal list-inside text-sm text-slate-300 space-y-2">
+                <li>Traverse the game tree to leaf nodes.</li>
+                <li>Apply heuristic evaluation at leaves.</li>
+                <li>Propagate values upward: MAX chooses max, MIN chooses min.</li>
+            </ul>
+        </div>
+
+        <div id="content-pretest" class="tab-content hidden bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Pre-Test</h2>
+            <p class="text-sm text-slate-300">Q: What type of game is Minimax best suited for?</p>
+            <button onclick="alert('Submitted!')" class="bg-indigo-600 px-4 py-2 rounded mt-2 text-sm">Submit</button>
+        </div>
+
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-center">
+                <button onclick="runMinimax()" class="bg-indigo-600 px-4 py-2 rounded text-white font-bold hover:bg-indigo-500 text-sm">Next Step</button>
+                <div id="status" class="font-mono text-indigo-400 font-bold text-sm">Current Node: Root</div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div id="tree" class="flex flex-wrap gap-4 justify-center py-10"></div>
+                <div class="bg-slate-950 p-4 rounded border border-slate-700 font-mono text-xs text-slate-400 h-64 overflow-y-auto" id="terminal"></div>
+            </div>
+        </div>
+
+        <div id="content-posttest" class="tab-content hidden bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Post-Test</h2>
+            <button onclick="alert('Submitted!')" class="bg-indigo-600 px-4 py-2 rounded text-sm">Submit</button>
+        </div>
+
+        <div id="content-ai" class="tab-content hidden bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 class="text-lg font-bold text-indigo-400 mb-4">AI Socratic Assistant</h2>
+            <div id="chatBox" class="h-48 bg-slate-950 p-4 rounded mb-4 overflow-y-auto text-xs font-mono text-slate-300">
+                <p>> Ask me about Minimax pruning!</p>
+            </div>
+            <div class="flex gap-2">
+                <input type="text" id="aiInput" class="flex-1 bg-slate-900 border border-slate-700 p-2 rounded text-sm" placeholder="Ask a question...">
+                <button onclick="askAI()" class="bg-indigo-600 px-4 py-2 rounded text-white text-sm">Ask</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let nodes = [
+            { id: 'Root', type: 'max', v: null },
+            { id: 'A', type: 'min', v: null }, { id: 'B', type: 'min', v: null },
+            { id: 'L1', type: 'leaf', v: 3 }, { id: 'L2', type: 'leaf', v: 5 },
+            { id: 'L3', type: 'leaf', v: 2 }, { id: 'L4', type: 'leaf', v: 9 }
+        ];
+        let step = 0;
+
+        function switchTab(t) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600'));
+            document.getElementById('content-' + t).classList.remove('hidden');
+            const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.innerText.toLowerCase().includes(t));
+            if (activeBtn) activeBtn.classList.add('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+        }
+
+        function renderTree() {
+            const tree = document.getElementById('tree');
+            tree.innerHTML = nodes.map(n => `
+                <div class="node ${n.type}-node ${n.v !== null ? 'leaf-node' : ''}">
+                    <span>${n.id}</span>
+                    <span>${n.v !== null ? n.v : '?'}</span>
+                </div>
+            `).join('');
+        }
+
+        function runMinimax() {
+            if (step === 0) {
+                document.getElementById('terminal').innerHTML += "> Evaluating Leaf nodes...<br>";
+                step++;
+            } else if (step === 1) {
+                nodes[1].v = 3; nodes[2].v = 2;
+                document.getElementById('terminal').innerHTML += "> MIN nodes updated with min(leafs).<br>";
+                step++;
+            } else {
+                nodes[0].v = 3;
+                document.getElementById('terminal').innerHTML += "> MAX node updated with max(children). Done.<br>";
+            }
+            renderTree();
+        }
+
+        function askAI() {
+            const q = document.getElementById('aiInput').value;
+            document.getElementById('chatBox').innerHTML += `<p>> ${q}</p><p class="text-indigo-400">> Minimax assumes both players play optimally. One player maximizes their utility while the other minimizes it.</p>`;
+            document.getElementById('aiInput').value = '';
+        }
+        
+        renderTree();
+    </script>
+</body>
+</html>
+```eof
+
+**What is the 7th Artificial Intelligence experiment on your list?**

@@ -1,0 +1,634 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Python File Handling — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .code-line{transition:background-color .25s ease,border-color .25s ease;border-left:4px solid transparent;}
+  .code-line.active{background:rgba(124,58,237,.09);border-left-color:#7c3aed;}
+  .mem-card,.disk-card{transition:all .25s ease;}
+  .mem-card.updated,.disk-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.02);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.3);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-brands fa-python"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Python Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment 8: Python File Handling & Storage Operations</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> Theory
+      </button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-list-check"></i> Procedure
+      </button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+      </button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-flask"></i> Simulation
+      </button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-graduation-cap"></i> Post-Test
+      </button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Python File Handling</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">File handling lets data persist on non-volatile secondary storage (disk) instead of disappearing when the program ends. Python's built-in <code class="font-mono text-purple-600">open()</code> function is the gateway to reading and writing external files.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-purple-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-folder-open text-emerald-500"></i> open() & Modes</span>
+            <span class="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded">Modes</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed"><code class="font-mono text-purple-600">'r'</code> read, <code class="font-mono text-purple-600">'w'</code> write/overwrite, <code class="font-mono text-purple-600">'a'</code> append, <code class="font-mono text-purple-600">'x'</code> exclusive create.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-purple-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-file-lines text-amber-500"></i> read() & write()</span>
+            <span class="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded">I/O Streams</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed"><code class="font-mono text-purple-600">f.write("text")</code> writes to the file buffer; <code class="font-mono text-purple-600">f.read()</code> loads the entire content into memory.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-purple-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-shield-halved text-cyan-500"></i> with Context Manager</span>
+            <span class="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded">Auto-Close</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed"><code class="font-mono text-purple-600">with open(...) as f:</code> automatically flushes and closes the file when the block exits — even on error.</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Mode</th><th class="p-2 text-left">Behavior</th><th class="p-2 text-left">If File Doesn't Exist</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">'r'</td><td class="p-2">Read only, pointer at start</td><td class="p-2">Raises FileNotFoundError</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">'w'</td><td class="p-2">Write; truncates/overwrites existing content</td><td class="p-2">Creates a new file</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">'a'</td><td class="p-2">Write; pointer at end, appends without erasing</td><td class="p-2">Creates a new file</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">'x'</td><td class="p-2">Exclusive create; fails if file already exists</td><td class="p-2">Creates a new file</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs text-rose-700 space-y-2">
+        <h4 class="font-bold text-rose-700 text-sm"><i class="fa-solid fa-triangle-exclamation"></i> Common Pitfalls</h4>
+        <ul class="list-disc list-inside space-y-1 leading-relaxed">
+          <li><strong>Forgetting to close a file</strong> can leave data unflushed in the buffer and never actually written to disk — always prefer <code class="font-mono">with open(...) as f:</code> over manual <code class="font-mono">open()</code>/<code class="font-mono">close()</code>.</li>
+          <li><strong>Opening in <code class="font-mono">'w'</code> mode destroys existing content immediately</strong> — even before you write anything. If you meant to keep the old data, you wanted <code class="font-mono">'a'</code>.</li>
+          <li><strong>Reading a file twice without resetting the pointer</strong> gives an empty string the second time — the read cursor is already at the end. Use <code class="font-mono">f.seek(0)</code> to rewind.</li>
+          <li><strong><code class="font-mono">f.read()</code> loads the ENTIRE file into memory</strong> — for huge files, iterate line-by-line instead (<code class="font-mono">for line in f:</code>).</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Select a <strong>File Operation Scenario</strong> (Write, Read, Append, or Context Manager) from the dropdown or click a Quick Preset.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Simulation</strong> to reset the virtual disk and load the script into memory.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step Execution</strong> to trace line-by-line. Observe the file handle opening, buffer writes, and pointer changes.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Inspect the <strong>Virtual Secondary Storage Inspector</strong> panel to watch content and the OPEN/CLOSED handle status change live.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Run / Execute All</strong> to complete execution instantly and view the final terminal output.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> at any time to clear the trace and start over.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What happens when you open an existing file in <code class="font-mono">'w'</code> mode?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Content is preserved and new text is appended at the end</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> Existing content is truncated (overwritten)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Python raises a FileExistsError</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What is the primary advantage of <code class="font-mono">with open(...) as f:</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> It speeds up execution by skipping disk writes</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> It automatically closes the file handle when exiting the block</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> It prevents syntax errors in Python</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. Which mode adds new content to the END of a file without erasing existing content?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> 'a'</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> 'w'</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> 'r'</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">4. What does <code class="font-mono">f.read()</code> return?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> Only the first line of the file</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> A list of lines</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> The entire file content as a single string</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Select File Operation Scenario</label>
+              <select id="fileScenario" onchange="updateScenarioDisplay()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500 min-w-[300px]">
+                <option value="file_write">Writing to File (Mode 'w')</option>
+                <option value="file_read">Reading from File (Mode 'r')</option>
+                <option value="file_append">Appending Content (Mode 'a')</option>
+                <option value="with_statement">Context Manager ('with' Auto-close)</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Start Simulation
+            </button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-forward-step"></i> Step Execution
+            </button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-bolt"></i> Run / Execute All
+            </button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('file_write')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Write File ('w')</button>
+          <button onclick="loadPreset('file_read')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Read File ('r')</button>
+          <button onclick="loadPreset('file_append')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Append File ('a')</button>
+          <button onclick="loadPreset('with_statement')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">'with' Statement</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-code text-purple-600"></i> Code Trace Window
+            </span>
+          </div>
+          <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 text-slate-200 flex-1 space-y-0.5 overflow-x-auto min-h-[260px]"></div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Select a scenario and click 'Start Simulation' or 'Run / Execute All'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-7 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-4">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center justify-between">
+              <span class="flex items-center gap-2"><i class="fa-solid fa-hard-drive text-purple-600"></i> Virtual Secondary Storage Inspector (/disk/sample.txt)</span>
+              <span id="fileHandleStatus" class="text-[10px] bg-slate-100 text-rose-500 px-2 py-0.5 rounded border border-slate-200 font-mono">Status: CLOSED</span>
+            </h3>
+            <div id="diskFileBox" class="disk-card bg-slate-950 border border-slate-800 p-4 rounded-xl font-mono text-xs space-y-2">
+              <div class="flex justify-between items-center text-slate-400 border-b border-slate-800 pb-2 text-[11px]">
+                <span>Filename: <strong class="text-amber-300">sample.txt</strong></span>
+                <span>Active Mode: <strong id="activeModeLabel" class="text-purple-300">--</strong></span>
+              </div>
+              <div class="pt-2">
+                <span class="text-slate-500 text-[10px] uppercase block mb-1">Disk Buffer Contents:</span>
+                <pre id="virtualDiskContent" class="text-emerald-300 bg-slate-900 p-3 rounded border border-slate-800 font-mono text-xs whitespace-pre-wrap min-h-[80px]">file is empty or not created yet...</pre>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal
+              </span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[140px] max-h-[180px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-square-check"></i>
+              </div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Final Execution Output</h4>
+                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+            <span class="text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200">Status: OK</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. Which file mode appends data without removing existing content?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> 'w'</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> 'a'</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> 'r+'</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What method reads the entire file into a single string?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> file.readline()</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> file.read()</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> file.get_content()</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. What automatically happens to the file handle when a <code class="font-mono">with open(...) as f:</code> block exits, even if an exception occurred?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> It stays open until the program ends</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> Python deletes the file</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> It is automatically closed</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. What is the risk of opening a file in <code class="font-mono">'w'</code> mode when you meant to keep existing content?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> The existing content is immediately truncated, even before any write() call</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> Nothing — 'w' behaves exactly like 'a'</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> Python asks for confirmation before overwriting</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+      </h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me anything about file handling: open(), modes ('r', 'w', 'a'), read(), write(), or the with statement.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., difference between mode 'w' and 'a'?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+let scenario = 'file_write';
+let stepList = [];
+let currentStepIdx = 0;
+
+function loadPreset(presetScenario){
+  document.getElementById('fileScenario').value = presetScenario;
+  runAll();
+}
+
+function updateScenarioDisplay(){
+  scenario = document.getElementById('fileScenario').value;
+  const codeContainer = document.getElementById('codeContainer');
+
+  if (scenario === 'file_write'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>f = open(<span class="text-emerald-300">"sample.txt"</span>, <span class="text-emerald-300">"w"</span>)</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>f.write(<span class="text-emerald-300">"Hello Virtual Lab!\\n"</span>)</span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span>f.close()</span></div>
+      <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">"File written and closed successfully."</span>)</span></div>
+    `;
+  } else if (scenario === 'file_read'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>f = open(<span class="text-emerald-300">"sample.txt"</span>, <span class="text-emerald-300">"r"</span>)</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>content = f.read()</span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span>f.close()</span></div>
+      <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Content Read:\\n{content}"</span>)</span></div>
+    `;
+  } else if (scenario === 'file_append'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>f = open(<span class="text-emerald-300">"sample.txt"</span>, <span class="text-emerald-300">"a"</span>)</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>f.write(<span class="text-emerald-300">"Appended Line 2\\n"</span>)</span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span>f.close()</span></div>
+      <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">"Appended new line to sample.txt"</span>)</span></div>
+    `;
+  } else if (scenario === 'with_statement'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>with open(<span class="text-emerald-300">"sample.txt"</span>, <span class="text-emerald-300">"r"</span>) as f:</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>&nbsp;&nbsp;&nbsp;&nbsp;data = f.read()</span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span># Exited context block -&gt; f is auto-closed!</span></div>
+      <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Read via 'with': {data.strip()}"</span>)</span></div>
+    `;
+  }
+}
+
+function buildExecutionSteps(){
+  stepList = [];
+  if (scenario === 'file_write'){
+    stepList = [
+      { line:1, mode:"'w'", isOpen:true, diskText:"(file truncated for writing...)",
+        consoleMsg:`&gt; Opened 'sample.txt' in mode 'w' (Write)`, explanation:`Line 1: Created file handle 'f' in write mode. Existing content is truncated immediately.` },
+      { line:2, mode:"'w'", isOpen:true, diskText:"Hello Virtual Lab!\n",
+        consoleMsg:`&gt; f.write("Hello Virtual Lab!\\n") -&gt; Written 20 bytes`, explanation:`Line 2: Wrote a string into the virtual file buffer on disk.` },
+      { line:3, mode:"'w'", isOpen:false, diskText:"Hello Virtual Lab!\n",
+        consoleMsg:`&gt; f.close() -&gt; Stream closed & flushed`, explanation:`Line 3: Closed the file handle and safely flushed buffers to persistent storage.` },
+      { line:4, mode:"CLOSED", isOpen:false, diskText:"Hello Virtual Lab!\n",
+        consoleMsg:`<span class='text-emerald-600 font-bold'>File written and closed successfully.</span>`, explanation:`Line 4: Displayed the completion message.` }
+    ];
+  } else if (scenario === 'file_read'){
+    stepList = [
+      { line:1, mode:"'r'", isOpen:true, diskText:"Hello Virtual Lab!\n",
+        consoleMsg:`&gt; Opened 'sample.txt' in mode 'r' (Read)`, explanation:`Line 1: Opened the file stream in read-only mode.` },
+      { line:2, mode:"'r'", isOpen:true, diskText:"Hello Virtual Lab!\n",
+        consoleMsg:`&gt; content = f.read() -&gt; Read 20 bytes from disk`, explanation:`Line 2: Executed f.read() to load the entire file into a single string in RAM.` },
+      { line:3, mode:"'r'", isOpen:false, diskText:"Hello Virtual Lab!\n",
+        consoleMsg:`&gt; f.close() -&gt; Closed file stream`, explanation:`Line 3: Closed the file handle.` },
+      { line:4, mode:"CLOSED", isOpen:false, diskText:"Hello Virtual Lab!\n",
+        consoleMsg:`<span class='text-emerald-600 font-bold'>Content Read:<br>Hello Virtual Lab!</span>`, explanation:`Line 4: Printed the file content loaded from disk.` }
+    ];
+  } else if (scenario === 'file_append'){
+    stepList = [
+      { line:1, mode:"'a'", isOpen:true, diskText:"Hello Virtual Lab!\n",
+        consoleMsg:`&gt; Opened 'sample.txt' in mode 'a' (Append)`, explanation:`Line 1: Opened the file in append mode — pointer positioned at the end of the file, existing content untouched.` },
+      { line:2, mode:"'a'", isOpen:true, diskText:"Hello Virtual Lab!\nAppended Line 2\n",
+        consoleMsg:`&gt; f.write("Appended Line 2\\n") -&gt; Appended 16 bytes`, explanation:`Line 2: Appended new text without overwriting the original content.` },
+      { line:3, mode:"'a'", isOpen:false, diskText:"Hello Virtual Lab!\nAppended Line 2\n",
+        consoleMsg:`&gt; f.close() -&gt; Stream closed`, explanation:`Line 3: Closed the file handle safely.` },
+      { line:4, mode:"CLOSED", isOpen:false, diskText:"Hello Virtual Lab!\nAppended Line 2\n",
+        consoleMsg:`<span class='text-emerald-600 font-bold'>Appended new line to sample.txt</span>`, explanation:`Line 4: Printed the success output.` }
+    ];
+  } else if (scenario === 'with_statement'){
+    stepList = [
+      { line:1, mode:"'r' (with)", isOpen:true, diskText:"Hello Virtual Lab!\nAppended Line 2\n",
+        consoleMsg:`&gt; Entered 'with open("sample.txt", "r") as f:' block`, explanation:`Line 1: Context manager opened the file and assigned it to alias 'f'.` },
+      { line:2, mode:"'r' (with)", isOpen:true, diskText:"Hello Virtual Lab!\nAppended Line 2\n",
+        consoleMsg:`&gt; data = f.read() -&gt; Read disk buffer`, explanation:`Line 2: Read the file content inside the context manager block.` },
+      { line:3, mode:"AUTO-CLOSED", isOpen:false, diskText:"Hello Virtual Lab!\nAppended Line 2\n",
+        consoleMsg:`&gt; Exited block -&gt; context manager automatically called f.close()!`, explanation:`Line 3: The context manager automatically closed the file the instant the block exited — even if an exception had occurred.` },
+      { line:4, mode:"CLOSED", isOpen:false, diskText:"Hello Virtual Lab!\nAppended Line 2\n",
+        consoleMsg:`<span class='text-emerald-600 font-bold'>Read via 'with': Hello Virtual Lab! Appended Line 2</span>`, explanation:`Line 4: Printed the read content after the file was auto-closed.` }
+    ];
+  }
+}
+
+function renderDiskState(mode, isOpen, content){
+  document.getElementById('activeModeLabel').innerText = mode;
+  const statusBadge = document.getElementById('fileHandleStatus');
+  const diskText = document.getElementById('virtualDiskContent');
+
+  if (isOpen){
+    statusBadge.innerText = "Status: OPEN (" + mode + ")";
+    statusBadge.className = "text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded border border-emerald-200 font-mono";
+  } else {
+    statusBadge.innerText = "Status: CLOSED";
+    statusBadge.className = "text-[10px] bg-slate-100 text-rose-500 px-2 py-0.5 rounded border border-slate-200 font-mono";
+  }
+
+  diskText.innerText = content || "file is empty...";
+  const card = document.getElementById('diskFileBox');
+  card.classList.add('updated');
+  setTimeout(()=>card.classList.remove('updated'), 500);
+}
+
+function startSimulation(){
+  updateScenarioDisplay();
+  buildExecutionSteps();
+  currentStepIdx = 0;
+  hideResultBanner();
+  clearConsole();
+  document.getElementById('progressFill').style.width = '0%';
+
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95";
+
+  appendConsole(`&gt;&gt;&gt; Executing: file_ops.py [Scenario: ${scenario}]`);
+  executeStepAtIndex(0);
+}
+
+function executeStepAtIndex(idx){
+  const step = stepList[idx];
+  highlightLine(step.line);
+  renderDiskState(step.mode, step.isOpen, step.diskText);
+  appendConsole(step.consoleMsg);
+  document.getElementById('explanationText').innerText = step.explanation;
+  document.getElementById('currentStepBadge').innerText = `Step ${idx + 1}/${stepList.length}`;
+  document.getElementById('progressFill').style.width = `${((idx+1)/stepList.length)*100}%`;
+
+  if (idx === stepList.length - 1){
+    showResultBanner("File Handling Execution Completed");
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+    document.getElementById('currentStepBadge').innerText = "Finished";
+  }
+}
+
+function stepExecute(){
+  if (currentStepIdx < stepList.length - 1){
+    currentStepIdx++;
+    executeStepAtIndex(currentStepIdx);
+  }
+}
+
+function runAll(){
+  startSimulation();
+  while (currentStepIdx < stepList.length - 1){
+    currentStepIdx++;
+    executeStepAtIndex(currentStepIdx);
+  }
+}
+
+function resetSimulation(){
+  currentStepIdx = 0;
+  highlightLine(0);
+  clearConsole();
+  hideResultBanner();
+  renderDiskState('--', false, 'file is empty or not created yet...');
+  document.getElementById('progressFill').style.width = '0%';
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+  document.getElementById('currentStepBadge').innerText = "Step: Ready";
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+}
+
+function highlightLine(lineNum){
+  document.querySelectorAll('.code-line').forEach(el=>el.classList.remove('active'));
+  if (lineNum > 0){ const t = document.getElementById(`line${lineNum}`); if (t) t.classList.add('active'); }
+}
+function clearConsole(){ document.getElementById('terminal').innerHTML = ''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+function showResultBanner(text){
+  document.getElementById('resultBannerText').innerText = text;
+  document.getElementById('resultBanner').classList.remove('hidden');
+}
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try testing write vs append scenarios in the simulator and watch how the disk buffer updates!";
+  if (q.includes('with') || q.includes('context')) response = "with open(...) as f: creates a context manager that automatically calls f.close() even if an exception occurs inside the block — much safer than manual close().";
+  else if (q.includes('mode') || q.includes('write') || q.includes('append')) response = "Mode 'w' overwrites (truncates) existing content the instant the file opens. Mode 'a' appends new data to the end without deleting old text.";
+  else if (q.includes('read') || q.includes('readline')) response = "f.read() reads the entire file as one string. f.readline() reads a single line. f.readlines() returns a list of line strings. All of them advance the read pointer.";
+  else if (q.includes('close') || q.includes('flush') || q.includes('buffer')) response = "Data written to a file may sit in an in-memory buffer until close() (or a flush()) actually pushes it to disk. Forgetting to close a file can silently lose your writes!";
+  else if (q.includes('seek') || q.includes('pointer')) response = "Every open file has an internal read/write pointer. After reading to the end, a second f.read() call returns an empty string — use f.seek(0) to rewind to the start.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  updateScenarioDisplay();
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,685 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Q-Learning — AI Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  .grid-cell{transition:all .25s ease;}
+  .grid-cell.updated{animation:pulseCard .4s ease;}
+  .agent-dot{transition:all .3s cubic-bezier(.4,0,.2,1);}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-robot"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Artificial Intelligence Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment: Q-Learning (Model-Free Reinforcement Learning)</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <!-- Tab Nav -->
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> Theory
+      </button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-list-check"></i> Procedure
+      </button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+      </button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-flask"></i> Simulation
+      </button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-graduation-cap"></i> Post-Test
+      </button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Q-Learning</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">Q-Learning is a <strong>model-free</strong> reinforcement learning algorithm — unlike Value/Policy Iteration, the agent does <em>not</em> know the reward function or transition model in advance. It learns purely from experience: try an action, observe the reward and next state, and update an estimate.</p>
+
+      <div class="bg-slate-900 text-emerald-300 font-mono text-sm p-4 rounded-xl overflow-x-auto">
+        Q(s,a) &larr; Q(s,a) + &alpha; &middot; [ r + &gamma; &middot; max<sub>a'</sub> Q(s',a') &minus; Q(s,a) ]
+      </div>
+      <p class="text-xs text-slate-500 leading-relaxed">This is the <strong>Temporal-Difference (TD) update</strong>. The bracketed term <code class="font-mono">r + γ·max Q(s',a') − Q(s,a)</code> is the <strong>TD error</strong> — the difference between what we just observed (immediate reward plus our best current estimate of the future) and what we previously believed Q(s,a) was worth. <code class="font-mono">α</code> (learning rate) controls how much we trust this one new observation over our old estimate.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-xs">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h4 class="font-bold text-purple-600 mb-1">ε-greedy action selection</h4>
+          <p class="text-slate-500 leading-relaxed">With probability ε, pick a uniformly random action (<strong>explore</strong>); otherwise pick argmax<sub>a</sub> Q(s,a) (<strong>exploit</strong> current knowledge). Without exploration the agent could get stuck always repeating a mediocre path it found early on.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h4 class="font-bold text-purple-600 mb-1">Why Q-Learning is "off-policy"</h4>
+          <p class="text-slate-500 leading-relaxed">The update uses <code class="font-mono">max_a' Q(s',a')</code> — the BEST possible next action — regardless of which action the ε-greedy policy actually takes next. It learns the optimal Q-function even while behaving partly randomly.</p>
+        </div>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Worked Micro-Example</h3>
+      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-600 leading-relaxed space-y-2">
+        <p>Agent is one cell left of the goal. All Q-values start at 0. α=0.3, γ=0.9. It takes action "right", lands on the goal, and receives reward r=+1 (episode ends, so no bootstrap term for a terminal next-state):</p>
+        <p class="font-mono bg-white p-2 rounded border border-slate-200">Q(s,right) &larr; 0 + 0.3 &middot; [1 + 0.9&middot;0 &minus; 0] = 0.3</p>
+        <p>Next time the agent visits this same cell and tries "right" again, reaching the goal again gives: <code class="font-mono">Q ← 0.3 + 0.3·[1 − 0.3] = 0.51</code>. Each visit nudges Q(s,"right") closer to its true value (~1.0) — this is why Q-Learning needs MANY episodes before the table stabilises.</p>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Q-Learning (model-free)</th><th class="p-2 text-left">Value/Policy Iteration (model-based)</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2">No knowledge of R(s) or transition function needed — learns purely from sampled (s,a,r,s') experience.</td><td class="p-2">Requires the full reward function and transition model to sweep every state exactly.</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2">Needs many episodes; convergence is noisy and gradual.</td><td class="p-2">Converges in a small, predictable number of sweeps/cycles.</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2">Works when the environment is unknown or too large to model exactly (most real-world robotics/game AI).</td><td class="p-2">Only usable when the full MDP is known and small enough to sweep.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab, pick a <strong>Quick Preset</strong> grid, and set α (learning rate), γ (discount) and ε (exploration rate).</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start</strong> to zero the Q-table and place the agent (●) at the start cell.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step (1 Action)</strong> to take a single ε-greedy action — watch the agent move, the TD update printed in the terminal, and that cell's Q-values change.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Run 1 Episode</strong> to animate steps automatically until the agent reaches the goal or pit.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Fast-Train 100 Episodes</strong> to run many episodes instantly (no animation) — the running average "steps to goal" chart shows learning progress at a glance.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Each cell shows its best learned action as an arrow, and the max Q-value for that cell — this is the greedy policy implied by the current Q-table.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> to wipe the Q-table and start learning from scratch.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">1. What makes Q-Learning "model-free"?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> It never uses a grid</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> It has no reward function at all</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> It doesn't need to know the transition model or reward function in advance — it learns from experience</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. In ε-greedy action selection, what happens with probability ε?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> The agent stops learning</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> The agent picks a random action to explore</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> The episode restarts</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. What role does α (alpha) play in the TD update?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> It's the learning rate — how much weight the new observation gets vs. the old estimate</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> It's the number of episodes</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> It's the grid size</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">4. Q(s,a) is meant to estimate...</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> The distance from s to the goal</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> The expected total discounted future reward from taking action a in state s, then acting optimally</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> The number of times action a has been tried</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Learning Rate α</label>
+              <input type="number" id="inputAlpha" value="0.3" step="0.05" min="0.05" max="1" class="w-20 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Discount γ</label>
+              <input type="number" id="inputGamma" value="0.9" step="0.05" min="0.1" max="0.99" class="w-20 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Exploration ε</label>
+              <input type="number" id="inputEpsilon" value="0.2" step="0.05" min="0" max="1" class="w-20 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Start
+            </button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-forward-step"></i> Step (1 Action)
+            </button>
+            <button onclick="runEpisode()" class="bg-purple-600 hover:bg-purple-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-person-running"></i> Run 1 Episode
+            </button>
+            <button onclick="fastTrain(100)" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-bolt"></i> Fast-Train 100 Episodes
+            </button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('A')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Grid A — Goal top-right</button>
+          <button onclick="loadPreset('B')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Grid B — Goal bottom-right</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-table-cells text-purple-600"></i> GridWorld — Agent &amp; Learned Q-Policy
+            </span>
+            <span class="text-xs text-slate-400 font-mono">● = agent · numbers = max Q(s,a)</span>
+          </div>
+          <div class="p-5 flex items-center justify-center bg-slate-50/50 flex-1">
+            <div id="gridContainer" class="grid gap-2" style="grid-template-columns:repeat(4,minmax(80px,1fr))"></div>
+          </div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Click 'Start' to initialise the Q-table, then 'Step (1 Action)', 'Run 1 Episode', or 'Fast-Train 100 Episodes'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-5 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-microchip text-purple-600"></i> Learning Progress
+            </h3>
+            <div class="grid grid-cols-3 gap-3" id="memCardsContainer">
+              <div id="mem1" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">Episodes</span>
+                <span id="val1" class="text-xl font-bold font-mono text-purple-600 block my-1">0</span>
+              </div>
+              <div id="mem2" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">Last Steps</span>
+                <span id="val2" class="text-xl font-bold font-mono text-purple-600 block my-1">--</span>
+              </div>
+              <div id="mem3" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">Avg (last 20)</span>
+                <span id="val3" class="text-xl font-bold font-mono text-emerald-600 block my-1">--</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal
+              </span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[160px] max-h-[260px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Start' then take actions to train the agent.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-flag-checkered"></i>
+              </div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Episode Finished</h4>
+                <p id="resultBannerText" class="text-sm font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. Why is Q-Learning called "off-policy"?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> It never follows any policy</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> Its update uses max_a' Q(s',a') — the best possible next action — even though the agent's actual next action may be exploratory/random</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> It doesn't use a policy at all, ever</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. If ε is set to 0 for the entire training run, what is likely to go wrong?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> The agent may never discover a better path than the first one it stumbles on, since it never explores</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> Nothing, it learns faster and better</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> The Q-table becomes negative everywhere</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. When the agent's action leads directly into a terminal state (goal/pit), how does the TD update change?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> It doesn't change at all</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> α is set to 0</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> There is no bootstrap term (max_a' Q(s',a') = 0) since the episode ends — the target is just the reward r</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. What is a reasonable sign that Q-Learning is converging?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> The running average of steps-to-goal per episode trends downward and stabilises</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> The Q-table shrinks in size</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> ε automatically becomes negative</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+      </h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about the TD update, ε-greedy exploration, learning rate α, or how Q-Learning differs from Value Iteration.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., what does alpha control?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ==========================================================================
+   CORE Q-LEARNING LOGIC (pure functions — verified in Node.js)
+   ========================================================================== */
+const GRID_PRESETS = {
+  A: { rows:4, cols:4, walls:[[1,1]], goal:[0,3], pit:[1,3], start:[3,0] },
+  B: { rows:4, cols:4, walls:[[0,1],[2,2]], goal:[3,3], pit:[1,3], start:[0,0] }
+};
+const ACTIONS = ['up','down','left','right'];
+const ARROW = { up:'&uarr;', down:'&darr;', left:'&larr;', right:'&rarr;' };
+
+function isWall(g,r,c){ return g.walls.some(w=>w[0]===r&&w[1]===c); }
+function isTerminal(g,r,c){ return (r===g.goal[0]&&c===g.goal[1])||(r===g.pit[0]&&c===g.pit[1]); }
+function moveResult(g,r,c,a){
+  let nr=r,nc=c;
+  if(a==='up') nr=r-1; else if(a==='down') nr=r+1; else if(a==='left') nc=c-1; else if(a==='right') nc=c+1;
+  if(nr<0||nr>=g.rows||nc<0||nc>=g.cols||isWall(g,nr,nc)) return [r,c];
+  return [nr,nc];
+}
+function stepReward(g,nr,nc){
+  if(nr===g.goal[0]&&nc===g.goal[1]) return 1;
+  if(nr===g.pit[0]&&nc===g.pit[1]) return -1;
+  return -0.04;
+}
+function makeQ(g){
+  const Q={};
+  for(let r=0;r<g.rows;r++)for(let c=0;c<g.cols;c++){
+    if(isWall(g,r,c)) continue;
+    Q[`${r},${c}`]={up:0,down:0,left:0,right:0};
+  }
+  return Q;
+}
+function argmaxA(qs){
+  let best=ACTIONS[0], bestVal=-Infinity;
+  for(const a of ACTIONS){ if(qs[a]>bestVal){ bestVal=qs[a]; best=a; } }
+  return best;
+}
+function epsGreedy(Q,r,c,eps){
+  if(Math.random()<eps) return ACTIONS[Math.floor(Math.random()*ACTIONS.length)];
+  return argmaxA(Q[`${r},${c}`]);
+}
+// Single TD-update transition. Mutates Q. Returns {action, reward, next:[nr,nc], done, tdError}.
+function takeAction(g, Q, r, c, alpha, gamma, eps){
+  const a = epsGreedy(Q, r, c, eps);
+  const [nr,nc] = moveResult(g,r,c,a);
+  const rew = stepReward(g,nr,nc);
+  const qsa = Q[`${r},${c}`][a];
+  const done = isTerminal(g,nr,nc);
+  const target = done ? rew : rew + gamma*Math.max(...ACTIONS.map(a2=>Q[`${nr},${nc}`][a2]));
+  const tdError = target - qsa;
+  Q[`${r},${c}`][a] = qsa + alpha*tdError;
+  return { action:a, reward:rew, next:[nr,nc], done, tdError, target };
+}
+
+/* ---------- UI state & controller ---------- */
+let sim = { grid:null, Q:null, agent:null, alpha:0.3, gamma:0.9, eps:0.2, episodeCount:0, episodeSteps:0, history:[], timer:null, running:false };
+
+function loadPreset(name){ startSimulation(name); }
+
+function renderGrid(){
+  const g = sim.grid;
+  const cont = document.getElementById('gridContainer');
+  cont.innerHTML = '';
+  for(let r=0;r<g.rows;r++){
+    for(let c=0;c<g.cols;c++){
+      const div = document.createElement('div');
+      div.id = `cell-${r}-${c}`;
+      div.className = 'grid-cell rounded-xl border-2 flex flex-col items-center justify-center h-20 font-mono text-xs relative';
+      if(isWall(g,r,c)){
+        div.className += ' bg-slate-300 border-slate-400 text-slate-500';
+        div.innerHTML = '<i class="fa-solid fa-ban"></i>';
+      } else if(r===g.goal[0]&&c===g.goal[1]){
+        div.className += ' bg-emerald-100 border-emerald-400 text-emerald-700 font-bold';
+        div.innerHTML = 'GOAL<br>+1';
+      } else if(r===g.pit[0]&&c===g.pit[1]){
+        div.className += ' bg-rose-100 border-rose-400 text-rose-700 font-bold';
+        div.innerHTML = 'PIT<br>-1';
+      } else {
+        div.className += ' bg-white border-slate-200 text-slate-700';
+        div.innerHTML = `<span class="val text-[11px] font-bold">0.000</span><span class="arrow text-purple-500 text-lg"></span><span class="agent hidden absolute w-4 h-4 rounded-full bg-amber-500 border-2 border-white shadow agent-dot"></span>`;
+      }
+      cont.appendChild(div);
+    }
+  }
+}
+function clearAgentMarkers(){
+  document.querySelectorAll('.agent').forEach(el=>el.classList.add('hidden'));
+}
+function placeAgent(r,c){
+  clearAgentMarkers();
+  const cell = document.getElementById(`cell-${r}-${c}`);
+  const marker = cell.querySelector('.agent');
+  if(marker) marker.classList.remove('hidden');
+}
+function colorForQ(v){
+  if(v>=0){ const t=Math.min(1,v); return `rgb(${Math.round(240-t*130)},${Math.round(240-t*90)},${Math.round(240-t*140)})`; }
+  const t=Math.min(1,-v); return `rgb(240,${Math.round(240-t*130)},${Math.round(240-t*130)})`;
+}
+function renderQValues(pulseCell){
+  const g = sim.grid, Q = sim.Q;
+  for(let r=0;r<g.rows;r++)for(let c=0;c<g.cols;c++){
+    if(isWall(g,r,c) || isTerminal(g,r,c)) continue;
+    const cell = document.getElementById(`cell-${r}-${c}`);
+    const qs = Q[`${r},${c}`];
+    const maxQ = Math.max(...ACTIONS.map(a=>qs[a]));
+    cell.querySelector('.val').innerText = maxQ.toFixed(3);
+    cell.style.background = colorForQ(maxQ);
+    cell.querySelector('.arrow').innerHTML = (maxQ!==0) ? ARROW[argmaxA(qs)] : '';
+    if(pulseCell && pulseCell[0]===r && pulseCell[1]===c){ cell.classList.add('updated'); setTimeout(()=>cell.classList.remove('updated'),400); }
+  }
+}
+
+function startSimulation(presetName){
+  clearInterval(sim.timer);
+  const name = presetName || sim.presetName || 'A';
+  const alpha = parseFloat(document.getElementById('inputAlpha').value) || 0.3;
+  const gamma = parseFloat(document.getElementById('inputGamma').value) || 0.9;
+  const eps = parseFloat(document.getElementById('inputEpsilon').value);
+  sim = { grid: JSON.parse(JSON.stringify(GRID_PRESETS[name])), Q:null, agent:null, alpha, gamma, eps:isNaN(eps)?0.2:eps, episodeCount:0, episodeSteps:0, history:[], timer:null, running:false, presetName:name };
+  sim.Q = makeQ(sim.grid);
+  sim.agent = [...sim.grid.start];
+  renderGrid();
+  renderQValues(null);
+  placeAgent(sim.agent[0], sim.agent[1]);
+  clearConsole();
+  hideResultBanner();
+  updateMemCards();
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('currentStepBadge').innerText = 'Step: Ready';
+  document.getElementById('explanationText').innerText = `Grid ${name} loaded. Q-table zeroed. Agent placed at start (${sim.grid.start.join(',')}).`;
+  appendConsole(`&gt;&gt;&gt; Q-table initialised to 0 for all (state,action) pairs. α=${alpha}, γ=${gamma}, ε=${sim.eps}.`);
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95 flex items-center gap-2';
+}
+
+function stepOnce(){
+  const [r,c] = sim.agent;
+  const res = takeAction(sim.grid, sim.Q, r, c, sim.alpha, sim.gamma, sim.eps);
+  sim.episodeSteps++;
+  const qKey = `${r},${c}`;
+  appendConsole(`s=(${r},${c}) a=${res.action} &rarr; s'=(${res.next[0]},${res.next[1]})  r=${res.reward.toFixed(2)}  TD-error=${res.tdError.toFixed(3)}  Q&larr;${sim.Q[qKey][res.action].toFixed(3)}`);
+  renderQValues([r,c]);
+  sim.agent = res.next;
+  placeAgent(sim.agent[0], sim.agent[1]);
+  if(res.done){
+    sim.episodeCount++;
+    sim.history.push(sim.episodeSteps);
+    appendConsole(`<span class="${res.reward>0?'text-emerald-400':'text-rose-400'}">&gt;&gt;&gt; Episode ${sim.episodeCount} finished in ${sim.episodeSteps} steps (${res.reward>0?'reached GOAL':'fell in PIT'}).</span>`);
+    showResultBanner(`Episode ${sim.episodeCount}: ${sim.episodeSteps} steps — ${res.reward>0?'Goal reached! 🎯':'Fell into the pit.'}`);
+    sim.episodeSteps = 0;
+    sim.agent = [...sim.grid.start];
+    placeAgent(sim.agent[0], sim.agent[1]);
+  }
+  updateMemCards();
+  document.getElementById('currentStepBadge').innerText = `Episode ${sim.episodeCount} · Step ${sim.episodeSteps}`;
+  document.getElementById('progressFill').style.width = `${Math.min(100, (sim.episodeCount/50)*100)}%`;
+  return res.done;
+}
+
+function stepExecute(){ if(sim.grid) stepOnce(); }
+
+function runEpisode(){
+  if(!sim.grid) startSimulation();
+  clearInterval(sim.timer);
+  sim.timer = setInterval(()=>{
+    const done = stepOnce();
+    if(done){ clearInterval(sim.timer); }
+  }, 300);
+}
+
+function fastTrain(n){
+  if(!sim.grid) startSimulation();
+  clearInterval(sim.timer);
+  hideResultBanner();
+  for(let i=0;i<n;i++){
+    let [r,c] = sim.agent;
+    let steps = 0;
+    while(steps < 300){
+      const res = takeAction(sim.grid, sim.Q, r, c, sim.alpha, sim.gamma, sim.eps);
+      steps++;
+      r = res.next[0]; c = res.next[1];
+      if(res.done){
+        sim.episodeCount++;
+        sim.history.push(steps);
+        break;
+      }
+    }
+    sim.agent = [...sim.grid.start];
+  }
+  renderQValues(null);
+  placeAgent(sim.agent[0], sim.agent[1]);
+  updateMemCards();
+  const last20 = sim.history.slice(-20);
+  const avg = last20.reduce((a,b)=>a+b,0)/last20.length;
+  appendConsole(`<span class="text-emerald-400">&gt;&gt;&gt; Fast-trained ${n} episodes (no animation). Total episodes: ${sim.episodeCount}. Avg steps (last 20): ${avg.toFixed(2)}.</span>`);
+  document.getElementById('explanationText').innerText = `Fast-trained ${n} episodes. The Q-table and arrows above now reflect the greedy policy learned so far — average steps-to-goal is ${avg.toFixed(2)} over the last 20 episodes.`;
+  document.getElementById('progressFill').style.width = `${Math.min(100, (sim.episodeCount/50)*100)}%`;
+}
+
+function resetSimulation(){
+  clearInterval(sim.timer);
+  if(sim.grid){
+    sim.Q = makeQ(sim.grid);
+    sim.agent = [...sim.grid.start];
+    sim.episodeCount = 0; sim.episodeSteps = 0; sim.history = [];
+    renderQValues(null);
+    placeAgent(sim.agent[0], sim.agent[1]);
+  }
+  updateMemCards();
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('currentStepBadge').innerText = 'Step: Ready';
+  document.getElementById('explanationText').innerText = "Q-table reset to 0. Click 'Step (1 Action)', 'Run 1 Episode', or 'Fast-Train 100 Episodes'.";
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95 flex items-center gap-2';
+}
+
+function updateMemCards(){
+  document.getElementById('val1').innerText = sim.episodeCount;
+  document.getElementById('val2').innerText = sim.history.length ? sim.history[sim.history.length-1] : '--';
+  const last20 = sim.history.slice(-20);
+  document.getElementById('val3').innerText = last20.length ? (last20.reduce((a,b)=>a+b,0)/last20.length).toFixed(1) : '--';
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+  if(term.children.length > 200) term.removeChild(term.firstChild);
+}
+function showResultBanner(text){
+  document.getElementById('resultBannerText').innerText = text;
+  document.getElementById('resultBanner').classList.remove('hidden');
+}
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try 'Fast-Train 100 Episodes' a few times and watch the 'Avg (last 20)' number in the Learning Progress panel drop — that's the Q-table converging!";
+  if (q.includes('td') || q.includes('temporal')) response = "The TD (Temporal-Difference) error is r + γ·max Q(s',a') − Q(s,a) — the gap between your OLD estimate and a slightly-better NEW estimate built from one real observation. Q-Learning nudges Q(s,a) toward closing that gap a little at a time, controlled by α.";
+  else if (q.includes('alpha') || q.includes('learning rate') || q.includes('α')) response = "α (alpha) is the learning rate: how much weight a single new observation gets versus everything learned before. α=1 means 'trust only the latest observation, forget history' (noisy); α near 0 means 'barely update at all' (very slow). Try setting α=1 in the simulator and watch Q-values swing wildly between episodes.";
+  else if (q.includes('epsilon') || q.includes('explor') || q.includes('greedy') || q.includes('ε')) response = "ε-greedy balances exploration (trying random actions to discover better paths) against exploitation (using what you already know works). Set ε=0 and Fast-Train — the agent may lock onto a mediocre route forever because it never tries anything new.";
+  else if (q.includes('off-policy') || q.includes('off policy')) response = "Q-Learning is off-policy because its update always bootstraps off max_a' Q(s',a') — the BEST next action — even if the agent's actual next move (chosen by ε-greedy) is a random exploratory one. It learns the optimal Q-function regardless of how it behaves while learning.";
+  else if (q.includes('converg') || q.includes('avg') || q.includes('average steps')) response = "Watch the 'Avg (last 20)' stat — as the Q-table gets more accurate, the greedy path gets shorter and more consistent, so this running average trends down and flattens out. It rarely reaches a perfectly flat line because ε-greedy keeps injecting occasional random detours.";
+  else if (q.includes('terminal') || q.includes('episode end') || q.includes('goal') || q.includes('pit')) response = "When the agent's action lands it in the goal or pit, the episode ends immediately — there's no 'next action' to bootstrap from, so the TD target is just the reward r (no + γ·max Q(s',a') term). The agent then restarts at the start cell for the next episode.";
+  else if (q.includes('value iteration') || q.includes('vs value') || q.includes('model')) response = "Value Iteration needs the FULL reward/transition model to sweep every state exactly. Q-Learning needs none of that — it only ever sees (state, action, reward, next-state) tuples from actually trying things, which is why it works in environments too complex to model exactly.";
+  else if (q.includes('gamma') || q.includes('discount') || q.includes('γ')) response = "γ (gamma) discounts how much a future reward counts toward Q(s,a) right now. With γ near 1 the agent 'plans ahead' more; with γ near 0 it becomes greedy for only the very next reward.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  startSimulation('A');
+});
+</script>
+</body>
+</html>

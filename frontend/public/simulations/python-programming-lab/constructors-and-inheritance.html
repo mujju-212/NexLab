@@ -1,0 +1,605 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Python Constructors & Inheritance — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .code-line{transition:background-color .25s ease,border-color .25s ease;border-left:4px solid transparent;}
+  .code-line.active{background:rgba(124,58,237,.09);border-left-color:#7c3aed;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  .object-box{transition:all .25s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-brands fa-python"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Python Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment 7: Python Constructors (__init__) & Class Inheritance</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> Theory
+      </button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-list-check"></i> Procedure
+      </button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+      </button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-flask"></i> Simulation
+      </button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-graduation-cap"></i> Post-Test
+      </button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Constructors & Inheritance</h2>
+      <p class="text-sm text-slate-600 leading-relaxed"><strong>Constructors</strong> initialize a newly created object's starting state. <strong>Inheritance</strong> lets a child class reuse, extend, or override behavior defined in a parent class — the foundation of code reuse in object-oriented design.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-purple-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-gears text-emerald-500"></i> __init__ Constructor</span>
+            <span class="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded">Initializer</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed"><code class="font-mono text-purple-600">def __init__(self, ...)</code> runs automatically the moment an object is instantiated, to set initial instance attributes.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-purple-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-sitemap text-amber-500"></i> Class Inheritance</span>
+            <span class="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded">Child(Parent)</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed">A child class inherits attributes/methods using <code class="font-mono text-purple-600">class Child(Parent):</code>, enabling reuse and modularity.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-purple-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-arrow-up-from-ground-water text-cyan-500"></i> super()</span>
+            <span class="text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded">super().__init__()</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed"><code class="font-mono text-purple-600">super()</code> lets a child class explicitly invoke the parent's constructor/methods without hardcoding the parent's name.</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Scenario</th><th class="p-2 text-left">What Happens</th><th class="p-2 text-left">Example</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2">Child defines NO <code class="font-mono">__init__</code></td><td class="p-2">Parent's __init__ runs automatically, unmodified</td><td class="p-2 font-mono">class Student(Person): pass</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2">Child defines its own <code class="font-mono">__init__</code> without <code class="font-mono">super()</code></td><td class="p-2">Parent's __init__ is completely overridden — never runs</td><td class="p-2 font-mono">def __init__(self): self.x = 1</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2">Child calls <code class="font-mono">super().__init__()</code></td><td class="p-2">Parent's __init__ runs first, then the rest of the child's __init__</td><td class="p-2 font-mono">super().__init__(name)</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs text-rose-700 space-y-2">
+        <h4 class="font-bold text-rose-700 text-sm"><i class="fa-solid fa-triangle-exclamation"></i> Common Pitfalls</h4>
+        <ul class="list-disc list-inside space-y-1 leading-relaxed">
+          <li><strong>Overriding <code class="font-mono">__init__</code> silently drops the parent's setup</strong> unless you explicitly call <code class="font-mono">super().__init__(...)</code> — a very common source of missing attributes.</li>
+          <li><strong><code class="font-mono">self</code> must be the first parameter</strong> of every instance method, including <code class="font-mono">__init__</code> — Python passes it automatically, you never pass it yourself when calling.</li>
+          <li><strong>Mutable default arguments</strong> (e.g. <code class="font-mono">def __init__(self, items=[]):</code>) are created ONCE and shared across all instances — always default to <code class="font-mono">None</code> and create the list inside the method instead.</li>
+          <li><strong><code class="font-mono">super()</code> respects Method Resolution Order (MRO)</strong>, not just "the direct parent" — this matters once multiple inheritance is involved.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Select a <strong>Scenario</strong> (__init__ Initialization, Single Inheritance, or super() Call) from the dropdown or click a Quick Preset.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Simulation</strong> to load the class definitions and clear memory state.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step Execution</strong> to trace line-by-line and observe how the constructor initializes properties, and how child classes inherit parent attributes.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Inspect the <strong>Heap RAM Memory Inspector</strong> to watch initialized instance parameters and inherited variables update live.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Run / Execute All</strong> to complete execution instantly and view the final console output.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> at any time to clear the trace and start over.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. When is <code class="font-mono">__init__</code> executed in Python?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Only when explicitly calling obj.__init__()</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> Automatically when a new instance is created</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> When the object is garbage collected</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What syntax defines a child class <code class="font-mono">Student</code> inheriting from <code class="font-mono">Person</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> class Student extends Person:</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> class Student(Person):</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> class Student inherits Person:</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. What is the purpose of the <code class="font-mono">self</code> parameter?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> A reference to the current instance</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> The name of the class</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> A global constant</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">4. What does <code class="font-mono">super()</code> refer to inside a child class method?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> The current object itself</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> A brand-new unrelated object</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> A proxy to the parent class</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Select Scenario</label>
+              <select id="constScenario" onchange="updateScenarioDisplay()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500 min-w-[300px]">
+                <option value="constructor_init">__init__ Constructor Initialization</option>
+                <option value="single_inheritance">Single Inheritance (Parent -&gt; Child)</option>
+                <option value="super_call">Calling Parent Constructor via super()</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Start Simulation
+            </button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-forward-step"></i> Step Execution
+            </button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-bolt"></i> Run / Execute All
+            </button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('constructor_init')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Constructor Init</button>
+          <button onclick="loadPreset('single_inheritance')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Single Inheritance</button>
+          <button onclick="loadPreset('super_call')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">super() Call</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-code text-purple-600"></i> Code Trace Window
+            </span>
+          </div>
+          <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 text-slate-200 flex-1 space-y-0.5 overflow-x-auto min-h-[260px]"></div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Select a scenario and click 'Start Simulation' or 'Run / Execute All'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-7 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-4">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2">
+              <i class="fa-solid fa-cubes text-purple-600"></i> Heap RAM Memory & Object Inspector
+            </h3>
+            <div id="heapObjectsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3 min-h-[110px]">
+              <div class="col-span-2 text-slate-400 italic text-xs p-4 text-center border border-dashed border-slate-200 rounded-lg">
+                Select a scenario and click 'Start Simulation' to view constructor allocation & inheritance on the heap.
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal
+              </span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[140px] max-h-[180px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-square-check"></i>
+              </div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Final Execution Output</h4>
+                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+            <span class="text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200">Status: OK</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What is the purpose of <code class="font-mono">super().__init__()</code> in a child class constructor?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> To override all parent methods with empty implementations</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> To execute the parent's constructor and initialize inherited attributes</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> To delete the parent object from RAM</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. If a child class defines its own <code class="font-mono">__init__</code> WITHOUT calling <code class="font-mono">super().__init__()</code>, what happens?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> The parent's __init__ is NOT called automatically — it's fully overridden</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> Python raises a SyntaxError</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> The parent's __init__ runs after the child's automatically</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. Given <code class="font-mono">class Student(Person): pass</code>, and <code class="font-mono">Person.__init__</code> sets <code class="font-mono">self.species = "Human"</code>, what happens when you create <code class="font-mono">s1 = Student()</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> s1 has no species attribute at all</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> An error is raised because Student has no __init__</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> s1.species is automatically "Human", inherited from Person's __init__</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">4. Why should you avoid a mutable default argument like <code class="font-mono">def __init__(self, items=[]):</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> Python does not allow default arguments in __init__</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> The default list is created once and shared across all instances</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> Lists cannot be used as attributes</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+      </h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me anything about constructors (__init__), inheritance, method overriding, or super().</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., why do we need super().__init__()?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+let scenario = 'constructor_init';
+let stepList = [];
+let currentStepIdx = 0;
+
+function loadPreset(presetScenario){
+  document.getElementById('constScenario').value = presetScenario;
+  runAll();
+}
+
+function updateScenarioDisplay(){
+  scenario = document.getElementById('constScenario').value;
+  const codeContainer = document.getElementById('codeContainer');
+
+  if (scenario === 'constructor_init'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>class Student:</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>&nbsp;&nbsp;&nbsp;&nbsp;def __init__(self, name, age):</span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.name = name</span></div>
+      <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">4</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.age = age</span></div>
+      <div id="line5" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">5</span><span>s1 = Student(<span class="text-emerald-300">"Alex"</span>, 20)</span></div>
+      <div id="line6" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">6</span><span>print(<span class="text-emerald-300">f"{s1.name} is {s1.age} years old"</span>)</span></div>
+    `;
+  } else if (scenario === 'single_inheritance'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>class Person:</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>&nbsp;&nbsp;&nbsp;&nbsp;def __init__(self): self.species = <span class="text-emerald-300">"Human"</span></span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span>class Student(Person): pass</span></div>
+      <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">4</span><span>s1 = Student()</span></div>
+      <div id="line5" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">5</span><span>print(<span class="text-emerald-300">f"Inherited Species: {s1.species}"</span>)</span></div>
+    `;
+  } else if (scenario === 'super_call'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>class Person:</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>&nbsp;&nbsp;&nbsp;&nbsp;def __init__(self, name): self.name = name</span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span>class Student(Person):</span></div>
+      <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">4</span><span>&nbsp;&nbsp;&nbsp;&nbsp;def __init__(self, name, grade):</span></div>
+      <div id="line5" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">5</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;super().__init__(name)</span></div>
+      <div id="line6" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">6</span><span>&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;self.grade = grade</span></div>
+      <div id="line7" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">7</span><span>s1 = Student(<span class="text-emerald-300">"Sophia"</span>, <span class="text-emerald-300">"A+"</span>)</span></div>
+      <div id="line8" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">8</span><span>print(<span class="text-emerald-300">f"{s1.name} grade: {s1.grade}"</span>)</span></div>
+    `;
+  }
+}
+
+function buildExecutionSteps(){
+  stepList = [];
+  if (scenario === 'constructor_init'){
+    stepList = [
+      { line:1, objects:[], consoleMsg:`&gt; Defined class 'Student' with __init__(self, name, age) constructor.`, explanation:`Lines 1-4: Defined 'Student' class with a constructor method.` },
+      { line:5, objects:[{varName:'s1',className:'Student',addr:'0x7f8a10',attrs:{name:'"Alex"',age:20}}], consoleMsg:`&gt; Instantiated s1 = Student("Alex", 20) -&gt; Executed __init__!`, explanation:`Line 5: Created instance s1; __init__ initialized self.name="Alex" and self.age=20.` },
+      { line:6, objects:[{varName:'s1',className:'Student',addr:'0x7f8a10',attrs:{name:'"Alex"',age:20}}], consoleMsg:`<span class='text-emerald-600 font-bold'>Alex is 20 years old</span>`, explanation:`Line 6: Accessed constructor-initialized object attributes.` }
+    ];
+  } else if (scenario === 'single_inheritance'){
+    stepList = [
+      { line:1, objects:[], consoleMsg:`&gt; Defined base class 'Person' and child class 'Student(Person)'.`, explanation:`Lines 1-3: Defined inheritance hierarchy — Student inherits from Person.` },
+      { line:4, objects:[{varName:'s1',className:'Student (inherits Person)',addr:'0x7f8a12',attrs:{species:'"Human"'}}], consoleMsg:`&gt; Instantiated s1 = Student() -&gt; Inherited Person.__init__()`, explanation:`Line 4: Child object s1 automatically inherited the parent's attribute species="Human" because Student defines no __init__ of its own.` },
+      { line:5, objects:[{varName:'s1',className:'Student (inherits Person)',addr:'0x7f8a12',attrs:{species:'"Human"'}}], consoleMsg:`<span class='text-emerald-600 font-bold'>Inherited Species: Human</span>`, explanation:`Line 5: Printed the inherited parent attribute from the child instance.` }
+    ];
+  } else if (scenario === 'super_call'){
+    stepList = [
+      { line:1, objects:[], consoleMsg:`&gt; Defined classes Person and Student(Person) with a super() constructor call.`, explanation:`Lines 1-6: Child constructor invokes the parent constructor using super().__init__(name).` },
+      { line:7, objects:[{varName:'s1',className:'Student (inherits Person)',addr:'0x7f8a15',attrs:{name:'"Sophia"',grade:'"A+"'}}], consoleMsg:`&gt; Instantiated s1 = Student("Sophia", "A+") -&gt; super().__init__() bound name="Sophia"!`, explanation:`Line 7: Executed super().__init__() to bind parent attribute self.name="Sophia", then bound child attribute self.grade="A+".` },
+      { line:8, objects:[{varName:'s1',className:'Student (inherits Person)',addr:'0x7f8a15',attrs:{name:'"Sophia"',grade:'"A+"'}}], consoleMsg:`<span class='text-emerald-600 font-bold'>Sophia grade: A+</span>`, explanation:`Line 8: Printed a combination of parent and child instance attributes.` }
+    ];
+  }
+}
+
+function renderHeapObjects(objectsList){
+  const container = document.getElementById('heapObjectsContainer');
+  if (!objectsList || objectsList.length === 0){
+    container.innerHTML = `<div class="col-span-2 text-slate-400 italic text-xs p-4 text-center border border-dashed border-slate-200 rounded-lg">Select a scenario and click 'Start Simulation' to view constructor allocation & inheritance on the heap.</div>`;
+    return;
+  }
+  let html = '';
+  objectsList.forEach(obj=>{
+    html += `
+      <div class="object-box bg-slate-50 border-2 border-purple-200 p-3 rounded-xl font-mono space-y-1.5">
+        <div class="flex justify-between items-center border-b border-slate-200 pb-1 text-xs">
+          <span class="font-bold text-amber-600">${obj.varName} <span class="text-slate-400 font-normal">(${obj.className})</span></span>
+          <span class="text-[9px] bg-white text-emerald-600 px-1.5 py-0.5 rounded border border-slate-200">${obj.addr}</span>
+        </div>
+        <div class="text-xs space-y-1 pt-1">
+    `;
+    for (const [key, val] of Object.entries(obj.attrs)){
+      html += `<div class="flex justify-between items-center bg-white px-2 py-1 rounded text-[11px] border border-slate-200"><span class="text-purple-600">self.${key}:</span><span class="text-emerald-600 font-bold">${val}</span></div>`;
+    }
+    html += `</div></div>`;
+  });
+  container.innerHTML = html;
+}
+
+function startSimulation(){
+  updateScenarioDisplay();
+  buildExecutionSteps();
+  currentStepIdx = 0;
+  hideResultBanner();
+  clearConsole();
+  document.getElementById('progressFill').style.width = '0%';
+
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95";
+
+  appendConsole(`&gt;&gt;&gt; Executing: constructor_inheritance_demo.py [Scenario: ${scenario}]`);
+  executeStepAtIndex(0);
+}
+
+function executeStepAtIndex(idx){
+  const step = stepList[idx];
+  highlightLine(step.line);
+  renderHeapObjects(step.objects);
+  appendConsole(step.consoleMsg);
+  document.getElementById('explanationText').innerText = step.explanation;
+  document.getElementById('currentStepBadge').innerText = `Step ${idx + 1}/${stepList.length}`;
+  document.getElementById('progressFill').style.width = `${((idx+1)/stepList.length)*100}%`;
+
+  if (idx === stepList.length - 1){
+    showResultBanner("Constructor & Inheritance Execution Completed");
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+    document.getElementById('currentStepBadge').innerText = "Finished";
+  }
+}
+
+function stepExecute(){
+  if (currentStepIdx < stepList.length - 1){
+    currentStepIdx++;
+    executeStepAtIndex(currentStepIdx);
+  }
+}
+
+function runAll(){
+  startSimulation();
+  while (currentStepIdx < stepList.length - 1){
+    currentStepIdx++;
+    executeStepAtIndex(currentStepIdx);
+  }
+}
+
+function resetSimulation(){
+  currentStepIdx = 0;
+  highlightLine(0);
+  clearConsole();
+  hideResultBanner();
+  renderHeapObjects([]);
+  document.getElementById('progressFill').style.width = '0%';
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+  document.getElementById('currentStepBadge').innerText = "Step: Ready";
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+}
+
+function highlightLine(lineNum){
+  document.querySelectorAll('.code-line').forEach(el=>el.classList.remove('active'));
+  if (lineNum > 0){ const t = document.getElementById(`line${lineNum}`); if (t) t.classList.add('active'); }
+}
+function clearConsole(){ document.getElementById('terminal').innerHTML = ''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+function showResultBanner(text){
+  document.getElementById('resultBannerText').innerText = text;
+  document.getElementById('resultBanner').classList.remove('hidden');
+}
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try running the constructor and inheritance scenarios in the simulator to see how self and super() bind attributes on the heap!";
+  if (q.includes('super')) response = "super().__init__() calls the parent class's constructor from inside a child class. This ensures inherited attributes (like 'name') are properly initialized — without it, the child constructor completely replaces the parent's.";
+  else if (q.includes('init') || q.includes('constructor')) response = "__init__ is Python's constructor method. It runs automatically when you create a new instance (e.g. s = Student()) to set up initial state on self.";
+  else if (q.includes('override') || q.includes('inherit')) response = "Inheritance lets a child class reuse attributes/methods from a parent class (class Child(Parent):). Defining a method with the same name in the child overrides the parent's version.";
+  else if (q.includes('mutable') || q.includes('default')) response = "Avoid mutable default arguments like def __init__(self, items=[]): — that list is created ONCE at class-definition time and shared across every instance that doesn't pass its own. Use None and create the list inside __init__ instead.";
+  else if (q.includes('self')) response = "self refers to the specific instance a method is being called on. Python passes it automatically — you never supply it yourself when calling obj.method(args).";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  updateScenarioDisplay();
+});
+</script>
+</body>
+</html>

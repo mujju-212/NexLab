@@ -1,0 +1,456 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OOP Virtual Lab: Polymorphism (Method Overriding)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-cube"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">OOP Virtual Lab</h1>
+        <p class="text-xs text-indigo-600 font-medium">Experiment 6: Polymorphism (Method Overriding)</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2"><i class="fa-solid fa-book-open"></i> Theory</button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Assistant</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Theory: Polymorphism (Method Overriding)</h2>
+      <p class="text-sm text-slate-600 leading-relaxed"><strong>Polymorphism</strong> ("many forms") lets objects of different classes respond to the same method call in their own way. <strong>Method overriding</strong> is its runtime form: a subclass redefines a method it inherited with the exact same signature, and the version that actually executes depends on the object's real type at runtime.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1">Java</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Uses dynamic method dispatch — the JVM looks up the actual object's class at runtime to decide which overridden method runs.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1">Python</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Uses duck typing — any object with a matching method can be used polymorphically, no explicit hierarchy required.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1">C++</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Requires the <code class="font-mono">virtual</code> keyword on the base method to enable runtime polymorphism through pointers/references.</p>
+        </div>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Method Overriding — Multi-Language</h3>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">Java</p>
+          <pre class="whitespace-pre-wrap">class Animal {
+  void sound() { System.out.println("..."); }
+}
+class Dog extends Animal {
+  void sound() { System.out.println("Bark"); }
+}
+Animal a = new Dog();
+a.sound(); // "Bark" - runtime dispatch</pre>
+        </div>
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">Python</p>
+          <pre class="whitespace-pre-wrap">class Animal:
+    def sound(self): pass
+
+class Dog(Animal):
+    def sound(self):
+        print("Bark")
+
+a = Dog()
+a.sound()  # "Bark"</pre>
+        </div>
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">C++</p>
+          <pre class="whitespace-pre-wrap">class Animal {
+  public: virtual void sound() {}
+};
+class Dog : public Animal {
+  public: void sound() {
+    cout &lt;&lt; "Bark";
+  }
+};
+Animal* a = new Dog();
+a->sound(); // "Bark" - virtual dispatch</pre>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white"><tr><th class="p-2 text-left">Overloading</th><th class="p-2 text-left">Overriding</th></tr></thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2">Same class, different parameter lists.</td><td class="p-2">Parent/child classes, identical signature.</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2">Resolved at compile time.</td><td class="p-2">Resolved at runtime, based on actual object type.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab and select a language pill — <strong>Java</strong>, <strong>Python</strong>, or <strong>C++</strong>.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Note that both <code class="font-mono">Animal</code> and <code class="font-mono">Dog</code> define a method with the identical signature: <code class="font-mono">sound()</code>.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Call via Animal Reference (Dog object)</strong> — even though the variable's declared type is <code class="font-mono">Animal</code>, the Dog's overridden version runs.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Call via Animal Reference (Cat object)</strong> — same reference type, different actual object, different output — proving dispatch happens at runtime based on the real object.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Compare both Execution Log entries side by side to see polymorphism in action.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What is polymorphism?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Hiding data behind private attributes</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> The ability for the same method call to behave differently depending on the actual object</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Creating multiple constructors</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. What is method overriding?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> A subclass redefining a method it inherited, with the same signature</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> Defining two methods with the same name but different parameters in one class</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> Deleting a parent class's method</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. What does the <code class="font-mono">virtual</code> keyword do in C++?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> Makes a class abstract</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> Deletes the method</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> Enables runtime polymorphism / dynamic dispatch for that method</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">4. Compile-time vs. runtime polymorphism — which pairing is correct?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> Overriding is compile-time; overloading is runtime</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> Overloading is compile-time; overriding is runtime</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> Both are always resolved at compile time</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-slate-500 font-medium mr-1">Language:</span>
+            <button id="lang-java" onclick="loadSim('java')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-slate-900 text-white">Java</button>
+            <button id="lang-python" onclick="loadSim('python')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-500 hover:bg-slate-100">Python</button>
+            <button id="lang-cpp" onclick="loadSim('cpp')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-500 hover:bg-slate-100">C++</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="invokeSound('Dog','Bark')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-play"></i> Call via Animal Reference (Dog)</button>
+            <button onclick="invokeSound('Cat','Meow')" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-play"></i> Call via Animal Reference (Cat)</button>
+            <button onclick="resetLog()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+          </div>
+        </div>
+        <div id="codeDisplay" class="font-mono text-xs bg-slate-950 text-slate-200 p-4 rounded-xl border border-slate-800 min-h-[150px] overflow-x-auto"></div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-code-branch text-indigo-600"></i> Polymorphism Execution Log</h3>
+          <div id="heapDisplay" class="grid grid-cols-1 gap-3">
+            <div class="p-4 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 italic text-xs">Awaiting a method call...</div>
+          </div>
+        </div>
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal</span>
+            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition"><i class="fa-solid fa-trash-can"></i> Clear</button>
+          </div>
+          <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[160px] max-h-[260px] overflow-y-auto space-y-1">
+            <p class="text-slate-500 italic">&gt;&gt;&gt; Call sound() through an Animal reference on both a Dog and a Cat.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">1. In <code class="font-mono">Animal a = new Dog(); a.sound();</code>, which version of sound() runs?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> Dog's overridden version, because dispatch is based on the actual object type at runtime</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> Animal's version, because the variable's declared type is Animal</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> Neither — this code fails to compile</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. Can static methods be overridden in the polymorphic sense?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> Yes, identically to instance methods</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> No — static methods are resolved at compile time by declared type (hidden, not overridden)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> Only in Python</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. How does Python achieve polymorphism without requiring a shared base class?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> It doesn't — Python requires explicit interfaces</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> Through the <code class="font-mono">virtual</code> keyword</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> Through duck typing — any object with a matching method can be used polymorphically</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. Why is dynamic dispatch important?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> It lets code written against a general/parent type automatically use the correct specialized behavior at runtime</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> It makes programs compile faster</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> It removes the need for classes entirely</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-indigo-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant</h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about polymorphism, method overriding, dynamic dispatch, or duck typing.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., what is dynamic dispatch?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('#tab-theory,#tab-procedure,#tab-pretest,#tab-simulation,#tab-posttest,#tab-ai').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ---------- Simulation ---------- */
+const codes = {
+  java: `class Animal {
+  void sound() { System.out.println("..."); }
+}
+class Dog extends Animal {
+  void sound() { System.out.println("Bark"); }
+}
+class Cat extends Animal {
+  void sound() { System.out.println("Meow"); }
+}
+Animal a = new Dog();  // or new Cat()
+a.sound();  // dispatch decided at runtime`,
+  python: `class Animal:
+    def sound(self): pass
+
+class Dog(Animal):
+    def sound(self):
+        print("Bark")
+
+class Cat(Animal):
+    def sound(self):
+        print("Meow")
+
+a = Dog()  # or Cat()
+a.sound()`,
+  cpp: `class Animal {
+  public: virtual void sound() {}
+};
+class Dog : public Animal {
+  public: void sound() { cout << "Bark"; }
+};
+class Cat : public Animal {
+  public: void sound() { cout << "Meow"; }
+};
+Animal* a = new Dog();  // or new Cat()
+a->sound();  // virtual dispatch at runtime`
+};
+
+let currentLang = 'java';
+
+function loadSim(lang){
+  currentLang = lang;
+  document.getElementById('codeDisplay').textContent = codes[lang];
+  ['java','python','cpp'].forEach(l=>{
+    const b = document.getElementById('lang-'+l);
+    b.classList.remove('bg-slate-900','text-white');
+    b.classList.add('text-slate-500');
+  });
+  const active = document.getElementById('lang-'+lang);
+  active.classList.add('bg-slate-900','text-white');
+  active.classList.remove('text-slate-500');
+}
+
+const refSyntax = { java: 'Animal a = new %C%(); a.sound();', python: 'a = %C%(); a.sound()', cpp: 'Animal* a = new %C%(); a->sound();' };
+
+function invokeSound(cls, output){
+  const heap = document.getElementById('heapDisplay');
+  if (heap.querySelector('.italic')) heap.innerHTML = '';
+  const call = refSyntax[currentLang].replace(/%C%/g, cls);
+  const card = document.createElement('div');
+  card.className = 'mem-card animate-pop bg-slate-50 p-4 rounded-xl border border-indigo-300';
+  card.innerHTML = `
+    <p class="text-[10px] text-indigo-600 font-bold font-mono mb-1">RUNTIME DISPATCH</p>
+    <p class="text-sm font-bold text-slate-800">Call: <span class="font-mono">${call}</span></p>
+    <p class="text-xs text-slate-500">Declared type: Animal &bull; Actual object: ${cls} &rarr; Output: <span class="font-mono">${output}</span></p>
+  `;
+  heap.prepend(card);
+  appendConsole(`&gt;&gt;&gt; ${call} &rarr; <span class="text-indigo-400">${output} (${cls}'s overridden sound() ran)</span>`);
+}
+
+function resetLog(){
+  document.getElementById('heapDisplay').innerHTML = '<div class="p-4 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 italic text-xs">Awaiting a method call...</div>';
+  clearConsole();
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Call sound() through an Animal reference on both a Dog and a Cat.</span>");
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-indigo-50 border border-indigo-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try calling sound() through an Animal reference on both a Dog and a Cat, and watch the output change even though the reference type never does!";
+  if (q.includes('dynamic dispatch') || q.includes('runtime')) response = "Dynamic dispatch means the specific method implementation that runs is chosen at runtime, based on the object's real class — not the type of the variable holding it. That's how Animal a = new Dog(); a.sound(); prints 'Bark'.";
+  else if (q.includes('duck typ')) response = "Duck typing (Python) means 'if it walks like a duck and quacks like a duck, treat it like a duck' — any object with a matching method can be used polymorphically, without needing a shared base class or interface.";
+  else if (q.includes('virtual')) response = "In C++, marking a base class method 'virtual' tells the compiler to use dynamic dispatch (a vtable lookup) instead of resolving the call at compile time — without it, overriding through a base pointer wouldn't work as expected.";
+  else if (q.includes('static') && q.includes('polymorph')) response = "Static/compile-time polymorphism is method overloading — resolved by the compiler from the arguments. Runtime/dynamic polymorphism is method overriding — resolved from the actual object type while the program runs.";
+  else if (q.includes('override')) response = "Overriding lets a subclass provide its own implementation of a method it inherited, using the exact same signature. Calling that method on the subclass's objects runs the new version, even through a parent-typed reference.";
+  else if (q.includes('extens') || q.includes('extend')) response = "Polymorphism enables extensibility: you can add new subclasses (like a new Bird class with its own sound()) without touching any code that already works with the Animal type.";
+  else if (q.includes('polymorph')) response = "Polymorphism lets code written against a general type (like Animal) automatically work correctly with any specific subtype (Dog, Cat, ...) — the right behavior is selected automatically.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{ loadSim('java'); });
+</script>
+</body>
+</html>

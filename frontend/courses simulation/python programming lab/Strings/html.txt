@@ -1,0 +1,1013 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Strings - Virtual Lab Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .code-line { transition: background-color 0.2s ease, border-color 0.2s ease; }
+        .code-line.active { background-color: rgba(99, 102, 241, 0.25); border-left: 4px solid #6366f1; }
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes pulseMem {
+            0% { transform: scale(1); border-color: #6366f1; }
+            50% { transform: scale(1.05); border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+            100% { transform: scale(1); border-color: #374151; }
+        }
+        .mem-card.updated { animation: pulseMem 0.5s ease-in-out; }
+        .char-cell { transition: all 0.2s ease; }
+        .char-cell.highlight { background-color: rgba(16, 185, 129, 0.3); border-color: #10b981; color: #34d399; transform: translateY(-2px); }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-brands fa-python"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Computer Science & Engineering</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 4: Python Strings, Slicing, Immutability & String Methods</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <!-- Main Tab Navigation -->
+    <nav class="bg-slate-800/80 border-b border-slate-700 px-6 py-2">
+        <div class="flex flex-wrap gap-2 text-sm font-medium">
+            <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-lg text-indigo-400 bg-slate-700/60 border border-slate-600 flex items-center gap-2 transition">
+                <i class="fa-solid fa-book-open"></i> Theory
+            </button>
+            <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-list-check"></i> Procedure
+            </button>
+            <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+            </button>
+            <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-flask"></i> Simulation
+            </button>
+            <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-graduation-cap"></i> Post-Test
+            </button>
+            <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-robot"></i> AI Socratic Assistant
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+        <!-- TAB 1: THEORY -->
+        <div id="content-theory" class="tab-content bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Theory: Python Strings, Slicing & Immutability</h2>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                In Python, a <strong>String</strong> (<code class="bg-slate-900 text-amber-300 px-1.5 py-0.5 rounded font-mono">str</code>) is an immutable sequence of Unicode characters enclosed in single quotes (<code class="text-emerald-300">'...'</code>), double quotes (<code class="text-emerald-300">"..."</code>), or triple quotes (<code class="text-emerald-300">"""..."""</code>). Strings support rich operations like indexing, slicing, concatenation, substring searching, and string-specific methods.
+            </p>
+
+            <!-- Grid of Concepts -->
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+                
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-arrow-right-to-city text-emerald-400"></i> String Indexing</span>
+                        <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded font-sans">0-Based</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Characters are accessed using square brackets <code class="text-amber-300">s[i]</code>. Positive indices start from <code class="text-slate-200">0</code> (left to right), while negative indices start from <code class="text-slate-200">-1</code> (right to left).
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-scissors text-amber-400"></i> String Slicing</span>
+                        <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded font-sans">s[start:stop:step]</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Extracts substrings using <code class="text-amber-300">s[start:stop:step]</code>. <code class="text-slate-200">stop</code> is exclusive. E.g., <code class="text-emerald-300">"Python"[0:2]</code> yields <code class="text-emerald-300">"Py"</code>.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-lock text-rose-400"></i> String Immutability</span>
+                        <span class="text-[10px] bg-rose-500/20 text-rose-300 px-2 py-0.5 rounded font-sans">Immutable</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        String characters cannot be changed in place! Attempting <code class="text-rose-400">s[0] = 'X'</code> raises a <code class="text-rose-400">TypeError</code>. Any string operation returns a new string.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-wand-magic-sparkles text-cyan-400"></i> String Methods</span>
+                        <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-sans">str Methods</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Built-in string transformations include <code class="text-amber-300">upper()</code>, <code class="text-amber-300">lower()</code>, <code class="text-amber-300">replace(old, new)</code>, <code class="text-amber-300">split(delim)</code>, and <code class="text-amber-300">strip()</code>.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-quote-left text-purple-400"></i> f-String Formatting</span>
+                        <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded font-sans">f"..."</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Formatted string literals allow embedding Python expressions directly inside curly braces: <code class="text-emerald-300">f"Hello {name}, score: {score}"</code>.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-magnifying-glass text-emerald-400"></i> Substring Search</span>
+                        <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-sans">find() / in</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Check substring presence using <code class="text-amber-300">'Py' in 'Python'</code> (returns <code class="text-emerald-400">True</code>) or find index using <code class="text-amber-300">s.find('th')</code>.
+                    </p>
+                </div>
+
+            </div>
+
+            <!-- Key Functions Section -->
+            <div class="bg-slate-900/60 p-4 rounded-lg border border-slate-700 text-xs text-slate-300 space-y-2">
+                <h4 class="font-bold text-indigo-300 text-sm"><i class="fa-solid fa-gears text-amber-300"></i> String Index & Slicing Reference Chart</h4>
+                <div class="overflow-x-auto p-2 bg-slate-950 rounded border border-slate-800 font-mono text-center text-xs">
+                    <table class="w-full text-slate-300 border-collapse">
+                        <tr class="text-emerald-400 border-b border-slate-800"><td class="p-1 font-bold">Positive Index:</td><td>0</td><td>1</td><td>2</td><td>3</td><td>4</td><td>5</td></tr>
+                        <tr class="text-amber-300 font-bold text-sm bg-slate-900/50"><td>Characters:</td><td class="p-1 border border-slate-700">P</td><td class="p-1 border border-slate-700">y</td><td class="p-1 border border-slate-700">t</td><td class="p-1 border border-slate-700">h</td><td class="p-1 border border-slate-700">o</td><td class="p-1 border border-slate-700">n</td></tr>
+                        <tr class="text-indigo-400 border-t border-slate-800"><td class="p-1 font-bold">Negative Index:</td><td>-6</td><td>-5</td><td>-4</td><td>-3</td><td>-2</td><td>-1</td></tr>
+                    </table>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: PROCEDURE -->
+        <div id="content-procedure" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Simulator Procedure</h2>
+            <ol class="list-decimal list-inside space-y-3 text-sm text-slate-300 leading-relaxed">
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Select a <strong>String Scenario</strong> (e.g. Indexing & Slicing, Immutability Error, Built-in Methods, f-String Formatting, or Substring Search) from the dropdown or click a Quick Preset.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Start Simulation"</strong> to initialize the string variable in RAM and render the string character memory grid.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Step Execution"</strong> to trace code line-by-line and observe variable state changes.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Observe the <strong>Character Index Visualizer Grid</strong> highlighting positive and negative indices for selected characters/slices.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Run / Execute All"</strong> to finish execution instantly and view the pop-out output result banner.</li>
+            </ol>
+        </div>
+
+        <!-- TAB 3: PRE-TEST -->
+        <div id="content-pretest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Pre-Lab Assessment Quiz</h2>
+                <span id="pretest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="preq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. What is the output of `"Python"[1:4]` in Python?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> 'Pyt'</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> 'yth'</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> 'ytho'</label>
+                    </div>
+                    <p id="preq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="preq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What happens if you execute `s = "Hello"; s[0] = 'J'`?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> s becomes "Jello"</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> TypeError is raised (strings are immutable)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> ValueError is raised</label>
+                    </div>
+                    <p id="preq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPretest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Pre-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 4: SIMULATION -->
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <!-- Controls Bar -->
+            <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Select String Scenario</label>
+                            <select id="strScenario" onchange="updateScenarioDisplay()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="slicing">String Indexing & Slicing ([start:stop:step])</option>
+                                <option value="immutability">String Immutability Assignment Error</option>
+                                <option value="methods">String Methods (upper, replace, split)</option>
+                                <option value="formatting">f-String Formatting & Interpolation</option>
+                                <option value="membership">Substring Search ('in' operator & find())</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="startSimulation()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95">
+                            <i class="fa-solid fa-play"></i> Start Simulation
+                        </button>
+                        <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 cursor-not-allowed">
+                            <i class="fa-solid fa-forward-step"></i> Step Execution
+                        </button>
+                        <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95">
+                            <i class="fa-solid fa-bolt"></i> Run / Execute All
+                        </button>
+                        <button onclick="resetSimulation()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium px-3 py-2 rounded-lg text-sm transition flex items-center gap-1 active:scale-95">
+                            <i class="fa-solid fa-rotate-left"></i> Reset
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick Preset Shortcuts -->
+                <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-700/60 text-xs">
+                    <span class="text-slate-400 font-medium"><i class="fa-solid fa-bolt text-amber-400"></i> Quick Presets:</span>
+                    <button onclick="loadPreset('slicing')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Indexing & Slicing</button>
+                    <button onclick="loadPreset('immutability')" class="bg-slate-900 hover:bg-rose-950 text-rose-300 px-2.5 py-1 rounded border border-rose-800 font-mono">Immutability Error</button>
+                    <button onclick="loadPreset('methods')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">String Methods</button>
+                    <button onclick="loadPreset('formatting')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">f-Strings</button>
+                    <button onclick="loadPreset('membership')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Substring Search</button>
+                </div>
+            </div>
+
+            <!-- Execution Workspace Split View -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left Column: Source Code Panel -->
+                <div class="lg:col-span-5 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md">
+                    <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <i class="fa-solid fa-code text-indigo-400"></i> Code Trace Window
+                        </span>
+                        <span id="currentStepBadge" class="text-xs bg-slate-700 text-slate-300 px-2.5 py-0.5 rounded-full font-mono">Step: Ready</span>
+                    </div>
+                    <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 flex-1 space-y-1 overflow-x-auto min-h-[220px]">
+                        <!-- Dynamic code trace lines rendered by JS -->
+                    </div>
+                    <div class="p-4 border-t border-slate-700/80 bg-slate-800/50">
+                        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Execution Status</h4>
+                        <p id="explanationText" class="text-xs text-slate-300 leading-relaxed min-h-[36px]">
+                            Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Right Column: Variable Memory & Interactive Character Visualizer -->
+                <div class="lg:col-span-7 flex flex-col gap-6">
+                    
+                    <!-- Memory Inspector -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md space-y-4">
+                        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                            <span class="flex items-center gap-2"><i class="fa-solid fa-microchip text-indigo-400"></i> Variable RAM Memory State</span>
+                            <span class="text-[10px] bg-slate-900 text-slate-400 px-2 py-0.5 rounded border border-slate-700 font-mono">Stack & Heap Active</span>
+                        </h3>
+                        
+                        <div class="grid grid-cols-3 gap-3">
+                            <div id="memVar1" class="mem-card bg-slate-900 border border-slate-700 p-3 rounded-lg text-center transition">
+                                <span id="lblVar1" class="text-xs text-slate-400 block font-mono">var1</span>
+                                <span id="valVar1" class="text-lg font-bold font-mono text-amber-400 block my-1 truncate">--</span>
+                                <div class="flex items-center justify-center gap-1">
+                                    <span id="typeVar1" class="text-[10px] bg-indigo-500/10 text-indigo-300 px-1.5 py-0.5 rounded font-mono">--</span>
+                                    <span id="mutVar1" class="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">--</span>
+                                </div>
+                            </div>
+
+                            <div id="memVar2" class="mem-card bg-slate-900 border border-slate-700 p-3 rounded-lg text-center transition">
+                                <span id="lblVar2" class="text-xs text-slate-400 block font-mono">var2</span>
+                                <span id="valVar2" class="text-lg font-bold font-mono text-indigo-400 block my-1 truncate">--</span>
+                                <div class="flex items-center justify-center gap-1">
+                                    <span id="typeVar2" class="text-[10px] bg-indigo-500/10 text-indigo-300 px-1.5 py-0.5 rounded font-mono">--</span>
+                                    <span id="mutVar2" class="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">--</span>
+                                </div>
+                            </div>
+
+                            <div id="memVar3" class="mem-card bg-slate-900 border border-slate-700 p-3 rounded-lg text-center transition">
+                                <span id="lblVar3" class="text-xs text-slate-400 block font-mono">var3</span>
+                                <span id="valVar3" class="text-lg font-bold font-mono text-emerald-400 block my-1 truncate">--</span>
+                                <div class="flex items-center justify-center gap-1">
+                                    <span id="typeVar3" class="text-[10px] bg-emerald-500/10 text-emerald-300 px-1.5 py-0.5 rounded font-mono">--</span>
+                                    <span id="mutVar3" class="text-[10px] bg-slate-800 text-slate-400 px-1.5 py-0.5 rounded font-mono">--</span>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- String Character Index Visualizer -->
+                        <div class="bg-slate-950 p-3 rounded-lg border border-slate-700 space-y-2">
+                            <div class="flex justify-between items-center text-xs">
+                                <span class="font-semibold text-indigo-300 flex items-center gap-1.5">
+                                    <i class="fa-solid fa-layer-group text-amber-400"></i> String Character Memory Grid
+                                </span>
+                                <span id="strLenBadge" class="text-[10px] font-mono text-slate-400">len: 0</span>
+                            </div>
+                            <div id="charIndexGrid" class="flex flex-nowrap overflow-x-auto gap-1 py-1 font-mono text-xs">
+                                <span class="text-slate-500 italic text-[11px] p-2">Select scenario and click 'Start Simulation' to view string memory.</span>
+                            </div>
+                        </div>
+
+                    </div>
+
+                    <!-- Terminal Output -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md flex-1">
+                        <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-2.5 flex justify-between items-center">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                                <i class="fa-solid fa-terminal text-emerald-400"></i> Output Terminal
+                            </span>
+                            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition">
+                                <i class="fa-solid fa-trash-can"></i> Clear
+                            </button>
+                        </div>
+                        <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-300 min-h-[140px] max-h-[180px] overflow-y-auto space-y-1">
+                            <p class="text-slate-500 italic">>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+                        </div>
+                    </div>
+
+                    <!-- Pop-out Result Banner -->
+                    <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-950 to-indigo-950 border-2 border-emerald-500/50 p-4 rounded-xl shadow-xl flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
+                                <i class="fa-solid fa-square-check"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs uppercase font-semibold text-emerald-400 tracking-wider">Final Execution Output</h4>
+                                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-300">Execution Completed</p>
+                            </div>
+                        </div>
+                        <span id="bannerStatus" class="text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1 rounded-md border border-slate-700">
+                            Completed
+                        </span>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: POST-TEST -->
+        <div id="content-posttest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Post-Lab Evaluation Quiz</h2>
+                <span id="posttest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="postq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. What is the result of `"Python"[-1]`?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="a"> 'P'</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="b"> 'n'</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="c"> IndexError</label>
+                    </div>
+                    <p id="postq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="postq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What method splits a string into a list based on a delimiter?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="a"> s.slice()</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="b"> s.split()</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="c"> s.cut()</label>
+                    </div>
+                    <p id="postq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPosttest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Post-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 6: AI ASSISTANT -->
+        <div id="content-ai" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md flex flex-col h-[520px]">
+            <h2 class="text-lg font-bold text-indigo-400 border-b border-slate-700 pb-2 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+            </h2>
+
+            <div id="aiChatBox" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-4 overflow-y-auto space-y-3 text-xs">
+                <div class="flex items-start gap-3">
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        Hello! I am your AI Socratic Assistant. Ask me any question about Python strings, slicing `[start:stop:step]`, negative indexing, or methods like `split()` and `replace()`!
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 mt-4">
+                <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., Why are strings immutable in Python?)..." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                <button onclick="sendAiQuery()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-xs font-semibold transition active:scale-95">
+                    Send
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // Execution State Variables
+        let scenario = 'slicing';
+        let stepList = [];
+        let currentStepIdx = 0;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            updateScenarioDisplay();
+        });
+
+        // UI Tab Switcher
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+                el.classList.add('text-slate-400');
+            });
+
+            document.getElementById(`content-${tabName}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            activeBtn.classList.remove('text-slate-400');
+            activeBtn.classList.add('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+        }
+
+        function loadPreset(presetScenario) {
+            document.getElementById('strScenario').value = presetScenario;
+            updateScenarioDisplay();
+            runAll();
+        }
+
+        function updateScenarioDisplay() {
+            scenario = document.getElementById('strScenario').value;
+            const codeContainer = document.getElementById('codeContainer');
+
+            if (scenario === 'slicing') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>text = <span class="text-emerald-300">"Python Lab"</span></span></div>
+                    <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>first_char = text[0]</span></div>
+                    <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>sub_str = text[0:6]</span></div>
+                    <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Char[0]: {first_char}, Slice[0:6]: {sub_str}"</span>)</span></div>
+                `;
+            } else if (scenario === 'immutability') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>msg = <span class="text-emerald-300">"Hello"</span></span></div>
+                    <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>first = msg[0]</span></div>
+                    <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>msg[0] = <span class="text-emerald-300">'J'</span> &nbsp;<span class="text-rose-400 text-xs"># TypeError!</span></span></div>
+                    <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(msg)</span></div>
+                `;
+            } else if (scenario === 'methods') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>s = <span class="text-emerald-300">"apple,banana,orange"</span></span></div>
+                    <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>upper_s = s.upper()</span></div>
+                    <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>fruits = s.split(<span class="text-emerald-300">","</span>)</span></div>
+                    <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Fruits List: {fruits}"</span>)</span></div>
+                `;
+            } else if (scenario === 'formatting') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>name = <span class="text-emerald-300">"Alice"</span></span></div>
+                    <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>score = 98</span></div>
+                    <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>report = <span class="text-emerald-300">f"Student {name} scored {score}%"</span></span></div>
+                    <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(report)</span></div>
+                `;
+            } else if (scenario === 'membership') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>word = <span class="text-emerald-300">"VirtualLab"</span></span></div>
+                    <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>has_lab = <span class="text-emerald-300">"Lab"</span> in word</span></div>
+                    <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>str_len = len(word)</span></div>
+                    <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"'Lab' in word: {has_lab}, Length: {str_len}"</span>)</span></div>
+                `;
+            }
+        }
+
+        // Render Character Index Visualizer Grid
+        function renderCharGrid(strVal, highlightedRange = []) {
+            const grid = document.getElementById('charIndexGrid');
+            const lenBadge = document.getElementById('strLenBadge');
+            
+            if (!strVal || strVal === '--') {
+                grid.innerHTML = `<span class="text-slate-500 italic text-[11px] p-2">Select scenario and click 'Start Simulation' to view string memory.</span>`;
+                lenBadge.innerText = 'len: 0';
+                return;
+            }
+
+            lenBadge.innerText = `len: ${strVal.length}`;
+            let html = `<div class="flex items-center gap-1 overflow-x-auto p-1">`;
+            
+            const n = strVal.length;
+            for (let i = 0; i < n; i++) {
+                const ch = strVal[i];
+                const negIdx = i - n;
+                const isHighlight = highlightedRange.includes(i);
+                
+                html += `
+                    <div class="char-cell flex flex-col items-center bg-slate-900 border ${isHighlight ? 'border-emerald-400 bg-emerald-950/40 text-emerald-300' : 'border-slate-700 text-slate-300'} px-2 py-1 rounded min-w-[28px] text-center font-mono">
+                        <span class="text-[9px] text-emerald-400 font-bold">${i}</span>
+                        <span class="text-sm font-bold my-0.5">${ch === ' ' ? '␣' : ch}</span>
+                        <span class="text-[9px] text-indigo-400">${negIdx}</span>
+                    </div>
+                `;
+            }
+            html += `</div>`;
+            grid.innerHTML = html;
+        }
+
+        // Generate Step Sequence for Simulation
+        function buildExecutionSteps() {
+            stepList = [];
+
+            if (scenario === 'slicing') {
+                stepList = [
+                    {
+                        line: 1,
+                        v1: { label: 'text', val: '"Python Lab"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'first_char', val: '--', type: '--', mut: '--' },
+                        v3: { label: 'sub_str', val: '--', type: '--', mut: '--' },
+                        mainStr: "Python Lab",
+                        highlightRange: [],
+                        consoleMsg: `> Stored text = "Python Lab" (len = 10)`,
+                        explanation: `Line 1: Stored immutable string "Python Lab" in memory.`
+                    },
+                    {
+                        line: 2,
+                        v1: { label: 'text', val: '"Python Lab"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'first_char', val: '"P"', type: 'str', mut: 'Immutable' },
+                        v3: { label: 'sub_str', val: '--', type: '--', mut: '--' },
+                        mainStr: "Python Lab",
+                        highlightRange: [0],
+                        consoleMsg: `> Read index 0: text[0] -> "P"`,
+                        explanation: `Line 2: Accessed character at index 0 ('P').`
+                    },
+                    {
+                        line: 3,
+                        v1: { label: 'text', val: '"Python Lab"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'first_char', val: '"P"', type: 'str', mut: 'Immutable' },
+                        v3: { label: 'sub_str', val: '"Python"', type: 'str', mut: 'Immutable' },
+                        mainStr: "Python Lab",
+                        highlightRange: [0, 1, 2, 3, 4, 5],
+                        consoleMsg: `> Slice text[0:6] -> "Python" (stop index 6 exclusive)`,
+                        explanation: `Line 3: Extracted substring from index 0 up to 5.`
+                    },
+                    {
+                        line: 4,
+                        v1: { label: 'text', val: '"Python Lab"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'first_char', val: '"P"', type: 'str', mut: 'Immutable' },
+                        v3: { label: 'sub_str', val: '"Python"', type: 'str', mut: 'Immutable' },
+                        mainStr: "Python Lab",
+                        highlightRange: [0, 1, 2, 3, 4, 5],
+                        consoleMsg: `<span class='text-emerald-300 font-bold'>Char[0]: P, Slice[0:6]: Python</span>`,
+                        explanation: `Line 4: Printed string index and slice results.`
+                    }
+                ];
+            } else if (scenario === 'immutability') {
+                stepList = [
+                    {
+                        line: 1,
+                        v1: { label: 'msg', val: '"Hello"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'first', val: '--', type: '--', mut: '--' },
+                        v3: { label: 'status', val: 'OK', type: 'str', mut: 'Immutable' },
+                        mainStr: "Hello",
+                        highlightRange: [],
+                        consoleMsg: `> Initialized msg = "Hello"`,
+                        explanation: `Line 1: Created immutable string object "Hello".`
+                    },
+                    {
+                        line: 2,
+                        v1: { label: 'msg', val: '"Hello"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'first', val: '"H"', type: 'str', mut: 'Immutable' },
+                        v3: { label: 'status', val: 'OK', type: 'str', mut: 'Immutable' },
+                        mainStr: "Hello",
+                        highlightRange: [0],
+                        consoleMsg: `> Read msg[0] -> "H"`,
+                        explanation: `Line 2: Read access on string character is permitted.`
+                    },
+                    {
+                        line: 3,
+                        v1: { label: 'msg', val: '"Hello"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'first', val: '"H"', type: 'str', mut: 'Immutable' },
+                        v3: { label: 'status', val: 'ERROR!', type: 'TypeError', mut: 'Raised' },
+                        mainStr: "Hello",
+                        highlightRange: [0],
+                        consoleMsg: `<span class='text-rose-400 font-bold'>TypeError: 'str' object does not support item assignment!</span>`,
+                        explanation: `Line 3: Item assignment on string raises TypeError (Strings are Immutable!).`
+                    }
+                ];
+            } else if (scenario === 'methods') {
+                stepList = [
+                    {
+                        line: 1,
+                        v1: { label: 's', val: '"apple,banana,orange"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'upper_s', val: '--', type: '--', mut: '--' },
+                        v3: { label: 'fruits', val: '--', type: '--', mut: '--' },
+                        mainStr: "apple,banana,orange",
+                        highlightRange: [],
+                        consoleMsg: `> s = "apple,banana,orange"`,
+                        explanation: `Line 1: Stored comma-separated string.`
+                    },
+                    {
+                        line: 2,
+                        v1: { label: 's', val: '"apple,banana,orange"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'upper_s', val: '"APPLE,BANANA,ORANGE"', type: 'str', mut: 'Immutable' },
+                        v3: { label: 'fruits', val: '--', type: '--', mut: '--' },
+                        mainStr: "apple,banana,orange",
+                        highlightRange: [],
+                        consoleMsg: `> s.upper() -> "APPLE,BANANA,ORANGE"`,
+                        explanation: `Line 2: Created new uppercase string copy.`
+                    },
+                    {
+                        line: 3,
+                        v1: { label: 's', val: '"apple,banana,orange"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'upper_s', val: '"APPLE,BANANA,ORANGE"', type: 'str', mut: 'Immutable' },
+                        v3: { label: 'fruits', val: "['apple', 'banana', 'orange']", type: 'list', mut: 'Mutable' },
+                        mainStr: "apple,banana,orange",
+                        highlightRange: [],
+                        consoleMsg: `> s.split(",") -> ['apple', 'banana', 'orange']`,
+                        explanation: `Line 3: Split string by comma into list of 3 items.`
+                    },
+                    {
+                        line: 4,
+                        v1: { label: 's', val: '"apple,banana,orange"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'upper_s', val: '"APPLE,BANANA,ORANGE"', type: 'str', mut: 'Immutable' },
+                        v3: { label: 'fruits', val: "['apple', 'banana', 'orange']", type: 'list', mut: 'Mutable' },
+                        mainStr: "apple,banana,orange",
+                        highlightRange: [],
+                        consoleMsg: `<span class='text-emerald-300 font-bold'>Fruits List: ['apple', 'banana', 'orange']</span>`,
+                        explanation: `Line 4: Printed split fruits list successfully.`
+                    }
+                ];
+            } else if (scenario === 'formatting') {
+                stepList = [
+                    {
+                        line: 1,
+                        v1: { label: 'name', val: '"Alice"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'score', val: '--', type: '--', mut: '--' },
+                        v3: { label: 'report', val: '--', type: '--', mut: '--' },
+                        mainStr: "Alice",
+                        highlightRange: [],
+                        consoleMsg: `> Stored name = "Alice"`,
+                        explanation: `Line 1: Variable 'name' initialized.`
+                    },
+                    {
+                        line: 2,
+                        v1: { label: 'name', val: '"Alice"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'score', val: '98', type: 'int', mut: 'Immutable' },
+                        v3: { label: 'report', val: '--', type: '--', mut: '--' },
+                        mainStr: "Alice",
+                        highlightRange: [],
+                        consoleMsg: `> Stored score = 98`,
+                        explanation: `Line 2: Variable 'score' initialized.`
+                    },
+                    {
+                        line: 3,
+                        v1: { label: 'name', val: '"Alice"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'score', val: '98', type: 'int', mut: 'Immutable' },
+                        v3: { label: 'report', val: '"Student Alice scored 98%"', type: 'str', mut: 'Immutable' },
+                        mainStr: "Student Alice scored 98%",
+                        highlightRange: [],
+                        consoleMsg: `> Evaluated f-string report`,
+                        explanation: `Line 3: Interpolated expressions inside f-string.`
+                    },
+                    {
+                        line: 4,
+                        v1: { label: 'name', val: '"Alice"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'score', val: '98', type: 'int', mut: 'Immutable' },
+                        v3: { label: 'report', val: '"Student Alice scored 98%"', type: 'str', mut: 'Immutable' },
+                        mainStr: "Student Alice scored 98%",
+                        highlightRange: [],
+                        consoleMsg: `<span class='text-emerald-300 font-bold'>Student Alice scored 98%</span>`,
+                        explanation: `Line 4: Outputted formatted string.`
+                    }
+                ];
+            } else if (scenario === 'membership') {
+                stepList = [
+                    {
+                        line: 1,
+                        v1: { label: 'word', val: '"VirtualLab"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'has_lab', val: '--', type: '--', mut: '--' },
+                        v3: { label: 'str_len', val: '--', type: '--', mut: '--' },
+                        mainStr: "VirtualLab",
+                        highlightRange: [],
+                        consoleMsg: `> word = "VirtualLab"`,
+                        explanation: `Line 1: Initialized string variable 'word'.`
+                    },
+                    {
+                        line: 2,
+                        v1: { label: 'word', val: '"VirtualLab"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'has_lab', val: 'True', type: 'bool', mut: 'Immutable' },
+                        v3: { label: 'str_len', val: '--', type: '--', mut: '--' },
+                        mainStr: "VirtualLab",
+                        highlightRange: [7, 8, 9],
+                        consoleMsg: `> Checked 'Lab' in word -> True`,
+                        explanation: `Line 2: Substring "Lab" found at index 7..9.`
+                    },
+                    {
+                        line: 3,
+                        v1: { label: 'word', val: '"VirtualLab"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'has_lab', val: 'True', type: 'bool', mut: 'Immutable' },
+                        v3: { label: 'str_len', val: '10', type: 'int', mut: 'Immutable' },
+                        mainStr: "VirtualLab",
+                        highlightRange: [],
+                        consoleMsg: `> len(word) -> 10`,
+                        explanation: `Line 3: Calculated total character length.`
+                    },
+                    {
+                        line: 4,
+                        v1: { label: 'word', val: '"VirtualLab"', type: 'str', mut: 'Immutable' },
+                        v2: { label: 'has_lab', val: 'True', type: 'bool', mut: 'Immutable' },
+                        v3: { label: 'str_len', val: '10', type: 'int', mut: 'Immutable' },
+                        mainStr: "VirtualLab",
+                        highlightRange: [],
+                        consoleMsg: `<span class='text-emerald-300 font-bold'>'Lab' in word: True, Length: 10</span>`,
+                        explanation: `Line 4: Printed membership test and string length.`
+                    }
+                ];
+            }
+        }
+
+        function startSimulation() {
+            updateScenarioDisplay();
+            buildExecutionSteps();
+            currentStepIdx = 0;
+
+            hideResultBanner();
+            clearMemory();
+            clearConsole();
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = false;
+            btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95 shadow-lg shadow-emerald-600/20";
+
+            appendConsole(`>>> Executing: string_demo.py [Scenario: ${scenario}]`);
+            executeStepAtIndex(0);
+        }
+
+        function executeStepAtIndex(idx) {
+            const step = stepList[idx];
+            highlightLine(step.line);
+
+            // Update Variable 1 Memory Card
+            document.getElementById('lblVar1').innerText = step.v1.label;
+            document.getElementById('valVar1').innerText = step.v1.val;
+            document.getElementById('typeVar1').innerText = step.v1.type;
+            document.getElementById('mutVar1').innerText = step.v1.mut;
+
+            // Update Variable 2 Memory Card
+            document.getElementById('lblVar2').innerText = step.v2.label;
+            document.getElementById('valVar2').innerText = step.v2.val;
+            document.getElementById('typeVar2').innerText = step.v2.type;
+            document.getElementById('mutVar2').innerText = step.v2.mut;
+
+            // Update Variable 3 Memory Card
+            document.getElementById('lblVar3').innerText = step.v3.label;
+            document.getElementById('valVar3').innerText = step.v3.val;
+            document.getElementById('typeVar3').innerText = step.v3.type;
+            document.getElementById('mutVar3').innerText = step.v3.mut;
+
+            triggerMemUpdate('memVar1');
+            triggerMemUpdate('memVar2');
+            triggerMemUpdate('memVar3');
+
+            renderCharGrid(step.mainStr, step.highlightRange);
+
+            appendConsole(step.consoleMsg);
+            document.getElementById('explanationText').innerText = step.explanation;
+            document.getElementById('currentStepBadge').innerText = `Step ${idx + 1}/${stepList.length}`;
+
+            if (idx === stepList.length - 1) {
+                const isErr = scenario === 'immutability';
+                showResultBanner(isErr ? "Execution Error: TypeError" : "Execution Completed Successfully", isErr);
+                const btnStep = document.getElementById('btnStep');
+                btnStep.disabled = true;
+                btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+                document.getElementById('currentStepBadge').innerText = "Finished";
+            }
+        }
+
+        function stepExecute() {
+            if (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function runAll() {
+            startSimulation();
+            while (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function resetSimulation() {
+            currentStepIdx = 0;
+            highlightLine(0);
+            clearMemory();
+            clearConsole();
+            hideResultBanner();
+            renderCharGrid('--', []);
+            appendConsole("<p class='text-slate-500 italic'>>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>");
+            document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+            document.getElementById('currentStepBadge').innerText = "Step: Ready";
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = true;
+            btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+        }
+
+        function highlightLine(lineNum) {
+            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+            if (lineNum > 0) {
+                const target = document.getElementById(`line${lineNum}`);
+                if (target) target.classList.add('active');
+            }
+        }
+
+        function clearMemory() {
+            ['lblVar1', 'lblVar2', 'lblVar3'].forEach((id, i) => document.getElementById(id).innerText = `var${i+1}`);
+            ['valVar1', 'valVar2', 'valVar3'].forEach(id => document.getElementById(id).innerText = '--');
+            ['typeVar1', 'typeVar2', 'typeVar3'].forEach(id => document.getElementById(id).innerText = '--');
+            ['mutVar1', 'mutVar2', 'mutVar3'].forEach(id => document.getElementById(id).innerText = '--');
+        }
+
+        function clearConsole() {
+            document.getElementById('terminal').innerHTML = '';
+        }
+
+        function appendConsole(htmlContent) {
+            const term = document.getElementById('terminal');
+            const p = document.createElement('p');
+            p.innerHTML = htmlContent;
+            term.appendChild(p);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function triggerMemUpdate(memId) {
+            const el = document.getElementById(memId);
+            if (!el) return;
+            el.classList.add('updated');
+            setTimeout(() => { el.classList.remove('updated'); }, 500);
+        }
+
+        function showResultBanner(text, isError) {
+            const banner = document.getElementById('resultBanner');
+            const bannerText = document.getElementById('resultBannerText');
+            const bannerIcon = document.getElementById('bannerIcon');
+            const bannerStatus = document.getElementById('bannerStatus');
+
+            bannerText.innerText = text;
+            if (isError) {
+                bannerText.className = "text-lg font-mono font-bold text-rose-400";
+                bannerIcon.className = "w-10 h-10 rounded-full bg-rose-500/20 text-rose-400 flex items-center justify-center text-lg font-bold";
+                bannerIcon.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i>`;
+                bannerStatus.innerText = "Status: Error";
+                bannerStatus.className = "text-xs font-mono text-rose-400 bg-rose-950/80 px-3 py-1 rounded-md border border-rose-800";
+            } else {
+                bannerText.className = "text-lg font-mono font-bold text-emerald-300";
+                bannerIcon.className = "w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold";
+                bannerIcon.innerHTML = `<i class="fa-solid fa-square-check"></i>`;
+                bannerStatus.innerText = "Completed";
+                bannerStatus.className = "text-xs font-mono text-emerald-400 bg-slate-900/80 px-3 py-1 rounded-md border border-slate-700";
+            }
+            banner.classList.remove('hidden');
+        }
+
+        function hideResultBanner() {
+            document.getElementById('resultBanner').classList.add('hidden');
+        }
+
+        // Quiz Checkers
+        function checkPretest() {
+            const q1 = document.querySelector('input[name="pq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="pq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('preq1-box');
+            const q1fb = document.getElementById('preq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! Slicing [1:4] extracts indices 1, 2, and 3 ('yth').";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. The upper index stop value (4) is exclusive.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('preq2-box');
+            const q2fb = document.getElementById('preq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'b') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! Strings in Python are immutable, so item assignment raises TypeError.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. Strings cannot be modified in place.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('pretest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function checkPosttest() {
+            const q1 = document.querySelector('input[name="postq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="postq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('postq1-box');
+            const q1fb = document.getElementById('postq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! Index -1 retrieves the last character ('n').";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. Negative indices count from the right, starting at -1.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('postq2-box');
+            const q2fb = document.getElementById('postq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'b') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! s.split() breaks string into a list by delimiter.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. The standard string method is split().";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('posttest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        // AI Assistant Query Handler
+        function sendAiQuery() {
+            const input = document.getElementById('aiQueryInput');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const chatBox = document.getElementById('aiChatBox');
+
+            const userDiv = document.createElement('div');
+            userDiv.className = 'flex items-start gap-3 justify-end';
+            userDiv.innerHTML = `
+                <div class="bg-indigo-600/30 border border-indigo-500/40 p-3 rounded-lg text-slate-200">
+                    ${query}
+                </div>
+                <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 text-xs shrink-0">You</div>
+            `;
+            chatBox.appendChild(userDiv);
+            input.value = '';
+
+            let response = "Try selecting different scenarios in the simulator to inspect how Python handles string memory, indexing, and immutability!";
+            const qLower = query.toLowerCase();
+            if (qLower.includes('slice') || qLower.includes('start') || qLower.includes('stop')) {
+                response = "String slicing uses `s[start:stop:step]`. Remember that `start` is INCLUSIVE while `stop` is EXCLUSIVE. Try the 'Indexing & Slicing' preset!";
+            } else if (qLower.includes('immutable') || qLower.includes('change') || qLower.includes('error')) {
+                response = "Strings in Python are IMMUTABLE. Once created in memory, individual characters cannot be modified. Methods like `.replace()` or `.upper()` return a NEW string copy!";
+            } else if (qLower.includes('split') || qLower.includes('list') || qLower.includes('method')) {
+                response = "The `.split(delim)` method converts a string into a list of substrings using a delimiter (like comma or space). Check out the 'String Methods' preset!";
+            } else if (qLower.includes('negative') || qLower.includes('index')) {
+                response = "Negative indices count backwards from the end of the string: `s[-1]` is the last character, `s[-2]` is second to last, down to `s[-len(s)]` for the first character!";
+            }
+
+            setTimeout(() => {
+                const aiDiv = document.createElement('div');
+                aiDiv.className = 'flex items-start gap-3';
+                aiDiv.innerHTML = `
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        ${response}
+                    </div>
+                `;
+                chatBox.appendChild(aiDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 500);
+        }
+    </script>
+</body>
+</html>

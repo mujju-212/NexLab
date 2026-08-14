@@ -1,0 +1,677 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Python Exception Handling — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .code-line{transition:background-color .25s ease,border-color .25s ease;border-left:4px solid transparent;}
+  .code-line.active{background:rgba(124,58,237,.09);border-left-color:#7c3aed;}
+  .code-line.error-active{background:rgba(244,63,94,.09);border-left-color:#f43f5e;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-brands fa-python"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Python Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment 14: Exception Handling (try, except, else, finally, raise)</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <!-- Tab Nav -->
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> Theory
+      </button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-list-check"></i> Procedure
+      </button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+      </button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-flask"></i> Simulation
+      </button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-graduation-cap"></i> Post-Test
+      </button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Exception Handling in Python</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">An <strong>exception</strong> is an event that occurs during execution which interrupts the normal flow of a program's instructions. Python handles runtime errors gracefully using the <code class="bg-slate-100 text-purple-600 px-1.5 py-0.5 rounded font-mono">try-except</code> block construct, preventing sudden script crashes and allowing recovery logic to run instead.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono">try ... except</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Code that might raise a runtime error is placed inside <code class="font-mono">try</code>. If an error occurs, execution immediately jumps to the matching <code class="font-mono">except</code> block.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono">else &amp; finally</h3>
+          <p class="text-slate-500 text-xs leading-relaxed"><code class="font-mono">else</code> runs only if NO exception occurred in <code class="font-mono">try</code>. <code class="font-mono">finally</code> runs ALWAYS, regardless of errors — ideal for resource cleanup.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono">raise Exception</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Developers can explicitly trigger errors with <code class="font-mono">raise</code> (e.g. <code class="font-mono">raise ValueError("Invalid input")</code>) to enforce business-logic validation.</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Clause</th><th class="p-2 text-left">Runs when...</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">except</td><td class="p-2">An exception matching its type was raised in try</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">else</td><td class="p-2">The try block completed with NO exception</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">finally</td><td class="p-2">ALWAYS — whether an exception occurred, was handled, or not</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bg-slate-50 p-4 rounded-lg border border-slate-200 text-xs text-slate-600 space-y-2">
+        <h4 class="font-bold text-slate-700 text-sm"><i class="fa-solid fa-circle-info text-purple-600"></i> Common Standard Exception Types</h4>
+        <ul class="list-disc list-inside space-y-1">
+          <li><strong class="text-slate-700">ZeroDivisionError:</strong> raised when dividing a number by zero (<code class="font-mono">10 / 0</code>).</li>
+          <li><strong class="text-slate-700">ValueError:</strong> raised when a function receives an argument of the right type but an inappropriate value (<code class="font-mono">int("abc")</code>).</li>
+          <li><strong class="text-slate-700">TypeError:</strong> raised when an operation is performed on an inappropriate data type.</li>
+          <li><strong class="text-slate-700">KeyError / IndexError:</strong> raised for a missing dictionary key or an out-of-range sequence index.</li>
+        </ul>
+      </div>
+
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 space-y-1.5">
+        <h4 class="font-bold flex items-center gap-2"><i class="fa-solid fa-triangle-exclamation"></i> Common Pitfalls</h4>
+        <ul class="list-disc list-inside space-y-1">
+          <li>A bare <code class="font-mono">except:</code> catches every exception including <code class="font-mono">KeyboardInterrupt</code> — always catch a specific exception type when possible.</li>
+          <li><code class="font-mono">finally</code> runs even if the <code class="font-mono">try</code> block returns or the exception was never caught — don't rely on code after the try/except to always execute cleanup.</li>
+          <li>An unhandled <code class="font-mono">raise</code> crashes the program — wrap risky calls with <code class="font-mono">try/except</code> if the caller shouldn't crash on invalid input.</li>
+          <li><code class="font-mono">else</code> is easy to forget — code placed directly after <code class="font-mono">except</code> (outside try) runs regardless of success/failure, unlike a true <code class="font-mono">else</code> clause.</li>
+        </ul>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Patterns Covered in This Lab</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><strong class="text-slate-700">Basic Catch</strong> — trapping a ZeroDivisionError with try/except.</div>
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><strong class="text-slate-700">Full Lifecycle</strong> — try/except/else/finally running together on a success path.</div>
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><strong class="text-slate-700">Manual Trigger</strong> — validating input and raising ValueError explicitly, unhandled.</div>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab and pick an <strong>Exception Scenario</strong> (ZeroDivisionError catch, full try/except/else/finally, or raise ValueError) from the dropdown, or click a <strong>Quick Preset</strong>.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Simulation</strong> to load the code into execution memory.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step Execution</strong> repeatedly to trace the code line-by-line — the line that raises an exception is highlighted in <span class="text-rose-500 font-semibold">red</span> instead of the normal purple.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Or click <strong>Run / Execute All</strong> to animate every step automatically.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Watch the <strong>Exception Status</strong> badge above the memory panel switch between NONE, TRAPPED, and RAISED as control flow moves through try/except/else/finally.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> at any time to clear the trace and start over.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. Which block ALWAYS executes, regardless of whether an exception occurs?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> else</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> finally</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> except</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What statement manually triggers an exception in Python?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> throw</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> raise</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> error</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. What exception is raised by <code class="font-mono">10 / 0</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> ZeroDivisionError</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> ValueError</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> TypeError</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">4. What happens if an exception is raised but never caught by any except block?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> Python silently ignores it</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> Python retries the try block automatically</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> The program crashes with an unhandled exception traceback</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Select Exception Scenario</label>
+              <select id="scenarioSelect" onchange="onScenarioChange()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500 min-w-[300px]">
+                <option value="try_except">ZeroDivisionError Handling (try / except)</option>
+                <option value="full_try">Full Lifecycle (try / except / else / finally)</option>
+                <option value="raise_error">Manual Exception Triggering (raise ValueError)</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Start Simulation
+            </button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-forward-step"></i> Step Execution
+            </button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-bolt"></i> Run / Execute All
+            </button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('try_except')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">ZeroDivision Catch</button>
+          <button onclick="loadPreset('full_try')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">else &amp; finally Lifecycle</button>
+          <button onclick="loadPreset('raise_error')" class="bg-white hover:bg-rose-50 text-rose-500 px-2.5 py-1 rounded-full border border-rose-200 font-mono">raise ValueError</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-code text-purple-600"></i> Code Trace Window
+            </span>
+          </div>
+          <div id="codeLines" class="p-4 font-mono text-sm bg-slate-950 text-slate-200 flex-1 space-y-0.5 overflow-x-auto min-h-[220px]"></div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Select a scenario and click 'Start Simulation' or 'Run / Execute All'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-7 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center justify-between">
+              <span class="flex items-center gap-2"><i class="fa-solid fa-microchip text-purple-600"></i> Exception Call Stack &amp; RAM Inspector</span>
+              <span id="activeErrorBadge" class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 font-mono">Exception: NONE</span>
+            </h3>
+            <div class="grid grid-cols-3 gap-3" id="memCardsContainer">
+              <div id="mem1" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span id="label1" class="text-xs text-slate-500 block font-mono">var1</span>
+                <span id="val1" class="text-base font-bold font-mono text-purple-600 block my-1 truncate">--</span>
+                <span id="type1" class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">--</span>
+              </div>
+              <div id="mem2" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span id="label2" class="text-xs text-slate-500 block font-mono">var2</span>
+                <span id="val2" class="text-base font-bold font-mono text-purple-600 block my-1 truncate">--</span>
+                <span id="type2" class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">--</span>
+              </div>
+              <div id="mem3" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span id="label3" class="text-xs text-slate-500 block font-mono">var3</span>
+                <span id="val3" class="text-base font-bold font-mono text-emerald-600 block my-1 truncate">--</span>
+                <span id="type3" class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">--</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal
+              </span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[140px] max-h-[180px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-square-check"></i>
+              </div>
+              <div>
+                <h4 id="bannerLabel" class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Final Execution Output</h4>
+                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+            <span id="bannerStatus" class="text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200">Status: OK</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. When does the <code class="font-mono">else</code> block execute in a try-except-else statement?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> Only when an exception occurs inside try</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> Only when NO exceptions occur inside try</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> Always, regardless of exceptions</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What error type is raised by <code class="font-mono">int("hello")</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> ZeroDivisionError</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> ValueError</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> KeyError</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. In a try/except/finally block where the try succeeds with no error, what is the execution order?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> finally, then try, then except</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> try, then except, then finally</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> try, then finally (except is skipped)</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. What is the purpose of <code class="font-mono">raise ValueError("Age cannot be negative!")</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> To manually trigger an exception with a custom message when a validation rule fails</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> To silently ignore invalid values</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> To catch an exception that already occurred</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+      </h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me anything about try, except, else, finally, or triggering errors with raise.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., difference between else and finally?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ---------- Code definitions per scenario ---------- */
+function buildCodeLines(scenario){
+  switch(scenario){
+    case 'try_except': return [
+      {indent:0, text:'try:'},
+      {indent:1, text:'res = 10 / 0'},
+      {indent:0, text:'except ZeroDivisionError:'},
+      {indent:1, text:'res = "Error: Cannot divide by zero!"'},
+      {indent:0, text:'print(f"Handled: {res}")'}
+    ];
+    case 'full_try': return [
+      {indent:0, text:'try:'},
+      {indent:1, text:'val = int("42")'},
+      {indent:0, text:'except ValueError: msg = "Invalid Int"'},
+      {indent:0, text:'else: msg = f"Success: {val}"'},
+      {indent:0, text:'finally: status = "Cleaned"'},
+      {indent:0, text:'print(f"{msg} | {status}")'}
+    ];
+    case 'raise_error': return [
+      {indent:0, text:'age = -5'},
+      {indent:0, text:'if age < 0:'},
+      {indent:1, text:'raise ValueError("Age cannot be negative!")'},
+      {indent:0, text:'print(f"Age: {age}")'}
+    ];
+  }
+}
+
+const VAR_LABELS = {
+  try_except: [{id:'res',label:'res'},{id:'error',label:'error'},{id:'status',label:'status'}],
+  full_try: [{id:'val',label:'val'},{id:'msg',label:'msg'},{id:'status',label:'status'}],
+  raise_error: [{id:'age',label:'age'},{id:'valid',label:'valid'},{id:'status',label:'status'}]
+};
+
+/* ---------- Step builders (pure, mirrors real Python semantics) ---------- */
+function buildSteps(scenario){
+  const steps = [];
+  if (scenario === 'try_except'){
+    steps.push({line:1, err:false, mem:{res:{val:'--',type:'--'}, error:{val:'NONE',type:'--'}, status:{val:'Active',type:'str'}}, badge:{text:'Exception: NONE', cls:'text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 font-mono'}, console:'Entered try block', note:'Line 1: Entered the try block. Execution proceeds to the protected statement.'});
+    steps.push({line:2, err:true, mem:{res:{val:'--',type:'--'}, error:{val:'ZeroDivisionError',type:'Exception'}, status:{val:'TRAPPED',type:'str'}}, badge:{text:'TRAPPED: ZeroDivisionError', cls:'text-[10px] bg-rose-50 text-rose-500 px-2 py-0.5 rounded-full border border-rose-200 font-mono'}, console:'ZeroDivisionError: division by zero!', note:'Line 2: Executed 10 / 0 — ZeroDivisionError raised and immediately caught by the except block.', pulse:['error','status']});
+    steps.push({line:4, err:false, mem:{res:{val:'"Error: Cannot divide by zero!"',type:'str'}, error:{val:'Handled',type:'str'}, status:{val:'Recovered',type:'str'}}, badge:{text:'Handled: ZeroDivisionError', cls:'text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full border border-emerald-200 font-mono'}, console:'Executed except ZeroDivisionError block -> handled gracefully', note:'Line 4: Fallback code executed, assigning an error string to res.', pulse:['res','status']});
+    steps.push({line:5, err:false, mem:{res:{val:'"Error: Cannot divide by zero!"',type:'str'}, error:{val:'Handled',type:'str'}, status:{val:'Finished',type:'str'}}, badge:{text:'Handled: ZeroDivisionError', cls:'text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full border border-emerald-200 font-mono'}, console:'Handled: Error: Cannot divide by zero!', note:'Line 5: Script resumed normal execution after handling the exception.', final:true, resultText:'Handled: Error: Cannot divide by zero!', isError:false});
+  }
+  else if (scenario === 'full_try'){
+    steps.push({line:1, err:false, mem:{val:{val:'--',type:'--'}, msg:{val:'--',type:'--'}, status:{val:'--',type:'--'}}, badge:{text:'Exception: NONE', cls:'text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 font-mono'}, console:'Entered try block', note:'Line 1: Loaded the try/except/else/finally statement.'});
+    steps.push({line:2, err:false, mem:{val:{val:'42',type:'int'}, msg:{val:'--',type:'--'}, status:{val:'--',type:'--'}}, badge:{text:'Exception: NONE', cls:'text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 font-mono'}, console:'val = int("42") -> successfully parsed 42', note:'Line 2: Successfully parsed the string "42" into integer 42. No exception raised.', pulse:['val']});
+    steps.push({line:4, err:false, mem:{val:{val:'42',type:'int'}, msg:{val:'"Success: 42"',type:'str'}, status:{val:'--',type:'--'}}, badge:{text:'Exception: NONE', cls:'text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 font-mono'}, console:'Executed else block (since NO error occurred)', note:'Line 4: Skipped the except block entirely and executed else — this only happens on the success path.', pulse:['msg']});
+    steps.push({line:5, err:false, mem:{val:{val:'42',type:'int'}, msg:{val:'"Success: 42"',type:'str'}, status:{val:'"Cleaned"',type:'str'}}, badge:{text:'finally: EXECUTED', cls:'text-[10px] bg-purple-50 text-purple-600 px-2 py-0.5 rounded-full border border-purple-200 font-mono'}, console:'Executed finally block (ALWAYS executes!)', note:'Line 5: Executed the finally block for resource cleanup — runs on every path.', pulse:['status']});
+    steps.push({line:6, err:false, mem:{val:{val:'42',type:'int'}, msg:{val:'"Success: 42"',type:'str'}, status:{val:'"Cleaned"',type:'str'}}, badge:{text:'Completed', cls:'text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded-full border border-emerald-200 font-mono'}, console:'Success: 42 | Cleaned', note:'Line 6: Printed the formatted status result.', final:true, resultText:'Success: 42 | Cleaned', isError:false});
+  }
+  else if (scenario === 'raise_error'){
+    steps.push({line:1, err:false, mem:{age:{val:'-5',type:'int'}, valid:{val:'False',type:'bool'}, status:{val:'Pending',type:'str'}}, badge:{text:'Exception: NONE', cls:'text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 font-mono'}, console:'Initialized age = -5', note:'Line 1: Stored age = -5 in memory.'});
+    steps.push({line:2, err:false, mem:{age:{val:'-5',type:'int'}, valid:{val:'False',type:'bool'}, status:{val:'Check Failed',type:'str'}}, badge:{text:'Exception: NONE', cls:'text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 font-mono'}, console:'Condition age < 0 evaluated True (-5 < 0)', note:'Line 2: Evaluated the if condition — -5 is indeed less than 0.', pulse:['status']});
+    steps.push({line:3, err:true, mem:{age:{val:'-5',type:'int'}, valid:{val:'False',type:'bool'}, status:{val:'CRASHED',type:'str'}}, badge:{text:'RAISED: ValueError', cls:'text-[10px] bg-rose-50 text-rose-500 px-2 py-0.5 rounded-full border border-rose-200 font-mono'}, console:'ValueError: Age cannot be negative!', note:'Line 3: Explicitly raised ValueError("Age cannot be negative!"). No except block catches it — execution stops here.', final:true, resultText:'Unhandled Exception: ValueError', isError:true, pulse:['status']});
+  }
+  return steps;
+}
+
+/* ---------- Simulation controller ---------- */
+let state = { scenario:'try_except', steps:[], idx:0, timer:null };
+
+function onScenarioChange(){ /* no numeric params for this lab */ }
+
+function loadPreset(scenario){
+  document.getElementById('scenarioSelect').value = scenario;
+  startSimulation();
+}
+
+function renderCodeLines(scenario){
+  const defs = buildCodeLines(scenario);
+  const container = document.getElementById('codeLines');
+  container.innerHTML = defs.map((d,idx)=>`
+    <div id="line${idx+1}" class="code-line px-3 py-1.5 rounded flex items-center gap-3">
+      <span class="text-slate-600 text-xs w-4">${idx+1}</span>
+      <span style="padding-left:${d.indent*20}px">${d.text}</span>
+    </div>`).join('');
+}
+
+function renderMemLabels(scenario){
+  const labels = VAR_LABELS[scenario];
+  labels.forEach((l,idx)=>{
+    document.getElementById(`label${idx+1}`).innerText = l.label;
+    document.getElementById(`val${idx+1}`).innerText = '--';
+    document.getElementById(`type${idx+1}`).innerText = '--';
+  });
+}
+
+function highlightLine(n, isErr){
+  document.querySelectorAll('.code-line').forEach(el=>el.classList.remove('active','error-active'));
+  if (n > 0){
+    const t = document.getElementById(`line${n}`);
+    if (t) t.classList.add(isErr ? 'error-active' : 'active');
+  }
+}
+
+function applyStep(step, scenario){
+  highlightLine(step.line, step.err);
+  const labels = VAR_LABELS[scenario];
+  labels.forEach((l,idx)=>{
+    const v = step.mem[l.id];
+    if (v !== undefined){
+      document.getElementById(`val${idx+1}`).innerText = v.val;
+      document.getElementById(`type${idx+1}`).innerText = v.type;
+      if (step.pulse && step.pulse.includes(l.id)){
+        const card = document.getElementById(`mem${idx+1}`);
+        card.classList.add('updated');
+        setTimeout(()=>card.classList.remove('updated'), 500);
+      }
+    }
+  });
+  const badge = document.getElementById('activeErrorBadge');
+  badge.innerText = step.badge.text;
+  badge.className = step.badge.cls;
+
+  if (step.console) appendConsole(step.console);
+  document.getElementById('explanationText').innerText = step.note || '';
+  if (step.final){ showResultBanner(step.resultText, step.isError); }
+  const total = state.steps.length;
+  const done = state.idx;
+  document.getElementById('progressFill').style.width = `${Math.min(100,(done/total)*100)}%`;
+  document.getElementById('currentStepBadge').innerText = step.final ? 'Finished' : `Step ${done}/${total}`;
+}
+
+function startSimulation(){
+  clearInterval(state.timer);
+  const scenario = document.getElementById('scenarioSelect').value;
+  state = { scenario, steps: buildSteps(scenario), idx:0, timer:null };
+
+  renderCodeLines(scenario);
+  renderMemLabels(scenario);
+  highlightLine(0, false);
+  clearConsole();
+  hideResultBanner();
+  const badge = document.getElementById('activeErrorBadge');
+  badge.innerText = 'Exception: NONE';
+  badge.className = 'text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 font-mono';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('currentStepBadge').innerText = 'Step: Ready';
+  document.getElementById('explanationText').innerText = "Simulation loaded. Click 'Step Execution' or 'Run / Execute All'.";
+  appendConsole(`&gt;&gt;&gt; Executing: exception_demo.py [Scenario: ${scenario}]`);
+
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95';
+}
+
+function stepExecute(){
+  if (state.idx >= state.steps.length) return;
+  const step = state.steps[state.idx];
+  state.idx++;
+  applyStep(step, state.scenario);
+  if (state.idx >= state.steps.length){
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = 'bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+  }
+}
+
+function runAll(){
+  startSimulation();
+  clearInterval(state.timer);
+  state.timer = setInterval(()=>{
+    if (state.idx >= state.steps.length){ clearInterval(state.timer); return; }
+    stepExecute();
+  }, 260);
+}
+
+function resetSimulation(){
+  clearInterval(state.timer);
+  state.idx = 0;
+  highlightLine(0, false);
+  clearConsole();
+  hideResultBanner();
+  const badge = document.getElementById('activeErrorBadge');
+  badge.innerText = 'Exception: NONE';
+  badge.className = 'text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded-full border border-slate-200 font-mono';
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Select a scenario and click 'Start Simulation' or 'Run / Execute All'.";
+  document.getElementById('currentStepBadge').innerText = 'Step: Ready';
+  document.getElementById('progressFill').style.width = '0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = 'bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+function showResultBanner(text, isError){
+  const banner = document.getElementById('resultBanner');
+  const bannerText = document.getElementById('resultBannerText');
+  const bannerIcon = document.getElementById('bannerIcon');
+  const bannerStatus = document.getElementById('bannerStatus');
+  bannerText.innerText = text;
+  if (isError){
+    banner.className = 'animate-pop bg-gradient-to-r from-rose-50 to-amber-50 border-2 border-rose-300 p-4 rounded-2xl shadow-sm flex items-center justify-between';
+    bannerText.className = 'text-lg font-mono font-bold text-rose-600';
+    bannerIcon.className = 'w-10 h-10 rounded-full bg-rose-100 text-rose-500 flex items-center justify-center text-lg font-bold';
+    bannerIcon.innerHTML = '<i class="fa-solid fa-triangle-exclamation"></i>';
+    bannerStatus.innerText = 'Status: Raised';
+    bannerStatus.className = 'text-xs font-mono text-rose-500 bg-white px-3 py-1 rounded-full border border-rose-200';
+  } else {
+    banner.className = 'animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between';
+    bannerText.className = 'text-lg font-mono font-bold text-emerald-700';
+    bannerIcon.className = 'w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold';
+    bannerIcon.innerHTML = '<i class="fa-solid fa-square-check"></i>';
+    bannerStatus.innerText = 'Status: Handled';
+    bannerStatus.className = 'text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200';
+  }
+  banner.classList.remove('hidden');
+}
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try running an exception handling scenario in the simulator to observe how try/except blocks catch errors!";
+  if (q.includes('finally') && q.includes('else')) response = "else runs only if no exception occurred in try. finally runs ALWAYS — whether an exception occurred, was caught, or not — making it essential for releasing resources (closing files, DB connections).";
+  else if (q.includes('finally')) response = "finally always executes, regardless of whether the try block succeeded, failed, or the exception was even caught. It's the right place for cleanup code.";
+  else if (q.includes('else')) response = "The else clause on a try statement runs only when NO exception occurred — it's a way to separate 'code that might fail' (try) from 'code that only runs on success' (else).";
+  else if (q.includes('raise') || q.includes('custom') || q.includes('trigger')) response = "Use raise ExceptionType('message') to manually trigger an error when a validation condition fails — e.g. raise ValueError('Age cannot be negative!').";
+  else if (q.includes('zerodivision')) response = "ZeroDivisionError is raised whenever a number is divided by zero, e.g. 10 / 0. Catch it with except ZeroDivisionError: to provide a fallback instead of crashing.";
+  else if (q.includes('valueerror')) response = "ValueError is raised when a function gets an argument of the right type but an invalid value — e.g. int('hello') fails because 'hello' isn't a valid integer string.";
+  else if (q.includes('unhandled') || q.includes('crash')) response = "If an exception is raised and no matching except block exists anywhere up the call stack, Python prints a traceback and terminates the program — that's what happens in the raise_error scenario.";
+  else if (q.includes('catch') || q.includes('specific')) response = "Always catch specific error types (except ZeroDivisionError:, except ValueError:) rather than a bare except: — this avoids accidentally swallowing unrelated bugs.";
+  else if (q.includes('try')) response = "Code that might throw a runtime error is placed inside try:. If an exception occurs, Python immediately jumps to the matching except block, skipping the rest of the try body.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  renderCodeLines('try_except');
+  renderMemLabels('try_except');
+});
+</script>
+</body>
+</html>

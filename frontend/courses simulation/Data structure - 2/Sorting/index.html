@@ -1,0 +1,595 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Sorting Algorithms — Selection &amp; Radix Sort — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .code-line{transition:background-color .25s ease,border-color .25s ease;border-left:4px solid transparent;}
+  .code-line.active{background:rgba(79,70,229,.09);border-left-color:#4f46e5;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+  .tile{position:absolute;top:0;width:56px;height:56px;transition:left .45s cubic-bezier(.4,0,.2,1),background-color .25s ease,border-color .25s ease,transform .25s ease;display:flex;align-items:center;justify-content:center;font-weight:700;border-radius:12px;border:2px solid #e2e8f0;background:#f8fafc;color:#475569;}
+  .tile.compare{background:#eef2ff;border-color:#6366f1;color:#4338ca;transform:translateY(-6px);}
+  .tile.min{background:#fffbeb;border-color:#f59e0b;color:#b45309;transform:translateY(-6px);}
+  .tile.swap{background:#ecfdf5;border-color:#10b981;color:#047857;transform:scale(1.08);}
+  .tile.sorted{background:#0f172a;border-color:#0f172a;color:#34d399;}
+  .tile-label{position:absolute;top:60px;width:56px;text-align:center;font-size:10px;color:#94a3b8;transition:left .45s cubic-bezier(.4,0,.2,1);font-family:'Fira Code',monospace;}
+  .bucket-box{transition:all .25s ease;}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-indigo-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-arrow-down-1-9"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Data Structures Virtual Lab</h1>
+        <p class="text-xs text-indigo-600 font-medium">Experiment: Sorting Algorithms — Selection Sort &amp; LSD Radix Sort</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <!-- Tab Nav -->
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2"><i class="fa-solid fa-book-open"></i> Theory</button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Assistant</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Theory: Sorting Algorithms</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">Sorting arranges data into a defined order (ascending here). This lab covers two very different strategies: <strong>Selection Sort</strong>, a simple comparison-based algorithm, and <strong>Radix Sort (LSD)</strong>, a non-comparison, digit-based algorithm.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">Selection Sort</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">On each pass <code class="font-mono">i</code>, scan the unsorted remainder <code class="font-mono">[i..n-1]</code> to find the minimum value, then swap it into position <code class="font-mono">i</code>. Repeats until the whole array is sorted. In-place, comparison-based, and <strong>not stable</strong> (a swap can reorder equal elements).</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">Radix Sort (LSD)</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Sorts integers digit-by-digit, starting from the <strong>Least Significant Digit</strong> (units, then tens, then hundreds...). Each pass distributes numbers into 10 buckets (0–9) by the current digit using a <strong>stable</strong> bucket/counting distribution, then collects buckets 0→9 back into the array. No comparisons between elements are ever made.</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Algorithm</th><th class="p-2 text-left">Best Case</th><th class="p-2 text-left">Average Case</th><th class="p-2 text-left">Worst Case</th><th class="p-2 text-left">Space</th><th class="p-2 text-left">Stable?</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">Selection Sort</td><td class="p-2 font-mono">O(n²)</td><td class="p-2 font-mono">O(n²)</td><td class="p-2 font-mono">O(n²)</td><td class="p-2 font-mono">O(1)</td><td class="p-2">No</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">Radix Sort (LSD)</td><td class="p-2 font-mono">O(d·(n+k))</td><td class="p-2 font-mono">O(d·(n+k))</td><td class="p-2 font-mono">O(d·(n+k))</td><td class="p-2 font-mono">O(n+k)</td><td class="p-2">Yes</td></tr>
+          </tbody>
+        </table>
+        <p class="text-[11px] text-slate-400 mt-2 px-1">n = number of elements, d = number of digits in the largest number, k = radix base (10 for decimal digits). Selection Sort always performs exactly n(n-1)/2 comparisons regardless of input order — that's why best/average/worst are identical.</p>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Why Radix Sort Has No Comparisons</h3>
+      <p class="text-xs text-slate-500 leading-relaxed">Instead of asking "is A bigger than B?", radix sort repeatedly asks "what is this number's current digit?" and drops it straight into the matching bucket (0–9). Because each per-digit distribution is <strong>stable</strong> (elements with the same digit keep their relative order from the previous pass), after processing every digit — from least to most significant — the whole array ends up fully sorted.</p>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab and choose <strong>Selection Sort</strong> or <strong>Radix Sort (LSD)</strong> from the algorithm dropdown.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Pick a <strong>Quick Preset</strong> (Random, Nearly Sorted, Reverse Sorted, Duplicates) or leave the default array loaded.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Simulation</strong> to load the trace at step zero.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step</strong> repeatedly to advance one comparison/swap (or one digit pass for Radix) at a time — watch the tiles slide into their new positions.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Or click <strong>Run All</strong> to animate the entire sort automatically.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">For Radix Sort, the <strong>Digit Buckets</strong> panel shows which bucket (0–9) each value falls into on the current pass.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> at any time to reload the current array and clear the trace.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What does Selection Sort do on each pass?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Swaps every adjacent pair of out-of-order elements</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> Finds the minimum of the unsorted remainder and swaps it into place</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Splits the array in half recursively</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. Radix Sort sorts numbers by:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> Processing digits, typically least-significant digit first</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> Comparing every pair of elements</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> Picking a random pivot</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. What is the time complexity of Selection Sort in all cases?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> O(n log n)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> O(n)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> O(n²)</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">4. Is Radix Sort a comparison-based algorithm?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> Yes, it compares every pair of elements</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> No, it distributes elements into digit buckets instead</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> Yes, but only for negative numbers</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Select Algorithm</label>
+              <select id="algoSelect" onchange="resetSimulation()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-indigo-500 min-w-[220px]">
+                <option value="selection">Selection Sort</option>
+                <option value="radix">Radix Sort (LSD)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Current Array</label>
+              <input type="text" id="arrayInput" value="64,34,25,12,22,11,90,45" class="w-64 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-indigo-500" placeholder="e.g. 64,34,25,12">
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-play"></i> Start Simulation</button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed"><i class="fa-solid fa-forward-step"></i> Step</button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-bolt"></i> Run All</button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('random')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Random</button>
+          <button onclick="loadPreset('nearly')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Nearly Sorted</button>
+          <button onclick="loadPreset('reverse')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Reverse Sorted</button>
+          <button onclick="loadPreset('dupes')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Duplicates</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-indigo-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-4 flex items-center gap-2"><i class="fa-solid fa-chart-simple text-indigo-600"></i> Array Visualization</h3>
+            <div id="arrayViz" class="relative h-24 mb-2"></div>
+          </div>
+
+          <div id="bucketPanel" class="hidden bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-boxes-stacked text-indigo-600"></i> Digit Buckets (0–9)</h3>
+            <div id="bucketGrid" class="grid grid-cols-5 md:grid-cols-10 gap-2"></div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal</span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition"><i class="fa-solid fa-trash-can"></i> Clear</button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[120px] max-h-[220px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Start Simulation' or 'Run All' to execute.</p>
+            </div>
+          </div>
+        </div>
+
+        <div class="lg:col-span-5 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-microchip text-indigo-600"></i> Algorithm State</h3>
+            <div class="grid grid-cols-3 gap-3" id="memCardsContainer">
+              <div id="mem1" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center"><span id="label1" class="text-xs text-slate-500 block font-mono">i</span><span id="val1" class="text-xl font-bold font-mono text-indigo-600 block my-1">--</span></div>
+              <div id="mem2" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center"><span id="label2" class="text-xs text-slate-500 block font-mono">j / min</span><span id="val2" class="text-xl font-bold font-mono text-indigo-600 block my-1">--</span></div>
+              <div id="mem3" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center"><span id="label3" class="text-xs text-slate-500 block font-mono">comparisons</span><span id="val3" class="text-xl font-bold font-mono text-emerald-600 block my-1">--</span></div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[54px]">Choose an algorithm, pick a preset, then click 'Start Simulation'.</p>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-indigo-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold"><i class="fa-solid fa-square-check"></i></div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Sorted Output</h4>
+                <p id="resultBannerText" class="text-sm font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. For array [5, 3, 8, 1], how many comparisons does Selection Sort perform in total?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> 3</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> 6</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> 4</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. Why must each digit-distribution pass in Radix Sort be stable?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> So elements with equal digits keep the order established by earlier (less significant) passes</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> Stability makes the algorithm run in O(n log n)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> It isn't required — any order works</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. How many digit passes does Radix Sort need to fully sort [802, 24, 2]?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> 1</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> 2</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> 3 (matches the digit count of the largest number, 802)</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. Why is Selection Sort considered unstable?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> Swapping the found minimum into place can jump it past an equal-valued element, changing their relative order</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> It uses recursion which is inherently unstable</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> It only works on sorted input</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-indigo-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant</h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about Selection Sort, Radix Sort, time complexity, stability, or in-place sorting.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., is radix sort stable?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{ el.classList.remove('bg-slate-900','text-white'); el.classList.add('text-slate-500'); });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500'); btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ---------- Verified pure algorithm step-builders (id/value pairs) ---------- */
+function buildSelectionSteps(items){
+  const a = items.map(x=>({...x}));
+  const steps = []; const n = a.length; let comparisons=0, swaps=0;
+  for(let i=0;i<n;i++){
+    let min = i;
+    steps.push({type:'outer', i, minId:a[min].id, order:a.map(x=>x.id), note:`Pass ${i+1}: tentatively treat position ${i} (value ${a[i].value}) as the minimum.`, comparisons, swaps});
+    for(let j=i+1;j<n;j++){
+      comparisons++;
+      steps.push({type:'compare', i, j, minId:a[min].id, order:a.map(x=>x.id), note:`Compare value ${a[j].value} (pos ${j}) with current min ${a[min].value} (pos ${min}).`, comparisons, swaps});
+      if(a[j].value < a[min].value){
+        min = j;
+        steps.push({type:'newmin', i, j, minId:a[min].id, order:a.map(x=>x.id), note:`New minimum found: ${a[min].value} at position ${min}.`, comparisons, swaps});
+      }
+    }
+    if(min !== i){
+      swaps++;
+      [a[i],a[min]] = [a[min],a[i]];
+      steps.push({type:'swap', i, j:min, order:a.map(x=>x.id), note:`Swap positions ${i} and ${min} — smallest remaining value moves into place.`, comparisons, swaps});
+    }
+    steps.push({type:'sorted', i, order:a.map(x=>x.id), note:`Position ${i} is now finalized (sorted).`, comparisons, swaps});
+  }
+  steps.push({type:'done', order:a.map(x=>x.id), note:`Selection sort complete — ${comparisons} comparisons, ${swaps} swaps.`, comparisons, swaps});
+  return steps;
+}
+
+function buildRadixSteps(items){
+  const a = items.map(x=>({...x}));
+  const steps = [];
+  if(a.length===0) return steps;
+  const maxVal = Math.max(...a.map(x=>x.value));
+  let exp = 1, pass = 0;
+  while(Math.floor(maxVal/exp) > 0){
+    pass++;
+    const buckets = Array.from({length:10}, ()=>[]);
+    a.forEach(item => { const d = Math.floor(item.value/exp)%10; buckets[d].push(item); });
+    steps.push({type:'bucket', exp, pass, buckets: buckets.map(b=>b.map(x=>x.id)), order:a.map(x=>x.id), note:`Pass ${pass}: distribute each value into a bucket (0–9) by the digit at place value ${exp}.`});
+    const newArr = [];
+    for(let d=0; d<10; d++) newArr.push(...buckets[d]);
+    for(let k=0;k<a.length;k++) a[k]=newArr[k];
+    steps.push({type:'collect', exp, pass, order:a.map(x=>x.id), note:`Collect buckets 0→9 in order — the array is now sorted by all digits up to place value ${exp}.`});
+    exp *= 10;
+  }
+  steps.push({type:'done', order:a.map(x=>x.id), note:'Radix sort complete — every digit place has been processed.'});
+  return steps;
+}
+
+/* ---------- Simulation state & rendering ---------- */
+let state = { items:[], algo:'selection', steps:[], idx:0, timer:null };
+const TILE_W = 64;
+
+function parseArrayInput(){
+  const raw = document.getElementById('arrayInput').value;
+  const vals = raw.split(',').map(s=>parseInt(s.trim(),10)).filter(v=>!isNaN(v) && v>=0 && v<=999);
+  return vals.length ? vals : [64,34,25,12,22,11,90,45];
+}
+
+function loadPreset(kind){
+  let arr;
+  if(kind==='random') arr = Array.from({length:8},()=>Math.floor(Math.random()*90)+10);
+  else if(kind==='nearly') arr = [12,15,11,18,22,20,25,29];
+  else if(kind==='reverse') arr = [90,77,65,54,43,32,21,10];
+  else if(kind==='dupes') arr = [42,17,42,8,17,8,55,42];
+  document.getElementById('arrayInput').value = arr.join(',');
+  startSimulation();
+}
+
+function itemsFromArray(arr){ return arr.map((v,id)=>({id, value:v})); }
+
+function renderStaticViz(items){
+  const container = document.getElementById('arrayViz');
+  container.style.width = (items.length*TILE_W) + 'px';
+  container.innerHTML = items.map((it,idx)=>`
+    <div id="tile-${it.id}" class="tile" style="left:${idx*TILE_W}px;">${it.value}</div>
+    <div id="tlabel-${it.id}" class="tile-label" style="left:${idx*TILE_W}px;">#${idx}</div>
+  `).join('');
+}
+
+function applyOrder(order, highlights){
+  order.forEach((id, idx)=>{
+    const tile = document.getElementById(`tile-${id}`);
+    const label = document.getElementById(`tlabel-${id}`);
+    if(tile){
+      tile.style.left = (idx*TILE_W)+'px';
+      tile.className = 'tile' + (highlights[id] ? ' '+highlights[id] : '');
+    }
+    if(label){ label.style.left = (idx*TILE_W)+'px'; label.innerText = '#'+idx; }
+  });
+}
+
+function renderBuckets(bucketsIds, items){
+  const map = {}; items.forEach(it=>map[it.id]=it.value);
+  const grid = document.getElementById('bucketGrid');
+  grid.innerHTML = bucketsIds.map((ids,d)=>`
+    <div class="bucket-box bg-slate-50 border border-slate-200 rounded-lg p-2 text-center">
+      <div class="text-[10px] text-slate-400 font-mono mb-1">bucket ${d}</div>
+      <div class="text-xs font-mono text-indigo-600 min-h-[16px]">${ids.map(id=>map[id]).join(', ') || '&mdash;'}</div>
+    </div>`).join('');
+}
+
+function applyStep(step){
+  const highlights = {};
+  if(step.type==='compare'){ highlights[step.order[step.j]] = 'compare'; if(step.minId!==undefined) highlights[step.minId]='min'; }
+  if(step.type==='newmin'){ highlights[step.minId]='min'; }
+  if(step.type==='swap'){ /* find ids at i and j positions after swap already applied in order */ const idAtI = step.order[step.i]; const idAtJ = step.order[step.j]; highlights[idAtI]='swap'; highlights[idAtJ]='swap'; }
+  if(step.type==='sorted'){ for(let k=0;k<=step.i;k++) highlights[step.order[k]]='sorted'; }
+  if(step.type==='done'){ step.order.forEach(id=>highlights[id]='sorted'); }
+  if(step.type==='bucket'){
+    document.getElementById('bucketPanel').classList.remove('hidden');
+    renderBuckets(step.buckets, state.items);
+    step.buckets.forEach((ids,d)=>ids.forEach(id=>highlights[id]='compare'));
+  }
+
+  applyOrder(step.order, highlights);
+  if(step.note) appendConsole(step.note);
+  document.getElementById('explanationText').innerText = step.note || '';
+
+  if(state.algo==='selection'){
+    document.getElementById('label1').innerText='i (pass)'; document.getElementById('val1').innerText = step.i!==undefined?step.i:'--';
+    document.getElementById('label2').innerText='j / min'; document.getElementById('val2').innerText = step.j!==undefined?step.j:(step.minId!==undefined?'min@'+step.order.indexOf(step.minId):'--');
+    document.getElementById('label3').innerText='comparisons / swaps'; document.getElementById('val3').innerText = `${step.comparisons??0} / ${step.swaps??0}`;
+  } else {
+    document.getElementById('label1').innerText='pass'; document.getElementById('val1').innerText = step.pass!==undefined?step.pass:'--';
+    document.getElementById('label2').innerText='place value'; document.getElementById('val2').innerText = step.exp!==undefined?step.exp:'--';
+    document.getElementById('label3').innerText='status'; document.getElementById('val3').innerText = step.type==='done'?'sorted':(step.type||'--');
+  }
+  ['mem1','mem2','mem3'].forEach(id=>{ const c=document.getElementById(id); c.classList.add('updated'); setTimeout(()=>c.classList.remove('updated'),450); });
+
+  if(step.type==='done'){
+    const map={}; state.items.forEach(it=>map[it.id]=it.value);
+    document.getElementById('resultBannerText').innerText = step.order.map(id=>map[id]).join(', ');
+    document.getElementById('resultBanner').classList.remove('hidden');
+  }
+
+  const total = state.steps.length, done = state.idx;
+  document.getElementById('progressFill').style.width = `${Math.min(100,(done/total)*100)}%`;
+  document.getElementById('currentStepBadge').innerText = step.type==='done' ? 'Finished' : `Step ${done}/${total}`;
+}
+
+function startSimulation(){
+  clearInterval(state.timer);
+  const algo = document.getElementById('algoSelect').value;
+  const arr = parseArrayInput();
+  const items = itemsFromArray(arr);
+  const steps = algo==='selection' ? buildSelectionSteps(items) : buildRadixSteps(items);
+  state = { items, algo, steps, idx:0, timer:null };
+
+  document.getElementById('bucketPanel').classList.add('hidden');
+  renderStaticViz(items);
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('progressFill').style.width='0%';
+  document.getElementById('currentStepBadge').innerText='Step: Ready';
+  document.getElementById('explanationText').innerText = "Simulation loaded. Click 'Step' or 'Run All'.";
+  appendConsole(`&gt;&gt;&gt; Running ${algo==='selection'?'Selection Sort':'Radix Sort (LSD)'} on [${arr.join(', ')}]`);
+
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled=false;
+  btnStep.className = 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95';
+
+  if(algo==='selection'){ document.getElementById('label1').innerText='i'; document.getElementById('label2').innerText='j / min'; document.getElementById('label3').innerText='comparisons / swaps'; }
+  else { document.getElementById('label1').innerText='pass'; document.getElementById('label2').innerText='place value'; document.getElementById('label3').innerText='status'; }
+  document.getElementById('val1').innerText='--'; document.getElementById('val2').innerText='--'; document.getElementById('val3').innerText='--';
+}
+
+function stepExecute(){
+  if(state.idx >= state.steps.length) return;
+  const step = state.steps[state.idx]; state.idx++;
+  applyStep(step);
+  if(state.idx >= state.steps.length){
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled=true; btnStep.className='bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+  }
+}
+
+function runAll(){
+  startSimulation();
+  clearInterval(state.timer);
+  state.timer = setInterval(()=>{
+    if(state.idx >= state.steps.length){ clearInterval(state.timer); return; }
+    stepExecute();
+  }, 420);
+}
+
+function resetSimulation(){
+  clearInterval(state.timer);
+  const arr = parseArrayInput();
+  const items = itemsFromArray(arr);
+  state = { items, algo: document.getElementById('algoSelect').value, steps:[], idx:0, timer:null };
+  document.getElementById('bucketPanel').classList.add('hidden');
+  renderStaticViz(items);
+  clearConsole();
+  hideResultBanner();
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Start Simulation' or 'Run All' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Choose an algorithm, pick a preset, then click 'Start Simulation'.";
+  document.getElementById('currentStepBadge').innerText='Step: Ready';
+  document.getElementById('progressFill').style.width='0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled=true; btnStep.className='bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+  document.getElementById('val1').innerText='--'; document.getElementById('val2').innerText='--'; document.getElementById('val3').innerText='--';
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){ const term=document.getElementById('terminal'); const p=document.createElement('p'); p.innerHTML=html; term.appendChild(p); term.scrollTop=term.scrollHeight; }
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading (generic, shared pattern) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q; const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback'); fb.classList.remove('hidden');
+    if(picked === correct){ score++; q.className='bg-white p-4 rounded-xl border border-emerald-300'; fb.innerText='✓ Correct!'; fb.className='feedback text-xs mt-2 font-medium text-emerald-600'; }
+    else { q.className='bg-white p-4 rounded-xl border border-rose-300'; fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.'; fb.className='feedback text-xs mt-2 font-medium text-rose-500'; }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if(!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className='flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-indigo-50 border border-indigo-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv); input.value='';
+
+  const q = query.toLowerCase();
+  let response = "Try running the simulator and watch the Algorithm State panel and tile positions update step by step!";
+  if(q.includes('stable') && q.includes('radix')) response = "Yes — Radix Sort is stable. Each digit pass places equal-digit elements into the same bucket in their arrival order, which preserves relative order across passes. That stability is essential: without it, earlier (less significant) digit sorting would be undone.";
+  else if(q.includes('stable') && q.includes('selection')) response = "No — Selection Sort is NOT stable. Swapping the found minimum into position i can jump it past an equal-valued element that appeared earlier, changing their relative order.";
+  else if(q.includes('stable')) response = "A stable sort preserves the relative order of equal elements. Radix Sort is stable; Selection Sort is not (its swap can reorder equal values).";
+  else if(q.includes('radix') && (q.includes('complex')||q.includes('big o')||q.includes('time'))) response = "Radix Sort (LSD) runs in O(d·(n+k)) time — d digit passes, each doing an O(n+k) stable bucket distribution (n elements, k=10 buckets). For fixed-width numbers this is effectively linear in n.";
+  else if(q.includes('selection') && (q.includes('complex')||q.includes('big o')||q.includes('time'))) response = "Selection Sort always performs n(n-1)/2 comparisons — that's O(n²) in the best, average, and worst case, because it scans the whole unsorted remainder on every pass regardless of how sorted the input already is.";
+  else if(q.includes('in-place') || q.includes('in place')) response = "Selection Sort is in-place — O(1) extra memory, it only swaps within the original array. Radix Sort needs O(n+k) auxiliary space for its buckets, so it is not in-place.";
+  else if(q.includes('bucket')) response = "In each Radix Sort pass, every element is placed into one of 10 buckets (0–9) based on its current digit, then the buckets are concatenated 0→9 back into the array — that's how the pass 'sorts' by that digit.";
+  else if(q.includes('digit') || q.includes('lsd') || q.includes('msd')) response = "LSD (Least Significant Digit first) processes units, then tens, then hundreds, etc. — this lab implements LSD. MSD (Most Significant Digit first) works the opposite way and is more like a recursive bucket sort; it's trickier to implement correctly.";
+  else if(q.includes('swap')) response = "Selection Sort performs at most one swap per pass (n swaps total in the worst case) — far fewer swaps than Bubble Sort, even though comparison counts are the same O(n²).";
+  else if(q.includes('minimum') || q.includes('min')) response = "On pass i, Selection Sort scans positions i..n-1, tracking the index of the smallest value seen so far ('min'). After the scan finishes, it swaps that minimum into position i.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className='flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv); chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  const items = itemsFromArray(parseArrayInput());
+  state.items = items; state.algo='selection';
+  renderStaticViz(items);
+});
+</script>
+</body>
+</html>

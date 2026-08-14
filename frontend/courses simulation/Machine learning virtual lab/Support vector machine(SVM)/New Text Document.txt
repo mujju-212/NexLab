@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Lab: Support Vector Machine (SVM) - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .code-line { transition: background-color 0.2s ease, border-color 0.2s ease; }
+        .code-line.active { background-color: rgba(99, 102, 241, 0.25); border-left: 4px solid #6366f1; }
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes pulseMem {
+            0% { transform: scale(1); border-color: #6366f1; }
+            50% { transform: scale(1.03); border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+            100% { transform: scale(1); border-color: #374151; }
+        }
+        .stat-card.updated { animation: pulseMem 0.5s ease-in-out; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-vector-square"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Machine Learning & Data Science</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 8: Support Vector Machine (SVM) Classification (Max Margin, Kernels & $C$ Regularization)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <nav class="bg-slate-800/80 border-b border-slate-700 px-6 py-2">
+        <div class="flex flex-wrap gap-2 text-sm font-medium">
+            <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-lg text-indigo-400 bg-slate-700/60 border border-slate-600 flex items-center gap-2 transition">
+                <i class="fa-solid fa-book-open"></i> Theory
+            </button>
+            <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-list-check"></i> Procedure
+            </button>
+            <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+            </button>
+            <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-flask"></i> Simulation
+            </button>
+            <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-graduation-cap"></i> Post-Test
+            </button>
+            <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-robot"></i> AI Socratic Assistant
+            </button>
+        </div>
+    </nav>
+
+    <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+        <!-- TAB 1: THEORY -->
+        <div id="content-theory" class="tab-content bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Theory: Support Vector Machine (SVM) Classification</h2>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                A <strong>Support Vector Machine (SVM)</strong> is a powerful supervised learning algorithm used for binary classification and regression tasks. SVM finds an optimal decision boundary (a <strong>hyperplane</strong>) that maximizes the geometric margin between data points of two distinct classes $y_i \in \{-1, +1\}$.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-arrows-left-right-to-line text-emerald-400"></i> 1. Maximum Margin Hyperplane</span>
+                        <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-sans">Optimization</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        SVM maximizes the margin width $\frac{2}{\|w\|}$ separating class boundaries:
+                        <br><code class="text-amber-300 font-mono">\min_{w,b} \frac{1}{2}\|w\|^2 \quad \text{s.t. } y_i(w \cdot x_i + b) \ge 1</code>.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-circle-dot text-amber-400"></i> 2. Support Vectors</span>
+                        <span class="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-sans">Critical Samples</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        The subset of training points lying exactly on or inside the margin boundaries $y_i(w \cdot x_i + b) = 1$. They fully define the position and orientation of the decision boundary!
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-sliders text-cyan-400"></i> 3. Penalty Parameter $C$</span>
+                        <span class="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded font-sans">Soft Margin</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Controls trade-off between maximizing margin width and minimizing misclassifications. Small $C$ yields a wider margin with more allowed errors (high regularization), while large $C$ strictly classifies all points (risk of overfitting).
+                    </p>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/60 p-4 rounded-lg border border-slate-700 text-xs text-slate-300 space-y-2">
+                <h4 class="font-bold text-indigo-300 text-sm"><i class="fa-solid fa-circle-info text-amber-300"></i> The Kernel Trick for Non-Linear Data</h4>
+                <p class="text-slate-400 leading-relaxed">
+                    When data is not linearly separable in the original input space, the <strong>Kernel Trick</strong> implicitly maps input feature vectors into a higher-dimensional feature space where linear separation is possible without computing high-dimensional coordinates explicitly:
+                </p>
+                <ul class="list-disc list-inside space-y-1 text-slate-400 font-mono">
+                    <li><strong class="text-slate-200 font-sans">Linear Kernel:</strong> $K(x, z) = x^T z$ (for linearly separable features)</li>
+                    <li><strong class="text-slate-200 font-sans">RBF Kernel (Gaussian):</strong> $K(x, z) = \exp(-\gamma \|x - z\|^2)$ (for complex circular/curved boundaries)</li>
+                    <li><strong class="text-slate-200 font-sans">Polynomial Kernel:</strong> $K(x, z) = (x^T z + r)^d$ (for polynomial decision surfaces)</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- TAB 2: PROCEDURE -->
+        <div id="content-procedure" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Simulator Procedure</h2>
+            <ol class="list-decimal list-inside space-y-3 text-sm text-slate-300 leading-relaxed">
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Select a <strong>Classification Dataset</strong> (Linearly Separable, Concentric Circles, or Overlapping Moons) or click a Quick Preset.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Select the <strong>Kernel Type</strong> (`linear`, `rbf`, or `poly`) and configure the penalty parameter <strong>$C$</strong> ($0.1, 1.0, 10.0$) and <strong>$\gamma$</strong>.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Start Simulation"</strong> to plot the training dataset onto the spatial canvas.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Step Epoch"</strong> to trace Scikit-Learn code execution line-by-line (`fit()`, `support_vectors_`, `predict()`).</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Inspect the <strong>Interactive Spatial Canvas & Support Vector Inspector</strong> to view decision boundary curves, margin lines, and highlighted support vector points live.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Run / Execute All"</strong> to complete full hyperparameter optimization instantly.</li>
+            </ol>
+        </div>
+
+        <!-- TAB 3: PRE-TEST -->
+        <div id="content-pretest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Pre-Lab Assessment Quiz</h2>
+                <span id="pretest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="preq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. What are "Support Vectors" in a Support Vector Machine classifier?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> All training data points in the dataset</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> The subset of data points closest to or lying on the decision margin boundary</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Outliers that are ignored during optimization</label>
+                    </div>
+                    <p id="preq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="preq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What happens when you set a very large penalty value for parameter $C$ in SVM?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> The model allows a wider margin with more misclassifications</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> The model strictly minimizes misclassifications, leading to a narrower margin and potential overfitting</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> The decision boundary becomes a circle</label>
+                    </div>
+                    <p id="preq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPretest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Pre-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 4: SIMULATION WORKSPACE -->
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Select Dataset</label>
+                            <select id="svmDataset" onchange="updateDatasetDisplay()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="linear">1. Linearly Separable Data</option>
+                                <option value="circles">2. Non-Linear Concentric Circles</option>
+                                <option value="moons">3. Overlapping Moons / Noise</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Kernel Function</label>
+                            <select id="kernelSelect" onchange="onParamChange()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="linear" selected>kernel='linear'</option>
+                                <option value="rbf">kernel='rbf' (Gaussian)</option>
+                                <option value="poly">kernel='poly' (Degree 3)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Penalty Parameter ($C$)</label>
+                            <select id="cSelect" onchange="onParamChange()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="0.1">C = 0.1 (Soft Margin)</option>
+                                <option value="1.0" selected>C = 1.0 (Standard)</option>
+                                <option value="10.0">C = 10.0 (Hard Margin)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="startSimulation()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95">
+                            <i class="fa-solid fa-play"></i> Start Simulation
+                        </button>
+                        <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 cursor-not-allowed">
+                            <i class="fa-solid fa-forward-step"></i> Step Epoch
+                        </button>
+                        <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95">
+                            <i class="fa-solid fa-bolt"></i> Run / Execute All
+                        </button>
+                        <button onclick="resetSimulation()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium px-3 py-2 rounded-lg text-sm transition flex items-center gap-1 active:scale-95">
+                            <i class="fa-solid fa-rotate-left"></i> Reset
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-700/60 text-xs">
+                    <span class="text-slate-400 font-medium"><i class="fa-solid fa-bolt text-amber-400"></i> Presets:</span>
+                    <button onclick="loadPreset('linear_hard')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Linear Hard Margin (C=10)</button>
+                    <button onclick="loadPreset('rbf_circles')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">RBF Non-Linear Circles</button>
+                    <button onclick="loadPreset('poly_moons')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Poly Moon Classifier</button>
+                </div>
+            </div>
+
+            <!-- Execution Workspace Split View -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left Column: Source Code Panel -->
+                <div class="lg:col-span-5 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md">
+                    <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <i class="fa-solid fa-code text-indigo-400"></i> Scikit-Learn Code Trace
+                        </span>
+                        <span id="currentStepBadge" class="text-xs bg-slate-700 text-slate-300 px-2.5 py-0.5 rounded-full font-mono">Epoch: Ready</span>
+                    </div>
+                    <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 flex-1 space-y-1 overflow-x-auto min-h-[260px]">
+                    </div>
+                    <div class="p-4 border-t border-slate-700/80 bg-slate-800/50">
+                        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Model Parameter State</h4>
+                        <p id="explanationText" class="text-xs text-slate-300 leading-relaxed min-h-[36px]">
+                            Select dataset and click 'Start Simulation' or 'Run / Execute All' to execute.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Right Column: Interactive Spatial Canvas & Support Vector Inspector -->
+                <div class="lg:col-span-7 flex flex-col gap-6">
+                    
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md space-y-4">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-vector-square text-indigo-400"></i> Interactive 2D SVM Decision Boundary & Margin Canvas
+                            </span>
+                            <span id="metricsBadge" class="font-mono text-emerald-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-700 text-[11px]">
+                                SVs: -- | Margin: --
+                            </span>
+                        </div>
+
+                        <!-- Canvas Box -->
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-700 flex justify-center items-center">
+                            <canvas id="svmCanvas" width="560" height="260" class="w-full h-[260px] rounded"></canvas>
+                        </div>
+
+                        <!-- Live Metrics Cards -->
+                        <div class="grid grid-cols-4 gap-2 font-mono text-xs">
+                            <div class="stat-card bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center">
+                                <span class="text-slate-400 block text-[10px]">Active Kernel</span>
+                                <span id="valKernel" class="text-sm font-bold text-amber-400">Linear</span>
+                            </div>
+                            <div class="stat-card bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center">
+                                <span class="text-slate-400 block text-[10px]">Support Vectors</span>
+                                <span id="valSvCount" class="text-sm font-bold text-emerald-400">0</span>
+                            </div>
+                            <div class="stat-card bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center">
+                                <span class="text-slate-400 block text-[10px]">Margin Width</span>
+                                <span id="valMarginWidth" class="text-sm font-bold text-indigo-400">--</span>
+                            </div>
+                            <div class="stat-card bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center">
+                                <span class="text-slate-400 block text-[10px]">Train Accuracy</span>
+                                <span id="valAccuracy" class="text-sm font-bold text-cyan-400">0.0%</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Output Terminal -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md flex-1">
+                        <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-2.5 flex justify-between items-center">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                                <i class="fa-solid fa-terminal text-emerald-400"></i> Output Terminal
+                            </span>
+                            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition">
+                                <i class="fa-solid fa-trash-can"></i> Clear
+                            </button>
+                        </div>
+                        <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-300 min-h-[90px] max-h-[120px] overflow-y-auto space-y-1">
+                            <p class="text-slate-500 italic">>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+                        </div>
+                    </div>
+
+                    <!-- Pop-out Result Banner -->
+                    <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-950 to-indigo-950 border-2 border-emerald-500/50 p-4 rounded-xl shadow-xl flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
+                                <i class="fa-solid fa-square-check"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs uppercase font-semibold text-emerald-400 tracking-wider">Final Execution Output</h4>
+                                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-300">SVM Hyperplane Optimized Successfully</p>
+                            </div>
+                        </div>
+                        <span id="bannerStatus" class="text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1 rounded-md border border-slate-700">
+                            Completed
+                        </span>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: POST-TEST -->
+        <div id="content-posttest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Post-Lab Evaluation Quiz</h2>
+                <span id="posttest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="postq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. In Scikit-Learn `SVC`, what attribute returns the coordinates of identified support vectors?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="a"> `model.support_vectors_`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="b"> `model.margin_points`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="c"> `model.vectors_list`</label>
+                    </div>
+                    <p id="postq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="postq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What role does the RBF (Gaussian) Kernel play in SVM classification?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="a"> It maps non-linearly separable data into an infinite-dimensional feature space to construct complex curved decision boundaries</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="b"> It forces decision boundaries to always be straight lines</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="c"> It deletes non-separable outlier points from memory</label>
+                    </div>
+                    <p id="postq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPosttest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Post-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 6: AI SOCRATIC ASSISTANT -->
+        <div id="content-ai" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md flex flex-col h-[520px]">
+            <h2 class="text-lg font-bold text-indigo-400 border-b border-slate-700 pb-2 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+            </h2>
+
+            <div id="aiChatBox" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-4 overflow-y-auto space-y-3 text-xs">
+                <div class="flex items-start gap-3">
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        Hello! I am your AI Socratic Assistant. Ask me any question about Support Vector Machines (SVM), Maximum Margin, Support Vectors, Penalty parameter $C$, or Kernels (RBF, Linear, Poly)!
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 mt-4">
+                <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., How does penalty C affect hard vs soft margins in SVM?)...." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                <button onclick="sendAiQuery()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-xs font-semibold transition active:scale-95">
+                    Send
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let scenario = 'linear';
+        let stepList = [];
+        let currentStepIdx = 0;
+
+        const datasets = {
+            linear: {
+                title: "Linearly Separable Data",
+                points: [
+                    { x: 1.5, y: 1.8, label: -1 }, { x: 2.0, y: 3.0, label: -1 }, { x: 2.5, y: 1.2, label: -1 },
+                    { x: 3.0, y: 2.2, label: -1 }, { x: 3.2, y: 3.5, label: -1 }, { x: 3.5, y: 1.5, label: -1 },
+                    { x: 5.5, y: 4.8, label: 1 }, { x: 6.0, y: 6.2, label: 1 }, { x: 6.5, y: 5.0, label: 1 },
+                    { x: 7.0, y: 6.8, label: 1 }, { x: 7.5, y: 5.5, label: 1 }, { x: 8.0, y: 7.2, label: 1 }
+                ]
+            },
+            circles: {
+                title: "Non-Linear Concentric Circles",
+                points: [
+                    { x: 4.8, y: 4.9, label: -1 }, { x: 5.2, y: 5.1, label: -1 }, { x: 4.9, y: 5.3, label: -1 },
+                    { x: 5.1, y: 4.7, label: -1 }, { x: 4.7, y: 5.0, label: -1 }, { x: 5.3, y: 5.2, label: -1 },
+                    { x: 2.5, y: 5.0, label: 1 }, { x: 7.5, y: 5.0, label: 1 }, { x: 5.0, y: 2.5, label: 1 },
+                    { x: 5.0, y: 7.5, label: 1 }, { x: 3.2, y: 3.2, label: 1 }, { x: 6.8, y: 6.8, label: 1 }
+                ]
+            },
+            moons: {
+                title: "Overlapping Moons / Noise",
+                points: [
+                    { x: 2.0, y: 4.0, label: -1 }, { x: 3.0, y: 5.5, label: -1 }, { x: 4.0, y: 5.2, label: -1 },
+                    { x: 5.0, y: 4.2, label: -1 }, { x: 3.5, y: 3.8, label: -1 }, { x: 4.5, y: 4.8, label: 1 },
+                    { x: 5.5, y: 3.2, label: 1 }, { x: 6.5, y: 3.5, label: 1 }, { x: 7.5, y: 4.5, label: 1 },
+                    { x: 6.0, y: 2.8, label: 1 }, { x: 7.0, y: 2.5, label: 1 }
+                ]
+            }
+        };
+
+        document.addEventListener("DOMContentLoaded", () => {
+            updateDatasetDisplay();
+        });
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+                el.classList.add('text-slate-400');
+            });
+
+            const targetContent = document.getElementById(`content-${tabName}`);
+            if (targetContent) targetContent.classList.remove('hidden');
+
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('text-slate-400');
+                activeBtn.classList.add('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+            }
+        }
+
+        function loadPreset(presetKey) {
+            if (presetKey === 'linear_hard') {
+                document.getElementById('svmDataset').value = 'linear';
+                document.getElementById('kernelSelect').value = 'linear';
+                document.getElementById('cSelect').value = '10.0';
+            } else if (presetKey === 'rbf_circles') {
+                document.getElementById('svmDataset').value = 'circles';
+                document.getElementById('kernelSelect').value = 'rbf';
+                document.getElementById('cSelect').value = '1.0';
+            } else if (presetKey === 'poly_moons') {
+                document.getElementById('svmDataset').value = 'moons';
+                document.getElementById('kernelSelect').value = 'poly';
+                document.getElementById('cSelect').value = '1.0';
+            }
+            updateDatasetDisplay();
+            runAll();
+        }
+
+        function onParamChange() {
+            if (stepList.length > 0) {
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function updateDatasetDisplay() {
+            scenario = document.getElementById('svmDataset').value;
+            const codeContainer = document.getElementById('codeContainer');
+            const kernel = document.getElementById('kernelSelect').value;
+            const cVal = document.getElementById('cSelect').value;
+
+            codeContainer.innerHTML = `
+                <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>from sklearn.svm import SVC</span></div>
+                <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>model = SVC(kernel=<span class="text-amber-400 font-bold">'${kernel}'</span>, C=<span class="text-amber-400 font-bold">${cVal}</span>)</span></div>
+                <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>model.fit(X_train, y_labels)</span></div>
+                <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>sv_points = model.support_vectors_</span></div>
+                <div id="line5" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">5</span><span>y_pred = model.predict(X_query)</span></div>
+            `;
+
+            drawCanvasPlot(datasets[scenario].points, kernel, cVal, false);
+        }
+
+        function drawCanvasPlot(points, kernel, cVal, isFitted = false) {
+            const canvas = document.getElementById('svmCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const padding = 35;
+            const width = canvas.width - padding * 2;
+            const height = canvas.height - padding * 2;
+
+            const mapX = x => padding + (x / 10) * width;
+            const mapY = y => canvas.height - padding - (y / 8) * height;
+
+            // Draw Background Grid
+            ctx.strokeStyle = "#1e293b";
+            ctx.lineWidth = 1;
+            for (let x = 0; x <= 10; x += 2) {
+                ctx.beginPath();
+                ctx.moveTo(mapX(x), padding);
+                ctx.lineTo(mapX(x), canvas.height - padding);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= 8; y += 2) {
+                ctx.beginPath();
+                ctx.moveTo(padding, mapY(y));
+                ctx.lineTo(canvas.width - padding, mapY(y));
+                ctx.stroke();
+            }
+
+            // Draw Decision Boundary & Margins when fitted
+            if (isFitted) {
+                if (kernel === 'linear') {
+                    // Linear Hyperplane: y = -x + 9
+                    ctx.strokeStyle = "#6366f1"; // Solid Hyperplane
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(mapX(2.2), mapY(6.8));
+                    ctx.lineTo(mapX(6.8), mapY(2.2));
+                    ctx.stroke();
+
+                    // Dashed Margin Lines
+                    ctx.strokeStyle = "#a5b4fc";
+                    ctx.setLineDash([5, 5]);
+                    ctx.lineWidth = 1.5;
+
+                    ctx.beginPath(); // Upper Margin (+1)
+                    ctx.moveTo(mapX(3.0), mapY(7.2));
+                    ctx.lineTo(mapX(7.6), mapY(2.6));
+                    ctx.stroke();
+
+                    ctx.beginPath(); // Lower Margin (-1)
+                    ctx.moveTo(mapX(1.4), mapY(6.4));
+                    ctx.lineTo(mapX(6.0), mapY(1.8));
+                    ctx.stroke();
+
+                    ctx.setLineDash([]);
+                } else if (kernel === 'rbf') {
+                    // Non-linear circular decision contour
+                    ctx.strokeStyle = "#6366f1";
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.arc(mapX(5.0), mapY(5.0), width * 0.18, 0, Math.PI * 2);
+                    ctx.stroke();
+
+                    ctx.strokeStyle = "#a5b4fc";
+                    ctx.setLineDash([4, 4]);
+                    ctx.beginPath();
+                    ctx.arc(mapX(5.0), mapY(5.0), width * 0.25, 0, Math.PI * 2);
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                } else if (kernel === 'poly') {
+                    // Non-linear polynomial curve
+                    ctx.strokeStyle = "#6366f1";
+                    ctx.lineWidth = 3;
+                    ctx.beginPath();
+                    ctx.moveTo(mapX(1.5), mapY(2.5));
+                    ctx.bezierCurveTo(mapX(4.0), mapY(6.5), mapX(6.0), mapY(2.0), mapX(8.5), mapY(5.5));
+                    ctx.stroke();
+                }
+            }
+
+            // Identify Support Vectors indices based on dataset
+            let svIndices = [1, 3, 6, 8];
+            if (scenario === 'circles') svIndices = [0, 2, 6, 7, 8];
+            if (scenario === 'moons') svIndices = [2, 3, 5, 6, 9];
+
+            points.forEach((p, idx) => {
+                const px = mapX(p.x);
+                const py = mapY(p.y);
+
+                const isSv = isFitted && svIndices.includes(idx);
+
+                // Draw SV Highlight Outer Ring
+                if (isSv) {
+                    ctx.strokeStyle = "#f59e0b"; // Glowing Gold Ring
+                    ctx.lineWidth = 2.5;
+                    ctx.beginPath();
+                    ctx.arc(px, py, 10, 0, Math.PI * 2);
+                    ctx.stroke();
+                }
+
+                // Draw Data Point Circle
+                ctx.fillStyle = p.label === 1 ? "#10b981" : "#3b82f6";
+                ctx.beginPath();
+                ctx.arc(px, py, 6, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = "#ffffff";
+                ctx.lineWidth = 1.5;
+                ctx.stroke();
+            });
+        }
+
+        function buildExecutionSteps() {
+            const data = datasets[scenario];
+            const kernel = document.getElementById('kernelSelect').value;
+            const cVal = document.getElementById('cSelect').value;
+
+            let svCount = 4;
+            if (scenario === 'circles') svCount = 5;
+            if (scenario === 'moons') svCount = 5;
+
+            let marginW = kernel === 'linear' ? (2.0 / (parseFloat(cVal) * 0.8 + 1)).toFixed(2) : "N/A (Kernel)";
+            let accuracy = scenario === 'linear' ? 100.0 : (scenario === 'circles' && kernel !== 'linear' ? 98.2 : 91.5);
+
+            stepList = [
+                {
+                    line: 1,
+                    isFitted: false,
+                    svCount: 0,
+                    marginW: "--",
+                    accuracy: 0.0,
+                    consoleMsg: `> Loaded dataset: ${data.title} (${data.points.length} 2D samples)`,
+                    explanation: `Line 1: Imported SVC classifier from sklearn.svm.`
+                },
+                {
+                    line: 2,
+                    isFitted: false,
+                    svCount: 0,
+                    marginW: "--",
+                    accuracy: 0.0,
+                    consoleMsg: `> Configured SVC(kernel='${kernel}', C=${cVal})`,
+                    explanation: `Line 2: Instantiated Support Vector Classifier with ${kernel.toUpperCase()} kernel and C=${cVal}.`
+                },
+                {
+                    line: 3,
+                    isFitted: true,
+                    svCount,
+                    marginW,
+                    accuracy,
+                    consoleMsg: `> Executing fit(): Quadratic Programming optimization converged! Found ${svCount} Support Vectors.`,
+                    explanation: `Line 3: Solved convex optimization problem. Identified support vectors holding max margin.`
+                },
+                {
+                    line: 4,
+                    isFitted: true,
+                    svCount,
+                    marginW,
+                    accuracy,
+                    consoleMsg: `> Evaluated support_vectors_: ${svCount} critical points defining decision boundary`,
+                    explanation: `Line 4: Extracted coordinates of support vectors driving decision hyperplane.`
+                },
+                {
+                    line: 5,
+                    isFitted: true,
+                    svCount,
+                    marginW,
+                    accuracy,
+                    consoleMsg: `<span class='text-emerald-300 font-bold'>SVM Execution Converged! Model Accuracy: ${accuracy}% (${svCount} Support Vectors)</span>`,
+                    explanation: `Line 5: Generated classification predictions across spatial domain.`
+                }
+            ];
+        }
+
+        function startSimulation() {
+            updateDatasetDisplay();
+            buildExecutionSteps();
+            currentStepIdx = 0;
+
+            hideResultBanner();
+            clearConsole();
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = false;
+            btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95 shadow-lg shadow-emerald-600/20";
+
+            appendConsole(`>>> Executing: ml_svm_classification.py [Dataset: ${scenario}]`);
+            executeStepAtIndex(0);
+        }
+
+        function executeStepAtIndex(idx) {
+            const step = stepList[idx];
+            highlightLine(step.line);
+
+            const kernel = document.getElementById('kernelSelect').value;
+            const cVal = document.getElementById('cSelect').value;
+
+            document.getElementById('valKernel').innerText = kernel.toUpperCase();
+            document.getElementById('valSvCount').innerText = step.svCount;
+            document.getElementById('valMarginWidth').innerText = step.marginW;
+            document.getElementById('valAccuracy').innerText = `${step.accuracy}%`;
+
+            document.getElementById('metricsBadge').innerText = `SVs: ${step.svCount} | Margin: ${step.marginW}`;
+
+            drawCanvasPlot(datasets[scenario].points, kernel, cVal, step.isFitted);
+
+            appendConsole(step.consoleMsg);
+            document.getElementById('explanationText').innerText = step.explanation;
+            document.getElementById('currentStepBadge').innerText = `Epoch ${idx + 1}/${stepList.length}`;
+
+            if (idx === stepList.length - 1) {
+                showResultBanner("SVM Decision Hyperplane & Margins Optimized", false);
+                const btnStep = document.getElementById('btnStep');
+                btnStep.disabled = true;
+                btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+                document.getElementById('currentStepBadge').innerText = "Converged";
+            }
+        }
+
+        function stepExecute() {
+            if (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function runAll() {
+            startSimulation();
+            while (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function resetSimulation() {
+            currentStepIdx = 0;
+            highlightLine(0);
+            clearConsole();
+            hideResultBanner();
+
+            document.getElementById('metricsBadge').innerText = "SVs: -- | Margin: --";
+            document.getElementById('valKernel').innerText = "Linear";
+            document.getElementById('valSvCount').innerText = "0";
+            document.getElementById('valMarginWidth').innerText = "--";
+            document.getElementById('valAccuracy').innerText = "0.0%";
+
+            const kernel = document.getElementById('kernelSelect').value;
+            const cVal = document.getElementById('cSelect').value;
+            drawCanvasPlot(datasets[scenario].points, kernel, cVal, false);
+
+            appendConsole("<p class='text-slate-500 italic'>>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>");
+            document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+            document.getElementById('currentStepBadge').innerText = "Epoch: Ready";
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = true;
+            btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+        }
+
+        function highlightLine(lineNum) {
+            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+            if (lineNum > 0) {
+                const target = document.getElementById(`line${lineNum}`);
+                if (target) target.classList.add('active');
+            }
+        }
+
+        function clearConsole() {
+            document.getElementById('terminal').innerHTML = '';
+        }
+
+        function appendConsole(htmlContent) {
+            const term = document.getElementById('terminal');
+            const p = document.createElement('p');
+            p.innerHTML = htmlContent;
+            term.appendChild(p);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function showResultBanner(text, isError) {
+            const banner = document.getElementById('resultBanner');
+            const bannerText = document.getElementById('resultBannerText');
+            bannerText.innerText = text;
+            banner.classList.remove('hidden');
+        }
+
+        function hideResultBanner() {
+            document.getElementById('resultBanner').classList.add('hidden');
+        }
+
+        function checkPretest() {
+            const q1 = document.querySelector('input[name="pq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="pq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('preq1-box');
+            const q1fb = document.getElementById('preq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! Support vectors are critical samples lying on or inside margin boundaries.";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. Support vectors are the points closest to the decision boundary.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('preq2-box');
+            const q2fb = document.getElementById('preq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'b') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! High C penalizes errors strictly, producing narrower margins.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. Large C minimizes errors strictly and narrows the margin.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('pretest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function checkPosttest() {
+            const q1 = document.querySelector('input[name="postq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="postq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('postq1-box');
+            const q1fb = document.getElementById('postq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'a') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! support_vectors_ contains coordinates of critical support vector points.";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. Use model.support_vectors_ in Scikit-Learn.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('postq2-box');
+            const q2fb = document.getElementById('postq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'a') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! RBF kernel maps inputs into high-dimensional space for non-linear boundaries.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. RBF kernel handles non-linearly separable curved boundaries.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('posttest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function sendAiQuery() {
+            const input = document.getElementById('aiQueryInput');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const chatBox = document.getElementById('aiChatBox');
+
+            const userDiv = document.createElement('div');
+            userDiv.className = 'flex items-start gap-3 justify-end';
+            userDiv.innerHTML = `
+                <div class="bg-indigo-600/30 border border-indigo-500/40 p-3 rounded-lg text-slate-200">
+                    ${query}
+                </div>
+                <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 text-xs shrink-0">You</div>
+            `;
+            chatBox.appendChild(userDiv);
+            input.value = '';
+
+            let response = "Try testing linear vs RBF kernels or changing parameter C in the simulator to see how support vectors and margins update!";
+            const qLower = query.toLowerCase();
+            if (qLower.includes('margin') || qLower.includes('support') || qLower.includes('vector')) {
+                response = "Support Vectors are the training samples that lie directly on or inside the margin boundary $y_i(w \\cdot x_i + b) = 1$. Moving non-support vectors does not alter the decision boundary!";
+            } else if (qLower.includes('c') || qLower.includes('penalty') || qLower.includes('soft')) {
+                response = "Parameter $C$ controls the soft margin trade-off. A small $C$ allows minor misclassifications for a wider margin, while a large $C$ forces strict classification for a narrow margin!";
+            } else if (qLower.includes('kernel') || qLower.includes('rbf') || qLower.includes('trick')) {
+                response = "The Kernel Trick $K(x, z)$ computes inner products in a high-dimensional feature space without explicitly transforming data coordinates, enabling non-linear decision boundaries!";
+            }
+
+            setTimeout(() => {
+                const aiDiv = document.createElement('div');
+                aiDiv.className = 'flex items-start gap-3';
+                aiDiv.innerHTML = `
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        ${response}
+                    </div>
+                `;
+                chatBox.appendChild(aiDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 500);
+        }
+    </script>
+</body>
+</html>

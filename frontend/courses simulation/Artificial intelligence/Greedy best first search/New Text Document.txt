@@ -1,0 +1,156 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Lab: Greedy Best-First Search - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .tab-content { transition: opacity 0.3s ease; }
+        .tab-content.hidden { display: none; }
+        .node { width: 50px; height: 50px; border-radius: 8px; display: flex; flex-direction: column; align-items: center; justify-content: center; border: 2px solid #475569; transition: all 0.3s; font-size: 10px; }
+        .visited { background-color: #10b981; border-color: #059669; color: white; }
+        .active-node { border-color: #f59e0b; box-shadow: 0 0 10px #f59e0b; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-location-crosshairs"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Artificial Intelligence</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 5: Greedy Best-First Search</p>
+            </div>
+        </div>
+    </header>
+
+    <nav class="bg-slate-800/80 border-b border-slate-700 px-6 py-2">
+        <div class="flex gap-4 text-sm font-medium">
+            <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-lg text-indigo-400 bg-slate-700/60 border border-slate-600">
+                <i class="fa-solid fa-book-open"></i> Theory
+            </button>
+            <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-white">
+                <i class="fa-solid fa-list-check"></i> Procedure
+            </button>
+            <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-white">
+                <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+            </button>
+            <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-white">
+                <i class="fa-solid fa-flask"></i> Simulation
+            </button>
+            <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-white">
+                <i class="fa-solid fa-graduation-cap"></i> Post-Test
+            </button>
+            <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-white">
+                <i class="fa-solid fa-robot"></i> AI Socratic Assistant
+            </button>
+        </div>
+    </nav>
+
+    <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
+        <div id="content-theory" class="tab-content bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400">Theory: Greedy Best-First Search</h2>
+            <p class="text-sm text-slate-300">GBFS expands the node that appears to be closest to the goal according to a heuristic function $h(n)$. It is "greedy" because it makes the locally optimal choice at each stage.</p>
+        </div>
+
+        <div id="content-procedure" class="tab-content hidden bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Procedure</h2>
+            <ul class="list-decimal list-inside text-sm text-slate-300 space-y-2">
+                <li>Start with the priority queue containing the start node.</li>
+                <li>Pop the node with the lowest $h(n)$.</li>
+                <li>If goal, return path. Else, expand node and add neighbors to the queue.</li>
+            </ul>
+        </div>
+
+        <div id="content-pretest" class="tab-content hidden bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Pre-Test</h2>
+            <p class="text-sm text-slate-300">Q: Does Greedy Best-First Search guarantee the shortest path?</p>
+            <button onclick="alert('Submitted!')" class="bg-indigo-600 px-4 py-2 rounded mt-2 text-sm">Submit</button>
+        </div>
+
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-center">
+                <button onclick="runGBFS()" class="bg-indigo-600 px-4 py-2 rounded text-white font-bold hover:bg-indigo-500 text-sm">Next Step</button>
+                <div id="status" class="font-mono text-indigo-400 font-bold text-sm">Open List: []</div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div id="graph" class="flex flex-wrap gap-4 justify-center py-10"></div>
+                <div class="bg-slate-950 p-4 rounded border border-slate-700 font-mono text-xs text-slate-400 h-64 overflow-y-auto" id="terminal"></div>
+            </div>
+        </div>
+
+        <div id="content-posttest" class="tab-content hidden bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Post-Test</h2>
+            <button onclick="alert('Submitted!')" class="bg-indigo-600 px-4 py-2 rounded text-sm">Submit</button>
+        </div>
+
+        <div id="content-ai" class="tab-content hidden bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 class="text-lg font-bold text-indigo-400 mb-4">AI Socratic Assistant</h2>
+            <div id="chatBox" class="h-48 bg-slate-950 p-4 rounded mb-4 overflow-y-auto text-xs font-mono text-slate-300">
+                <p>> Ask me about Heuristic functions!</p>
+            </div>
+            <div class="flex gap-2">
+                <input type="text" id="aiInput" class="flex-1 bg-slate-900 border border-slate-700 p-2 rounded text-sm" placeholder="Ask a question...">
+                <button onclick="askAI()" class="bg-indigo-600 px-4 py-2 rounded text-white text-sm">Ask</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let nodes = [
+            { id: 'A', h: 6 }, { id: 'B', h: 4 }, { id: 'C', h: 2 }, { id: 'D', h: 1 }, { id: 'G', h: 0 }
+        ];
+        let visited = [];
+        let active = null;
+        
+        function switchTab(t) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600'));
+            document.getElementById('content-' + t).classList.remove('hidden');
+            const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.innerText.toLowerCase().includes(t));
+            if (activeBtn) activeBtn.classList.add('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+        }
+
+        function renderGraph() {
+            const graph = document.getElementById('graph');
+            graph.innerHTML = nodes.map(n => `
+                <div class="node ${visited.includes(n.id) ? 'visited' : ''} ${active === n.id ? 'active-node' : ''}">
+                    <span>${n.id}</span>
+                    <span class="text-amber-400">h=${n.h}</span>
+                </div>
+            `).join('');
+        }
+
+        function runGBFS() {
+            // Greedy: pick node with lowest h
+            let candidates = nodes.filter(n => !visited.includes(n.id));
+            if (candidates.length > 0) {
+                let next = candidates.reduce((prev, curr) => prev.h < curr.h ? prev : curr);
+                active = next.id;
+                visited.push(active);
+                document.getElementById('terminal').innerHTML += `> Expanding node ${next.id} (h=${next.h})...<br>`;
+                document.getElementById('status').innerText = `Visited: [${visited.join(', ')}]`;
+                renderGraph();
+            }
+        }
+
+        function askAI() {
+            const q = document.getElementById('aiInput').value;
+            document.getElementById('chatBox').innerHTML += `<p>> ${q}</p><p class="text-indigo-400">> Heuristics are 'rules of thumb'. GBFS uses $h(n)$ to guess the cost to the goal, but it can be misled by local optima!</p>`;
+            document.getElementById('aiInput').value = '';
+        }
+        
+        renderGraph();
+    </script>
+</body>
+</html>
+```eof
+
+**What is the 6th experiment on your list?**

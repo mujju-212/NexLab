@@ -1,0 +1,668 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Graph Algorithms — Topological Sort, MST &amp; Dijkstra — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{0%{transform:scale(1);border-color:#e2e8f0;}50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}100%{transform:scale(1);border-color:#e2e8f0;}}
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+  .g-edge{stroke:#cbd5e1;stroke-width:2.5;transition:stroke .3s ease,stroke-width .3s ease;}
+  .g-edge.frontier{stroke:#f59e0b;stroke-width:3;stroke-dasharray:5,4;}
+  .g-edge.active{stroke:#10b981;stroke-width:4;}
+  .g-edge.relax{stroke:#6366f1;stroke-width:3.5;}
+  .g-edge.faded{stroke:#e2e8f0;stroke-width:1.5;}
+  .g-node-circle{transition:fill .3s ease,stroke .3s ease;}
+  .g-label{font-family:'Fira Code',monospace;font-size:11px;fill:#64748b;}
+  .g-weight{font-family:'Fira Code',monospace;font-size:11px;font-weight:600;fill:#4338ca;}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition"><i class="fa-solid fa-arrow-left"></i> Dashboard</a>
+      <div class="bg-slate-900 text-indigo-400 p-2.5 rounded-xl font-bold text-xl shadow-sm"><i class="fa-solid fa-diagram-project"></i></div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Data Structures Virtual Lab</h1>
+        <p class="text-xs text-indigo-600 font-medium">Experiment: Graph Algorithms — Topological Sort, MST (Prim's) &amp; Dijkstra's Shortest Path</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active</span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2"><i class="fa-solid fa-book-open"></i> Theory</button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Assistant</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Theory: Graph Algorithms</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">A graph is a set of <strong>nodes (vertices)</strong> connected by <strong>edges</strong>. This lab uses one 8-node graph rendered two ways: a <strong>weighted undirected</strong> version (for MST and Dijkstra) and a <strong>directed acyclic</strong> version — a DAG — (for Topological Sort).</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">Topological Sort</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Orders the nodes of a <strong>Directed Acyclic Graph (DAG)</strong> so that every directed edge u→v places u before v. This lab uses <strong>Kahn's algorithm</strong>: compute in-degree of every node, repeatedly dequeue a node with in-degree 0, append it to the result, and decrement its neighbors' in-degree — re-enqueueing any neighbor whose in-degree drops to 0. Topological sort is <strong>undefined on graphs with cycles</strong> — Kahn's algorithm detects this when the result has fewer nodes than the graph.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">Minimum Spanning Tree (Prim's)</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">A spanning tree connects all nodes using the fewest possible edges (n-1) with no cycles; the <strong>minimum</strong> spanning tree does so with the least total edge weight. Prim's algorithm grows one tree from a start node: at every step it looks at every "frontier" edge (tree node → non-tree node) and greedily adds the cheapest one, until all nodes are included.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">Dijkstra's Shortest Path</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Finds the shortest distance from a source node to every other node in a graph with <strong>non-negative</strong> weights. Maintains a tentative distance for every node (0 for the source, ∞ elsewhere). Repeatedly visits the unvisited node with the smallest tentative distance and <strong>relaxes</strong> its outgoing edges — updating a neighbor's distance if going through the current node is shorter.</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white"><tr><th class="p-2 text-left">Algorithm</th><th class="p-2 text-left">Time Complexity</th><th class="p-2 text-left">Space</th><th class="p-2 text-left">Requires</th></tr></thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">Topological Sort (Kahn's)</td><td class="p-2 font-mono">O(V + E)</td><td class="p-2 font-mono">O(V)</td><td class="p-2">Directed, acyclic graph (DAG)</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">Prim's MST (array scan)</td><td class="p-2 font-mono">O(V²) — O(E log V) with a heap</td><td class="p-2 font-mono">O(V)</td><td class="p-2">Connected, weighted, undirected</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">Dijkstra's Shortest Path</td><td class="p-2 font-mono">O(V²) — O(E log V) with a heap</td><td class="p-2 font-mono">O(V)</td><td class="p-2">Non-negative edge weights</td></tr>
+          </tbody>
+        </table>
+        <p class="text-[11px] text-slate-400 mt-2 px-1">V = number of vertices, E = number of edges. This lab's linear-scan implementation of Prim's and Dijkstra's is O(V²), matching the "pick smallest of the unvisited" description used in the simulation.</p>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab and choose an algorithm: <strong>Topological Sort</strong>, <strong>Prim's MST</strong>, or <strong>Dijkstra's Shortest Path</strong>.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Selecting Topological Sort automatically switches the graph view to the <strong>directed DAG</strong> version; MST/Dijkstra use the <strong>weighted undirected</strong> version.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">For Prim's or Dijkstra's, pick a <strong>Start / Source Node</strong> from the dropdown.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Simulation</strong>, then <strong>Step</strong> through each stage or click <strong>Run All</strong> to animate automatically.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Watch the SVG graph: nodes/edges highlight amber while being considered, then turn emerald once confirmed (added to the MST / topological order / shortest-path tree).</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">The side panel tracks live state — in-degrees, frontier edges, running MST weight, or tentative distances — depending on the algorithm.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> to clear the trace and start over with the same graph.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. Topological sort can only be performed on:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Any undirected graph</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> A directed acyclic graph (DAG)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> A graph with negative weights</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. What does Prim's algorithm build?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> A minimum spanning tree connecting all nodes with least total edge weight</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> The shortest path between two specific nodes</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> A topological ordering</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. In Dijkstra's algorithm, "relaxing" an edge (u, v) means:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> Removing the edge from the graph</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> Marking both nodes as visited</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> Updating dist[v] if going through u gives a shorter distance</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. In Kahn's algorithm, a node is added to the processing queue when:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> Its in-degree becomes 0</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> Its out-degree becomes 0</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> It has the smallest edge weight</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Select Algorithm</label>
+              <select id="algoSelect" onchange="onAlgoChange()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-indigo-500 min-w-[240px]">
+                <option value="topo">Topological Sort (Kahn's)</option>
+                <option value="mst">Minimum Spanning Tree (Prim's)</option>
+                <option value="dijkstra">Dijkstra's Shortest Path</option>
+              </select>
+            </div>
+            <div id="startNodeWrap">
+              <label class="block text-xs font-medium text-slate-500 mb-1">Start / Source Node</label>
+              <select id="startNodeSelect" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-indigo-500"></select>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-play"></i> Start Simulation</button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed"><i class="fa-solid fa-forward-step"></i> Step</button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-bolt"></i> Run All</button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('topo')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Topological Sort</button>
+          <button onclick="loadPreset('mst','A')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">MST from A</button>
+          <button onclick="loadPreset('mst','E')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">MST from E</button>
+          <button onclick="loadPreset('dijkstra','A')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Dijkstra from A</button>
+          <button onclick="loadPreset('dijkstra','H')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Dijkstra from H</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div id="progressFill" class="progress-fill h-full bg-indigo-600 rounded-full" style="width:0%"></div></div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-share-nodes text-indigo-600"></i> Graph Visualization</h3>
+          <svg id="graphSvg" viewBox="0 0 640 420" class="w-full h-auto">
+            <defs>
+              <marker id="arrowhead" markerWidth="8" markerHeight="8" refX="7" refY="3" orient="auto"><polygon points="0 0, 7 3, 0 6" fill="#94a3b8"/></marker>
+            </defs>
+            <g id="edgesLayer"></g>
+            <g id="nodesLayer"></g>
+          </svg>
+        </div>
+
+        <div class="lg:col-span-5 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-microchip text-indigo-600"></i> Algorithm State</h3>
+            <div id="stateGrid" class="grid grid-cols-4 gap-2 text-[11px] font-mono"></div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[54px]">Choose an algorithm and click 'Start Simulation'.</p>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal</span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition"><i class="fa-solid fa-trash-can"></i> Clear</button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[100px] max-h-[180px] overflow-y-auto space-y-1"><p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Start Simulation' or 'Run All' to execute.</p></div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-indigo-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm">
+            <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider mb-1">Result</h4>
+            <p id="resultBannerText" class="text-sm font-mono font-bold text-emerald-700 break-words">--</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">1. If Kahn's algorithm finishes with fewer nodes in the output than the graph has, what does that indicate?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> The graph is disconnected but still valid</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> All edge weights are negative</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> The graph contains a cycle, so no valid topological order exists</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. In Prim's algorithm, how is the next edge to add chosen?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> The lowest-weight edge connecting a tree node to a non-tree node</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> The highest-weight edge remaining anywhere in the graph</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> A random unvisited edge</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">3. Why does Dijkstra's algorithm fail on graphs with negative edge weights?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> Negative numbers cause a runtime crash</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> Once a node is marked visited its distance is treated as final, but a later negative edge could still shorten it</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> It cannot represent negative numbers in the distance array</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. For a graph with V vertices, how many edges does a spanning tree contain?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> V − 1</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> V</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> V + 1</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-indigo-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant</h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3"><div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about Topological Sort, Prim's MST, Dijkstra's algorithm, or graph theory basics.</div></div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., what is relaxation?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{ el.classList.remove('bg-slate-900','text-white'); el.classList.add('text-slate-500'); });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500'); btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ---------- Graph data (verified) ---------- */
+const NODES = ['A','B','C','D','E','F','G','H'];
+const UNDIRECTED_EDGES = [
+  ['A','B',2],['A','C',5],['B','C',1],['B','D',4],['C','D',8],
+  ['C','E',7],['D','E',3],['D','F',6],['E','F',1],['E','G',5],
+  ['F','G',2],['F','H',4],['G','H',3]
+];
+const DAG_EDGES = [
+  ['A','B'],['A','C'],['B','D'],['C','D'],['C','E'],
+  ['D','F'],['E','F'],['E','G'],['F','H'],['G','H']
+];
+
+function buildAdj(){
+  const adj={}; NODES.forEach(n=>adj[n]=[]);
+  UNDIRECTED_EDGES.forEach(([u,v,w])=>{ adj[u].push({to:v,w}); adj[v].push({to:u,w}); });
+  return adj;
+}
+
+/* ---------- Verified pure step-builders ---------- */
+function buildTopoSteps(){
+  const adj={}, indeg={};
+  NODES.forEach(n=>{adj[n]=[]; indeg[n]=0;});
+  DAG_EDGES.forEach(([u,v])=>{ adj[u].push(v); indeg[v]++; });
+  const steps=[];
+  steps.push({type:'init', indeg:{...indeg}, note:'Compute in-degree of every node from the DAG edges.'});
+  const queue = NODES.filter(n=>indeg[n]===0);
+  steps.push({type:'seed', queue:[...queue], indeg:{...indeg}, note:`Nodes with in-degree 0 enter the queue: [${queue.join(', ')}]`});
+  const order=[]; const workIndeg={...indeg};
+  while(queue.length){
+    const u = queue.shift();
+    order.push(u);
+    steps.push({type:'visit', node:u, order:[...order], queue:[...queue], indeg:{...workIndeg}, note:`Dequeue ${u}, append to topological order → [${order.join(', ')}]`});
+    for(const v of adj[u]){
+      workIndeg[v]--;
+      steps.push({type:'relaxEdge', from:u, to:v, indeg:{...workIndeg}, order:[...order], queue:[...queue], note:`Remove edge ${u}→${v}; in-degree(${v}) = ${workIndeg[v]}.`});
+      if(workIndeg[v]===0){ queue.push(v); steps.push({type:'enqueue', node:v, queue:[...queue], indeg:{...workIndeg}, order:[...order], note:`in-degree(${v}) reached 0 → enqueue ${v}.`}); }
+    }
+  }
+  steps.push({type:'done', order:[...order], indeg:{...workIndeg}, valid: order.length===NODES.length, note: order.length===NODES.length ? `Topological order complete: ${order.join(' → ')}` : 'Cycle detected — no valid topological order.'});
+  return steps;
+}
+
+function buildPrimSteps(start){
+  const adj = buildAdj();
+  const inMST = new Set([start]);
+  const steps=[]; const mstEdges=[]; let total=0;
+  steps.push({type:'start', node:start, mstEdges:[], total:0, note:`Start MST from node ${start}.`});
+  while(inMST.size < NODES.length){
+    let frontier=[];
+    for(const u of inMST) for(const e of adj[u]) if(!inMST.has(e.to)) frontier.push({from:u,to:e.to,weight:e.w});
+    steps.push({type:'frontier', edges:frontier.map(e=>({...e})), mstEdges:[...mstEdges], total, note:`Frontier edges leaving the current tree: ${frontier.map(e=>`${e.from}-${e.to}(${e.weight})`).join(', ')}`});
+    if(!frontier.length) break;
+    let best = frontier[0];
+    for(const e of frontier) if(e.weight < best.weight) best = e;
+    inMST.add(best.to); mstEdges.push(best); total+=best.weight;
+    steps.push({type:'addEdge', edge:best, mstEdges:[...mstEdges], total, note:`Cheapest frontier edge: ${best.from}-${best.to} (weight ${best.weight}). Add to MST. Running total = ${total}.`});
+  }
+  steps.push({type:'done', mstEdges:[...mstEdges], total, note:`MST complete. Total weight = ${total}.`});
+  return steps;
+}
+
+function buildDijkstraSteps(source){
+  const adj = buildAdj();
+  const dist={}, prev={}, visited=new Set();
+  NODES.forEach(n=>{dist[n]=Infinity; prev[n]=null;});
+  dist[source]=0;
+  const steps=[];
+  steps.push({type:'init', dist:{...dist}, visited:[], note:`Initialize dist[${source}]=0, all other nodes = Infinity.`});
+  while(visited.size<NODES.length){
+    let u=null, best=Infinity;
+    for(const n of NODES) if(!visited.has(n) && dist[n]<best){ best=dist[n]; u=n; }
+    if(u===null) break;
+    visited.add(u);
+    steps.push({type:'visit', node:u, dist:{...dist}, visited:[...visited], note:`Visit unvisited node with smallest tentative distance: ${u} (dist=${dist[u]}).`});
+    for(const e of adj[u]){
+      if(!visited.has(e.to)){
+        const nd = dist[u]+e.w;
+        if(nd < dist[e.to]){
+          const old = dist[e.to];
+          dist[e.to]=nd; prev[e.to]=u;
+          steps.push({type:'relax', from:u, to:e.to, oldDist:old, newDist:nd, dist:{...dist}, visited:[...visited], note:`Relax edge ${u}-${e.to}: dist[${e.to}] improves from ${old===Infinity?'∞':old} to ${nd}.`});
+        }
+      }
+    }
+  }
+  steps.push({type:'done', dist:{...dist}, prev:{...prev}, visited:[...visited], note:'Dijkstra complete — all shortest distances finalized.'});
+  return steps;
+}
+
+/* ---------- SVG layout ---------- */
+function nodePos(name){
+  const i = NODES.indexOf(name);
+  const cx=320, cy=210, r=150;
+  const angle = (-90 + i*(360/NODES.length)) * Math.PI/180;
+  return { x: cx + r*Math.cos(angle), y: cy + r*Math.sin(angle) };
+}
+
+function renderGraph(mode){
+  const edgesLayer = document.getElementById('edgesLayer');
+  const nodesLayer = document.getElementById('nodesLayer');
+  edgesLayer.innerHTML=''; nodesLayer.innerHTML='';
+  const edges = mode==='topo' ? DAG_EDGES.map(([u,v])=>[u,v,null]) : UNDIRECTED_EDGES;
+
+  edges.forEach(([u,v,w])=>{
+    const p1=nodePos(u), p2=nodePos(v);
+    const ns = 'http://www.w3.org/2000/svg';
+    const line = document.createElementNS(ns,'line');
+    line.setAttribute('x1',p1.x); line.setAttribute('y1',p1.y);
+    line.setAttribute('x2',p2.x); line.setAttribute('y2',p2.y);
+    line.setAttribute('id', mode==='topo' ? `edge-${u}-${v}` : `edge-${[u,v].sort().join('-')}`);
+    line.setAttribute('class','g-edge');
+    if(mode==='topo') line.setAttribute('marker-end','url(#arrowhead)');
+    edgesLayer.appendChild(line);
+    if(w!==null){
+      const mx=(p1.x+p2.x)/2, my=(p1.y+p2.y)/2;
+      const text = document.createElementNS(ns,'text');
+      text.setAttribute('x',mx); text.setAttribute('y',my-6);
+      text.setAttribute('text-anchor','middle'); text.setAttribute('class','g-weight');
+      text.textContent = w;
+      const bg = document.createElementNS(ns,'rect');
+      bg.setAttribute('x',mx-9); bg.setAttribute('y',my-17); bg.setAttribute('width',18); bg.setAttribute('height',14);
+      bg.setAttribute('fill','#ffffff'); bg.setAttribute('rx',3);
+      edgesLayer.appendChild(bg); edgesLayer.appendChild(text);
+    }
+  });
+
+  NODES.forEach(n=>{
+    const p = nodePos(n);
+    const ns='http://www.w3.org/2000/svg';
+    const g = document.createElementNS(ns,'g');
+    const circle = document.createElementNS(ns,'circle');
+    circle.setAttribute('cx',p.x); circle.setAttribute('cy',p.y); circle.setAttribute('r',22);
+    circle.setAttribute('id',`node-${n}`); circle.setAttribute('class','g-node-circle');
+    circle.setAttribute('fill','#f8fafc'); circle.setAttribute('stroke','#334155'); circle.setAttribute('stroke-width','2.5');
+    const label = document.createElementNS(ns,'text');
+    label.setAttribute('x',p.x); label.setAttribute('y',p.y+5); label.setAttribute('text-anchor','middle');
+    label.setAttribute('font-weight','700'); label.setAttribute('font-family',"'Fira Code',monospace"); label.setAttribute('font-size','14');
+    label.setAttribute('id',`nlabel-${n}`); label.setAttribute('fill','#1e293b');
+    label.textContent = n;
+    const sub = document.createElementNS(ns,'text');
+    sub.setAttribute('x',p.x); sub.setAttribute('y',p.y+38); sub.setAttribute('text-anchor','middle');
+    sub.setAttribute('class','g-label'); sub.setAttribute('id',`nsub-${n}`);
+    sub.textContent='';
+    g.appendChild(circle); g.appendChild(label); g.appendChild(sub);
+    nodesLayer.appendChild(g);
+  });
+}
+
+function resetNodeColors(){
+  NODES.forEach(n=>{
+    const c = document.getElementById(`node-${n}`);
+    c.setAttribute('fill','#f8fafc'); c.setAttribute('stroke','#334155');
+    document.getElementById(`nsub-${n}`).textContent='';
+  });
+  document.querySelectorAll('.g-edge').forEach(e=>e.setAttribute('class','g-edge'));
+}
+
+function setNodeState(n, kind){
+  const c = document.getElementById(`node-${n}`);
+  if(!c) return;
+  if(kind==='current'){ c.setAttribute('fill','#eef2ff'); c.setAttribute('stroke','#4f46e5'); }
+  else if(kind==='done'){ c.setAttribute('fill','#0f172a'); c.setAttribute('stroke','#0f172a'); document.getElementById(`nlabel-${n}`).setAttribute('fill','#34d399'); }
+  else if(kind==='frontier'){ c.setAttribute('fill','#fffbeb'); c.setAttribute('stroke','#f59e0b'); }
+}
+
+function edgeId(mode,u,v){ return mode==='topo' ? `edge-${u}-${v}` : `edge-${[u,v].sort().join('-')}`; }
+
+/* ---------- Simulation controller ---------- */
+let state = { algo:'topo', start:'A', steps:[], idx:0, timer:null };
+
+function onAlgoChange(){
+  const algo = document.getElementById('algoSelect').value;
+  populateStartNodes();
+  document.getElementById('startNodeWrap').style.display = algo==='topo' ? 'none' : 'block';
+  resetSimulation();
+}
+
+function populateStartNodes(){
+  const sel = document.getElementById('startNodeSelect');
+  sel.innerHTML = NODES.map(n=>`<option value="${n}">${n}</option>`).join('');
+}
+
+function loadPreset(algo, node){
+  document.getElementById('algoSelect').value = algo;
+  onAlgoChange();
+  if(node) document.getElementById('startNodeSelect').value = node;
+  startSimulation();
+}
+
+function renderStateGrid(step, algo){
+  const grid = document.getElementById('stateGrid');
+  if(algo==='topo'){
+    const indeg = step.indeg || {};
+    grid.innerHTML = NODES.map(n=>`<div class="bg-slate-50 border border-slate-200 rounded-lg p-2 text-center"><div class="text-slate-400">${n}</div><div class="text-indigo-600 font-bold">${indeg[n]!==undefined?indeg[n]:'-'}</div></div>`).join('');
+  } else if(algo==='mst'){
+    const total = step.total!==undefined?step.total:0;
+    grid.innerHTML = `<div class="col-span-4 bg-emerald-50 border border-emerald-200 rounded-lg p-3 text-center"><div class="text-slate-500 text-[10px] uppercase">Running MST Weight</div><div class="text-emerald-600 font-bold text-lg">${total}</div></div>` +
+      (step.mstEdges||[]).map(e=>`<div class="col-span-2 bg-slate-50 border border-slate-200 rounded-lg p-2 text-center">${e.from}-${e.to}: ${e.weight}</div>`).join('');
+  } else if(algo==='dijkstra'){
+    const dist = step.dist || {};
+    grid.innerHTML = NODES.map(n=>`<div class="bg-slate-50 border border-slate-200 rounded-lg p-2 text-center"><div class="text-slate-400">${n}</div><div class="text-indigo-600 font-bold">${dist[n]===Infinity?'∞':(dist[n]!==undefined?dist[n]:'-')}</div></div>`).join('');
+  }
+}
+
+function applyStep(step){
+  const algo = state.algo;
+  const mode = algo==='topo' ? 'topo' : 'undirected';
+
+  if(algo==='topo'){
+    if(step.type==='visit'){ setNodeState(step.node,'done'); }
+    if(step.type==='relaxEdge'){ const el=document.getElementById(edgeId('topo',step.from,step.to)); if(el) el.setAttribute('class','g-edge faded'); setNodeState(step.to,'frontier'); }
+    if(step.type==='enqueue'){ setNodeState(step.node,'frontier'); }
+    if(step.type==='done' && step.order){ step.order.forEach(n=>setNodeState(n,'done')); }
+  } else if(algo==='mst'){
+    if(step.type==='start'){ setNodeState(step.node,'done'); }
+    if(step.type==='frontier'){ step.edges.forEach(e=>{ const el=document.getElementById(edgeId('undirected',e.from,e.to)); if(el && !el.classList.contains('active')) el.setAttribute('class','g-edge frontier'); }); }
+    if(step.type==='addEdge'){ const el=document.getElementById(edgeId('undirected',step.edge.from,step.edge.to)); if(el) el.setAttribute('class','g-edge active'); setNodeState(step.edge.to,'done'); }
+  } else if(algo==='dijkstra'){
+    if(step.type==='visit'){ setNodeState(step.node,'done'); document.getElementById(`nsub-${step.node}`).textContent = `d=${step.dist[step.node]}`; }
+    if(step.type==='relax'){
+      const el=document.getElementById(edgeId('undirected',step.from,step.to)); if(el) el.setAttribute('class','g-edge relax');
+      document.getElementById(`nsub-${step.to}`).textContent = `d=${step.newDist}`;
+      setNodeState(step.to,'frontier');
+    }
+    if(step.type==='done'){ NODES.forEach(n=>{ document.getElementById(`nsub-${n}`).textContent = step.dist[n]===Infinity?'d=∞':`d=${step.dist[n]}`; }); }
+  }
+
+  renderStateGrid(step, algo);
+  if(step.note) appendConsole(step.note);
+  document.getElementById('explanationText').innerText = step.note || '';
+
+  if(step.type==='done'){
+    let text = '';
+    if(algo==='topo') text = step.valid ? `Order: ${step.order.join(' → ')}` : 'Cycle detected — invalid graph for topological sort.';
+    else if(algo==='mst') text = `MST edges: ${step.mstEdges.map(e=>`${e.from}-${e.to}(${e.weight})`).join(', ')} | Total weight = ${step.total}`;
+    else if(algo==='dijkstra') text = NODES.map(n=>`${n}=${step.dist[n]===Infinity?'∞':step.dist[n]}`).join('  ');
+    document.getElementById('resultBannerText').innerText = text;
+    document.getElementById('resultBanner').classList.remove('hidden');
+  }
+
+  const total = state.steps.length, done = state.idx;
+  document.getElementById('progressFill').style.width = `${Math.min(100,(done/total)*100)}%`;
+  document.getElementById('currentStepBadge').innerText = step.type==='done' ? 'Finished' : `Step ${done}/${total}`;
+}
+
+function startSimulation(){
+  clearInterval(state.timer);
+  const algo = document.getElementById('algoSelect').value;
+  const start = document.getElementById('startNodeSelect').value || 'A';
+  const steps = algo==='topo' ? buildTopoSteps() : algo==='mst' ? buildPrimSteps(start) : buildDijkstraSteps(start);
+  state = { algo, start, steps, idx:0, timer:null };
+
+  renderGraph(algo==='topo' ? 'topo' : 'undirected');
+  resetNodeColors();
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('progressFill').style.width='0%';
+  document.getElementById('currentStepBadge').innerText='Step: Ready';
+  document.getElementById('explanationText').innerText = "Simulation loaded. Click 'Step' or 'Run All'.";
+  appendConsole(`&gt;&gt;&gt; Running ${algo==='topo'?'Topological Sort':algo==='mst'?"Prim's MST from "+start:"Dijkstra's Shortest Path from "+start}`);
+  document.getElementById('stateGrid').innerHTML='';
+
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled=false;
+  btnStep.className='bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95';
+}
+
+function stepExecute(){
+  if(state.idx >= state.steps.length) return;
+  const step = state.steps[state.idx]; state.idx++;
+  applyStep(step);
+  if(state.idx >= state.steps.length){
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled=true; btnStep.className='bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+  }
+}
+
+function runAll(){
+  startSimulation();
+  clearInterval(state.timer);
+  state.timer = setInterval(()=>{
+    if(state.idx >= state.steps.length){ clearInterval(state.timer); return; }
+    stepExecute();
+  }, 550);
+}
+
+function resetSimulation(){
+  clearInterval(state.timer);
+  const algo = document.getElementById('algoSelect').value;
+  state = { algo, start: document.getElementById('startNodeSelect').value||'A', steps:[], idx:0, timer:null };
+  renderGraph(algo==='topo' ? 'topo' : 'undirected');
+  resetNodeColors();
+  clearConsole();
+  hideResultBanner();
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Start Simulation' or 'Run All' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Choose an algorithm and click 'Start Simulation'.";
+  document.getElementById('currentStepBadge').innerText='Step: Ready';
+  document.getElementById('progressFill').style.width='0%';
+  document.getElementById('stateGrid').innerHTML='';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled=true; btnStep.className='bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){ const term=document.getElementById('terminal'); const p=document.createElement('p'); p.innerHTML=html; term.appendChild(p); term.scrollTop=term.scrollHeight; }
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q; const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback'); fb.classList.remove('hidden');
+    if(picked === correct){ score++; q.className='bg-white p-4 rounded-xl border border-emerald-300'; fb.innerText='✓ Correct!'; fb.className='feedback text-xs mt-2 font-medium text-emerald-600'; }
+    else { q.className='bg-white p-4 rounded-xl border border-rose-300'; fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.'; fb.className='feedback text-xs mt-2 font-medium text-rose-500'; }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if(!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className='flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-indigo-50 border border-indigo-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv); input.value='';
+
+  const q = query.toLowerCase();
+  let response = "Try running the simulator and watch the Algorithm State panel and graph highlighting update step by step!";
+  if(q.includes('relax')) response = "Relaxing an edge (u,v) means checking if dist[u] + weight(u,v) is smaller than the current dist[v]. If so, we've found a shorter path to v, so we update dist[v] and remember u as its predecessor.";
+  else if(q.includes('dag') || (q.includes('cycle') && q.includes('topo'))) response = "Topological sort only makes sense on a DAG (Directed Acyclic Graph). If there's a cycle, there's no valid linear order — Kahn's algorithm detects this because some nodes never reach in-degree 0, so the output order ends up shorter than the total node count.";
+  else if(q.includes('kahn')) response = "Kahn's algorithm: compute every node's in-degree, queue up all nodes with in-degree 0, then repeatedly dequeue a node, append it to the result, and decrement its neighbors' in-degree — enqueueing any that reach 0. It runs in O(V+E).";
+  else if(q.includes('prim')) response = "Prim's algorithm grows a single tree from a start node. At each step it looks at every 'frontier' edge (one endpoint in the tree, one outside) and greedily picks the cheapest one — guaranteed to produce a minimum spanning tree for a connected graph.";
+  else if(q.includes('kruskal')) response = "This lab implements Prim's algorithm, which grows one connected tree edge-by-edge. Kruskal's algorithm is an alternative MST approach that instead sorts ALL edges by weight and adds them greedily as long as they don't form a cycle (using union-find) — both produce a minimum spanning tree, but Prim's is often preferred on dense graphs.";
+  else if(q.includes('dijkstra')) response = "Dijkstra's algorithm finds shortest paths from one source to all nodes in a graph with non-negative weights. It repeatedly visits the closest unvisited node and relaxes its edges — once a node is visited, its shortest distance is final.";
+  else if(q.includes('negative')) response = "Dijkstra's algorithm assumes non-negative edge weights. It marks a node's distance as final once visited — but a negative edge discovered later could still shorten that 'final' distance, breaking correctness. Bellman-Ford handles negative weights instead.";
+  else if(q.includes('spanning tree') || q.includes('mst')) response = "A spanning tree connects all V nodes of a graph using exactly V-1 edges with no cycles. The Minimum Spanning Tree is the spanning tree whose total edge weight is smallest among all possible spanning trees.";
+  else if(q.includes('in-degree') || q.includes('indegree')) response = "A node's in-degree is the number of directed edges pointing INTO it. Kahn's algorithm only adds a node to the topological order once ALL of its prerequisites (incoming edges) have already been processed — i.e., once its in-degree drops to 0.";
+  else if(q.includes('frontier')) response = "In Prim's algorithm, the 'frontier' is the set of edges with one endpoint already in the growing MST and the other endpoint not yet included. Every step scans the frontier and picks the single cheapest edge to extend the tree.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className='flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv); chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  populateStartNodes();
+  document.getElementById('startNodeWrap').style.display='none';
+  renderGraph('topo');
+});
+</script>
+</body>
+</html>

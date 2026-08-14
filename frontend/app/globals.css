@@ -64,10 +64,21 @@
 
 *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
 
+/*
+ * Font stack — system fonts only, zero network dependency.
+ * Previously this app loaded Inter via next/font/google plus Space Grotesk /
+ * Manrope / JetBrains Mono via a <link> to fonts.googleapis.com. Both require a
+ * live round-trip to Google's font CDN (at build time for next/font, and on every
+ * page load for the <link> tag). On slow/unstable/restricted networks that was
+ * the main cause of slow or hanging page loads. Every font-family declaration in
+ * this codebase already lists a generic fallback (sans-serif/monospace) as the
+ * final value, so removing the remote fonts is a pure performance win with no
+ * visual breakage — text now renders instantly using the OS's native font.
+ */
 html, body {
   max-width: 100vw;
   overflow-x: hidden;
-  font-family: 'Inter', system-ui, sans-serif;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, sans-serif;
   background: var(--bg);
   color: var(--text-1);
   -webkit-font-smoothing: antialiased;
@@ -75,7 +86,7 @@ html, body {
 }
 
 a { color: inherit; text-decoration: none; }
-h1, h2, h3, h4 { font-family: 'Geist', 'Inter', sans-serif; }
+h1, h2, h3, h4 { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', system-ui, Roboto, sans-serif; }
 
 /* Shared loading spinner utility */
 @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }

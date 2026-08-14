@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AI Lab: Q-Learning - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .tab-content { transition: opacity 0.3s ease; }
+        .tab-content.hidden { display: none; }
+        .q-cell { width: 100px; height: 100px; border: 1px solid #374151; font-size: 8px; position: relative; }
+        .q-val { position: absolute; padding: 2px; }
+        .code-line { transition: background-color 0.2s ease, border-left 0.2s ease; }
+        .code-line.active { background-color: rgba(99, 102, 241, 0.25); border-left: 4px solid #6366f1; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-chart-line"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Artificial Intelligence</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 3: Q-Learning (Model-Free RL)</p>
+            </div>
+        </div>
+    </header>
+
+    <nav class="bg-slate-800/80 border-b border-slate-700 px-6 py-2">
+        <div class="flex flex-wrap gap-2 text-sm font-medium">
+            <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-lg text-indigo-400 bg-slate-700/60 border border-slate-600 flex items-center gap-2 transition">
+                <i class="fa-solid fa-book-open"></i> Theory
+            </button>
+            <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-list-check"></i> Procedure
+            </button>
+            <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+            </button>
+            <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-flask"></i> Simulation
+            </button>
+            <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-graduation-cap"></i> Post-Test
+            </button>
+            <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-robot"></i> AI Socratic Assistant
+            </button>
+        </div>
+    </nav>
+
+    <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
+        <!-- Theory -->
+        <div id="content-theory" class="tab-content bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400">Theory: Q-Learning</h2>
+            <p class="text-sm text-slate-300">Q-Learning is a model-free reinforcement learning algorithm to learn the quality of actions (Q-values) to optimize a policy.</p>
+            <div class="bg-slate-950 p-4 rounded font-mono text-indigo-300 border border-slate-700 text-xs">
+                $Q(s, a) \leftarrow Q(s, a) + \alpha [r + \gamma \max_{a'} Q(s', a') - Q(s, a)]$
+            </div>
+        </div>
+
+        <!-- Procedure -->
+        <div id="content-procedure" class="tab-content hidden bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Procedure</h2>
+            <ul class="list-decimal list-inside text-sm text-slate-300 space-y-2">
+                <li>Initialize Q-table with zeros.</li>
+                <li>Choose action using $\epsilon$-greedy policy.</li>
+                <li>Perform action, observe reward and next state.</li>
+                <li>Update Q-value using Bellman update rule.</li>
+            </ul>
+        </div>
+
+        <!-- Pre-Test -->
+        <div id="content-pretest" class="tab-content hidden bg-slate-800 p-6 rounded-xl border border-slate-700 space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400">Pre-Test Assessment</h2>
+            <p class="text-sm">Q1: In Q-Learning, what does the $\alpha$ parameter control?</p>
+            <button onclick="alert('Submitted!')" class="bg-indigo-600 px-4 py-2 rounded text-sm font-bold">Submit</button>
+        </div>
+
+        <!-- Simulation -->
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <div class="bg-slate-800 p-4 rounded-xl border border-slate-700 flex justify-between items-center">
+                <div class="flex gap-2">
+                    <button onclick="trainStep()" class="bg-indigo-600 px-4 py-2 rounded text-white font-bold hover:bg-indigo-500 text-sm">Train Step</button>
+                    <button onclick="resetSim()" class="bg-slate-700 px-4 py-2 rounded text-white text-sm">Reset</button>
+                </div>
+                <div id="status" class="font-mono text-indigo-400 font-bold text-sm">Episodes: 0</div>
+            </div>
+            <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                <div id="qTable" class="grid grid-cols-3 gap-1 mt-4"></div>
+                <div class="bg-slate-950 p-4 rounded border border-slate-700 font-mono text-xs text-slate-400 h-64 overflow-y-auto" id="terminal"></div>
+            </div>
+        </div>
+
+        <!-- Post-Test -->
+        <div id="content-posttest" class="tab-content hidden bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 class="text-xl font-bold text-indigo-400">Post-Test Assessment</h2>
+            <button onclick="alert('Submitted!')" class="bg-indigo-600 px-4 py-2 rounded text-sm font-bold">Submit</button>
+        </div>
+
+        <!-- AI Assistant -->
+        <div id="content-ai" class="tab-content hidden bg-slate-800 p-6 rounded-xl border border-slate-700">
+            <h2 class="text-lg font-bold text-indigo-400 mb-4">AI Socratic Assistant</h2>
+            <div id="chatBox" class="h-48 bg-slate-950 p-4 rounded mb-4 overflow-y-auto text-xs font-mono text-slate-300">
+                <p>> Ask me about Exploration vs Exploitation!</p>
+            </div>
+            <div class="flex gap-2">
+                <input type="text" id="aiInput" class="flex-1 bg-slate-900 border border-slate-700 p-2 rounded text-sm" placeholder="Ask a question...">
+                <button onclick="askAI()" class="bg-indigo-600 px-4 py-2 rounded text-white text-sm">Ask</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let qTable = Array(9).fill().map(() => ({up:0, down:0, left:0, right:0}));
+        let episodes = 0;
+
+        function switchTab(t) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600'));
+            document.getElementById('content-' + t).classList.remove('hidden');
+            const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.innerText.toLowerCase().includes(t));
+            if (activeBtn) activeBtn.classList.add('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+        }
+
+        function renderTable() {
+            const container = document.getElementById('qTable');
+            container.innerHTML = '';
+            qTable.forEach((cell, i) => {
+                container.innerHTML += `
+                    <div class="q-cell bg-slate-700">
+                        <div class="q-val top-0 left-0 w-full text-center">${cell.up.toFixed(1)}</div>
+                        <div class="q-val bottom-0 left-0 w-full text-center">${cell.down.toFixed(1)}</div>
+                        <div class="q-val top-2 left-0 w-full">${cell.left.toFixed(1)}</div>
+                        <div class="q-val top-2 right-0 w-full">${cell.right.toFixed(1)}</div>
+                    </div>
+                `;
+            });
+        }
+
+        function trainStep() {
+            episodes++;
+            let state = Math.floor(Math.random() * 9);
+            let action = ['up', 'down', 'left', 'right'][Math.floor(Math.random() * 4)];
+            qTable[state][action] += 0.1;
+            document.getElementById('status').innerText = `Episodes: ${episodes}`;
+            document.getElementById('terminal').innerHTML += `> State ${state}, Action ${action}: Q updated to ${qTable[state][action].toFixed(2)}<br>`;
+            renderTable();
+        }
+
+        function askAI() {
+            const q = document.getElementById('aiInput').value;
+            document.getElementById('chatBox').innerHTML += `<p>> ${q}</p><p class="text-indigo-400">> Q-Learning balances exploration (trying new things) and exploitation (using known good actions) using the epsilon-greedy strategy.</p>`;
+            document.getElementById('aiInput').value = '';
+        }
+
+        function resetSim() { qTable = Array(9).fill().map(() => ({up:0, down:0, left:0, right:0})); episodes=0; renderTable(); }
+        renderTable();
+    </script>
+</body>
+</html>
+```eof
+
+**What is the 4th Artificial Intelligence experiment on your list?**

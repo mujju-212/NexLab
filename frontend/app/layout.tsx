@@ -1,9 +1,12 @@
 import type { Metadata } from 'next';
-import { Inter } from 'next/font/google';
 import './globals.css';
 import { Providers } from '@/components/shared/providers';
 
-const inter = Inter({ subsets: ['latin'] });
+// Fonts are self-hosted via system-font stacks in globals.css (no next/font/google
+// or Google Fonts <link> tags). Both of those require a live network round-trip to
+// fonts.googleapis.com at build/dev-server-start time and on every page load —
+// on slow, unstable, or restricted networks this was the main cause of slow /
+// hanging page loads. System fonts render instantly with zero network dependency.
 
 export const metadata: Metadata = {
   title: 'AI Virtual Lab',
@@ -17,16 +20,7 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" suppressHydrationWarning>
-      <head>
-        {/* Single shared font load — page CSS modules no longer carry blocking @imports */}
-        <link rel="preconnect" href="https://fonts.googleapis.com" />
-        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
-        <link
-          href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@500;600;700&family=Manrope:wght@400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600;700&display=swap"
-          rel="stylesheet"
-        />
-      </head>
-      <body className={inter.className}>
+      <body>
         <Providers>{children}</Providers>
       </body>
     </html>

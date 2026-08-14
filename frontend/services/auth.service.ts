@@ -11,7 +11,17 @@ export interface RegisterDto {
   email: string;
   password: string;
   phone?: string;
+  // Institution self-registration (role='institution_admin' + institution_name)
+  role?: 'institution_admin';
+  institution_name?: string;
+  institution_type?: string;
+  institution_code?: string;
+  institution_phone?: string;
+  address?: string;
+  website?: string;
 }
+
+export type OtpPurpose = 'individual_register' | 'institution_register';
 
 export type BackendRole = 'platform_admin' | 'institution_admin' | 'instructor' | 'student' | 'free_user';
 
@@ -32,6 +42,20 @@ export interface AuthResponse {
 }
 
 export const authService = {
+  // OTP verification is required before `register()` will succeed — call
+  // sendOtp() then verifyOtp() with the same (email, purpose) pair first.
+  // This flow is ONLY for self-registration (individual or institution
+  // signup); accounts created by an admin never need OTP.
+  async sendOtp(email: string, purpose: OtpPurpose): Promise<{ message: string }> {
+    const { data } = await apiClient.post('/auth/otp/send', { email, purpose });
+    return data;
+  },
+
+  async verifyOtp(email: string, otp: string, purpose: OtpPurpose): Promise<{ verified: boolean; message: string }> {
+    const { data } = await apiClient.post('/auth/otp/verify', { email, otp, purpose });
+    return data;
+  },
+
   async login(dto: LoginDto): Promise<AuthResponse> {
     const { data } = await apiClient.post<AuthResponse>('/auth/login', dto);
     Cookies.set('access_token', data.token, { expires: 1 });

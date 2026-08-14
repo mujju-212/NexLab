@@ -1,0 +1,642 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>k-Nearest Neighbors (KNN) — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .code-line{transition:background-color .25s ease,border-color .25s ease;border-left:4px solid transparent;}
+  .code-line.active{background:rgba(124,58,237,.09);border-left-color:#7c3aed;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-circle-nodes"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Machine Learning Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment 4: k-Nearest Neighbors (KNN) Classification &amp; Distance Metrics</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2"><i class="fa-solid fa-book-open"></i> Theory</button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Assistant</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: k-Nearest Neighbors (KNN) &amp; Distance Metrics</h2>
+      <p class="text-sm text-slate-600 leading-relaxed"><strong>k-Nearest Neighbors</strong> is a non-parametric, instance-based ("lazy learning") algorithm. It never learns explicit parameters ($w, b$) — instead it stores the entire training set and, at query time, computes distances from a new point to every stored point, then votes among the $k$ closest.</p>
+
+      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 font-mono text-center text-purple-600 text-sm space-y-1">
+        <p>Euclidean: d(x,y) = &radic;&Sigma;(x<sub>i</sub>&minus;y<sub>i</sub>)&sup2;</p>
+        <p class="text-xs text-amber-600">Manhattan: d(x,y) = &Sigma;|x<sub>i</sub>&minus;y<sub>i</sub>|</p>
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-hashtag text-emerald-500"></i> Choice of k</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Small k (e.g. 1) is sensitive to noise (overfitting). Large k smooths boundaries but risks underfitting. Odd k avoids ties in binary classification.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-ruler-combined text-amber-500"></i> Distance Metrics</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Euclidean (L2) measures straight-line distance. Manhattan (L1) measures grid/city-block distance along axes. Feature scaling matters for both.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-check-to-slot text-cyan-500"></i> Majority Voting</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Among the k nearest neighbors, the query point is assigned the most frequent class label.</p>
+        </div>
+      </div>
+
+      <div class="bg-purple-50/60 p-4 rounded-xl border border-purple-100 text-xs text-slate-600 space-y-1.5">
+        <h4 class="font-bold text-purple-600 text-sm"><i class="fa-solid fa-circle-info"></i> The Curse of Dimensionality</h4>
+        <p>As feature count grows, the volume of space grows exponentially and all points start looking equidistant, weakening distance-based methods. Feature selection or dimensionality reduction (e.g. PCA) helps preserve KNN's effectiveness.</p>
+      </div>
+
+      <div class="bg-rose-50/60 p-4 rounded-xl border border-rose-100 text-xs text-slate-600 space-y-1.5">
+        <h4 class="font-bold text-rose-600 text-sm"><i class="fa-solid fa-triangle-exclamation"></i> Why the Radius Circle Must Respect Both Axes</h4>
+        <p>When a canvas plots two features with very different numeric ranges (e.g. Sepal Length 4–7 vs Petal Length 1–5), the pixels-per-unit scale differs on each axis. A true circle of Euclidean radius $r$ in <em>data space</em> becomes an <strong>ellipse</strong> in <em>pixel space</em> once each axis is scaled independently. Drawing it as a perfect pixel-circle using only one axis's scale would visually mislead students about which points are truly "within radius r." This simulator now draws the correct ellipse using both axis scales.</p>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Select a <strong>Classification Dataset</strong> (Iris Subset, Customer Churn, or Credit Loan Risk) or click a Quick Preset.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Set <strong>Neighbors (k)</strong> and the <strong>Distance Metric</strong> (Euclidean or Manhattan).</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click anywhere on the canvas to place the orange <strong>Query Point</strong>.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Simulation</strong> to compute distances from every training point to the query.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step Epoch</strong> to trace the code and watch the neighborhood ellipse, connecting lines, and vote tally update.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Review the majority vote tally and predicted class in the result banner.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. Why is KNN called a "Lazy Learning" algorithm?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> It takes days to train on small datasets</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> It builds no explicit model; predictions are computed on-the-fly at query time</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> It only works on 1-dimensional data</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What happens with k=1 on noisy/mislabeled data?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> The boundary becomes smooth and noise-immune</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> The model becomes highly sensitive to noise (overfitting)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> KNN converts into Linear Regression</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. Manhattan distance between (2,3) and (5,7) is:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> |5-2| + |7-3| = 7</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> &radic;(3²+4²) = 5</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> 3 × 4 = 12</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">4. Why should you generally use an odd value of k in binary classification?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> Odd numbers compute faster</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> sklearn requires it</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> It avoids a tied vote between the two classes</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Select Classification Dataset</label>
+              <select id="knnDataset" onchange="updateDatasetDisplay()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500 min-w-[260px]">
+                <option value="iris">1. Iris Flower Subset (Sepal vs Petal Length)</option>
+                <option value="churn">2. Customer Churn Risk (Age vs Income)</option>
+                <option value="loan">3. Credit Loan Approval (Score vs Debt Ratio)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Neighbors (k): <span id="kVal" class="text-amber-600 font-mono font-bold">3</span></label>
+              <select id="kSelect" onchange="onKNNParamChange()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+                <option value="1">k = 1</option><option value="3" selected>k = 3</option><option value="5">k = 5</option><option value="7">k = 7</option><option value="9">k = 9</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Distance Metric</label>
+              <select id="metricSelect" onchange="onKNNParamChange()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+                <option value="euclidean">Euclidean (L2)</option><option value="manhattan">Manhattan (L1)</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-play"></i> Start Simulation</button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed"><i class="fa-solid fa-forward-step"></i> Step Epoch</button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-bolt"></i> Run / Execute All</button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center justify-between gap-2 pt-2 border-t border-slate-100 text-xs">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+            <button onclick="loadPreset('iris')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Iris Flower</button>
+            <button onclick="loadPreset('churn')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Customer Churn</button>
+            <button onclick="loadPreset('loan')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Credit Loan Risk</button>
+          </div>
+          <span class="text-purple-600 font-mono text-[11px]"><i class="fa-solid fa-hand-pointer"></i> Click the plot to move the query point!</span>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div></div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Epoch: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-code text-purple-600"></i> Scikit-Learn Code Trace</span>
+          </div>
+          <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 text-slate-200 flex-1 space-y-0.5 overflow-x-auto min-h-[220px]"></div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Model Parameter State</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Select a dataset and click 'Start Simulation' or 'Run / Execute All'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-7 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+            <div class="flex justify-between items-center text-xs">
+              <span class="font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-circle-nodes text-purple-600"></i> KNN Spatial Distance &amp; Radius Visualizer</span>
+              <span id="metricsBadge" class="font-mono text-emerald-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-[11px]">Pred: -- | Votes: --</span>
+            </div>
+            <div class="bg-slate-950 p-2 rounded-lg border border-slate-200 flex justify-center items-center relative">
+              <canvas id="knnCanvas" width="560" height="260" class="w-full h-[260px] rounded cursor-crosshair"></canvas>
+            </div>
+            <div class="grid grid-cols-4 gap-2 font-mono text-xs">
+              <div class="mem-card bg-slate-50 border border-slate-200 p-2 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Prediction</span>
+                <span id="valPred" class="text-xs font-bold text-amber-600 truncate block">--</span>
+              </div>
+              <div class="mem-card bg-slate-50 border border-slate-200 p-2 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Class 0 Votes</span>
+                <span id="valClass0Votes" class="text-sm font-bold text-blue-600">0</span>
+              </div>
+              <div class="mem-card bg-slate-50 border border-slate-200 p-2 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Class 1 Votes</span>
+                <span id="valClass1Votes" class="text-sm font-bold text-emerald-600">0</span>
+              </div>
+              <div class="mem-card bg-slate-50 border border-slate-200 p-2 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Max Dist (r)</span>
+                <span id="valMaxDist" class="text-sm font-bold text-purple-600">0.00</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal</span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition"><i class="fa-solid fa-trash-can"></i> Clear</button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[90px] max-h-[130px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold"><i class="fa-solid fa-square-check"></i></div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Final Execution Output</h4>
+                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+            <span class="text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200">Status: OK</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. Which distance metric computes d(x,y) = |x1-y1| + |x2-y2|?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> Euclidean Distance (L2)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> Manhattan Distance (L1 / City Block)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> Cosine Similarity</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. Which Scikit-Learn method finds the indices/distances of the k nearest neighbors?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> model.kneighbors(X)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> model.get_neighbors(X)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> model.find_nearest(X)</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. Why does a Euclidean-radius neighborhood render as an ellipse (not a circle) on a canvas where the x and y axes represent features with very different numeric ranges?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> It's a rendering bug that should always be fixed by forcing a circle</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> Manhattan distance always draws ellipses</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> Each axis has a different pixels-per-unit scale, so equal data-space radius maps to unequal pixel-space radius on each axis</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. Increasing k from 3 to 15 on a small dataset will most likely:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> Smooth the decision boundary and risk underfitting</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> Make the model memorize training data exactly</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> Have no effect at all</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant</h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about KNN, Euclidean vs Manhattan distance, choosing k, or the Curse of Dimensionality.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., How does k affect the decision boundary?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{ el.classList.remove('bg-slate-900','text-white'); el.classList.add('text-slate-500'); });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+let scenario = 'iris';
+let stepList = [];
+let currentStepIdx = 0;
+let queryPoint = { x: 5.5, y: 2.8 };
+
+const datasets = {
+  iris: { title:"Iris Flower Subset (Setosa vs Versicolor)", classNames:{0:"Setosa",1:"Versicolor"}, queryDefault:{x:5.4,y:2.8},
+    points:[{x:4.8,y:1.4,label:0},{x:5.1,y:1.5,label:0},{x:4.6,y:1.0,label:0},{x:5.4,y:1.7,label:0},{x:5.0,y:1.6,label:0},{x:4.9,y:1.4,label:0},
+            {x:5.7,y:3.8,label:1},{x:6.2,y:4.3,label:1},{x:5.9,y:4.2,label:1},{x:6.5,y:4.6,label:1},{x:5.6,y:3.6,label:1},{x:6.0,y:4.0,label:1}] },
+  churn: { title:"Customer Churn Risk (Age vs Income)", classNames:{0:"Loyal (0)",1:"Churn Risk (1)"}, queryDefault:{x:38,y:52},
+    points:[{x:22,y:25,label:0},{x:25,y:32,label:0},{x:28,y:40,label:0},{x:32,y:48,label:0},{x:35,y:60,label:0},{x:29,y:35,label:0},
+            {x:45,y:75,label:1},{x:52,y:88,label:1},{x:58,y:95,label:1},{x:48,y:62,label:1},{x:55,y:70,label:1},{x:60,y:110,label:1}] },
+  loan: { title:"Credit Loan Risk (Score vs Debt Ratio)", classNames:{0:"Approved (0)",1:"High Risk (1)"}, queryDefault:{x:640,y:42},
+    points:[{x:720,y:15,label:0},{x:750,y:20,label:0},{x:680,y:25,label:0},{x:780,y:10,label:0},{x:710,y:30,label:0},{x:660,y:28,label:0},
+            {x:580,y:55,label:1},{x:540,y:68,label:1},{x:610,y:60,label:1},{x:520,y:75,label:1},{x:590,y:50,label:1},{x:630,y:65,label:1}] }
+};
+
+document.addEventListener("DOMContentLoaded", ()=>{
+  updateDatasetDisplay();
+  const canvas = document.getElementById('knnCanvas');
+  canvas.addEventListener('click', (e)=>{
+    const rect = canvas.getBoundingClientRect();
+    const scaleFactorX = canvas.width / rect.width;
+    const scaleFactorY = canvas.height / rect.height;
+    const clickPx = (e.clientX - rect.left) * scaleFactorX;
+    const clickPy = (e.clientY - rect.top) * scaleFactorY;
+    const padding = 45;
+    const width = canvas.width - padding*2;
+    const height = canvas.height - padding*2;
+    const points = datasets[scenario].points;
+    const xVals = points.map(p=>p.x), yVals = points.map(p=>p.y);
+    const minX = Math.min(...xVals)*0.8, maxX = Math.max(...xVals)*1.1;
+    const minY = Math.min(...yVals)*0.8, maxY = Math.max(...yVals)*1.1;
+    const normX = (clickPx - padding) / width;
+    const normY = (canvas.height - padding - clickPy) / height;
+    if (normX>=0 && normX<=1 && normY>=0 && normY<=1){
+      queryPoint.x = parseFloat((minX + normX*(maxX-minX)).toFixed(2));
+      queryPoint.y = parseFloat((minY + normY*(maxY-minY)).toFixed(2));
+      if (stepList.length>0) executeStepAtIndex(currentStepIdx);
+      else drawKNNPlot(datasets[scenario].points, queryPoint, parseInt(document.getElementById('kSelect').value), false);
+    }
+  });
+});
+
+function loadPreset(presetScenario){
+  document.getElementById('knnDataset').value = presetScenario;
+  updateDatasetDisplay();
+  runAll();
+}
+function onKNNParamChange(){
+  document.getElementById('kVal').innerText = document.getElementById('kSelect').value;
+  if (stepList.length>0) executeStepAtIndex(currentStepIdx);
+}
+
+function updateDatasetDisplay(){
+  scenario = document.getElementById('knnDataset').value;
+  queryPoint = { ...datasets[scenario].queryDefault };
+  const k = parseInt(document.getElementById('kSelect').value);
+  const metric = document.getElementById('metricSelect').value;
+  const lines = [
+    'from sklearn.neighbors import KNeighborsClassifier',
+    `knn = KNeighborsClassifier(n_neighbors=${k}, metric='${metric}')`,
+    'knn.fit(X_train, y_train)',
+    `pred = knn.predict([[${queryPoint.x}, ${queryPoint.y}]])`
+  ];
+  document.getElementById('codeContainer').innerHTML = lines.map((t,idx)=>`
+    <div id="line${idx+1}" class="code-line px-3 py-1.5 rounded flex items-center gap-3">
+      <span class="text-slate-600 text-xs w-4">${idx+1}</span><span>${t}</span>
+    </div>`).join('');
+  drawKNNPlot(datasets[scenario].points, queryPoint, k, false);
+}
+
+function computeKNN(points, query, k, metric){
+  const calculated = points.map((p,idx)=>{
+    let d;
+    if (metric === 'euclidean') d = Math.sqrt(Math.pow(p.x-query.x,2) + Math.pow(p.y-query.y,2));
+    else d = Math.abs(p.x-query.x) + Math.abs(p.y-query.y);
+    return { ...p, dist: d, idx };
+  });
+  calculated.sort((a,b)=>a.dist-b.dist);
+  const neighbors = calculated.slice(0,k);
+  let class0Count=0, class1Count=0;
+  neighbors.forEach(n=>{ if (n.label===0) class0Count++; else class1Count++; });
+  const predictedLabel = class1Count > class0Count ? 1 : 0;
+  const maxDist = neighbors[neighbors.length-1]?.dist || 0;
+  return { neighbors, class0Count, class1Count, predictedLabel, maxDist };
+}
+
+/* ---------- BUG FIX #4: ellipse uses BOTH axis pixel scales ---------- *
+ * scaleX/scaleY are computed once from the actual data ranges. The
+ * neighborhood boundary is drawn with ctx.ellipse(radiusX, radiusY)
+ * where radiusX = maxDist * scaleX and radiusY = maxDist * scaleY —
+ * this correctly traces the true Euclidean-equidistant boundary in
+ * pixel space even when the two axes have very different units.
+ */
+function drawKNNPlot(points, query, k, showNeighbors){
+  const canvas = document.getElementById('knnCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const padding = 45;
+  const width = canvas.width - padding*2;
+  const height = canvas.height - padding*2;
+  const xVals = points.map(p=>p.x).concat(query.x);
+  const yVals = points.map(p=>p.y).concat(query.y);
+  const minX = Math.min(...xVals)*0.8, maxX = Math.max(...xVals)*1.1;
+  const minY = Math.min(...yVals)*0.8, maxY = Math.max(...yVals)*1.1;
+  const scaleX = width / (maxX-minX);
+  const scaleY = height / (maxY-minY);
+  const mapX = x => padding + (x-minX)*scaleX;
+  const mapY = y => canvas.height - padding - (y-minY)*scaleY;
+
+  const metric = document.getElementById('metricSelect').value;
+  const knnResult = computeKNN(points, query, k, metric);
+
+  ctx.strokeStyle = "#475569"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(padding,padding); ctx.lineTo(padding,canvas.height-padding); ctx.lineTo(canvas.width-padding,canvas.height-padding); ctx.stroke();
+
+  if (showNeighbors && knnResult.neighbors.length>0){
+    const radiusPxX = knnResult.maxDist * scaleX;
+    const radiusPxY = knnResult.maxDist * scaleY;
+    ctx.strokeStyle = "rgba(124,58,237,.45)";
+    ctx.fillStyle = "rgba(124,58,237,.08)";
+    ctx.lineWidth = 2; ctx.setLineDash([4,4]);
+    ctx.beginPath();
+    ctx.ellipse(mapX(query.x), mapY(query.y), Math.max(radiusPxX,1), Math.max(radiusPxY,1), 0, 0, Math.PI*2);
+    ctx.fill(); ctx.stroke(); ctx.setLineDash([]);
+
+    knnResult.neighbors.forEach(n=>{
+      ctx.strokeStyle = n.label===1 ? "#10b981" : "#3b82f6";
+      ctx.lineWidth = 1.8;
+      ctx.beginPath(); ctx.moveTo(mapX(query.x),mapY(query.y)); ctx.lineTo(mapX(n.x),mapY(n.y)); ctx.stroke();
+    });
+  }
+
+  points.forEach(p=>{
+    const isNeighbor = showNeighbors && knnResult.neighbors.some(n=>n.idx===p.idx);
+    ctx.fillStyle = p.label===1 ? "#10b981" : "#3b82f6";
+    ctx.beginPath(); ctx.arc(mapX(p.x),mapY(p.y), isNeighbor?8:5, 0, Math.PI*2); ctx.fill();
+    ctx.strokeStyle = isNeighbor ? "#f59e0b" : "#ffffff";
+    ctx.lineWidth = isNeighbor ? 2.5 : 1; ctx.stroke();
+  });
+
+  ctx.fillStyle = "#f59e0b"; ctx.strokeStyle="#ffffff"; ctx.lineWidth=2;
+  ctx.beginPath(); ctx.arc(mapX(query.x),mapY(query.y),9,0,Math.PI*2); ctx.fill(); ctx.stroke();
+  ctx.fillStyle = "#ffffff"; ctx.font = "bold 10px monospace";
+  ctx.fillText("Q", mapX(query.x)-3, mapY(query.y)+3);
+}
+
+function buildExecutionSteps(){
+  const data = datasets[scenario].points;
+  const k = parseInt(document.getElementById('kSelect').value);
+  const metric = document.getElementById('metricSelect').value;
+  const res = computeKNN(data, queryPoint, k, metric);
+  const classNameStr = datasets[scenario].classNames[res.predictedLabel];
+
+  stepList = [
+    { line:1, res, consoleMsg:`&gt; Loaded dataset: ${datasets[scenario].title} (${data.length} samples)`, explanation:'Line 1: Imported KNeighborsClassifier and initialized 2D feature matrix.' },
+    { line:2, res, consoleMsg:`&gt; Configured KNN Classifier: k=${k}, metric='${metric}'`, explanation:`Line 2: Instantiated classifier with k=${k} neighbors and ${metric} distance.` },
+    { line:3, res, consoleMsg:`&gt; Executing fit(): stored ${data.length} training samples in memory`, explanation:'Line 3: Instance-based learner saved data points (lazy learning — no explicit model built).' },
+    { line:4, res, consoleMsg:`<span class="text-emerald-400 font-bold">Predicted Class: ${classNameStr} (Votes: Class 0 = ${res.class0Count}, Class 1 = ${res.class1Count})</span>`, explanation:`Line 4: Computed nearest distances and majority vote. Query classified as ${classNameStr}.`, final:true, resultText:`Query Point Classified as ${classNameStr}` }
+  ];
+}
+
+function startSimulation(){
+  updateDatasetDisplay();
+  buildExecutionSteps();
+  currentStepIdx = 0;
+  hideResultBanner();
+  clearConsole();
+  document.getElementById('progressFill').style.width='0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95";
+  appendConsole(`&gt;&gt;&gt; Executing: ml_knn_classifier.py [Dataset: ${scenario}, k: ${document.getElementById('kSelect').value}]`);
+  executeStepAtIndex(0);
+}
+
+function executeStepAtIndex(idx){
+  const step = stepList[idx];
+  highlightLine(step.line);
+  const res = step.res;
+  const classNameStr = datasets[scenario].classNames[res.predictedLabel];
+  document.getElementById('valPred').innerText = classNameStr;
+  document.getElementById('valClass0Votes').innerText = res.class0Count;
+  document.getElementById('valClass1Votes').innerText = res.class1Count;
+  document.getElementById('valMaxDist').innerText = res.maxDist.toFixed(2);
+  document.getElementById('metricsBadge').innerText = `Pred: ${classNameStr} | Votes: ${res.class0Count}-${res.class1Count}`;
+  drawKNNPlot(datasets[scenario].points, queryPoint, parseInt(document.getElementById('kSelect').value), true);
+  appendConsole(step.consoleMsg);
+  document.getElementById('explanationText').innerText = step.explanation;
+  document.getElementById('currentStepBadge').innerText = `Epoch ${idx+1}/${stepList.length}`;
+  document.getElementById('progressFill').style.width = `${((idx+1)/stepList.length)*100}%`;
+  if (step.final){
+    showResultBanner(step.resultText);
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+    document.getElementById('currentStepBadge').innerText = "Classified";
+  }
+}
+
+function stepExecute(){ if (currentStepIdx < stepList.length-1){ currentStepIdx++; executeStepAtIndex(currentStepIdx); } }
+function runAll(){
+  startSimulation();
+  const timer = setInterval(()=>{
+    if (currentStepIdx >= stepList.length-1){ clearInterval(timer); return; }
+    currentStepIdx++; executeStepAtIndex(currentStepIdx);
+  }, 500);
+}
+
+function resetSimulation(){
+  currentStepIdx = 0;
+  highlightLine(0);
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('valPred').innerText = "--";
+  document.getElementById('valClass0Votes').innerText = "0";
+  document.getElementById('valClass1Votes').innerText = "0";
+  document.getElementById('valMaxDist').innerText = "0.00";
+  document.getElementById('metricsBadge').innerText = "Pred: -- | Votes: --";
+  drawKNNPlot(datasets[scenario].points, queryPoint, parseInt(document.getElementById('kSelect').value), false);
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Select a dataset and click 'Start Simulation' or 'Run / Execute All'.";
+  document.getElementById('currentStepBadge').innerText = "Epoch: Ready";
+  document.getElementById('progressFill').style.width = '0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+}
+
+function highlightLine(lineNum){
+  document.querySelectorAll('.code-line').forEach(el=>el.classList.remove('active'));
+  if (lineNum>0){ const t=document.getElementById(`line${lineNum}`); if (t) t.classList.add('active'); }
+}
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){ const term=document.getElementById('terminal'); const p=document.createElement('p'); p.innerHTML=html; term.appendChild(p); term.scrollTop=term.scrollHeight; }
+function showResultBanner(text){ document.getElementById('resultBannerText').innerText=text; document.getElementById('resultBanner').classList.remove('hidden'); }
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q, correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try clicking on the plot to move the Query Point and watch the distance lines and vote tally update live!";
+  if (q.includes('euclidean') || q.includes('manhattan') || q.includes('distance')) response = "Euclidean distance measures straight-line distance (√Δx²+Δy²). Manhattan distance measures grid movement along axes (|Δx|+|Δy|). They can pick different neighbors on the same data!";
+  else if (q.includes('ellipse') || q.includes('circle') || q.includes('radius')) response = "The neighborhood boundary is a circle only in DATA space. Once each axis is scaled to different pixels-per-unit for plotting, that circle becomes an ellipse on screen. Using both axis scales when drawing keeps the boundary geometrically correct.";
+  else if (q.includes('k value') || q.includes('choice of k') || q.includes('overfit')) response = "Small k (e.g. k=1) fits noise and overfits. Large k smooths the boundary but risks underfitting. Odd k avoids tie votes in binary classification.";
+  else if (q.includes('curse') || q.includes('dimension')) response = "In high dimensions points become sparse and nearly equidistant, weakening distance-based methods like KNN. Feature scaling and dimensionality reduction (PCA) help.";
+  else if (q.includes('lazy')) response = "KNN is 'lazy' because fit() just stores the training data — all the real computation (distance calculation + voting) happens later, at prediction time.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+</script>
+</body>
+</html>

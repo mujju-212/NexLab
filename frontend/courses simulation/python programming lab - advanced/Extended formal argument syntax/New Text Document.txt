@@ -1,0 +1,736 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Extended Formal Argument Syntax - Virtual Lab Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .code-line { transition: background-color 0.2s ease, border-color 0.2s ease; }
+        .code-line.active { background-color: rgba(99, 102, 241, 0.25); border-left: 4px solid #6366f1; }
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes pulseMem {
+            0% { transform: scale(1); border-color: #6366f1; }
+            50% { transform: scale(1.03); border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+            100% { transform: scale(1); border-color: #374151; }
+        }
+        .mem-card.updated { animation: pulseMem 0.5s ease-in-out; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-brands fa-python"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Computer Science & Engineering</h1>
+                <p class="text-xs text-indigo-400 font-medium">Advanced Python: Experiment 13 — Extended Formal Argument Syntax (*args, **kwargs)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <nav class="bg-slate-800/80 border-b border-slate-700 px-6 py-2">
+        <div class="flex flex-wrap gap-2 text-sm font-medium">
+            <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-lg text-indigo-400 bg-slate-700/60 border border-slate-600 flex items-center gap-2 transition">
+                <i class="fa-solid fa-book-open"></i> Theory
+            </button>
+            <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-list-check"></i> Procedure
+            </button>
+            <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+            </button>
+            <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-flask"></i> Simulation
+            </button>
+            <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-graduation-cap"></i> Post-Test
+            </button>
+            <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-robot"></i> AI Socratic Assistant
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+        <div id="content-theory" class="tab-content bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Theory: Extended Formal Argument Syntax in Python</h2>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                Python allows functions to accept an arbitrary number of arguments using <strong>Extended Formal Argument Syntax</strong>. The single asterisk syntax (<code class="bg-slate-900 text-amber-300 px-1.5 py-0.5 rounded font-mono">*args</code>) captures extra positional arguments into a <strong>tuple</strong>, while the double asterisk syntax (<code class="bg-slate-900 text-amber-300 px-1.5 py-0.5 rounded font-mono">**kwargs</code>) captures keyword arguments into a <strong>dictionary</strong>.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-asterisk text-emerald-400"></i> *args Syntax</span>
+                        <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-sans">Positional Tuple</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Packs variable non-keyword arguments into an immutable tuple: <code class="text-amber-300">def add(*args): ...</code>. Allows functions to process any quantity of positional parameters.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-key text-amber-400"></i> **kwargs Syntax</span>
+                        <span class="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-sans">Keyword Dict</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Packs variable named keyword arguments into a dictionary: <code class="text-amber-300">def info(**kwargs): ...</code>. Access parameters using key lookups.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-sliders text-cyan-400"></i> Parameter Order</span>
+                        <span class="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded font-sans">Sequence Rule</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Strict declaration sequence: Standard positional arguments, then <code class="text-amber-300">*args</code>, default parameters, and finally <code class="text-amber-300">**kwargs</code>.
+                    </p>
+                </div>
+
+            </div>
+
+            <div class="bg-slate-900/60 p-4 rounded-lg border border-slate-700 text-xs text-slate-300 space-y-2">
+                <h4 class="font-bold text-indigo-300 text-sm"><i class="fa-solid fa-circle-info text-amber-300"></i> Key Syntax Comparison</h4>
+                <ul class="list-disc list-inside space-y-1 text-slate-400 font-mono">
+                    <li><strong class="text-slate-200 font-sans">*args:</strong> <code class="text-emerald-300">func(1, 2, 3)</code> $\rightarrow$ <code class="text-slate-300">args = (1, 2, 3)</code> (type: <code class="text-amber-300">tuple</code>)</li>
+                    <li><strong class="text-slate-200 font-sans">**kwargs:</strong> <code class="text-emerald-300">func(a=1, b=2)</code> $\rightarrow$ <code class="text-slate-300">kwargs = {'a': 1, 'b': 2}</code> (type: <code class="text-amber-300">dict</code>)</li>
+                    <li><strong class="text-slate-200 font-sans">Unpacking:</strong> <code class="text-emerald-300">func(*my_list)</code> or <code class="text-emerald-300">func(**my_dict)</code> unpacks containers directly into call arguments.</li>
+                </ul>
+            </div>
+        </div>
+
+        <div id="content-procedure" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Simulator Procedure</h2>
+            <ol class="list-decimal list-inside space-y-3 text-sm text-slate-300 leading-relaxed">
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Select an <strong>Extended Argument Scenario</strong> (`*args` Summation, `**kwargs` Profile Builder, or Combined `*args` & `**kwargs`) from the dropdown or click a Quick Preset.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Start Simulation"</strong> to load the script into memory.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Step Execution"</strong> to trace code line-by-line and observe how positional parameters pack into a `tuple` and keyword arguments pack into a `dict`.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Inspect the <strong>Extended Argument RAM Inspector</strong> to observe parameter dynamic allocation and data types live.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Run / Execute All"</strong> to complete execution instantly and view final terminal output.</li>
+            </ol>
+        </div>
+
+        <div id="content-pretest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Pre-Lab Assessment Quiz</h2>
+                <span id="pretest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="preq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. What data structure stores variable positional arguments defined with `*args`?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> `list`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> `tuple`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> `dict`</label>
+                    </div>
+                    <p id="preq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="preq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What data structure stores keyword arguments defined with `**kwargs`?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> `dict`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> `tuple`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> `set`</label>
+                    </div>
+                    <p id="preq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPretest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Pre-Test
+                </button>
+            </div>
+        </div>
+
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <!-- Controls Bar -->
+            <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Select Extended Argument Scenario</label>
+                            <select id="argScenario" onchange="updateScenarioDisplay()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="args_sum">Positional Arguments: *args Summation</option>
+                                <option value="kwargs_info">Keyword Arguments: **kwargs User Profile</option>
+                                <option value="combined">Combined Syntax: Standard + *args + **kwargs</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="startSimulation()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95">
+                            <i class="fa-solid fa-play"></i> Start Simulation
+                        </button>
+                        <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 cursor-not-allowed">
+                            <i class="fa-solid fa-forward-step"></i> Step Execution
+                        </button>
+                        <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95">
+                            <i class="fa-solid fa-bolt"></i> Run / Execute All
+                        </button>
+                        <button onclick="resetSimulation()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium px-3 py-2 rounded-lg text-sm transition flex items-center gap-1 active:scale-95">
+                            <i class="fa-solid fa-rotate-left"></i> Reset
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick Preset Shortcuts -->
+                <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-700/60 text-xs">
+                    <span class="text-slate-400 font-medium"><i class="fa-solid fa-bolt text-amber-400"></i> Quick Presets:</span>
+                    <button onclick="loadPreset('args_sum')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">*args Sum</button>
+                    <button onclick="loadPreset('kwargs_info')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">**kwargs Profile</button>
+                    <button onclick="loadPreset('combined')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Combined Args</button>
+                </div>
+            </div>
+
+            <!-- Execution Workspace Split View -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left Column: Source Code Panel -->
+                <div class="lg:col-span-5 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md">
+                    <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <i class="fa-solid fa-code text-indigo-400"></i> Code Trace Window
+                        </span>
+                        <span id="currentStepBadge" class="text-xs bg-slate-700 text-slate-300 px-2.5 py-0.5 rounded-full font-mono">Step: Ready</span>
+                    </div>
+                    <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 flex-1 space-y-1 overflow-x-auto min-h-[260px]">
+                    </div>
+                    <div class="p-4 border-t border-slate-700/80 bg-slate-800/50">
+                        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Execution Status</h4>
+                        <p id="explanationText" class="text-xs text-slate-300 leading-relaxed min-h-[36px]">
+                            Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Right Column: Memory Inspector & Terminal -->
+                <div class="lg:col-span-7 flex flex-col gap-6">
+                    
+                    <!-- Memory Inspector -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md">
+                        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center justify-between">
+                            <span class="flex items-center gap-2"><i class="fa-solid fa-microchip text-indigo-400"></i> Extended Argument RAM Memory State</span>
+                            <span class="text-[10px] bg-slate-900 text-slate-400 px-2 py-0.5 rounded border border-slate-700 font-mono">Stack & Function Frames</span>
+                        </h3>
+                        
+                        <div class="grid grid-cols-3 gap-3">
+                            <div id="memVar1" class="mem-card bg-slate-900 border border-slate-700 p-3 rounded-lg text-center transition">
+                                <span id="lblVar1" class="text-xs text-slate-400 block font-mono">var1</span>
+                                <span id="valVar1" class="text-base font-bold font-mono text-amber-400 block my-1 truncate">--</span>
+                                <span id="typeVar1" class="text-[10px] bg-indigo-500/10 text-indigo-300 px-1.5 py-0.5 rounded font-mono">--</span>
+                            </div>
+
+                            <div id="memVar2" class="mem-card bg-slate-900 border border-slate-700 p-3 rounded-lg text-center transition">
+                                <span id="lblVar2" class="text-xs text-slate-400 block font-mono">var2</span>
+                                <span id="valVar2" class="text-base font-bold font-mono text-indigo-400 block my-1 truncate">--</span>
+                                <span id="typeVar2" class="text-[10px] bg-indigo-500/10 text-indigo-300 px-1.5 py-0.5 rounded font-mono">--</span>
+                            </div>
+
+                            <div id="memVar3" class="mem-card bg-slate-900 border border-slate-700 p-3 rounded-lg text-center transition">
+                                <span id="lblVar3" class="text-xs text-slate-400 block font-mono">var3</span>
+                                <span id="valVar3" class="text-base font-bold font-mono text-emerald-400 block my-1 truncate">--</span>
+                                <span id="typeVar3" class="text-[10px] bg-emerald-500/10 text-emerald-300 px-1.5 py-0.5 rounded font-mono">--</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Terminal Output -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md flex-1">
+                        <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-2.5 flex justify-between items-center">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                                <i class="fa-solid fa-terminal text-emerald-400"></i> Output Terminal
+                            </span>
+                            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition">
+                                <i class="fa-solid fa-trash-can"></i> Clear
+                            </button>
+                        </div>
+                        <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-300 min-h-[140px] max-h-[180px] overflow-y-auto space-y-1">
+                            <p class="text-slate-500 italic">>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+                        </div>
+                    </div>
+
+                    <!-- Pop-out Result Banner -->
+                    <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-950 to-indigo-950 border-2 border-emerald-500/50 p-4 rounded-xl shadow-xl flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
+                                <i class="fa-solid fa-square-check"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs uppercase font-semibold text-emerald-400 tracking-wider">Final Execution Output</h4>
+                                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-300">Execution Completed</p>
+                            </div>
+                        </div>
+                        <span id="bannerStatus" class="text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1 rounded-md border border-slate-700">
+                            Completed
+                        </span>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <div id="content-posttest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Post-Lab Evaluation Quiz</h2>
+                <span id="posttest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="postq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. What is the output of `(lambda *args: sum(args))(10, 20, 30)`?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="a"> `(10, 20, 30)`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="b"> `60`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="c"> TypeError</label>
+                    </div>
+                    <p id="postq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="postq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. How do you pass dictionary `d = {'x': 1, 'y': 2}` as keyword arguments to `func`?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="a"> `func(*d)`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="b"> `func(**d)`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="c"> `func(d)`</label>
+                    </div>
+                    <p id="postq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPosttest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Post-Test
+                </button>
+            </div>
+        </div>
+
+        <div id="content-ai" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md flex flex-col h-[520px]">
+            <h2 class="text-lg font-bold text-indigo-400 border-b border-slate-700 pb-2 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+            </h2>
+
+            <div id="aiChatBox" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-4 overflow-y-auto space-y-3 text-xs">
+                <div class="flex items-start gap-3">
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        Hello! I am your AI Socratic Assistant. Ask me any question about extended argument syntax in Python (`*args`, `**kwargs`, parameter order, or container unpacking)!
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 mt-4">
+                <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., What is the difference between *args and **kwargs?)...." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                <button onclick="sendAiQuery()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-xs font-semibold transition active:scale-95">
+                    Send
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let scenario = 'args_sum';
+        let stepList = [];
+        let currentStepIdx = 0;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            updateScenarioDisplay();
+        });
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+                el.classList.add('text-slate-400');
+            });
+
+            const targetContent = document.getElementById(`content-${tabName}`);
+            if (targetContent) targetContent.classList.remove('hidden');
+
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('text-slate-400');
+                activeBtn.classList.add('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+            }
+        }
+
+        function loadPreset(presetScenario) {
+            const dropdown = document.getElementById('argScenario');
+            if (dropdown) dropdown.value = presetScenario;
+            updateScenarioDisplay();
+            runAll();
+        }
+
+        function updateScenarioDisplay() {
+            scenario = document.getElementById('argScenario').value;
+            const codeContainer = document.getElementById('codeContainer');
+
+            if (scenario === 'args_sum') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>def sum_numbers(*args):</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>&nbsp;&nbsp;&nbsp;&nbsp;return sum(args)</span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>res = sum_numbers(10, 20, 30, 40)</span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Sum of args: {res}"</span>)</span></div>
+                `;
+            } else if (scenario === 'kwargs_info') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>def build_profile(**kwargs):</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>&nbsp;&nbsp;&nbsp;&nbsp;return kwargs</span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>user = build_profile(name=<span class="text-emerald-300">"Alice"</span>, role=<span class="text-emerald-300">"Admin"</span>)</span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Profile Dict: {user}"</span>)</span></div>
+                `;
+            } else if (scenario === 'combined') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>def log_data(title, *tags, **meta):</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>&nbsp;&nbsp;&nbsp;&nbsp;return f"{title} | Tags: {tags} | Meta: {meta}"</span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>out = log_data(<span class="text-emerald-300">"Lab 13"</span>, <span class="text-emerald-300">"Py"</span>, <span class="text-emerald-300">"Adv"</span>, ver=3.10)</span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(out)</span></div>
+                `;
+            }
+        }
+
+        function buildExecutionSteps() {
+            stepList = [];
+
+            if (scenario === 'args_sum') {
+                stepList = [
+                    {
+                        line: 1,
+                        v1: { label: 'func', val: '<function sum_numbers>', type: 'function' },
+                        v2: { label: 'args', val: '--', type: '--' },
+                        v3: { label: 'res', val: '--', type: '--' },
+                        consoleMsg: `> Defined sum_numbers(*args)`,
+                        explanation: `Line 1: Loaded function sum_numbers supporting variable positional args.`
+                    },
+                    {
+                        line: 3,
+                        v1: { label: 'func', val: '<function sum_numbers>', type: 'function' },
+                        v2: { label: 'args', val: '(10, 20, 30, 40)', type: 'tuple' },
+                        v3: { label: 'res', val: '100', type: 'int' },
+                        consoleMsg: `> Called sum_numbers(10, 20, 30, 40) -> args packed into tuple (10, 20, 30, 40)`,
+                        explanation: `Line 3: 4 positional arguments packed into tuple args = (10, 20, 30, 40).`
+                    },
+                    {
+                        line: 4,
+                        v1: { label: 'func', val: '<function sum_numbers>', type: 'function' },
+                        v2: { label: 'args', val: '(10, 20, 30, 40)', type: 'tuple' },
+                        v3: { label: 'res', val: '100', type: 'int' },
+                        consoleMsg: `<span class='text-emerald-300 font-bold'>Sum of args: 100</span>`,
+                        explanation: `Line 4: Printed summation result computed from *args.`
+                    }
+                ];
+            } else if (scenario === 'kwargs_info') {
+                stepList = [
+                    {
+                        line: 1,
+                        v1: { label: 'func', val: '<function build_profile>', type: 'function' },
+                        v2: { label: 'kwargs', val: '--', type: '--' },
+                        v3: { label: 'user', val: '--', type: '--' },
+                        consoleMsg: `> Defined build_profile(**kwargs)`,
+                        explanation: `Line 1: Loaded function build_profile supporting variable keyword arguments.`
+                    },
+                    {
+                        line: 3,
+                        v1: { label: 'func', val: '<function build_profile>', type: 'function' },
+                        v2: { label: 'kwargs', val: '{"name": "Alice", "role": "Admin"}', type: 'dict' },
+                        v3: { label: 'user', val: '{"name": "Alice", "role": "Admin"}', type: 'dict' },
+                        consoleMsg: `> Called build_profile(name="Alice", role="Admin") -> kwargs packed into dict`,
+                        explanation: `Line 3: Keyword parameters packed into dictionary kwargs.`
+                    },
+                    {
+                        line: 4,
+                        v1: { label: 'func', val: '<function build_profile>', type: 'function' },
+                        v2: { label: 'kwargs', val: '{"name": "Alice", "role": "Admin"}', type: 'dict' },
+                        v3: { label: 'user', val: '{"name": "Alice", "role": "Admin"}', type: 'dict' },
+                        consoleMsg: `<span class='text-emerald-300 font-bold'>Profile Dict: {'name': 'Alice', 'role': 'Admin'}</span>`,
+                        explanation: `Line 4: Printed user profile dictionary.`
+                    }
+                ];
+            } else if (scenario === 'combined') {
+                stepList = [
+                    {
+                        line: 1,
+                        v1: { label: 'title', val: '"Lab 13"', type: 'str' },
+                        v2: { label: 'tags', val: "('Py', 'Adv')", type: 'tuple' },
+                        v3: { label: 'meta', val: "{'ver': 3.1}", type: 'dict' },
+                        consoleMsg: `> Defined log_data(title, *tags, **meta)`,
+                        explanation: `Line 1: Function signature combining standard, *args, and **kwargs.`
+                    },
+                    {
+                        line: 3,
+                        v1: { label: 'title', val: '"Lab 13"', type: 'str' },
+                        v2: { label: 'tags', val: "('Py', 'Adv')", type: 'tuple' },
+                        v3: { label: 'meta', val: "{'ver': 3.1}", type: 'dict' },
+                        consoleMsg: `> Executed log_data("Lab 13", "Py", "Adv", ver=3.10)`,
+                        explanation: `Line 3: Mapped positional, *args tuple, and **kwargs dict parameters.`
+                    },
+                    {
+                        line: 4,
+                        v1: { label: 'title', val: '"Lab 13"', type: 'str' },
+                        v2: { label: 'tags', val: "('Py', 'Adv')", type: 'tuple' },
+                        v3: { label: 'meta', val: "{'ver': 3.1}", type: 'dict' },
+                        consoleMsg: `<span class='text-emerald-300 font-bold'>Lab 13 | Tags: ('Py', 'Adv') | Meta: {'ver': 3.1}</span>`,
+                        explanation: `Line 4: Printed formatted log string.`
+                    }
+                ];
+            }
+        }
+
+        function startSimulation() {
+            updateScenarioDisplay();
+            buildExecutionSteps();
+            currentStepIdx = 0;
+
+            hideResultBanner();
+            clearConsole();
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = false;
+            btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95 shadow-lg shadow-emerald-600/20";
+
+            appendConsole(`>>> Executing: extended_args.py [Scenario: ${scenario}]`);
+            executeStepAtIndex(0);
+        }
+
+        function executeStepAtIndex(idx) {
+            const step = stepList[idx];
+            highlightLine(step.line);
+
+            document.getElementById('lblVar1').innerText = step.v1.label;
+            document.getElementById('valVar1').innerText = step.v1.val;
+            document.getElementById('typeVar1').innerText = step.v1.type;
+
+            document.getElementById('lblVar2').innerText = step.v2.label;
+            document.getElementById('valVar2').innerText = step.v2.val;
+            document.getElementById('typeVar2').innerText = step.v2.type;
+
+            document.getElementById('lblVar3').innerText = step.v3.label;
+            document.getElementById('valVar3').innerText = step.v3.val;
+            document.getElementById('typeVar3').innerText = step.v3.type;
+
+            triggerMemUpdate('memVar1');
+            triggerMemUpdate('memVar2');
+            triggerMemUpdate('memVar3');
+
+            appendConsole(step.consoleMsg);
+            document.getElementById('explanationText').innerText = step.explanation;
+            document.getElementById('currentStepBadge').innerText = `Step ${idx + 1}/${stepList.length}`;
+
+            if (idx === stepList.length - 1) {
+                showResultBanner("Extended Arguments Execution Completed", false);
+                const btnStep = document.getElementById('btnStep');
+                btnStep.disabled = true;
+                btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+                document.getElementById('currentStepBadge').innerText = "Finished";
+            }
+        }
+
+        function stepExecute() {
+            if (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function runAll() {
+            startSimulation();
+            while (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function resetSimulation() {
+            currentStepIdx = 0;
+            highlightLine(0);
+            clearConsole();
+            hideResultBanner();
+            appendConsole("<p class='text-slate-500 italic'>>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>");
+            document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+            document.getElementById('currentStepBadge').innerText = "Step: Ready";
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = true;
+            btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+        }
+
+        function highlightLine(lineNum) {
+            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+            if (lineNum > 0) {
+                const target = document.getElementById(`line${lineNum}`);
+                if (target) target.classList.add('active');
+            }
+        }
+
+        function clearConsole() {
+            document.getElementById('terminal').innerHTML = '';
+        }
+
+        function appendConsole(htmlContent) {
+            const term = document.getElementById('terminal');
+            const p = document.createElement('p');
+            p.innerHTML = htmlContent;
+            term.appendChild(p);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function triggerMemUpdate(memId) {
+            const el = document.getElementById(memId);
+            if (!el) return;
+            el.classList.add('updated');
+            setTimeout(() => { el.classList.remove('updated'); }, 500);
+        }
+
+        function showResultBanner(text, isError) {
+            const banner = document.getElementById('resultBanner');
+            const bannerText = document.getElementById('resultBannerText');
+            bannerText.innerText = text;
+            banner.classList.remove('hidden');
+        }
+
+        function hideResultBanner() {
+            document.getElementById('resultBanner').classList.add('hidden');
+        }
+
+        function checkPretest() {
+            const q1 = document.querySelector('input[name="pq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="pq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('preq1-box');
+            const q1fb = document.getElementById('preq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! *args packs variable positional arguments into an immutable tuple.";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. *args stores positional inputs as a tuple.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('preq2-box');
+            const q2fb = document.getElementById('preq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'a') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! **kwargs packs variable keyword arguments into a dictionary.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. **kwargs stores named inputs as a dictionary.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('pretest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function checkPosttest() {
+            const q1 = document.querySelector('input[name="postq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="postq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('postq1-box');
+            const q1fb = document.getElementById('postq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! sum((10, 20, 30)) returns 60.";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. The function sums 10 + 20 + 30 = 60.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('postq2-box');
+            const q2fb = document.getElementById('postq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'b') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! Use **d to unpack a dictionary into keyword arguments.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. Use ** to unpack dictionary key-value pairs into call arguments.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('posttest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function sendAiQuery() {
+            const input = document.getElementById('aiQueryInput');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const chatBox = document.getElementById('aiChatBox');
+
+            const userDiv = document.createElement('div');
+            userDiv.className = 'flex items-start gap-3 justify-end';
+            userDiv.innerHTML = `
+                <div class="bg-indigo-600/30 border border-indigo-500/40 p-3 rounded-lg text-slate-200">
+                    ${query}
+                </div>
+                <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 text-xs shrink-0">You</div>
+            `;
+            chatBox.appendChild(userDiv);
+            input.value = '';
+
+            let response = "Try running extended argument scenarios in the simulator to see how *args tuples and **kwargs dicts update in memory!";
+            const qLower = query.toLowerCase();
+            if (qLower.includes('args') && !qLower.includes('kwargs')) {
+                response = "`*args` allows a function to accept any number of positional arguments, which are stored as a tuple inside the function!";
+            } else if (qLower.includes('kwargs')) {
+                response = "`**kwargs` captures arbitrary keyword arguments as a dictionary (e.g., `func(name='Alice', age=20)` creates `kwargs = {'name': 'Alice', 'age': 20}`)!";
+            } else if (qLower.includes('order') || qLower.includes('sequence')) {
+                response = "The parameter declaration sequence must follow: 1. Positional args, 2. `*args`, 3. Default parameters, 4. `**kwargs`!";
+            } else if (qLower.includes('unpack')) {
+                response = "You can unpack containers into function arguments using `*list` for positional args or `**dict` for keyword args!";
+            }
+
+            setTimeout(() => {
+                const aiDiv = document.createElement('div');
+                aiDiv.className = 'flex items-start gap-3';
+                aiDiv.innerHTML = `
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        ${response}
+                    </div>
+                `;
+                chatBox.appendChild(aiDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 500);
+        }
+    </script>
+</body>
+</html>

@@ -1,0 +1,186 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OOP Lab: Constructors & Inheritance - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; }
+        .tab-btn.active { background-color: #334155; color: #818cf8; border: 1px solid #475569; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .memory-slot { transition: all 0.5s ease-out; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <header class="bg-[#1e293b] border-b border-[#334155] px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-cube"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Object Oriented Programming</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 2: Constructor Analysis (Java, Python, C++)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <nav class="bg-[#1e293b] border-b border-[#334155] px-6 py-2">
+        <div class="flex gap-4 text-sm font-medium">
+            <button onclick="switchTab('theory')" id="btn-theory" class="tab-btn active px-4 py-2 rounded-lg flex items-center gap-2"><i class="fa-solid fa-book"></i> Theory</button>
+            <button onclick="switchTab('procedure')" id="btn-procedure" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+            <button onclick="switchTab('pretest')" id="btn-pretest" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+            <button onclick="switchTab('simulation')" id="btn-simulation" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+            <button onclick="switchTab('posttest')" id="btn-posttest" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+            <button onclick="switchTab('ai')" id="btn-ai" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Socratic Assistant</button>
+        </div>
+    </nav>
+
+    <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
+        <!-- Theory Tab -->
+        <div id="content-theory" class="tab-content active bg-[#1e293b] p-8 rounded-xl border border-[#334155] shadow-xl space-y-6">
+            <h2 class="text-2xl font-bold text-indigo-400 flex items-center gap-3"><i class="fa-solid fa-cube"></i> Theory: Constructors</h2>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                A constructor is a special member function that is executed automatically when an object of a class is created. It is used to initialize the object's data members.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-slate-900 p-5 rounded-lg border border-slate-700">
+                    <h4 class="font-bold text-indigo-300 mb-2">Java</h4>
+                    <p class="text-xs text-slate-400">Uses the class name as the constructor method name.</p>
+                </div>
+                <div class="bg-slate-900 p-5 rounded-lg border border-slate-700">
+                    <h4 class="font-bold text-indigo-300 mb-2">Python</h4>
+                    <p class="text-xs text-slate-400">Uses the <code>__init__</code> special method.</p>
+                </div>
+                <div class="bg-slate-900 p-5 rounded-lg border border-slate-700">
+                    <h4 class="font-bold text-indigo-300 mb-2">C++</h4>
+                    <p class="text-xs text-slate-400">Uses the class name with an optional member initializer list.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Procedure Tab -->
+        <div id="content-procedure" class="tab-content hidden bg-[#1e293b] p-8 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-6">Procedure</h2>
+            <ol class="list-decimal list-inside text-sm text-slate-300 space-y-3">
+                <li>Select a language tab (Java, Python, C++) in the Simulation area.</li>
+                <li>Examine the constructor syntax and attribute initialization.</li>
+                <li>Trigger the instantiation process to visualize heap memory allocation.</li>
+            </ol>
+        </div>
+
+        <!-- Pre-Test Tab -->
+        <div id="content-pretest" class="tab-content hidden bg-[#1e293b] p-8 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-6">Pre-Test Assessment</h2>
+            <div id="pretest-form" class="space-y-4 text-sm text-slate-300">
+                <div><p>1. When is a constructor called?</p><textarea class="w-full bg-slate-900 border border-slate-700 p-2 mt-1" rows="1"></textarea></div>
+                <div><p>2. How do you define a constructor in Python?</p><textarea class="w-full bg-slate-900 border border-slate-700 p-2 mt-1" rows="1"></textarea></div>
+                <div><p>3. Can a class have multiple constructors?</p><textarea class="w-full bg-slate-900 border border-slate-700 p-2 mt-1" rows="1"></textarea></div>
+                <div><p>4. What is the role of 'this' in Java?</p><textarea class="w-full bg-slate-900 border border-slate-700 p-2 mt-1" rows="1"></textarea></div>
+                <div><p>5. What is a default constructor?</p><textarea class="w-full bg-slate-900 border border-slate-700 p-2 mt-1" rows="1"></textarea></div>
+                <div><p>6. Define parameterized constructor.</p><textarea class="w-full bg-slate-900 border border-slate-700 p-2 mt-1" rows="1"></textarea></div>
+                <button onclick="alert('Submitted!')" class="bg-indigo-600 px-6 py-2 rounded text-white font-bold text-sm">Submit</button>
+            </div>
+        </div>
+
+        <!-- Simulation Tab -->
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <div class="flex gap-6 border-b border-[#334155] pb-2">
+                <button onclick="loadSim('java')" id="lang-java" class="font-bold text-indigo-400 text-sm">Java</button>
+                <button onclick="loadSim('python')" id="lang-python" class="text-slate-400 font-bold text-sm">Python</button>
+                <button onclick="loadSim('cpp')" id="lang-cpp" class="text-slate-400 font-bold text-sm">C++</button>
+            </div>
+            <div id="codeDisplay" class="font-mono text-xs text-emerald-400 bg-slate-950 p-8 rounded border border-slate-700 min-h-[100px]"></div>
+            <div class="flex gap-2">
+                <button onclick="instantiateObject()" class="bg-indigo-600 px-6 py-3 rounded w-48 text-white font-bold text-sm hover:bg-indigo-500 transition">Instantiate Object</button>
+                <button onclick="resetHeap()" class="bg-slate-700 px-6 py-3 rounded text-white font-bold text-sm hover:bg-slate-600 transition">Reset Heap</button>
+            </div>
+            
+            <div class="bg-slate-900 p-6 rounded border border-slate-700">
+                <h3 class="text-sm font-bold text-indigo-300 mb-4 uppercase tracking-wider">Heap Memory (Object Allocation)</h3>
+                <div id="heapDisplay" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-4 border-2 border-slate-700 rounded-lg text-center text-slate-500 italic text-sm">No instances allocated yet.</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Post-Test Tab -->
+        <div id="content-posttest" class="tab-content hidden bg-[#1e293b] p-8 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-6">Post-Test Assessment</h2>
+            <div class="space-y-4 text-sm text-slate-300">
+                <p>1. Compare constructor syntax in Java vs C++.</p>
+                <p>2. What is constructor overloading?</p>
+                <p>3. Explain member initializer lists in C++ constructors.</p>
+                <p>4. Why does Python use __init__ instead of class name?</p>
+                <p>5. What are private constructors used for?</p>
+                <p>6. Describe the order of constructor execution in inheritance.</p>
+                <textarea class="w-full bg-slate-900 border border-slate-700 p-4 text-sm text-white h-24 mt-2" placeholder="Your answers here..."></textarea>
+                <button onclick="alert('Submitted!')" class="bg-indigo-600 px-6 py-2 rounded text-white font-bold text-sm">Submit</button>
+            </div>
+        </div>
+
+        <!-- AI Assistant Tab -->
+        <div id="content-ai" class="tab-content hidden bg-[#1e293b] p-8 rounded-xl border border-[#334155]">
+            <h2 class="text-lg font-bold text-indigo-400 mb-4 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Socratic Assistant</h2>
+            <div id="chatBox" class="h-48 bg-slate-950 p-4 rounded mb-4 overflow-y-auto text-xs font-mono text-slate-300 border border-slate-700"></div>
+            <div class="flex gap-2">
+                <input type="text" id="aiInput" class="flex-1 bg-slate-900 border border-slate-700 p-3 rounded text-sm text-white" placeholder="Ask about constructors...">
+                <button onclick="askAI()" class="bg-indigo-600 px-4 py-3 rounded text-white text-sm font-bold">Ask</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const codes = {
+            java: "public class Student {<br>&nbsp;&nbsp;String name;<br>&nbsp;&nbsp;public Student(String n) { name = n; }<br>}<br>Student s1 = new Student(\"Alice\");",
+            python: "class Student:<br>&nbsp;&nbsp;def __init__(self, name): self.name = name<br>s1 = Student('Alice')",
+            cpp: "class Student {<br>&nbsp;&nbsp;public: string name;<br>&nbsp;&nbsp;Student(string n) : name(n) {}<br>};<br>Student s1(\"Alice\");"
+        };
+        let currentLang = 'java';
+
+        function switchTab(t) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active') || el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('content-' + t).classList.add('active');
+            document.getElementById('content-' + t).classList.remove('hidden');
+            document.getElementById('btn-' + t).classList.add('active');
+        }
+        function loadSim(lang) { 
+            currentLang = lang;
+            document.getElementById('codeDisplay').innerHTML = codes[lang]; 
+            document.querySelectorAll('button[onclick^="loadSim"]').forEach(btn => btn.classList.remove('font-bold', 'text-indigo-400'));
+            document.getElementById('lang-' + lang).classList.add('font-bold', 'text-indigo-400');
+        }
+        function instantiateObject() {
+            const display = document.getElementById('heapDisplay');
+            const addr = Math.floor(Math.random() * 9000) + 1000;
+            display.innerHTML = `
+                <div class="memory-slot bg-slate-800 p-4 rounded-lg border border-emerald-500/50 shadow-inner">
+                    <p class="text-[10px] text-emerald-400 font-bold mb-1">Heap Allocation @ 0x${addr.toString(16).toUpperCase()}</p>
+                    <p class="text-sm font-bold text-white">Instance: s1 (${currentLang.toUpperCase()})</p>
+                    <p class="text-xs text-slate-300">Initialized by Constructor</p>
+                </div>
+            `;
+        }
+        function resetHeap() {
+            document.getElementById('heapDisplay').innerHTML = `<div class="p-4 border-2 border-slate-700 rounded-lg text-center text-slate-500 italic text-sm">No instances allocated yet.</div>`;
+        }
+        function askAI() {
+            const q = document.getElementById('aiInput').value;
+            document.getElementById('chatBox').innerHTML += `<p class="mb-2"><span class="text-indigo-400">You:</span> ${q}</p><p class="mb-2"><span class="text-emerald-400">AI:</span> A constructor initializes object attributes at the moment of object creation in heap memory.</p>`;
+            document.getElementById('aiInput').value = '';
+        }
+        loadSim('java');
+    </script>
+</body>
+</html>
+```eof

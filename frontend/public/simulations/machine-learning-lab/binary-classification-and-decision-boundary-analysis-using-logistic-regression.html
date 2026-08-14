@@ -1,0 +1,596 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Binary Classification & Logistic Regression — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .code-line{transition:background-color .25s ease,border-color .25s ease;border-left:4px solid transparent;}
+  .code-line.active{background:rgba(124,58,237,.09);border-left-color:#7c3aed;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-square-poll-vertical"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Machine Learning Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment 3: Binary Classification &amp; Decision Boundary Analysis (Logistic Regression)</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2"><i class="fa-solid fa-book-open"></i> Theory</button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Assistant</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Binary Classification &amp; Logistic Regression</h2>
+      <p class="text-sm text-slate-600 leading-relaxed"><strong>Logistic Regression</strong> is a supervised algorithm for <strong>binary classification</strong> where the target $y \in \{0,1\}$. Unlike Linear Regression, which outputs unbounded continuous values, Logistic Regression squashes a linear combination of inputs through the <strong>Sigmoid function</strong> to produce a probability strictly between 0 and 1.</p>
+
+      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 font-mono text-center text-purple-600 text-sm">
+        &sigma;(z) = 1 / (1 + e<sup>&minus;z</sup>) &nbsp;&nbsp;where z = w&middot;x + b
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-wave-square text-emerald-500"></i> Sigmoid Function</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Maps any real number to $P(y=1|x) \in [0,1]$. At $z=0$, $\sigma(z)=0.5$ — this is the decision boundary point.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-sliders text-amber-500"></i> Decision Boundary</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Default probability threshold is 0.5: <code class="font-mono">&yhat; = 1 if P &ge; 0.5 else 0</code>. Adjustable to trade off Precision vs Recall.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-bullseye text-cyan-500"></i> Log-Loss</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Convex cost penalizing confident wrong predictions: <code class="font-mono">J = -1/n &Sigma;[y&middot;log(&yhat;) + (1-y)&middot;log(1-&yhat;)]</code>.</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white"><tr><th class="p-2 text-left">Metric</th><th class="p-2 text-left">Formula</th><th class="p-2 text-left">Answers</th></tr></thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">Accuracy</td><td class="p-2 font-mono">(TP+TN)/Total</td><td class="p-2">Overall, how often is the model right?</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">Precision</td><td class="p-2 font-mono">TP/(TP+FP)</td><td class="p-2">Of predicted positives, how many are correct?</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">Recall</td><td class="p-2 font-mono">TP/(TP+FN)</td><td class="p-2">Of actual positives, how many did we catch?</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bg-purple-50/60 p-4 rounded-xl border border-purple-100 text-xs text-slate-600 space-y-1.5">
+        <h4 class="font-bold text-purple-600 text-sm"><i class="fa-solid fa-circle-info"></i> Why Linear Regression Fails for Classification</h4>
+        <p>Linear Regression outputs unbounded predictions ($&gt;1$ or $&lt;0$) and is highly sensitive to outliers, which shifts the decision boundary unpredictably. Logistic Regression guarantees a valid probability output in $[0,1]$ and is trained by minimizing the convex Log-Loss rather than MSE.</p>
+      </div>
+
+      <div class="bg-amber-50/60 p-4 rounded-xl border border-amber-100 text-xs text-slate-600 space-y-1.5">
+        <h4 class="font-bold text-amber-700 text-sm"><i class="fa-solid fa-triangle-exclamation"></i> A Note on the Demo Weights</h4>
+        <p>The sigmoid, log-loss, and accuracy/precision/recall computations in this simulator are all <strong>genuinely computed live</strong> from the current w, b, and threshold. The specific final w, b values shown for each preset dataset are illustrative approximations of what <code class="font-mono">LogisticRegression.fit()</code> would converge to on that toy data — chosen to produce a clean-looking decision boundary for teaching, not derived from a full iterative solver. All downstream metrics (log-loss, accuracy, precision, recall) are always mathematically consistent with whatever w, b, and threshold are active, so changing the threshold slider always changes the numbers correctly.</p>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Select a <strong>Classification Dataset</strong> (Exam Pass/Fail, Tumor Malignancy, or Loan Default) or click a Quick Preset.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Adjust the <strong>Decision Threshold</strong> slider (0.30–0.70) to see its live effect on Precision and Recall.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Simulation</strong> to plot data points onto the classification canvas.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step Epoch</strong> to trace the sigmoid curve converging line-by-line.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Watch the <strong>Sigmoid Curve &amp; Decision Boundary</strong> canvas classify points live as Accuracy, Log-Loss, Precision, and Recall update.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Run / Execute All</strong> to finish training instantly, or <strong>Reset</strong> to start over.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What is the output range of the Sigmoid function &sigma;(z)?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> [-&infin;, +&infin;]</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> [0.0, 1.0]</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> [-1.0, +1.0]</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What cost function is minimized during Logistic Regression training?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> Mean Squared Error (MSE)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> Binary Cross-Entropy (Log-Loss)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> Hinge Loss</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. At the decision boundary (z=0), what probability does the sigmoid output?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> 0.5</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> 0.0</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> 1.0</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">4. Precision answers which question?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> Of all actual positives, how many did we catch?</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> How often is the model correct overall?</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> Of everything predicted positive, how many were actually positive?</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Select Classification Dataset</label>
+              <select id="logDataset" onchange="updateDatasetDisplay()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500 min-w-[260px]">
+                <option value="exam">1. Exam Pass (1) vs Fail (0) (Study Hours)</option>
+                <option value="tumor">2. Malignant (1) vs Benign (0) (Tumor Size)</option>
+                <option value="loan">3. Loan Default (1) vs Paid (0) (Credit Score)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Decision Threshold: <span id="thresholdVal" class="text-amber-600 font-mono font-bold">0.50</span></label>
+              <input type="range" id="thresholdSlider" min="0.30" max="0.70" step="0.05" value="0.50" oninput="onThresholdChange()" class="w-36 accent-purple-600 cursor-pointer">
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-play"></i> Start Simulation</button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed"><i class="fa-solid fa-forward-step"></i> Step Epoch</button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-bolt"></i> Run / Execute All</button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('exam')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Exam Pass/Fail</button>
+          <button onclick="loadPreset('tumor')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Tumor Malignancy</button>
+          <button onclick="loadPreset('loan')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Loan Default</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div></div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Epoch: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-code text-purple-600"></i> Scikit-Learn Code Trace</span>
+          </div>
+          <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 text-slate-200 flex-1 space-y-0.5 overflow-x-auto min-h-[220px]"></div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Model Parameter State</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Select a dataset and click 'Start Simulation' or 'Run / Execute All'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-7 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+            <div class="flex justify-between items-center text-xs">
+              <span class="font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-wave-square text-purple-600"></i> Sigmoid Curve &amp; Decision Boundary</span>
+              <span id="metricsBadge" class="font-mono text-emerald-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-[11px]">Acc: -- | Loss: --</span>
+            </div>
+            <div class="bg-slate-950 p-2 rounded-lg border border-slate-200 flex justify-center items-center">
+              <canvas id="logisticCanvas" width="560" height="260" class="w-full h-[260px] rounded"></canvas>
+            </div>
+            <div class="grid grid-cols-4 gap-2 font-mono text-xs">
+              <div class="mem-card bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Accuracy</span>
+                <span id="valAcc" class="text-sm font-bold text-emerald-600">0.0%</span>
+              </div>
+              <div class="mem-card bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Log Loss</span>
+                <span id="valLoss" class="text-sm font-bold text-rose-600">0.000</span>
+              </div>
+              <div class="mem-card bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Precision</span>
+                <span id="valPrec" class="text-sm font-bold text-amber-600">0.00</span>
+              </div>
+              <div class="mem-card bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Recall</span>
+                <span id="valRecall" class="text-sm font-bold text-purple-600">0.00</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal</span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition"><i class="fa-solid fa-trash-can"></i> Clear</button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[100px] max-h-[150px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold"><i class="fa-solid fa-square-check"></i></div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Final Execution Output</h4>
+                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+            <span class="text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200">Status: OK</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. If the decision threshold is lowered from 0.50 to 0.30, what typically happens to Recall for Class 1?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> Recall decreases</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> Recall increases (more positive instances captured)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> Recall stays unchanged</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. Which Scikit-Learn method returns predicted class probabilities?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> model.predict_proba(X)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> model.decision_function(X)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> model.score_class(X)</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. Raising the decision threshold from 0.50 to 0.70 typically:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> Decreases Precision, increases Recall</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> Has no effect on either metric</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> Increases Precision, decreases Recall (fewer, more confident positive predictions)</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. A model that always confidently predicts the wrong class incurs:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> Very high Log-Loss</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> Log-Loss of exactly 0</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> Undefined Log-Loss always</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant</h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about Binary Classification, Sigmoid Curves, Decision Boundaries, or Log-Loss.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., How does threshold affect precision and recall?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{ el.classList.remove('bg-slate-900','text-white'); el.classList.add('text-slate-500'); });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+let scenario = 'exam';
+let stepList = [];
+let currentStepIdx = 0;
+
+const datasets = {
+  exam: { title:"Exam Pass (1) vs Fail (0)", xLabel:"Study Hours",
+    points:[{x:1.0,y:0},{x:1.5,y:0},{x:2.0,y:0},{x:2.5,y:0},{x:3.0,y:0},{x:3.5,y:1},{x:4.0,y:0},{x:4.5,y:1},{x:5.0,y:1},{x:6.0,y:1},{x:7.0,y:1}] },
+  tumor: { title:"Tumor Malignancy (1) vs Benign (0)", xLabel:"Tumor Radius (mm)",
+    points:[{x:5,y:0},{x:7,y:0},{x:9,y:0},{x:11,y:0},{x:12,y:0},{x:13,y:1},{x:14,y:0},{x:15,y:1},{x:17,y:1},{x:19,y:1},{x:22,y:1}] },
+  loan: { title:"Loan Default (1) vs Paid (0)", xLabel:"Credit Risk Index",
+    points:[{x:20,y:0},{x:30,y:0},{x:40,y:0},{x:45,y:0},{x:50,y:1},{x:55,y:0},{x:60,y:1},{x:70,y:1},{x:80,y:1},{x:90,y:1}] }
+};
+
+document.addEventListener("DOMContentLoaded", ()=>{ updateDatasetDisplay(); });
+
+function loadPreset(presetScenario){
+  document.getElementById('logDataset').value = presetScenario;
+  updateDatasetDisplay();
+  runAll();
+}
+
+function onThresholdChange(){
+  const threshold = parseFloat(document.getElementById('thresholdSlider').value);
+  document.getElementById('thresholdVal').innerText = threshold.toFixed(2);
+  if (stepList.length>0) executeStepAtIndex(currentStepIdx);
+}
+
+function updateDatasetDisplay(){
+  scenario = document.getElementById('logDataset').value;
+  const lines = [
+    'from sklearn.linear_model import LogisticRegression',
+    "model = LogisticRegression(solver='lbfgs')",
+    'model.fit(X, y)',
+    'probs = model.predict_proba(X)[:, 1]'
+  ];
+  document.getElementById('codeContainer').innerHTML = lines.map((t,idx)=>`
+    <div id="line${idx+1}" class="code-line px-3 py-1.5 rounded flex items-center gap-3">
+      <span class="text-slate-600 text-xs w-4">${idx+1}</span><span>${t}</span>
+    </div>`).join('');
+  drawPlot(datasets[scenario].points, 0.2, 0, false);
+}
+
+function drawPlot(points, w, b, drawCurve){
+  const canvas = document.getElementById('logisticCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const padding = 45;
+  const width = canvas.width - padding*2;
+  const height = canvas.height - padding*2;
+  const xVals = points.map(p=>p.x);
+  const minX = Math.min(...xVals)*0.8, maxX = Math.max(...xVals)*1.1;
+  const mapX = x => padding + ((x-minX)/(maxX-minX))*width;
+  const mapY = p => canvas.height - padding - (p*height);
+  const threshold = parseFloat(document.getElementById('thresholdSlider').value) || 0.5;
+
+  ctx.strokeStyle = "#475569"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(padding,padding); ctx.lineTo(padding,canvas.height-padding); ctx.lineTo(canvas.width-padding,canvas.height-padding); ctx.stroke();
+
+  ctx.strokeStyle = "#f59e0b"; ctx.setLineDash([4,4]); ctx.lineWidth=1.5;
+  ctx.beginPath(); ctx.moveTo(padding,mapY(threshold)); ctx.lineTo(canvas.width-padding,mapY(threshold)); ctx.stroke(); ctx.setLineDash([]);
+
+  if (drawCurve){
+    ctx.strokeStyle = "#7c3aed"; ctx.lineWidth=3;
+    ctx.beginPath();
+    for (let px=padding; px<=canvas.width-padding; px+=2){
+      const xVal = minX + ((px-padding)/width)*(maxX-minX);
+      const z = w*xVal + b;
+      const prob = 1/(1+Math.exp(-z));
+      const py = mapY(prob);
+      if (px===padding) ctx.moveTo(px,py); else ctx.lineTo(px,py);
+    }
+    ctx.stroke();
+  }
+  points.forEach(p=>{
+    const z = w*p.x+b;
+    const prob = drawCurve ? (1/(1+Math.exp(-z))) : p.y;
+    ctx.fillStyle = p.y===1 ? "#10b981" : "#3b82f6";
+    ctx.beginPath(); ctx.arc(mapX(p.x),mapY(prob),6,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle="#ffffff"; ctx.lineWidth=1.5; ctx.stroke();
+  });
+}
+
+function calculateMetrics(points, w, b){
+  const threshold = parseFloat(document.getElementById('thresholdSlider').value) || 0.5;
+  let tp=0,fp=0,tn=0,fn=0,totalLoss=0;
+  points.forEach(p=>{
+    const z = w*p.x+b;
+    const prob = Math.min(Math.max(1/(1+Math.exp(-z)),1e-15),1-1e-15);
+    const pred = prob>=threshold ? 1 : 0;
+    if (pred===1 && p.y===1) tp++;
+    else if (pred===1 && p.y===0) fp++;
+    else if (pred===0 && p.y===0) tn++;
+    else if (pred===0 && p.y===1) fn++;
+    totalLoss += -(p.y*Math.log(prob) + (1-p.y)*Math.log(1-prob));
+  });
+  const total = points.length;
+  return {
+    accuracy: ((tp+tn)/total)*100,
+    precision: (tp+fp)>0 ? tp/(tp+fp) : 0,
+    recall: (tp+fn)>0 ? tp/(tp+fn) : 0,
+    logLoss: totalLoss/total
+  };
+}
+
+function buildExecutionSteps(){
+  const data = datasets[scenario].points;
+  let wFinal = 1.2, bFinal = -4.5;
+  if (scenario === 'tumor'){ wFinal = 0.45; bFinal = -5.8; }
+  if (scenario === 'loan'){ wFinal = 0.12; bFinal = -6.0; }
+
+  stepList = [
+    { line:1, w:0.1*wFinal, b:0.1*bFinal, consoleMsg:`&gt; Loaded dataset: ${datasets[scenario].title} (${data.length} samples)`, explanation:'Line 1: Imported LogisticRegression and loaded binary target labels.' },
+    { line:2, w:0.4*wFinal, b:0.4*bFinal, consoleMsg:"&gt; Configured Logistic Regression solver (solver='lbfgs')", explanation:'Line 2: Configured classification solver hyperparameters.' },
+    { line:3, w:0.85*wFinal, b:0.85*bFinal, consoleMsg:'&gt; Executing fit(): Minimizing Binary Cross-Entropy (Log-Loss)...', explanation:'Line 3: Model parameters (w, b) converging toward the decision boundary.' },
+    { line:4, w:wFinal, b:bFinal, consoleMsg:`<span class="text-emerald-400 font-bold">Model Converged! Sigmoid Decision Boundary fitted.</span>`, explanation:'Line 4: Generated probability predictions via predict_proba().', final:true, resultText:'Logistic Classifier Trained Successfully' }
+  ];
+}
+
+function startSimulation(){
+  updateDatasetDisplay();
+  buildExecutionSteps();
+  currentStepIdx = 0;
+  hideResultBanner();
+  clearConsole();
+  document.getElementById('progressFill').style.width='0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95";
+  appendConsole(`&gt;&gt;&gt; Executing: ml_logistic_regression.py [Dataset: ${scenario}]`);
+  executeStepAtIndex(0);
+}
+
+function executeStepAtIndex(idx){
+  const step = stepList[idx];
+  highlightLine(step.line);
+  const metrics = calculateMetrics(datasets[scenario].points, step.w, step.b);
+  document.getElementById('valAcc').innerText = `${metrics.accuracy.toFixed(1)}%`;
+  document.getElementById('valLoss').innerText = metrics.logLoss.toFixed(3);
+  document.getElementById('valPrec').innerText = metrics.precision.toFixed(2);
+  document.getElementById('valRecall').innerText = metrics.recall.toFixed(2);
+  document.getElementById('metricsBadge').innerText = `Acc: ${metrics.accuracy.toFixed(1)}% | Loss: ${metrics.logLoss.toFixed(3)}`;
+  drawPlot(datasets[scenario].points, step.w, step.b, true);
+  appendConsole(step.consoleMsg);
+  document.getElementById('explanationText').innerText = step.explanation;
+  document.getElementById('currentStepBadge').innerText = `Epoch ${idx+1}/${stepList.length}`;
+  document.getElementById('progressFill').style.width = `${((idx+1)/stepList.length)*100}%`;
+  if (step.final){
+    showResultBanner(step.resultText);
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+    document.getElementById('currentStepBadge').innerText = "Converged";
+  }
+}
+
+function stepExecute(){ if (currentStepIdx < stepList.length-1){ currentStepIdx++; executeStepAtIndex(currentStepIdx); } }
+function runAll(){
+  startSimulation();
+  const timer = setInterval(()=>{
+    if (currentStepIdx >= stepList.length-1){ clearInterval(timer); return; }
+    currentStepIdx++; executeStepAtIndex(currentStepIdx);
+  }, 500);
+}
+
+function resetSimulation(){
+  currentStepIdx = 0;
+  highlightLine(0);
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('valAcc').innerText = "0.0%";
+  document.getElementById('valLoss').innerText = "0.000";
+  document.getElementById('valPrec').innerText = "0.00";
+  document.getElementById('valRecall').innerText = "0.00";
+  document.getElementById('metricsBadge').innerText = "Acc: -- | Loss: --";
+  drawPlot(datasets[scenario].points, 0.2, 0, false);
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Select a dataset and click 'Start Simulation' or 'Run / Execute All'.";
+  document.getElementById('currentStepBadge').innerText = "Epoch: Ready";
+  document.getElementById('progressFill').style.width = '0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+}
+
+function highlightLine(lineNum){
+  document.querySelectorAll('.code-line').forEach(el=>el.classList.remove('active'));
+  if (lineNum>0){ const t=document.getElementById(`line${lineNum}`); if (t) t.classList.add('active'); }
+}
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){ const term=document.getElementById('terminal'); const p=document.createElement('p'); p.innerHTML=html; term.appendChild(p); term.scrollTop=term.scrollHeight; }
+function showResultBanner(text){ document.getElementById('resultBannerText').innerText=text; document.getElementById('resultBanner').classList.remove('hidden'); }
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q, correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try adjusting the threshold slider in the simulator to see how the decision boundary shifts and affects Precision/Recall!";
+  if (q.includes('sigmoid') || q.includes('activation')) response = "The Sigmoid function σ(z) = 1/(1+e^-z) squashes the linear output z = wx+b into a probability range [0,1]. At z=0 it outputs exactly 0.5.";
+  else if (q.includes('threshold') || q.includes('boundary')) response = "Lowering the decision threshold (e.g. 0.5 → 0.3) captures more positive instances (higher Recall) but risks more false positives (lower Precision). Raising it does the opposite.";
+  else if (q.includes('precision')) response = "Precision = TP / (TP+FP) — of everything the model called positive, how many actually were? High precision means few false alarms.";
+  else if (q.includes('recall')) response = "Recall = TP / (TP+FN) — of all actual positives, how many did the model catch? High recall means few missed positives.";
+  else if (q.includes('loss') || q.includes('log') || q.includes('cross-entropy')) response = "Log-Loss (Binary Cross-Entropy) measures how well predicted probabilities match actual labels. A confident wrong prediction (e.g. predicting 0.99 for the true label 0) incurs a very heavy penalty.";
+  else if (q.includes('linear regression') || q.includes('why not')) response = "Linear Regression can output values outside [0,1] which makes no sense as a probability, and it's trained to minimize MSE rather than the convex Log-Loss that classification needs.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+</script>
+</body>
+</html>

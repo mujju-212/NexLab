@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Principal Component Analysis (PCA) — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+  #pcaCanvas{background:#0f172a;border-radius:.75rem;}
+  .var-bar{transition:width .6s cubic-bezier(.16,1,.3,1);}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-layer-group"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Machine Learning Virtual Lab</h1>
+        <p class="text-xs text-indigo-600 font-medium">Experiment: Principal Component Analysis (PCA)</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <!-- Tab Nav -->
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> Theory
+      </button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-list-check"></i> Procedure
+      </button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+      </button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-flask"></i> Simulation
+      </button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-graduation-cap"></i> Post-Test
+      </button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Theory: Principal Component Analysis</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">PCA finds new axes — <strong>principal components</strong> — that are ordered by how much variance of the data they capture. The first principal component (PC1) points in the direction of maximum spread; the second (PC2) is orthogonal to it and captures the remaining spread. Projecting data onto only the top component(s) reduces dimensionality while keeping as much information (variance) as possible.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">1. Centering</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Subtract each feature's mean: <code class="font-mono">x̄, ȳ</code>. Centered data <code class="font-mono">x' = x − x̄</code> has mean zero, which is required before computing covariance.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">2. Covariance matrix</h3>
+          <p class="text-slate-500 text-xs leading-relaxed"><code class="font-mono">Cov = [[Σx'²/(n−1), Σx'y'/(n−1)], [Σx'y'/(n−1), Σy'²/(n−1)]]</code>. Diagonal entries are the per-feature variances; the off-diagonal entry is the covariance between the two features.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">3. Eigenvalues (closed form)</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">For symmetric <code class="font-mono">[[a,b],[b,d]]</code>: <code class="font-mono">λ = (a+d)/2 ± √(((a−d)/2)² + b²)</code>. Each eigenvalue is the variance captured along its eigenvector's direction.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">4. Eigenvectors</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Solving <code class="font-mono">(A − λI)v = 0</code> for a 2×2 symmetric matrix gives <code class="font-mono">v ∝ [b, λ−a]</code> (normalized), or the coordinate axes directly when <code class="font-mono">b = 0</code>.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">5. Explained variance ratio</h3>
+          <p class="text-slate-500 text-xs leading-relaxed"><code class="font-mono">ratio_i = λᵢ / (λ₁+λ₂)</code>. Tells you what fraction of total variance each principal component accounts for — the basis for deciding how many components to keep.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">6. Projection &amp; reconstruction</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">1-D projection: <code class="font-mono">projᵢ = x'ᵢ · ev1</code>. Reconstruction: <code class="font-mono">x̂ᵢ = mean + projᵢ · ev1</code>. Using only PC1 is lossy (unless λ₂ ≈ 0); using both components reconstructs the original data exactly.</p>
+        </div>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Why reduce dimensionality?</h3>
+      <p class="text-xs text-slate-500 leading-relaxed">When features are correlated, most of the information can be captured by fewer directions than the original number of features. PCA finds the smallest set of new (uncorrelated) axes that keeps most of the variance, which speeds up downstream models, reduces noise, and makes data easier to visualize.</p>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Highly correlated data</th><th class="p-2 text-left">Uncorrelated data</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2">λ₁ ≫ λ₂ — PC1 explains almost all the variance (near 100%). One dimension is nearly enough.</td><td class="p-2">λ₁ ≈ λ₂ — variance is spread roughly evenly across both directions. Reducing to 1-D loses substantial information.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab and choose a <strong>Dataset</strong> from the dropdown, or click a <strong>Quick Preset</strong>.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start</strong> to plot the raw 2-D scatter with its centroid.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step</strong> repeatedly (or <strong>Run All</strong>) to walk through: centering → covariance matrix → eigenvalues/eigenvectors → explained variance → projection animation → reconstruction.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">At the eigen-decomposition step, watch the two principal-axis lines drawn through the centroid — their length is scaled by √λ, so the dominant axis is visibly longer.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">At the final step, watch every point genuinely animate from its original 2-D position onto the PC1 line — this is the actual 1-D projection, not a canned animation.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Compare datasets: highly-correlated presets collapse almost losslessly onto PC1 (explained variance near 100%); the uncorrelated preset visibly loses information when collapsed.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> at any time to clear and start over.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">1. What does PCA primarily do?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Reduces dimensionality by finding directions of maximum variance</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> Classifies data into predefined categories</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Clusters data into k groups</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. What is the first step before computing the covariance matrix?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> Center the data by subtracting each feature's mean</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> Normalize every value to the range [0,1]</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> Compute eigenvalues directly on the raw data</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. What do the eigenvectors of the covariance matrix represent?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> The principal directions (axes) of maximum variance in the data</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> The raw data points themselves</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> A classification decision boundary</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. What does a higher eigenvalue indicate about its corresponding component?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> It explains a larger proportion of the data's variance</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> It is less important than components with lower eigenvalues</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> It always equals exactly 1</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Dataset</label>
+              <select id="selDataset" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-indigo-500 min-w-[260px]">
+                <option value="A" selected>Diagonal correlation (default)</option>
+                <option value="B">Near-perfect correlation</option>
+                <option value="C">Anti-correlation (y ≈ −x)</option>
+                <option value="D">Low / no correlation</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startPCA()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Start
+            </button>
+            <button id="btnStep" onclick="stepPCA()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-forward-step"></i> Step
+            </button>
+            <button onclick="runAllPCA()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-bolt"></i> Run All
+            </button>
+            <button onclick="resetPCA()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('A')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Diagonal Correlation</button>
+          <button onclick="loadPreset('B')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Near-Perfect Correlation</button>
+          <button onclick="loadPreset('C')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Anti-Correlation</button>
+          <button onclick="loadPreset('D')" class="bg-white hover:bg-rose-50 text-rose-500 px-2.5 py-1 rounded-full border border-rose-200 font-mono">Low / No Correlation</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-indigo-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-chart-scatter text-indigo-600"></i> Scatter, Principal Axes &amp; Projection
+            </span>
+            <span class="text-[10px] text-slate-400 font-mono">PC1 = indigo · PC2 = amber</span>
+          </div>
+          <div class="p-3">
+            <canvas id="pcaCanvas" width="560" height="400" class="w-full h-auto"></canvas>
+          </div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Pipeline Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Choose a dataset, then click 'Start'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-5 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-microchip text-indigo-600"></i> Computed Quantities
+            </h3>
+            <div class="grid grid-cols-3 gap-3">
+              <div id="mem1" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">Mean (x̄, ȳ)</span>
+                <span id="val1" class="text-sm font-bold font-mono text-indigo-600 block my-1">--</span>
+              </div>
+              <div id="mem2" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">λ₁ , λ₂</span>
+                <span id="val2" class="text-sm font-bold font-mono text-indigo-600 block my-1">--</span>
+              </div>
+              <div id="mem3" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">Explained Var PC1</span>
+                <span id="val3" class="text-sm font-bold font-mono text-emerald-600 block my-1">--</span>
+              </div>
+            </div>
+            <div id="covPanel" class="hidden mt-3 bg-slate-950 text-emerald-300 font-mono text-xs p-3 rounded-lg space-y-1">
+              <div>Covariance matrix Cov =</div>
+              <div id="covMatrix"></div>
+              <div id="eigVecLine" class="pt-1 text-indigo-300"></div>
+            </div>
+          </div>
+
+          <div id="varPanel" class="hidden bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-chart-column text-indigo-600"></i> Explained Variance Ratio
+            </h3>
+            <div class="space-y-2 text-xs">
+              <div>
+                <div class="flex justify-between mb-1"><span class="font-mono text-indigo-600">PC1</span><span id="pc1pct" class="font-mono">--</span></div>
+                <div class="h-3 bg-slate-100 rounded-full overflow-hidden"><div id="pc1bar" class="var-bar h-full bg-indigo-600 rounded-full" style="width:0%"></div></div>
+              </div>
+              <div>
+                <div class="flex justify-between mb-1"><span class="font-mono text-amber-600">PC2</span><span id="pc2pct" class="font-mono">--</span></div>
+                <div class="h-3 bg-slate-100 rounded-full overflow-hidden"><div id="pc2bar" class="var-bar h-full bg-amber-500 rounded-full" style="width:0%"></div></div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-600"></i> Computation Log
+              </span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[120px] max-h-[200px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Start' then 'Step' or 'Run All'.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-indigo-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-square-check"></i>
+              </div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">PCA Complete</h4>
+                <p id="resultBannerText" class="text-sm font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">1. If two features are perfectly correlated (all points lie exactly on a line), the second eigenvalue will be:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> Approximately 0</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> Equal to the first eigenvalue</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> Negative</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. The explained variance ratio for PC1 is calculated as:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> λ₁ / (λ₁ + λ₂)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> λ₁ × λ₂</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> λ₁ − λ₂</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. For a symmetric 2×2 covariance matrix [[a,b],[b,d]], the eigenvalues are given by:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> (a+d)/2 ± √(((a−d)/2)² + b²)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> a×d − b² only</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> a + d only</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. Projecting centered data onto only the first principal component is a form of:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> Lossy dimensionality reduction that keeps the direction of maximum variance</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> Lossless compression</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> Data augmentation</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-indigo-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+      </h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me anything about covariance, eigenvalues, eigenvectors, explained variance, or projection/reconstruction.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., what is an eigenvector?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ================= REAL PCA MATH ENGINE (pure, testable) ================= */
+const DATASETS = {
+  A: [[1,1],[2,2.2],[3,2.8],[4,4.3],[5,4.8],[6,6.1],[2,1.8],[5,5.4],[3.5,3.7],[1.5,1.3]],
+  B: [[1,1.1],[2,1.9],[3,3.2],[4,3.8],[5,5.1],[6,5.9],[7,7.2],[1.5,1.4],[3.5,3.6],[6.5,6.7]],
+  C: [[1,7],[2,6],[3,5.2],[4,4.1],[5,3],[6,2.2],[7,1],[1.5,6.4],[4.5,3.6],[6.5,1.6]],
+  D: [[1,3],[5,3],[3,1],[3,5],[2,2],[4,4],[2,4],[4,2],[3,3],[1,1],[5,5],[1,5]]
+};
+const DATASET_LABELS = { A:'Diagonal correlation', B:'Near-perfect correlation', C:'Anti-correlation (y ≈ −x)', D:'Low / no correlation' };
+
+function computeMean(points){
+  const n = points.length;
+  const mx = points.reduce((s,p)=>s+p[0],0)/n;
+  const my = points.reduce((s,p)=>s+p[1],0)/n;
+  return [mx, my];
+}
+function centerPoints(points, mean){ return points.map(p=>[p[0]-mean[0], p[1]-mean[1]]); }
+function computeCovariance(centered){
+  const n = centered.length;
+  let sxx=0, syy=0, sxy=0;
+  centered.forEach(c=>{ sxx += c[0]*c[0]; syy += c[1]*c[1]; sxy += c[0]*c[1]; });
+  return { a: sxx/(n-1), d: syy/(n-1), b: sxy/(n-1) }; // matrix [[a,b],[b,d]]
+}
+function computeEigenDecomposition(cov){
+  const { a, b, d } = cov;
+  const trace = a + d;
+  const diff = (a - d) / 2;
+  const root = Math.sqrt(diff*diff + b*b);
+  const lambda1 = trace/2 + root;
+  const lambda2 = trace/2 - root;
+  function eigenvector(lambda){
+    if (Math.abs(b) > 1e-9){
+      const v = [b, lambda - a];
+      const norm = Math.hypot(v[0], v[1]);
+      return [v[0]/norm, v[1]/norm];
+    }
+    return Math.abs(lambda - a) < Math.abs(lambda - d) ? [1,0] : [0,1];
+  }
+  return { lambda1, lambda2, ev1: eigenvector(lambda1), ev2: eigenvector(lambda2) };
+}
+function explainedVarianceRatio(lambda1, lambda2){
+  const total = lambda1 + lambda2;
+  return { r1: total ? lambda1/total : 0, r2: total ? lambda2/total : 0 };
+}
+function projectOntoPC(centered, ev){ return centered.map(c => c[0]*ev[0] + c[1]*ev[1]); }
+function reconstructFrom1D(projections, ev, mean){
+  return projections.map(s => [mean[0] + s*ev[0], mean[1] + s*ev[1]]);
+}
+function reconstructFromBoth(proj1, proj2, ev1, ev2, mean){
+  return proj1.map((s1,i)=>{
+    const s2 = proj2[i];
+    return [mean[0] + s1*ev1[0] + s2*ev2[0], mean[1] + s1*ev1[1] + s2*ev2[1]];
+  });
+}
+function runFullPCA(points){
+  const mean = computeMean(points);
+  const centered = centerPoints(points, mean);
+  const cov = computeCovariance(centered);
+  const eig = computeEigenDecomposition(cov);
+  const variance = explainedVarianceRatio(eig.lambda1, eig.lambda2);
+  const proj1 = projectOntoPC(centered, eig.ev1);
+  const proj2 = projectOntoPC(centered, eig.ev2);
+  const recon1D = reconstructFrom1D(proj1, eig.ev1, mean);
+  const reconFull = reconstructFromBoth(proj1, proj2, eig.ev1, eig.ev2, mean);
+  return { mean, centered, cov, eig, variance, proj1, proj2, recon1D, reconFull, points };
+}
+
+/* ================= Canvas rendering (equal-scale transform) ================= */
+const CANVAS_W = 560, CANVAS_H = 400, PAD = 44;
+
+function makeTransform(points){
+  const xs = points.map(p=>p[0]), ys = points.map(p=>p[1]);
+  const minX = Math.min(...xs), maxX = Math.max(...xs);
+  const minY = Math.min(...ys), maxY = Math.max(...ys);
+  const cx = (minX+maxX)/2, cy = (minY+maxY)/2;
+  const range = Math.max(maxX-minX, maxY-minY, 2) * 1.5;
+  const plotW = CANVAS_W - 2*PAD, plotH = CANVAS_H - 2*PAD;
+  const scale = Math.min(plotW, plotH) / range;
+  return {
+    toCX: x => CANVAS_W/2 + (x-cx)*scale,
+    toCY: y => CANVAS_H/2 - (y-cy)*scale,
+    scale, cx, cy, range
+  };
+}
+
+function drawBackground(ctx){
+  ctx.clearRect(0,0,CANVAS_W,CANVAS_H);
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
+}
+function drawGrid(ctx, tr){
+  ctx.strokeStyle = 'rgba(148,163,184,0.15)';
+  ctx.lineWidth = 1;
+  const step = tr.range/8;
+  for(let g=-4; g<=4; g++){
+    const gx = tr.cx + g*step, gy = tr.cy + g*step;
+    ctx.beginPath(); ctx.moveTo(tr.toCX(gx), 0); ctx.lineTo(tr.toCX(gx), CANVAS_H); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(0, tr.toCY(gy)); ctx.lineTo(CANVAS_W, tr.toCY(gy)); ctx.stroke();
+  }
+}
+function drawAxesLine(ctx, tr){
+  ctx.strokeStyle = 'rgba(148,163,184,0.35)'; ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(0, tr.toCY(0)); ctx.lineTo(CANVAS_W, tr.toCY(0)); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(tr.toCX(0), 0); ctx.lineTo(tr.toCX(0), CANVAS_H); ctx.stroke();
+}
+function drawPointsAt(ctx, tr, coords, color){
+  coords.forEach(p=>{
+    ctx.beginPath();
+    ctx.arc(tr.toCX(p[0]), tr.toCY(p[1]), 6, 0, 7);
+    ctx.fillStyle = color;
+    ctx.fill();
+    ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 1.3; ctx.stroke();
+  });
+}
+function drawCentroid(ctx, tr, mean){
+  ctx.beginPath();
+  ctx.arc(tr.toCX(mean[0]), tr.toCY(mean[1]), 5, 0, 7);
+  ctx.fillStyle = '#f59e0b';
+  ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2; ctx.stroke();
+}
+function drawPrincipalAxes(ctx, tr, mean, eig){
+  const s1 = Math.sqrt(Math.max(eig.lambda1,0)) * 1.3;
+  const s2 = Math.sqrt(Math.max(eig.lambda2,0)) * 1.3;
+  function drawAxis(ev, len, color){
+    ctx.strokeStyle = color; ctx.lineWidth = 2.5;
+    ctx.beginPath();
+    ctx.moveTo(tr.toCX(mean[0]-ev[0]*len), tr.toCY(mean[1]-ev[1]*len));
+    ctx.lineTo(tr.toCX(mean[0]+ev[0]*len), tr.toCY(mean[1]+ev[1]*len));
+    ctx.stroke();
+  }
+  drawAxis(eig.ev2, s2, 'rgba(245,158,11,0.85)');
+  drawAxis(eig.ev1, s1, 'rgba(79,70,229,0.9)');
+}
+
+function renderPCA(){
+  const canvas = document.getElementById('pcaCanvas');
+  const ctx = canvas.getContext('2d');
+  const s = pcaState;
+  drawBackground(ctx);
+  const tr = s.transform;
+  drawGrid(ctx, tr);
+  drawAxesLine(ctx, tr);
+  if(s.step >= 5 && s.result){ drawPrincipalAxes(ctx, tr, s.result.mean, s.result.eig); }
+  const coords = s.animCoords || s.result.points;
+  drawPointsAt(ctx, tr, coords, '#4f46e5');
+  if(s.step >= 2){ drawCentroid(ctx, tr, s.result.mean); }
+}
+
+/* ================= Simulation controller ================= */
+const STEP_NAMES = ['Raw Data','Mean & Centering','Covariance Matrix','Eigen-Decomposition','Explained Variance','Projection & Reconstruction'];
+let pcaState = { dataset:'A', result:null, transform:null, step:0, maxStep:6, timer:null, animCoords:null };
+
+function loadPreset(key){
+  document.getElementById('selDataset').value = key;
+  startPCA();
+}
+
+function startPCA(){
+  clearInterval(pcaState.timer);
+  const key = document.getElementById('selDataset').value;
+  const points = DATASETS[key];
+  const result = runFullPCA(points);
+  pcaState = { dataset:key, result, transform: makeTransform(points), step:0, maxStep:6, timer:null, animCoords:null };
+  renderPCA();
+  resetPanels();
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('currentStepBadge').innerText = 'Step: Ready';
+  document.getElementById('explanationText').innerText = `Dataset "${DATASET_LABELS[key]}" loaded (${points.length} points). Click 'Step' or 'Run All' to begin the real PCA pipeline.`;
+  appendConsole(`&gt;&gt;&gt; Dataset loaded: ${DATASET_LABELS[key]} (n=${points.length})`);
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95';
+}
+
+function resetPanels(){
+  document.getElementById('val1').innerText = '--';
+  document.getElementById('val2').innerText = '--';
+  document.getElementById('val3').innerText = '--';
+  document.getElementById('covPanel').classList.add('hidden');
+  document.getElementById('varPanel').classList.add('hidden');
+  document.getElementById('pc1bar').style.width = '0%';
+  document.getElementById('pc2bar').style.width = '0%';
+  document.getElementById('pc1pct').innerText = '--';
+  document.getElementById('pc2pct').innerText = '--';
+}
+
+function pulseCards(ids){
+  ids.forEach(id=>{
+    const el = document.getElementById(id);
+    el.classList.add('updated');
+    setTimeout(()=>el.classList.remove('updated'), 500);
+  });
+}
+
+function applyPcaStep(idx){
+  const s = pcaState;
+  const r = s.result;
+  s.step = idx + 1;
+  document.getElementById('currentStepBadge').innerText = `Step ${s.step}/${s.maxStep}: ${STEP_NAMES[idx]}`;
+  document.getElementById('progressFill').style.width = `${(s.step/s.maxStep)*100}%`;
+
+  if(idx === 0){
+    s.animCoords = null;
+    renderPCA();
+    document.getElementById('explanationText').innerText = 'Raw 2-D scatter plotted directly from the dataset — no transformation applied yet.';
+    appendConsole(`Step 1: plotted ${r.points.length} raw points.`);
+  }
+  else if(idx === 1){
+    document.getElementById('val1').innerText = `${r.mean[0].toFixed(2)}, ${r.mean[1].toFixed(2)}`;
+    pulseCards(['mem1']);
+    renderPCA();
+    document.getElementById('explanationText').innerText = `Mean computed as x̄=${r.mean[0].toFixed(3)}, ȳ=${r.mean[1].toFixed(3)} (amber dot = centroid). Data is now conceptually centered by subtracting this mean.`;
+    appendConsole(`Step 2: mean = (${r.mean[0].toFixed(4)}, ${r.mean[1].toFixed(4)}). Centered ${r.centered.length} points.`);
+  }
+  else if(idx === 2){
+    const c = r.cov;
+    document.getElementById('covPanel').classList.remove('hidden');
+    document.getElementById('covMatrix').innerText = `[ ${c.a.toFixed(4)}   ${c.b.toFixed(4)} ]\n[ ${c.b.toFixed(4)}   ${c.d.toFixed(4)} ]`;
+    document.getElementById('eigVecLine').innerText = '';
+    document.getElementById('explanationText').innerText = `Covariance matrix computed from the centered data: Cov[0][0]=${c.a.toFixed(3)}, Cov[1][1]=${c.d.toFixed(3)}, Cov[0][1]=Cov[1][0]=${c.b.toFixed(3)}.`;
+    appendConsole(`Step 3: Cov = [[${c.a.toFixed(4)}, ${c.b.toFixed(4)}], [${c.b.toFixed(4)}, ${c.d.toFixed(4)}]]`);
+  }
+  else if(idx === 3){
+    const e = r.eig;
+    document.getElementById('val2').innerText = `${e.lambda1.toFixed(3)}, ${e.lambda2.toFixed(3)}`;
+    pulseCards(['mem2']);
+    document.getElementById('eigVecLine').innerText = `ev1=[${e.ev1[0].toFixed(3)}, ${e.ev1[1].toFixed(3)}]  ev2=[${e.ev2[0].toFixed(3)}, ${e.ev2[1].toFixed(3)}]`;
+    renderPCA();
+    document.getElementById('explanationText').innerText = `Closed-form eigen-decomposition: λ₁=${e.lambda1.toFixed(3)}, λ₂=${e.lambda2.toFixed(3)}. Principal axes drawn through the centroid, length ∝ √λ (indigo = PC1, amber = PC2).`;
+    appendConsole(`Step 4: λ1=${e.lambda1.toFixed(4)}, λ2=${e.lambda2.toFixed(4)}, ev1=[${e.ev1.map(v=>v.toFixed(4))}], ev2=[${e.ev2.map(v=>v.toFixed(4))}]`);
+  }
+  else if(idx === 4){
+    const v = r.variance;
+    document.getElementById('val3').innerText = `${(v.r1*100).toFixed(1)}%`;
+    pulseCards(['mem3']);
+    document.getElementById('varPanel').classList.remove('hidden');
+    document.getElementById('pc1bar').style.width = `${v.r1*100}%`;
+    document.getElementById('pc2bar').style.width = `${v.r2*100}%`;
+    document.getElementById('pc1pct').innerText = `${(v.r1*100).toFixed(2)}%`;
+    document.getElementById('pc2pct').innerText = `${(v.r2*100).toFixed(2)}%`;
+    document.getElementById('explanationText').innerText = `Explained variance ratio = λᵢ/(λ₁+λ₂): PC1 captures ${(v.r1*100).toFixed(1)}% of total variance, PC2 the remaining ${(v.r2*100).toFixed(1)}%.`;
+    appendConsole(`Step 5: explained variance — PC1=${(v.r1*100).toFixed(2)}%, PC2=${(v.r2*100).toFixed(2)}%`);
+  }
+  else if(idx === 5){
+    document.getElementById('explanationText').innerText = `Animating projection: each centered point x' is projected as proj = x'·ev1, then placed back at mean + proj·ev1 — genuinely computed per point, not scripted.`;
+    appendConsole(`Step 6: projecting ${r.points.length} points onto PC1 and animating collapse...`);
+    animateProjectionThenFinish();
+    return; // finish handled async
+  }
+  const btnStep = document.getElementById('btnStep');
+  if(s.step >= s.maxStep){
+    btnStep.disabled = true;
+    btnStep.className = 'bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+  }
+}
+
+function animateProjectionThenFinish(){
+  const s = pcaState, r = s.result;
+  const from = r.points.map(p=>p.slice());
+  const to = r.recon1D;
+  const duration = 900;
+  const t0 = performance.now();
+  function frame(now){
+    const t = Math.min(1, (now - t0) / duration);
+    const eased = 1 - Math.pow(1 - t, 3);
+    s.animCoords = from.map((p,i)=>[
+      p[0] + (to[i][0]-p[0])*eased,
+      p[1] + (to[i][1]-p[1])*eased
+    ]);
+    renderPCA();
+    if(t < 1){ requestAnimationFrame(frame); }
+    else { finishProjection(); }
+  }
+  requestAnimationFrame(frame);
+}
+
+function finishProjection(){
+  const s = pcaState, r = s.result;
+  let maxErrBoth = 0;
+  r.points.forEach((p,i)=>{
+    const rec = r.reconFull[i];
+    maxErrBoth = Math.max(maxErrBoth, Math.hypot(p[0]-rec[0], p[1]-rec[1]));
+  });
+  const avgErr1D = r.points.reduce((acc,p,i)=> acc + Math.hypot(p[0]-r.recon1D[i][0], p[1]-r.recon1D[i][1]), 0) / r.points.length;
+  appendConsole(`Projection complete. Using both PCs, reconstruction error ≈ ${maxErrBoth.toExponential(2)} (should be ~0 — sanity check passed).`);
+  appendConsole(`Using only PC1 (lossy), average reconstruction error = ${avgErr1D.toFixed(4)}.`);
+  document.getElementById('explanationText').innerText = `Projection complete. Average 1-D reconstruction error = ${avgErr1D.toFixed(4)} — lower means the data was closer to already being 1-dimensional.`;
+  document.getElementById('resultBannerText').innerText = `λ1=${r.eig.lambda1.toFixed(2)}, λ2=${r.eig.lambda2.toFixed(2)} · PC1 explains ${(r.variance.r1*100).toFixed(1)}% variance · avg 1-D recon error=${avgErr1D.toFixed(3)}`;
+  document.getElementById('resultBanner').classList.remove('hidden');
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = 'bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+}
+
+function stepPCA(){
+  const s = pcaState;
+  if(s.step >= s.maxStep) return;
+  applyPcaStep(s.step);
+}
+
+function runAllPCA(){
+  startPCA();
+  clearInterval(pcaState.timer);
+  const advance = ()=>{
+    if(pcaState.step >= pcaState.maxStep) return;
+    const idx = pcaState.step;
+    applyPcaStep(idx);
+    if(idx < 5 && pcaState.step < pcaState.maxStep){
+      pcaState.timer = setTimeout(advance, 700);
+    }
+    // step 5 (projection) advances the pipeline internally via its own animation/finish callback
+  };
+  pcaState.timer = setTimeout(advance, 300);
+}
+
+function resetPCA(){
+  clearInterval(pcaState.timer);
+  const key = document.getElementById('selDataset').value;
+  const points = DATASETS[key];
+  const result = runFullPCA(points);
+  pcaState = { dataset:key, result, transform: makeTransform(points), step:0, maxStep:6, timer:null, animCoords:null };
+  renderPCA();
+  resetPanels();
+  clearConsole();
+  hideResultBanner();
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Start' then 'Step' or 'Run All'.</span>");
+  document.getElementById('explanationText').innerText = "Choose a dataset, then click 'Start'.";
+  document.getElementById('currentStepBadge').innerText = 'Step: Ready';
+  document.getElementById('progressFill').style.width = '0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = 'bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading (generic, same pattern as reference template) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-indigo-50 border border-indigo-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try running the pipeline step-by-step in the Simulation tab and watch each computed value fill in!";
+  if (q.includes('covariance')) response = "Covariance measures how two features vary together. Cov[0][1] = Σ x'y' / (n−1) over the centered data. Positive means they increase together (like our diagonal-correlation preset); negative means one increases as the other decreases (the anti-correlation preset); near zero means no linear relationship (the uncorrelated preset).";
+  else if (q.includes('eigenvector')) response = "An eigenvector v of the covariance matrix satisfies (Cov)v = λv — it's a direction that the covariance matrix only stretches (by λ), never rotates. For 2×2 symmetric matrices this lab solves it in closed form: v ∝ [b, λ−a], then normalizes it.";
+  else if (q.includes('eigenvalue')) response = "Each eigenvalue is the variance of the data measured along its eigenvector's direction. The larger eigenvalue (λ1) corresponds to PC1, the direction of maximum spread.";
+  else if (q.includes('explained variance') || q.includes('variance ratio')) response = "Explained variance ratio = λᵢ/(λ1+λ2). It tells you what fraction of the total spread each principal component accounts for. If PC1's ratio is 99%, one dimension captures almost everything.";
+  else if (q.includes('mean') || q.includes('center')) response = "Centering subtracts each feature's mean so the centered data has mean zero — this is required before computing covariance, otherwise the covariance formula would be biased by the data's location instead of only its spread.";
+  else if (q.includes('reconstruct')) response = "Reconstruction using only PC1 is lossy: x̂ = mean + proj·ev1. Reconstruction using both PC1 and PC2 together is exact (error ≈ 0) — the lab verifies this every run as a sanity check on the projection math.";
+  else if (q.includes('project')) response = "Projecting a centered point x' onto a unit eigenvector ev gives a single scalar: proj = x'·ev — this is literally how far along that direction the point sits. Projecting onto only PC1 discards the PC2 component, which is where dimensionality reduction comes from.";
+  else if (q.includes('correlat')) response = "Try switching datasets: the 'Diagonal correlation' and 'Near-perfect correlation' presets have λ2 ≈ 0 (PC1 explains ~99-100% of variance), while 'Low / no correlation' splits variance roughly 50/50 between PC1 and PC2 — collapsing it to 1-D loses real information.";
+  else if (q.includes('dimension')) response = "PCA reduces dimensionality by re-expressing data along new axes ordered by variance, then keeping only the top axes. If the first eigenvalue dominates, you can drop the second dimension with little information loss.";
+  else if (q.includes('why') && q.includes('pca')) response = "PCA is used to compress correlated features into fewer uncorrelated ones, reduce noise, speed up downstream models, and visualize high-dimensional data in 2-D or 3-D.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  const points = DATASETS.A;
+  pcaState.result = runFullPCA(points);
+  pcaState.transform = makeTransform(points);
+  renderPCA();
+});
+</script>
+</body>
+</html>

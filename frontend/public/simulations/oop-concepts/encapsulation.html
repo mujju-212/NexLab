@@ -1,0 +1,464 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OOP Virtual Lab: Encapsulation</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-cube"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">OOP Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment 3: Encapsulation &amp; Access Modifiers</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2"><i class="fa-solid fa-book-open"></i> Theory</button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Assistant</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Encapsulation</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">Encapsulation bundles data (attributes) and the methods that operate on it into a single unit (a class), and restricts direct outside access to that data — typically forcing interaction through controlled <strong>getter/setter</strong> methods.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1">Java</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Uses <code class="font-mono">private</code>, <code class="font-mono">protected</code>, <code class="font-mono">public</code> keywords. Private members trigger a real <strong>compile-time error</strong> if accessed from outside the class.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1">Python</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Uses naming convention only: <code class="font-mono">_protected</code>, <code class="font-mono">__private</code>. Python does <strong>not</strong> truly enforce privacy — see the nuance below.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1">C++</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Uses access specifiers (<code class="font-mono">private:</code>, <code class="font-mono">public:</code>) inside the class block, enforced at compile time.</p>
+        </div>
+      </div>
+
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+        <h3 class="font-bold text-amber-700 mb-1 text-sm flex items-center gap-2"><i class="fa-solid fa-triangle-exclamation"></i> Important nuance: Python's "privacy" is name mangling, not enforcement</h3>
+        <p class="text-xs text-amber-800 leading-relaxed">Writing <code class="font-mono">self.__balance</code> inside a class does not make the attribute truly inaccessible. Python performs <strong>name mangling</strong>: internally it renames the attribute to <code class="font-mono">_ClassName__balance</code>. So <code class="font-mono">account.__balance</code> from outside raises <code class="font-mono">AttributeError</code> (no attribute exists under that literal name) — but the data is still reachable via <code class="font-mono">account._Account__balance</code>. Java and C++, by contrast, enforce privacy for real at compile time.</p>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Encapsulation Syntax — Multi-Language</h3>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">Java</p>
+          <pre class="whitespace-pre-wrap">class Account {
+  private double balance;
+  public double getBalance() {
+    return balance;
+  }
+  public void setBalance(double b) {
+    balance = b;
+  }
+}</pre>
+        </div>
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">Python</p>
+          <pre class="whitespace-pre-wrap">class Account:
+    def __init__(self):
+        self.__balance = 0
+
+    def get_balance(self):
+        return self.__balance</pre>
+        </div>
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">C++</p>
+          <pre class="whitespace-pre-wrap">class Account {
+  private:
+    double balance;
+  public:
+    double getBalance() { return balance; }
+};</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab and select a language pill — <strong>Java</strong>, <strong>Python</strong>, or <strong>C++</strong>.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Study how the private <code class="font-mono">balance</code> attribute is exposed only through a public getter method.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Access via Getter</strong> to see the correct, encapsulated way to read the attribute — this always succeeds.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Attempt Direct Access</strong> to try reading the private attribute directly from outside the class, bypassing the getter, and observe the access denial that actually occurs for the selected language.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Compare the two Access Log entries side by side: the getter path (granted, emerald) versus the direct-access path (denied, rose).</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Switch languages and repeat — notice Java/C++ raise a compiler error, while Python raises a runtime <code class="font-mono">AttributeError</code> due to name mangling, not true enforcement.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What is the purpose of encapsulation?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> To make all code run faster</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> To bundle data and behavior together and restrict direct access to internal state</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> To allow multiple inheritance</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. How are "private" variables conventionally marked in Python?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> Double leading underscore, e.g. <code class="font-mono">__balance</code></label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> The keyword <code class="font-mono">private</code></label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> Uppercase names only</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. Why use getter and setter methods instead of exposing attributes directly?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> They make the class run in less memory</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> They are required by every programming language</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> They let you validate/control how internal data is read or changed</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">4. In Java/C++, what happens if you access a private attribute directly from outside its class?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> It works silently, same as a public attribute</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> The compiler raises an access error and refuses to build</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> It automatically converts to a getter call</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-slate-500 font-medium mr-1">Language:</span>
+            <button id="lang-java" onclick="loadSim('java')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-slate-900 text-white">Java</button>
+            <button id="lang-python" onclick="loadSim('python')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-500 hover:bg-slate-100">Python</button>
+            <button id="lang-cpp" onclick="loadSim('cpp')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-500 hover:bg-slate-100">C++</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="accessViaGetter()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-unlock"></i> Access via Getter</button>
+            <button onclick="attemptDirectAccess()" class="bg-rose-600 hover:bg-rose-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-lock"></i> Attempt Direct Access</button>
+            <button onclick="resetLog()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+          </div>
+        </div>
+        <div id="codeDisplay" class="font-mono text-xs bg-slate-950 text-slate-200 p-4 rounded-xl border border-slate-800 min-h-[150px] overflow-x-auto"></div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-shield-halved text-purple-600"></i> Access Log</h3>
+          <div id="heapDisplay" class="grid grid-cols-1 gap-3">
+            <div class="p-4 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 italic text-xs">Awaiting an access attempt...</div>
+          </div>
+        </div>
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal</span>
+            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition"><i class="fa-solid fa-trash-can"></i> Clear</button>
+          </div>
+          <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[160px] max-h-[260px] overflow-y-auto space-y-1">
+            <p class="text-slate-500 italic">&gt;&gt;&gt; Try both 'Access via Getter' and 'Attempt Direct Access'.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. If <code class="font-mono">self.__balance</code> is set inside class <code class="font-mono">Account</code>, what does Python actually rename it to internally?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> It stays exactly <code class="font-mono">__balance</code>, fully hidden</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> <code class="font-mono">_Account__balance</code> (name mangling)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> <code class="font-mono">balance_private</code></label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">2. What actually happens when you run <code class="font-mono">account.__balance</code> from outside the class in Python?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> It returns the balance normally, exactly like a public attribute</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> The program refuses to compile</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> It raises an AttributeError, because the real (mangled) name is different</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. Can a public method access a private attribute of its own class?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> Yes — access restrictions apply to code outside the class, not to the class's own methods</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> No, private attributes can never be read by any method</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> Only static methods can</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">4. Is Python's underscore-based privacy actually enforced by the language?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> Yes, identically to Java's compile-time enforcement</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> No — it's a convention/obscuring mechanism (name mangling); the data can still be reached via <code class="font-mono">_ClassName__attr</code></label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> Yes, private attributes are deleted from memory</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant</h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about encapsulation, private/protected/public, getters/setters, or Python name mangling.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., is Python privacy real?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('#tab-theory,#tab-procedure,#tab-pretest,#tab-simulation,#tab-posttest,#tab-ai').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ---------- Simulation ---------- */
+const codes = {
+  java: `class Account {
+  private double balance;
+  public double getBalance() {
+    return balance;
+  }
+  public void setBalance(double b) {
+    balance = b;
+  }
+}
+Account a = new Account();
+a.setBalance(500.0);`,
+  python: `class Account:
+    def __init__(self):
+        self.__balance = 500.0
+
+    def get_balance(self):
+        return self.__balance
+
+a = Account()`,
+  cpp: `class Account {
+  private:
+    double balance;
+  public:
+    double getBalance() { return balance; }
+    void setBalance(double b) { balance = b; }
+};
+Account a; a.setBalance(500.0);`
+};
+
+/* Real, per-language error text for a direct private-attribute access attempt */
+const directAccessErrors = {
+  java:   { line: 'System.out.println(a.balance);', error: "error: balance has private access in Account", kind: 'compile-time error' },
+  python: { line: 'print(a.__balance)', error: "AttributeError: 'Account' object has no attribute '__balance'", kind: 'runtime error (name mangling: the real attribute is stored as _Account__balance, not __balance)' },
+  cpp:    { line: 'cout << a.balance;', error: "error: 'double Account::balance' is private within this context", kind: 'compile-time error' }
+};
+const getterCalls = {
+  java: 'a.getBalance()',
+  python: 'a.get_balance()',
+  cpp: 'a.getBalance()'
+};
+
+let currentLang = 'java';
+
+function loadSim(lang){
+  currentLang = lang;
+  document.getElementById('codeDisplay').textContent = codes[lang];
+  ['java','python','cpp'].forEach(l=>{
+    const b = document.getElementById('lang-'+l);
+    b.classList.remove('bg-slate-900','text-white');
+    b.classList.add('text-slate-500');
+  });
+  const active = document.getElementById('lang-'+lang);
+  active.classList.add('bg-slate-900','text-white');
+  active.classList.remove('text-slate-500');
+}
+
+function accessViaGetter(){
+  const heap = document.getElementById('heapDisplay');
+  const firstCard = heap.querySelector('.mem-card');
+  if (!firstCard && heap.querySelector('.italic')) heap.innerHTML = '';
+  const card = document.createElement('div');
+  card.className = 'mem-card animate-pop bg-slate-50 p-4 rounded-xl border border-emerald-300';
+  card.innerHTML = `
+    <p class="text-[10px] text-emerald-600 font-bold font-mono mb-1">ACCESS GRANTED</p>
+    <p class="text-sm font-bold text-slate-800">Call: <span class="font-mono">${getterCalls[currentLang]}</span></p>
+    <p class="text-xs text-slate-500">Public getter reads the private attribute safely &rarr; returns <span class="font-mono">500.0</span></p>
+  `;
+  heap.prepend(card);
+  appendConsole(`&gt;&gt;&gt; ${getterCalls[currentLang]} &rarr; <span class="text-emerald-400">500.0 (OK)</span>`);
+}
+
+function attemptDirectAccess(){
+  const heap = document.getElementById('heapDisplay');
+  if (heap.querySelector('.italic')) heap.innerHTML = '';
+  const info = directAccessErrors[currentLang];
+  const card = document.createElement('div');
+  card.className = 'mem-card animate-pop bg-slate-50 p-4 rounded-xl border border-rose-300';
+  card.innerHTML = `
+    <p class="text-[10px] text-rose-600 font-bold font-mono mb-1">ACCESS DENIED (${info.kind})</p>
+    <p class="text-sm font-bold text-slate-800">Call: <span class="font-mono">${info.line}</span></p>
+    <p class="text-xs text-slate-500 font-mono">${info.error}</p>
+  `;
+  heap.prepend(card);
+  appendConsole(`&gt;&gt;&gt; ${info.line} &rarr; <span class="text-rose-400">${info.error}</span>`);
+}
+
+function resetLog(){
+  document.getElementById('heapDisplay').innerHTML = '<div class="p-4 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 italic text-xs">Awaiting an access attempt...</div>';
+  clearConsole();
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Try both 'Access via Getter' and 'Attempt Direct Access'.</span>");
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try both simulator buttons — 'Access via Getter' vs 'Attempt Direct Access' — and compare the Access Log entries!";
+  if (q.includes('mangl')) response = "Python 'name mangles' any attribute starting with __ (like __balance) into _ClassName__balance internally. So account.__balance fails with AttributeError — not because it's truly protected, but because that literal name doesn't exist anymore. account._Account__balance would still work.";
+  else if (q.includes('python') && (q.includes('private') || q.includes('real') || q.includes('enforce'))) response = "Python doesn't truly enforce privacy — it's convention plus name mangling. Unlike Java/C++, there's no compiler stopping you from reaching the mangled attribute name directly.";
+  else if (q.includes('getter') || q.includes('setter')) response = "Getters and setters are public methods that read/write a private attribute in a controlled way — letting you validate input or compute derived values instead of exposing raw data.";
+  else if (q.includes('private')) response = "A private attribute can only be accessed by code inside its own class. In Java/C++ this is enforced by the compiler; in Python it's only discouraged via naming + name mangling.";
+  else if (q.includes('protected')) response = "Protected members are accessible within the class and its subclasses, but not from unrelated outside code — a middle ground between private and public.";
+  else if (q.includes('public')) response = "Public members can be accessed from anywhere, including outside the class — no restriction is enforced.";
+  else if (q.includes('encapsulation')) response = "Encapsulation bundles data with the methods that operate on it, and restricts direct access to that data — reducing accidental misuse and making internal representation changeable without breaking outside code.";
+  else if (q.includes('java') || q.includes('c++') || q.includes('compile')) response = "In Java and C++, accessing a private member from outside its class is a genuine compile-time error — the program will not build at all, unlike Python's runtime AttributeError.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{ loadSim('java'); });
+</script>
+</body>
+</html>

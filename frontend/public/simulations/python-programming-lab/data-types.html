@@ -1,0 +1,719 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Python Data Types — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .code-line{transition:background-color .25s ease,border-color .25s ease;border-left:4px solid transparent;}
+  .code-line.active{background:rgba(124,58,237,.09);border-left-color:#7c3aed;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-brands fa-python"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Python Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment 3: Python Data Types, Type Inspection & Mutability</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> Theory
+      </button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-list-check"></i> Procedure
+      </button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+      </button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-flask"></i> Simulation
+      </button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-graduation-cap"></i> Post-Test
+      </button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Python Data Types & Mutability</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">Every value in Python has a specific <strong>data type</strong> that dictates what it can store, what operations it supports, and whether it can be modified in place (<strong>mutable</strong>) or not (<strong>immutable</strong>). Python uses <strong>dynamic typing</strong> — a variable's type is inferred automatically at runtime, and can change if reassigned.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-purple-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-hashtag text-emerald-500"></i> Numeric Types</span>
+            <span class="text-[10px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded">Immutable</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed"><code class="font-mono text-purple-600">int</code> (whole numbers, e.g. 42), <code class="font-mono text-purple-600">float</code> (decimals, e.g. 3.14159), <code class="font-mono text-purple-600">complex</code> (3 + 4j).</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-purple-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-quote-right text-purple-500"></i> Strings (str)</span>
+            <span class="text-[10px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded">Immutable</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Ordered sequence of characters: <code class="font-mono text-emerald-600">"Hello World"</code>. Supports indexing, slicing, concatenation.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-purple-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-list-ol text-emerald-500"></i> Lists (list)</span>
+            <span class="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded">Mutable</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Ordered, mutable sequence: <code class="font-mono text-purple-600">[10, 20, 30]</code>. Elements can be updated, appended, or removed dynamically.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-purple-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-lock text-amber-500"></i> Tuples (tuple)</span>
+            <span class="text-[10px] bg-rose-50 text-rose-600 px-2 py-0.5 rounded">Immutable</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Ordered, read-only sequence: <code class="font-mono text-purple-600">(10, 20, 30)</code>. Item assignment raises <code class="font-mono text-rose-600">TypeError</code>.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-purple-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-key text-cyan-500"></i> Dictionaries (dict)</span>
+            <span class="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded">Mutable</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Key-value mapping: <code class="font-mono text-purple-600">{"name": "Alice", "age": 20}</code>. O(1) average lookup by key.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-purple-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-layer-group text-purple-500"></i> Sets (set)</span>
+            <span class="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded">Mutable</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Unordered collection of unique items: <code class="font-mono text-purple-600">{1, 2, 3}</code>. Duplicates are automatically discarded.</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Function</th><th class="p-2 text-left">Purpose</th><th class="p-2 text-left">Example</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">type(obj)</td><td class="p-2">Returns the exact class of an object</td><td class="p-2 font-mono">type(5) → &lt;class 'int'&gt;</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">id(obj)</td><td class="p-2">Returns the object's unique memory address</td><td class="p-2 font-mono">id(x)</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">len(obj)</td><td class="p-2">Number of items in a sequence/collection</td><td class="p-2 font-mono">len([1,2,3]) → 3</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">int()/float()/str()</td><td class="p-2">Explicit type casting</td><td class="p-2 font-mono">int("50") → 50</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs text-rose-700 space-y-2">
+        <h4 class="font-bold text-rose-700 text-sm"><i class="fa-solid fa-triangle-exclamation"></i> Common Pitfalls</h4>
+        <ul class="list-disc list-inside space-y-1 leading-relaxed">
+          <li><strong>Mutable default arguments:</strong> a list/dict used as a default function parameter is shared across every call that doesn't override it — a classic beginner bug.</li>
+          <li><strong>Tuples of one element need a trailing comma:</strong> <code class="font-mono">(5)</code> is just the int 5, but <code class="font-mono">(5,)</code> is a 1-element tuple.</li>
+          <li><strong>Two variables pointing to the same mutable object</strong> (e.g. <code class="font-mono">b = a</code> where <code class="font-mono">a</code> is a list) share the underlying data — mutating one mutates the other. Use <code class="font-mono">a.copy()</code> to avoid this.</li>
+          <li><strong>Dictionary keys must be hashable (immutable)</strong> — you can use a tuple as a key, but never a list.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Select a <strong>Data Type Scenario</strong> (Primitives, List Mutation, Tuple Immutability, Dict Lookup, or Type Casting) from the dropdown or click a Quick Preset.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Simulation</strong> to initialize variable memory and load the source code trace.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step Execution</strong> to trace code line-by-line and observe variable creation in RAM.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Watch the <strong>Variable RAM Memory Inspector</strong> update with value, type class, and mutability status.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Run / Execute All</strong> to run the full script and view the pop-out result banner.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> at any time to clear the trace and start over.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. Which Python data type is MUTABLE (can be modified in place)?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> tuple</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> list</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> str</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. Which function inspects the class/type of a variable?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> typeof(x)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> type(x)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> classof(x)</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. Which of these is written as a Python dictionary?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> {"name": "Alice", "age": 20}</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> ["name", "Alice", "age", 20]</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> ("name": "Alice")</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">4. What does a Python <code class="font-mono">set</code> automatically do to duplicate values?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> Keeps them, but sorts them</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> Raises a ValueError</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> Eliminates them, keeping unique values only</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Select Data Type Scenario</label>
+              <select id="dtScenario" onchange="updateScenarioDisplay()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500 min-w-[300px]">
+                <option value="primitives">Primitives: Int, Float & String</option>
+                <option value="list_mutation">List Indexing & Mutation (Mutable)</option>
+                <option value="tuple_immutable">Tuple Read-Only (Immutable Error Check)</option>
+                <option value="dict_lookup">Dictionary Key-Value Lookup</option>
+                <option value="type_casting">Explicit Type Casting / Conversion</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Start Simulation
+            </button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-forward-step"></i> Step Execution
+            </button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-bolt"></i> Run / Execute All
+            </button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('primitives')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Primitives</button>
+          <button onclick="loadPreset('list_mutation')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">List Mutation</button>
+          <button onclick="loadPreset('tuple_immutable')" class="bg-white hover:bg-rose-50 text-rose-500 px-2.5 py-1 rounded-full border border-rose-200 font-mono">Tuple Immutability Error</button>
+          <button onclick="loadPreset('dict_lookup')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Dict Key Lookup</button>
+          <button onclick="loadPreset('type_casting')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Type Casting</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-code text-purple-600"></i> Code Trace Window
+            </span>
+          </div>
+          <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 text-slate-200 flex-1 space-y-0.5 overflow-x-auto min-h-[220px]"></div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Select a scenario and click 'Start Simulation' or 'Run / Execute All'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-7 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center justify-between">
+              <span class="flex items-center gap-2"><i class="fa-solid fa-microchip text-purple-600"></i> Variable RAM Memory State & Inspection</span>
+              <span class="text-[10px] bg-slate-100 text-slate-500 px-2 py-0.5 rounded font-mono">Stack & Heap Active</span>
+            </h3>
+            <div class="grid grid-cols-3 gap-3">
+              <div id="memVar1" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span id="lblVar1" class="text-xs text-slate-500 block font-mono">var1</span>
+                <span id="valVar1" class="text-lg font-bold font-mono text-purple-600 block my-1 truncate">--</span>
+                <div class="flex items-center justify-center gap-1">
+                  <span id="typeVar1" class="text-[10px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded font-mono">--</span>
+                  <span id="mutVar1" class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">--</span>
+                </div>
+              </div>
+              <div id="memVar2" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span id="lblVar2" class="text-xs text-slate-500 block font-mono">var2</span>
+                <span id="valVar2" class="text-lg font-bold font-mono text-purple-600 block my-1 truncate">--</span>
+                <div class="flex items-center justify-center gap-1">
+                  <span id="typeVar2" class="text-[10px] bg-purple-50 text-purple-600 px-1.5 py-0.5 rounded font-mono">--</span>
+                  <span id="mutVar2" class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">--</span>
+                </div>
+              </div>
+              <div id="memVar3" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span id="lblVar3" class="text-xs text-slate-500 block font-mono">var3</span>
+                <span id="valVar3" class="text-lg font-bold font-mono text-emerald-600 block my-1 truncate">--</span>
+                <div class="flex items-center justify-center gap-1">
+                  <span id="typeVar3" class="text-[10px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded font-mono">--</span>
+                  <span id="mutVar3" class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">--</span>
+                </div>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal
+              </span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[140px] max-h-[180px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-square-check"></i>
+              </div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Final Execution Output</h4>
+                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+            <span id="bannerStatus" class="text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200">Status: OK</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What happens when you execute <code class="font-mono">t = (1, 2, 3); t[0] = 99</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> t becomes (99, 2, 3)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> TypeError: 'tuple' object does not support item assignment</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> ValueError is raised</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What is the output of <code class="font-mono">type(int("50"))</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> &lt;class 'str'&gt;</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> &lt;class 'int'&gt;</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> &lt;class 'float'&gt;</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. If <code class="font-mono">b = a</code> where <code class="font-mono">a</code> is a list, and then you run <code class="font-mono">b.append(4)</code>, what happens to <code class="font-mono">a</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> a also gets the new element — both names reference the same list</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> a is completely unaffected</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> Python raises a TypeError</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">4. Which of these can be used as a dictionary key?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> A list, e.g. [1, 2]</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> A dict, e.g. {"a": 1}</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> A tuple, e.g. (1, 2)</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+      </h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me anything about data types, mutability (list vs tuple), dictionaries, or type casting.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., why are tuples immutable?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+let scenario = 'primitives';
+let stepList = [];
+let currentStepIdx = 0;
+
+function loadPreset(presetScenario){
+  document.getElementById('dtScenario').value = presetScenario;
+  runAll();
+}
+
+function updateScenarioDisplay(){
+  scenario = document.getElementById('dtScenario').value;
+  const codeContainer = document.getElementById('codeContainer');
+
+  if (scenario === 'primitives'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>x = 25</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>y = 98.6</span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span>name = <span class="text-emerald-300">"Python Lab"</span></span></div>
+      <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"x: {type(x)}, y: {type(y)}, name: {type(name)}"</span>)</span></div>
+    `;
+  } else if (scenario === 'list_mutation'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>nums = [10, 20, 30]</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>nums[1] = 99</span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span>nums.append(50)</span></div>
+      <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Updated List = {nums}, len = {len(nums)}"</span>)</span></div>
+    `;
+  } else if (scenario === 'tuple_immutable'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>point = (5, 10, 15)</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>first_val = point[0]</span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span>point[0] = 99 &nbsp;<span class="text-rose-400 text-xs"># Raises TypeError!</span></span></div>
+      <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">4</span><span>print(point)</span></div>
+    `;
+  } else if (scenario === 'dict_lookup'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>student = {"name": "Alice", "score": 95}</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>student["grade"] = "A+"</span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span>score_val = student["score"]</span></div>
+      <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Student Record = {student}"</span>)</span></div>
+    `;
+  } else if (scenario === 'type_casting'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>raw_str = "125"</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>num_int = int(raw_str)</span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span>num_float = float(num_int)</span></div>
+      <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Casted: {num_int} ({type(num_int)}) -&gt; {num_float} ({type(num_float)})"</span>)</span></div>
+    `;
+  }
+}
+
+function buildExecutionSteps(){
+  stepList = [];
+  if (scenario === 'primitives'){
+    stepList = [
+      { line:1, v1:{label:'x',val:'25',type:'int',mut:'Immutable'}, v2:{label:'y',val:'--',type:'--',mut:'--'}, v3:{label:'name',val:'--',type:'--',mut:'--'},
+        consoleMsg:`&gt; Stored x = 25 (type: int)`, explanation:`Line 1: Variable 'x' initialized with integer value 25.` },
+      { line:2, v1:{label:'x',val:'25',type:'int',mut:'Immutable'}, v2:{label:'y',val:'98.6',type:'float',mut:'Immutable'}, v3:{label:'name',val:'--',type:'--',mut:'--'},
+        consoleMsg:`&gt; Stored y = 98.6 (type: float)`, explanation:`Line 2: Variable 'y' initialized with float value 98.6.` },
+      { line:3, v1:{label:'x',val:'25',type:'int',mut:'Immutable'}, v2:{label:'y',val:'98.6',type:'float',mut:'Immutable'}, v3:{label:'name',val:'"Python Lab"',type:'str',mut:'Immutable'},
+        consoleMsg:`&gt; Stored name = "Python Lab" (type: str)`, explanation:`Line 3: Variable 'name' initialized with a string object.` },
+      { line:4, v1:{label:'x',val:'25',type:'int',mut:'Immutable'}, v2:{label:'y',val:'98.6',type:'float',mut:'Immutable'}, v3:{label:'name',val:'"Python Lab"',type:'str',mut:'Immutable'},
+        consoleMsg:`<span class='text-emerald-600 font-bold'>x: &lt;class 'int'&gt;, y: &lt;class 'float'&gt;, name: &lt;class 'str'&gt;</span>`, explanation:`Line 4: Printed all variable data classes.` }
+    ];
+  } else if (scenario === 'list_mutation'){
+    stepList = [
+      { line:1, v1:{label:'nums',val:'[10, 20, 30]',type:'list',mut:'Mutable'}, v2:{label:'len(nums)',val:'3',type:'int',mut:'Immutable'}, v3:{label:'nums[1]',val:'20',type:'int',mut:'Immutable'},
+        consoleMsg:`&gt; Initialized list nums = [10, 20, 30]`, explanation:`Line 1: Created a mutable list containing 3 elements.` },
+      { line:2, v1:{label:'nums',val:'[10, 99, 30]',type:'list',mut:'Mutable'}, v2:{label:'len(nums)',val:'3',type:'int',mut:'Immutable'}, v3:{label:'nums[1]',val:'99',type:'int',mut:'Immutable'},
+        consoleMsg:`&gt; Updated index 1: nums[1] = 99 (in-place mutation!)`, explanation:`Line 2: Mutated the element at index 1 from 20 to 99 in place.` },
+      { line:3, v1:{label:'nums',val:'[10, 99, 30, 50]',type:'list',mut:'Mutable'}, v2:{label:'len(nums)',val:'4',type:'int',mut:'Immutable'}, v3:{label:'nums[3]',val:'50',type:'int',mut:'Immutable'},
+        consoleMsg:`&gt; Appended 50 to list: len(nums) = 4`, explanation:`Line 3: Dynamically expanded the list by appending 50.` },
+      { line:4, v1:{label:'nums',val:'[10, 99, 30, 50]',type:'list',mut:'Mutable'}, v2:{label:'len(nums)',val:'4',type:'int',mut:'Immutable'}, v3:{label:'nums[3]',val:'50',type:'int',mut:'Immutable'},
+        consoleMsg:`<span class='text-emerald-600 font-bold'>Updated List = [10, 99, 30, 50], len = 4</span>`, explanation:`Line 4: Printed the final mutated list and its length.` }
+    ];
+  } else if (scenario === 'tuple_immutable'){
+    stepList = [
+      { line:1, v1:{label:'point',val:'(5, 10, 15)',type:'tuple',mut:'Immutable'}, v2:{label:'first_val',val:'--',type:'--',mut:'--'}, v3:{label:'status',val:'OK',type:'str',mut:'Immutable'},
+        consoleMsg:`&gt; Created read-only tuple point = (5, 10, 15)`, explanation:`Line 1: Initialized an immutable tuple with 3 values.` },
+      { line:2, v1:{label:'point',val:'(5, 10, 15)',type:'tuple',mut:'Immutable'}, v2:{label:'first_val',val:'5',type:'int',mut:'Immutable'}, v3:{label:'status',val:'OK',type:'str',mut:'Immutable'},
+        consoleMsg:`&gt; Read index 0: first_val = point[0] -&gt; 5`, explanation:`Line 2: Index read access is allowed on a tuple.` },
+      { line:3, v1:{label:'point',val:'(5, 10, 15)',type:'tuple',mut:'Immutable'}, v2:{label:'first_val',val:'5',type:'int',mut:'Immutable'}, v3:{label:'status',val:'ERROR!',type:'TypeError',mut:'Raised'},
+        consoleMsg:`<span class='text-rose-500 font-bold'>TypeError: 'tuple' object does not support item assignment!</span>`, explanation:`Line 3: Attempted mutation on an immutable tuple raises TypeError!` }
+    ];
+  } else if (scenario === 'dict_lookup'){
+    stepList = [
+      { line:1, v1:{label:'student',val:'{"name":"Alice","score":95}',type:'dict',mut:'Mutable'}, v2:{label:'grade',val:'--',type:'--',mut:'--'}, v3:{label:'score_val',val:'--',type:'--',mut:'--'},
+        consoleMsg:`&gt; Initialized dict student with 2 key-value pairs`, explanation:`Line 1: Created a dictionary mapping keys to values.` },
+      { line:2, v1:{label:'student',val:'{"name":"Alice","score":95,"grade":"A+"}',type:'dict',mut:'Mutable'}, v2:{label:'grade',val:'"A+"',type:'str',mut:'Immutable'}, v3:{label:'score_val',val:'--',type:'--',mut:'--'},
+        consoleMsg:`&gt; Added key "grade" = "A+"`, explanation:`Line 2: Added a new key-value pair to the dictionary.` },
+      { line:3, v1:{label:'student',val:'{"name":"Alice","score":95,"grade":"A+"}',type:'dict',mut:'Mutable'}, v2:{label:'grade',val:'"A+"',type:'str',mut:'Immutable'}, v3:{label:'score_val',val:'95',type:'int',mut:'Immutable'},
+        consoleMsg:`&gt; Lookup student["score"] -&gt; 95`, explanation:`Line 3: Retrieved value by key 'score' in average O(1) time.` },
+      { line:4, v1:{label:'student',val:'{"name":"Alice","score":95,"grade":"A+"}',type:'dict',mut:'Mutable'}, v2:{label:'grade',val:'"A+"',type:'str',mut:'Immutable'}, v3:{label:'score_val',val:'95',type:'int',mut:'Immutable'},
+        consoleMsg:`<span class='text-emerald-600 font-bold'>Student Record = {'name': 'Alice', 'score': 95, 'grade': 'A+'}</span>`, explanation:`Line 4: Printed the complete dictionary object.` }
+    ];
+  } else if (scenario === 'type_casting'){
+    stepList = [
+      { line:1, v1:{label:'raw_str',val:'"125"',type:'str',mut:'Immutable'}, v2:{label:'num_int',val:'--',type:'--',mut:'--'}, v3:{label:'num_float',val:'--',type:'--',mut:'--'},
+        consoleMsg:`&gt; raw_str = "125" (type: str)`, explanation:`Line 1: Stored string representation of digits.` },
+      { line:2, v1:{label:'raw_str',val:'"125"',type:'str',mut:'Immutable'}, v2:{label:'num_int',val:'125',type:'int',mut:'Immutable'}, v3:{label:'num_float',val:'--',type:'--',mut:'--'},
+        consoleMsg:`&gt; num_int = int("125") -&gt; 125 (type: int)`, explanation:`Line 2: Converted string "125" to integer 125.` },
+      { line:3, v1:{label:'raw_str',val:'"125"',type:'str',mut:'Immutable'}, v2:{label:'num_int',val:'125',type:'int',mut:'Immutable'}, v3:{label:'num_float',val:'125.0',type:'float',mut:'Immutable'},
+        consoleMsg:`&gt; num_float = float(125) -&gt; 125.0 (type: float)`, explanation:`Line 3: Cast integer 125 to floating-point 125.0.` },
+      { line:4, v1:{label:'raw_str',val:'"125"',type:'str',mut:'Immutable'}, v2:{label:'num_int',val:'125',type:'int',mut:'Immutable'}, v3:{label:'num_float',val:'125.0',type:'float',mut:'Immutable'},
+        consoleMsg:`<span class='text-emerald-600 font-bold'>Casted: 125 (&lt;class 'int'&gt;) -&gt; 125.0 (&lt;class 'float'&gt;)</span>`, explanation:`Line 4: Displayed the successful type casting.` }
+    ];
+  }
+}
+
+function startSimulation(){
+  updateScenarioDisplay();
+  buildExecutionSteps();
+  currentStepIdx = 0;
+  hideResultBanner();
+  clearMemory();
+  clearConsole();
+  document.getElementById('progressFill').style.width = '0%';
+
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95";
+
+  appendConsole(`&gt;&gt;&gt; Executing: datatypes_demo.py [Scenario: ${scenario}]`);
+  executeStepAtIndex(0);
+}
+
+function executeStepAtIndex(idx){
+  const step = stepList[idx];
+  highlightLine(step.line);
+
+  document.getElementById('lblVar1').innerText = step.v1.label;
+  document.getElementById('valVar1').innerText = step.v1.val;
+  document.getElementById('typeVar1').innerText = step.v1.type;
+  document.getElementById('mutVar1').innerText = step.v1.mut;
+
+  document.getElementById('lblVar2').innerText = step.v2.label;
+  document.getElementById('valVar2').innerText = step.v2.val;
+  document.getElementById('typeVar2').innerText = step.v2.type;
+  document.getElementById('mutVar2').innerText = step.v2.mut;
+
+  document.getElementById('lblVar3').innerText = step.v3.label;
+  document.getElementById('valVar3').innerText = step.v3.val;
+  document.getElementById('typeVar3').innerText = step.v3.type;
+  document.getElementById('mutVar3').innerText = step.v3.mut;
+
+  triggerMemUpdate('memVar1'); triggerMemUpdate('memVar2'); triggerMemUpdate('memVar3');
+
+  appendConsole(step.consoleMsg);
+  document.getElementById('explanationText').innerText = step.explanation;
+  document.getElementById('currentStepBadge').innerText = `Step ${idx + 1}/${stepList.length}`;
+  document.getElementById('progressFill').style.width = `${((idx+1)/stepList.length)*100}%`;
+
+  if (idx === stepList.length - 1){
+    const isErr = scenario === 'tuple_immutable';
+    showResultBanner(isErr ? "Execution Error: TypeError" : "Execution Completed Successfully", isErr);
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+    document.getElementById('currentStepBadge').innerText = "Finished";
+  }
+}
+
+function stepExecute(){
+  if (currentStepIdx < stepList.length - 1){
+    currentStepIdx++;
+    executeStepAtIndex(currentStepIdx);
+  }
+}
+
+function runAll(){
+  startSimulation();
+  while (currentStepIdx < stepList.length - 1){
+    currentStepIdx++;
+    executeStepAtIndex(currentStepIdx);
+  }
+}
+
+function resetSimulation(){
+  currentStepIdx = 0;
+  highlightLine(0);
+  clearMemory();
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('progressFill').style.width = '0%';
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+  document.getElementById('currentStepBadge').innerText = "Step: Ready";
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+}
+
+function highlightLine(lineNum){
+  document.querySelectorAll('.code-line').forEach(el=>el.classList.remove('active'));
+  if (lineNum > 0){ const t = document.getElementById(`line${lineNum}`); if (t) t.classList.add('active'); }
+}
+
+function clearMemory(){
+  ['lblVar1','lblVar2','lblVar3'].forEach((id,i)=>document.getElementById(id).innerText = `var${i+1}`);
+  ['valVar1','valVar2','valVar3'].forEach(id=>document.getElementById(id).innerText = '--');
+  ['typeVar1','typeVar2','typeVar3'].forEach(id=>document.getElementById(id).innerText = '--');
+  ['mutVar1','mutVar2','mutVar3'].forEach(id=>document.getElementById(id).innerText = '--');
+}
+function clearConsole(){ document.getElementById('terminal').innerHTML = ''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+function triggerMemUpdate(id){
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('updated');
+  setTimeout(()=>el.classList.remove('updated'), 500);
+}
+function showResultBanner(text, isError){
+  const banner = document.getElementById('resultBanner');
+  const bannerText = document.getElementById('resultBannerText');
+  const bannerIcon = document.getElementById('bannerIcon');
+  const bannerStatus = document.getElementById('bannerStatus');
+  bannerText.innerText = text;
+  if (isError){
+    bannerText.className = "text-lg font-mono font-bold text-rose-600";
+    bannerIcon.className = "w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-lg font-bold";
+    bannerIcon.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i>`;
+    bannerStatus.innerText = "Status: Error";
+    bannerStatus.className = "text-xs font-mono text-rose-600 bg-white px-3 py-1 rounded-full border border-rose-200";
+  } else {
+    bannerText.className = "text-lg font-mono font-bold text-emerald-700";
+    bannerIcon.className = "w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold";
+    bannerIcon.innerHTML = `<i class="fa-solid fa-square-check"></i>`;
+    bannerStatus.innerText = "Status: OK";
+    bannerStatus.className = "text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200";
+  }
+  banner.classList.remove('hidden');
+}
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try selecting different scenarios in the simulator to inspect how Python assigns data types and memory references!";
+  if (q.includes('mutable') || q.includes('list') || q.includes('tuple')) response = "Lists are MUTABLE (updatable via append() or index assignment); tuples are IMMUTABLE (read-only after creation). Immutability makes tuples safe to use as dictionary keys or set elements — mutable lists can't be used that way!";
+  else if (q.includes('type') || q.includes('cast')) response = "Explicit type casting uses built-in constructors like int(), float(), str(), or list(). int('hello') raises a ValueError because 'hello' isn't a valid numeric string.";
+  else if (q.includes('dict') || q.includes('key')) response = "Dictionaries store key-value pairs in {} and look up values by key in average O(1) time. Keys must be hashable (immutable) — you can use a tuple as a key, but never a list.";
+  else if (q.includes('share') || q.includes('reference') || q.includes('copy')) response = "When you write b = a for a mutable object like a list, both names point to the SAME object in memory — mutating one mutates the other! Use a.copy() or list(a) to make an independent copy.";
+  else if (q.includes('set')) response = "A set is an unordered collection of unique items — duplicates are automatically discarded. {1, 1, 2, 2, 3} becomes {1, 2, 3}.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  updateScenarioDisplay();
+});
+</script>
+</body>
+</html>

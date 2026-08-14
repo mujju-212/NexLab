@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Python Built-in Functions — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .code-line{transition:background-color .25s ease,border-color .25s ease;border-left:4px solid transparent;}
+  .code-line.active{background:rgba(79,70,229,.09);border-left-color:#4f46e5;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-brands fa-python"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Python Virtual Lab</h1>
+        <p class="text-xs text-indigo-600 font-medium">Experiment 5: Python Built-in Functions</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> Theory
+      </button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-list-check"></i> Procedure
+      </button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+      </button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-flask"></i> Simulation
+      </button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-graduation-cap"></i> Post-Test
+      </button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Theory: Python Built-in Functions</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">Python ships with a set of <strong>built-in functions</strong> that are always available in every script without an <code class="font-mono">import</code> statement. They cover math, sequence manipulation, type inspection/conversion, and I/O — and knowing them well means writing far less boilerplate code.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-indigo-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-calculator text-emerald-500"></i> Mathematical</span>
+            <span class="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded">Math</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed">
+            <code class="font-mono text-indigo-600">abs(x)</code> absolute value, <code class="font-mono text-indigo-600">pow(x,y)</code> power, <code class="font-mono text-indigo-600">round(x,n)</code> rounding, <code class="font-mono text-indigo-600">max(...)</code> / <code class="font-mono text-indigo-600">min(...)</code>.
+          </p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-indigo-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-list-check text-amber-500"></i> Sequence Utilities</span>
+            <span class="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded">Sequences</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed">
+            <code class="font-mono text-indigo-600">len(seq)</code> length, <code class="font-mono text-indigo-600">sum(seq)</code> total, <code class="font-mono text-indigo-600">sorted(seq)</code> new sorted list, <code class="font-mono text-indigo-600">reversed(seq)</code> reverse iterator.
+          </p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 space-y-2">
+          <h3 class="font-bold text-indigo-600 font-mono flex items-center justify-between">
+            <span><i class="fa-solid fa-font text-cyan-500"></i> Char & Type Functions</span>
+            <span class="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded">Conversion</span>
+          </h3>
+          <p class="text-slate-500 text-xs leading-relaxed">
+            <code class="font-mono text-indigo-600">ord(ch)</code> character → code, <code class="font-mono text-indigo-600">chr(code)</code> code → character, <code class="font-mono text-indigo-600">type(obj)</code> class inspection.
+          </p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Function</th><th class="p-2 text-left">Purpose</th><th class="p-2 text-left">Example</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">abs(x)</td><td class="p-2">Absolute (non-negative) value</td><td class="p-2 font-mono">abs(-42) → 42</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">pow(x,y)</td><td class="p-2">x raised to power y</td><td class="p-2 font-mono">pow(2,5) → 32</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">max()/min()</td><td class="p-2">Largest / smallest of arguments</td><td class="p-2 font-mono">max(10,85,45) → 85</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">sum(seq)</td><td class="p-2">Total of an iterable</td><td class="p-2 font-mono">sum([40,10,90]) → 140</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">sorted(seq)</td><td class="p-2">New sorted list (original untouched)</td><td class="p-2 font-mono">sorted([3,1,2]) → [1,2,3]</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">ord(ch) / chr(n)</td><td class="p-2">Character ⇌ Unicode code point</td><td class="p-2 font-mono">ord('A') → 65, chr(66) → 'B'</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs text-rose-700 space-y-2">
+        <h4 class="font-bold text-rose-700 text-sm"><i class="fa-solid fa-triangle-exclamation"></i> Common Pitfalls</h4>
+        <ul class="list-disc list-inside space-y-1 leading-relaxed">
+          <li><strong><code class="font-mono">sorted()</code> vs <code class="font-mono">list.sort()</code>:</strong> <code class="font-mono">sorted()</code> returns a brand-new list; <code class="font-mono">.sort()</code> mutates in place and returns <code class="font-mono">None</code>. Printing the result of <code class="font-mono">.sort()</code> is a classic beginner bug.</li>
+          <li><strong><code class="font-mono">ord()</code> only accepts a single character.</strong> Passing a multi-character string raises a <code class="font-mono">TypeError</code>.</li>
+          <li><strong><code class="font-mono">max()</code>/<code class="font-mono">min()</code> on an empty sequence</strong> raise a <code class="font-mono">ValueError</code> unless a <code class="font-mono">default=</code> argument is given.</li>
+          <li><strong><code class="font-mono">round()</code> uses banker's rounding</strong> (round-half-to-even): <code class="font-mono">round(2.5) == 2</code>, not 3 — surprising for newcomers used to "round half up".</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Select a <strong>Built-in Function Scenario</strong> (Math, Sequence Utilities, or Character/ASCII) from the dropdown or click a Quick Preset.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Simulation</strong> to load the code script and initialize RAM memory variables.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step Execution</strong> to trace the code line-by-line and observe each function's returned value.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Inspect the <strong>Variable RAM Memory State</strong> panel to see returned values and their data types update live.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Run / Execute All</strong> to complete execution instantly and view the pop-out result banner.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> at any time to clear the trace and start over.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What is the output of <code class="font-mono">abs(-15)</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> -15</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> 15</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> TypeError</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. Which function returns the total sum of elements in <code class="font-mono">[10, 20, 30]</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> total([10, 20, 30])</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> sum([10, 20, 30])</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> count([10, 20, 30])</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. What does <code class="font-mono">len("Python")</code> return?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> 6</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> 5</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> "Python"</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">4. What does <code class="font-mono">pow(2, 5)</code> evaluate to?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> 10</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> 32</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> 25</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Select Built-in Function Scenario</label>
+              <select id="funcScenario" onchange="updateScenarioDisplay()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-indigo-500 min-w-[280px]">
+                <option value="math_funcs">Math Functions (abs, max, min, pow)</option>
+                <option value="sequence_funcs">Sequence Functions (len, sum, sorted)</option>
+                <option value="char_funcs">Character & ASCII Functions (ord, chr)</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Start Simulation
+            </button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-forward-step"></i> Step Execution
+            </button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-bolt"></i> Run / Execute All
+            </button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('math_funcs')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Math Functions</button>
+          <button onclick="loadPreset('sequence_funcs')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Sequence Utilities</button>
+          <button onclick="loadPreset('char_funcs')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">ASCII & Char Functions</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-indigo-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-code text-indigo-600"></i> Code Trace Window
+            </span>
+          </div>
+          <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 text-slate-200 flex-1 space-y-0.5 overflow-x-auto min-h-[220px]"></div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Select a scenario and click 'Start Simulation' or 'Run / Execute All'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-7 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-microchip text-indigo-600"></i> Variable RAM Memory State
+            </h3>
+            <div class="grid grid-cols-3 gap-3">
+              <div id="memVar1" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span id="lblVar1" class="text-xs text-slate-500 block font-mono">var1</span>
+                <span id="valVar1" class="text-lg font-bold font-mono text-indigo-600 block my-1 truncate">--</span>
+                <span id="typeVar1" class="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-mono">--</span>
+              </div>
+              <div id="memVar2" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span id="lblVar2" class="text-xs text-slate-500 block font-mono">var2</span>
+                <span id="valVar2" class="text-lg font-bold font-mono text-indigo-600 block my-1 truncate">--</span>
+                <span id="typeVar2" class="text-[10px] bg-indigo-50 text-indigo-600 px-1.5 py-0.5 rounded font-mono">--</span>
+              </div>
+              <div id="memVar3" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span id="lblVar3" class="text-xs text-slate-500 block font-mono">var3</span>
+                <span id="valVar3" class="text-lg font-bold font-mono text-emerald-600 block my-1 truncate">--</span>
+                <span id="typeVar3" class="text-[10px] bg-emerald-50 text-emerald-600 px-1.5 py-0.5 rounded font-mono">--</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal
+              </span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[140px] max-h-[180px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-indigo-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-square-check"></i>
+              </div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Final Execution Output</h4>
+                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+            <span class="text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200">Status: OK</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What is the output of <code class="font-mono">ord('A')</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> 'A'</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> 65</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> 97</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What does <code class="font-mono">sorted([3, 1, 4, 2])</code> return?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> None (sorts list in place)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> [1, 2, 3, 4]</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> [4, 3, 2, 1]</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. What does <code class="font-mono">chr(66)</code> return?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> 66</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> 'A'</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> 'B'</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. What is the key difference between <code class="font-mono">sorted(list)</code> and <code class="font-mono">list.sort()</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> sorted() returns a new list; .sort() mutates in place and returns None</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> They are exactly identical</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> .sort() only works on strings</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-indigo-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+      </h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me anything about built-in functions like abs(), sum(), sorted(), ord(), chr(), max()/min(), or round().</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., what's the difference between sorted() and list.sort()?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+let scenario = 'math_funcs';
+let stepList = [];
+let currentStepIdx = 0;
+
+function loadPreset(presetScenario){
+  document.getElementById('funcScenario').value = presetScenario;
+  runAll();
+}
+
+function updateScenarioDisplay(){
+  scenario = document.getElementById('funcScenario').value;
+  const codeContainer = document.getElementById('codeContainer');
+
+  if (scenario === 'math_funcs'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>val = abs(-42)</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>p_val = pow(2, 5)</span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span>max_val = max(10, 85, 45)</span></div>
+      <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"abs: {val}, pow: {p_val}, max: {max_val}"</span>)</span></div>
+    `;
+  } else if (scenario === 'sequence_funcs'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>nums = [40, 10, 90, 20]</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>total = sum(nums)</span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span>sorted_nums = sorted(nums)</span></div>
+      <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"sum: {total}, sorted: {sorted_nums}"</span>)</span></div>
+    `;
+  } else if (scenario === 'char_funcs'){
+    codeContainer.innerHTML = `
+      <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">1</span><span>code = ord(<span class="text-emerald-300">'A'</span>)</span></div>
+      <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">2</span><span>char = chr(66)</span></div>
+      <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3"><span class="text-slate-600 text-xs w-4">3</span><span>print(<span class="text-emerald-300">f"ord('A'): {code}, chr(66): {char}"</span>)</span></div>
+    `;
+  }
+}
+
+function buildExecutionSteps(){
+  stepList = [];
+  if (scenario === 'math_funcs'){
+    stepList = [
+      { line:1, v1:{label:'val',val:'42',type:'int'}, v2:{label:'p_val',val:'--',type:'--'}, v3:{label:'max_val',val:'--',type:'--'},
+        consoleMsg:`&gt; Calculated abs(-42) -&gt; 42`, explanation:`Line 1: abs(-42) returns positive integer 42.` },
+      { line:2, v1:{label:'val',val:'42',type:'int'}, v2:{label:'p_val',val:'32',type:'int'}, v3:{label:'max_val',val:'--',type:'--'},
+        consoleMsg:`&gt; Calculated pow(2, 5) -&gt; 32`, explanation:`Line 2: pow(2, 5) evaluates 2 raised to the 5th power.` },
+      { line:3, v1:{label:'val',val:'42',type:'int'}, v2:{label:'p_val',val:'32',type:'int'}, v3:{label:'max_val',val:'85',type:'int'},
+        consoleMsg:`&gt; Evaluated max(10, 85, 45) -&gt; 85`, explanation:`Line 3: max() identifies the maximum argument value.` },
+      { line:4, v1:{label:'val',val:'42',type:'int'}, v2:{label:'p_val',val:'32',type:'int'}, v3:{label:'max_val',val:'85',type:'int'},
+        consoleMsg:`<span class='text-emerald-600 font-bold'>abs: 42, pow: 32, max: 85</span>`, explanation:`Line 4: Printed computed math function values.` }
+    ];
+  } else if (scenario === 'sequence_funcs'){
+    stepList = [
+      { line:1, v1:{label:'nums',val:'[40, 10, 90, 20]',type:'list'}, v2:{label:'total',val:'--',type:'--'}, v3:{label:'sorted_nums',val:'--',type:'--'},
+        consoleMsg:`&gt; Stored list nums = [40, 10, 90, 20]`, explanation:`Line 1: Initialized a list of integers.` },
+      { line:2, v1:{label:'nums',val:'[40, 10, 90, 20]',type:'list'}, v2:{label:'total',val:'160',type:'int'}, v3:{label:'sorted_nums',val:'--',type:'--'},
+        consoleMsg:`&gt; Calculated sum(nums) -&gt; 160`, explanation:`Line 2: sum() returned the total of all elements.` },
+      { line:3, v1:{label:'nums',val:'[40, 10, 90, 20]',type:'list'}, v2:{label:'total',val:'160',type:'int'}, v3:{label:'sorted_nums',val:'[10, 20, 40, 90]',type:'list'},
+        consoleMsg:`&gt; Evaluated sorted(nums) -&gt; [10, 20, 40, 90]`, explanation:`Line 3: sorted() returned a new sorted list copy — nums itself is unchanged.` },
+      { line:4, v1:{label:'nums',val:'[40, 10, 90, 20]',type:'list'}, v2:{label:'total',val:'160',type:'int'}, v3:{label:'sorted_nums',val:'[10, 20, 40, 90]',type:'list'},
+        consoleMsg:`<span class='text-emerald-600 font-bold'>sum: 160, sorted: [10, 20, 40, 90]</span>`, explanation:`Line 4: Printed sequence function outputs.` }
+    ];
+  } else if (scenario === 'char_funcs'){
+    stepList = [
+      { line:1, v1:{label:'code',val:'65',type:'int'}, v2:{label:'char',val:'--',type:'--'}, v3:{label:'status',val:'OK',type:'str'},
+        consoleMsg:`&gt; ord('A') -&gt; 65`, explanation:`Line 1: ord('A') returned the ASCII code integer 65.` },
+      { line:2, v1:{label:'code',val:'65',type:'int'}, v2:{label:'char',val:'"B"',type:'str'}, v3:{label:'status',val:'OK',type:'str'},
+        consoleMsg:`&gt; chr(66) -&gt; "B"`, explanation:`Line 2: chr(66) converted ASCII code 66 to character 'B'.` },
+      { line:3, v1:{label:'code',val:'65',type:'int'}, v2:{label:'char',val:'"B"',type:'str'}, v3:{label:'status',val:'OK',type:'str'},
+        consoleMsg:`<span class='text-emerald-600 font-bold'>ord('A'): 65, chr(66): B</span>`, explanation:`Line 3: Printed character/ASCII conversion results.` }
+    ];
+  }
+}
+
+function startSimulation(){
+  updateScenarioDisplay();
+  buildExecutionSteps();
+  currentStepIdx = 0;
+  hideResultBanner();
+  clearConsole();
+  document.getElementById('progressFill').style.width = '0%';
+
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95";
+
+  appendConsole(`&gt;&gt;&gt; Executing: builtin_funcs.py [Scenario: ${scenario}]`);
+  executeStepAtIndex(0);
+}
+
+function executeStepAtIndex(idx){
+  const step = stepList[idx];
+  highlightLine(step.line);
+
+  document.getElementById('lblVar1').innerText = step.v1.label;
+  document.getElementById('valVar1').innerText = step.v1.val;
+  document.getElementById('typeVar1').innerText = step.v1.type;
+
+  document.getElementById('lblVar2').innerText = step.v2.label;
+  document.getElementById('valVar2').innerText = step.v2.val;
+  document.getElementById('typeVar2').innerText = step.v2.type;
+
+  document.getElementById('lblVar3').innerText = step.v3.label;
+  document.getElementById('valVar3').innerText = step.v3.val;
+  document.getElementById('typeVar3').innerText = step.v3.type;
+
+  triggerMemUpdate('memVar1'); triggerMemUpdate('memVar2'); triggerMemUpdate('memVar3');
+
+  appendConsole(step.consoleMsg);
+  document.getElementById('explanationText').innerText = step.explanation;
+  document.getElementById('currentStepBadge').innerText = `Step ${idx + 1}/${stepList.length}`;
+  document.getElementById('progressFill').style.width = `${((idx+1)/stepList.length)*100}%`;
+
+  if (idx === stepList.length - 1){
+    showResultBanner("Built-in Functions Execution Completed");
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+    document.getElementById('currentStepBadge').innerText = "Finished";
+  }
+}
+
+function stepExecute(){
+  if (currentStepIdx < stepList.length - 1){
+    currentStepIdx++;
+    executeStepAtIndex(currentStepIdx);
+  }
+}
+
+function runAll(){
+  startSimulation();
+  while (currentStepIdx < stepList.length - 1){
+    currentStepIdx++;
+    executeStepAtIndex(currentStepIdx);
+  }
+}
+
+function resetSimulation(){
+  currentStepIdx = 0;
+  highlightLine(0);
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('progressFill').style.width = '0%';
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+  document.getElementById('currentStepBadge').innerText = "Step: Ready";
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+}
+
+function highlightLine(lineNum){
+  document.querySelectorAll('.code-line').forEach(el=>el.classList.remove('active'));
+  if (lineNum > 0){ const t = document.getElementById(`line${lineNum}`); if (t) t.classList.add('active'); }
+}
+function clearConsole(){ document.getElementById('terminal').innerHTML = ''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+function triggerMemUpdate(id){
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('updated');
+  setTimeout(()=>el.classList.remove('updated'), 500);
+}
+function showResultBanner(text){
+  document.getElementById('resultBannerText').innerText = text;
+  document.getElementById('resultBanner').classList.remove('hidden');
+}
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-indigo-50 border border-indigo-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try testing built-in functions in the simulator to see how Python evaluates mathematical and sequence operations!";
+  if (q.includes('sorted') || q.includes('sort')) response = "sorted(list) returns a NEW sorted list without modifying the original. list.sort() sorts in-place and returns None — printing the result of .sort() gives you 'None', a very common bug!";
+  else if (q.includes('ord') || q.includes('chr') || q.includes('ascii')) response = "ord(ch) converts a single character to its ASCII/Unicode code point integer (e.g. ord('A') -> 65), while chr(code) converts an integer back to a character (e.g. chr(65) -> 'A'). ord() only accepts a single character!";
+  else if (q.includes('abs') || q.includes('pow') || q.includes('max') || q.includes('min')) response = "abs(x) gets the absolute non-negative value, pow(x, y) calculates x to the power y, and max(...)/min(...) return the maximum/minimum of their arguments (or of an iterable).";
+  else if (q.includes('round')) response = "round(x, n) rounds to n decimal places using 'banker's rounding' (round half to even) — round(2.5) is 2, not 3! This trips up a lot of beginners.";
+  else if (q.includes('len')) response = "len(obj) returns the number of items in a string, list, tuple, dict, or set. len('Python') is 6 because it counts characters.";
+  else if (q.includes('sum')) response = "sum(iterable, start=0) adds up all numeric elements in an iterable, optionally starting from a custom base value.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  updateScenarioDisplay();
+});
+</script>
+</body>
+</html>

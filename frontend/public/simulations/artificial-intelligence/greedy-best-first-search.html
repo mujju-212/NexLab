@@ -1,0 +1,626 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Greedy Best-First Search — AI Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+  .node-circle{transition:all .25s ease;}
+  .edge-line{transition:all .25s ease;}
+  .stack-item{animation:slideIn .25s ease;}
+  @keyframes slideIn{from{transform:translateX(-8px);opacity:0;}to{transform:translateX(0);opacity:1;}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-route"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Artificial Intelligence Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment: Greedy Best-First Search (Heuristic Graph Search)</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <!-- Tab Nav -->
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> Theory
+      </button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-list-check"></i> Procedure
+      </button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+      </button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-flask"></i> Simulation
+      </button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-graduation-cap"></i> Post-Test
+      </button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Greedy Best-First Search</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">Greedy Best-First Search (GBFS) is an <strong>informed search</strong> algorithm: it uses a heuristic function <code class="font-mono bg-slate-100 text-purple-600 px-1.5 py-0.5 rounded">h(n)</code> — an estimate of how close node <code class="font-mono">n</code> is to the goal — to decide which node to expand next. It always expands the node in the <strong>open list</strong> (frontier) with the <em>lowest</em> h(n), completely ignoring how far it has already travelled to reach that node.</p>
+
+      <div class="bg-slate-900 text-emerald-300 font-mono text-xs p-4 rounded-xl overflow-x-auto">
+        h(n) = &radic;((n.x &minus; goal.x)&sup2; + (n.y &minus; goal.y)&sup2;) &nbsp;<span class="text-slate-400">// straight-line (Euclidean) distance to the goal</span>
+      </div>
+      <p class="text-xs text-slate-500 leading-relaxed">The <strong>open list</strong> only ever contains actual neighbours of nodes that have already been expanded (plus the start node initially) — it is NOT pre-loaded with every node in the graph. Each expansion: pop the lowest-h node from open, mark it expanded, and if it's not the goal, add its not-yet-visited neighbours to open (recording a <strong>parent pointer</strong> for path reconstruction). The search <strong>stops immediately</strong> the moment the goal is popped — expanding further would be wasted work.</p>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Worked Micro-Example</h3>
+      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-600 leading-relaxed space-y-2">
+        <p>Start S has two neighbours, A (h=8.5) and B (h=8.2, slightly closer to goal "as the crow flies"). GBFS greedily expands B first — even though this graph's edges might make the route through A shorter in practice, GBFS has no way to know that; it only trusts the straight-line estimate.</p>
+        <p class="font-mono bg-white p-2 rounded border border-slate-200">open=[A(8.5),B(8.2)] → pop B (lowest h) → expand B's neighbours → open=[A(8.5), D(5.8), E(3.2)] → pop E (lowest h) → ... → pop Goal → STOP</p>
+        <p>This is exactly why GBFS is <strong>not guaranteed optimal</strong>: it can be lured down a path that "looks close" by straight-line distance but is actually longer in real graph distance, while never reconsidering the path through A once a lower-h option exists.</p>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Greedy Best-First Search</th><th class="p-2 text-left">A* Search</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2">Expands the node with lowest h(n) — purely "distance to goal" estimate.</td><td class="p-2">Expands the node with lowest f(n) = g(n) + h(n) — cost-so-far PLUS estimated cost-to-go.</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2">Fast, but NOT guaranteed to find the optimal (shortest/cheapest) path.</td><td class="p-2">Guaranteed optimal if h(n) is admissible (never overestimates).</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2">Can be led far astray by a heuristic that "looks good" locally.</td><td class="p-2">Balances "looks good" against "cost so far", correcting for greedy mistakes.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab. The graph is drawn with each node's real 2D coordinates; pick a <strong>Quick Preset</strong> to choose the goal node (h(n) is recomputed live from coordinates).</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start</strong> to place the start node in the open list.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step Execution</strong> — each step pops the LOWEST-h node from the open list, expands it, and adds its unvisited neighbours (with their computed h values) to the open list.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Watch the <strong>Open List panel</strong> sort itself by h(n) live, and the graph highlight the node being expanded.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Or click <strong>Run All</strong> to animate the full search automatically. It stops the instant the goal is popped — no further expansion happens.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">The final path is reconstructed via parent pointers and highlighted in blue on the graph, and printed in the terminal.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> to try again.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What does h(n) represent in Greedy Best-First Search?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> The exact path cost travelled so far</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> An estimate of the distance from a node to the goal</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> The number of edges in the whole graph</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. Which node does GBFS always expand next?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> The node in the open list with the lowest h(n)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> A random node</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> The node furthest from the start</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. Is Greedy Best-First Search guaranteed to find the shortest path?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> Yes, always</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> Only on trees</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> No — it can be misled by the heuristic into a longer path</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. When should the search stop?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> The instant the goal node is popped from the open list</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> Only after every node in the graph has been expanded</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> After a fixed number of steps regardless of the goal</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="text-xs text-slate-500">8-node graph with real 2D coordinates &middot; h(n) = Euclidean distance to the current goal</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Start
+            </button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-forward-step"></i> Step Execution
+            </button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-bolt"></i> Run All
+            </button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('S','G')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">S &rarr; G (far goal)</button>
+          <button onclick="loadPreset('S','C')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">S &rarr; C (near goal)</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-diagram-project text-purple-600"></i> Graph (labelled with h(n))
+            </span>
+            <span class="text-xs text-slate-400 font-mono">amber = expanding · emerald = expanded · blue = final path</span>
+          </div>
+          <div class="p-4 flex items-center justify-center bg-slate-50/50 flex-1">
+            <svg id="graphSvg" viewBox="0 0 620 380" class="w-full max-w-2xl"></svg>
+          </div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Click 'Start' to place the start node into the open list.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-5 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-list-ol text-purple-600"></i> Open List (sorted by h(n))
+            </h3>
+            <div id="openPanel" class="flex flex-wrap gap-2 min-h-[46px] items-center"></div>
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-4">Expanded (Closed) Set</h3>
+            <div id="closedPanel" class="flex flex-wrap gap-2 min-h-[32px] items-center"></div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div id="mem1" class="mem-card bg-white border border-slate-200 p-3 rounded-xl text-center shadow-sm">
+              <span class="text-xs text-slate-500 block font-mono">Nodes Expanded</span>
+              <span id="val1" class="text-xl font-bold font-mono text-purple-600 block my-1">0</span>
+            </div>
+            <div id="mem2" class="mem-card bg-white border border-slate-200 p-3 rounded-xl text-center shadow-sm">
+              <span class="text-xs text-slate-500 block font-mono">Currently Expanding</span>
+              <span id="val2" class="text-xl font-bold font-mono text-emerald-600 block my-1">--</span>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal
+              </span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[140px] max-h-[220px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Start' or 'Run All' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-flag-checkered"></i>
+              </div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Path Found</h4>
+                <p id="resultBannerText" class="text-sm font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What is the KEY structural difference between GBFS's open list and DFS's stack?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> There is no difference</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> GBFS's open list is ordered by h(n) and always pops the minimum, regardless of insertion order — DFS's stack always pops whatever was inserted most recently</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> GBFS's open list is FIFO like a queue</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. Why must the search stop the MOMENT the goal is popped, rather than continuing to expand?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> Continuing would only waste computation — the goal has already been reached and its parent-pointer path is already determined</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> It's required for the heuristic to remain admissible</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> The graph would become disconnected otherwise</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. If a node's straight-line distance to the goal is small but every path through it is actually very long (e.g. blocked by a detour), what does GBFS do?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> It automatically avoids that node</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> It's impossible for this to happen</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> It can still be lured toward that node since GBFS only looks at h(n), never the actual path cost so far — this is its key weakness</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. How would adding a g(n) "cost so far" term alongside h(n) change this algorithm?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> It would turn GBFS into A* search, expanding by f(n)=g(n)+h(n) instead of h(n) alone</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> It would make no difference at all</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> It would turn it into DFS</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+      </h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about the heuristic h(n), the open list, why GBFS isn't optimal, or how it compares to A*.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., what is the heuristic?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ==========================================================================
+   CORE GREEDY BEST-FIRST SEARCH LOGIC (pure functions — verified in Node.js)
+   ========================================================================== */
+const NODES = {
+  S:{x:0,y:0}, A:{x:2,y:3}, B:{x:2,y:-2}, C:{x:5,y:4},
+  D:{x:5,y:-3}, E:{x:7,y:1}, F:{x:9,y:3}, G:{x:10,y:0}
+};
+const ADJ = {
+  S:['A','B'], A:['S','C','E'], B:['S','D','E'],
+  C:['A','F'], D:['B','E'], E:['A','B','F','G'],
+  F:['C','E','G'], G:['E','F']
+};
+// SVG layout coords (separate from the "logical" x,y used for heuristic distance, scaled/flipped to fit the canvas nicely)
+const POS = {
+  S:[40,190], A:[160,80], B:[160,300], C:[330,40],
+  D:[330,340], E:[440,190], F:[520,90], G:[580,190]
+};
+function euclidH(nodeId, goalId){
+  const a = NODES[nodeId], b = NODES[goalId];
+  return Math.sqrt((a.x-b.x)**2 + (a.y-b.y)**2); // computed for real from coordinates
+}
+// Full trace computed up front (pure function). Stops expansion at goal.
+function computeGbfsTrace(adj, start, goal){
+  const h = {};
+  for(const n in NODES) h[n] = euclidH(n, goal);
+  const open = [{node:start, h:h[start], parent:null}];
+  const visited = new Set();
+  const parent = {};
+  const expandedOrder = [];
+  const trace = [];
+  while(open.length){
+    open.sort((a,b)=>a.h-b.h);
+    const snapshotOpen = open.map(o=>({node:o.node,h:o.h}));
+    const popped = open.shift();
+    if(visited.has(popped.node)){
+      trace.push({type:'skip', node:popped.node, openSnapshot:snapshotOpen, visited:[...visited]});
+      continue;
+    }
+    visited.add(popped.node);
+    expandedOrder.push(popped.node);
+    if(popped.node !== start) parent[popped.node] = popped.parent;
+    const isGoal = popped.node === goal;
+    const added = [];
+    if(!isGoal){
+      for(const nb of adj[popped.node]){
+        if(!visited.has(nb) && !open.some(o=>o.node===nb)){
+          open.push({node:nb, h:h[nb], parent:popped.node});
+          added.push(nb);
+        }
+      }
+    }
+    trace.push({type:'expand', node:popped.node, added, isGoal, openSnapshot:snapshotOpen, openAfter: open.map(o=>({node:o.node,h:o.h})), visited:[...visited]});
+    if(isGoal) break;
+  }
+  // reconstruct path
+  const path = [goal];
+  let cur = goal;
+  while(cur !== start){ cur = parent[cur]; path.unshift(cur); }
+  return { h, expandedOrder, trace, path };
+}
+
+/* ---------- UI state & controller ---------- */
+let sim = { start:'S', goal:'G', trace:[], idx:0, timer:null, edgesUsed:new Set() };
+
+function loadPreset(start, goal){ startSimulation(start, goal); }
+
+function edgeKeyOf(a,b){ return [a,b].sort().join('-'); }
+function allEdges(){
+  const set = new Set();
+  for(const n in ADJ) ADJ[n].forEach(nb=>set.add(edgeKeyOf(n,nb)));
+  return [...set].map(k=>k.split('-'));
+}
+
+function renderGraph(){
+  const svg = document.getElementById('graphSvg');
+  let html = '';
+  allEdges().forEach(([a,b])=>{
+    const [x1,y1]=POS[a], [x2,y2]=POS[b];
+    html += `<line id="edge-${edgeKeyOf(a,b)}" class="edge-line" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#cbd5e1" stroke-width="3"/>`;
+  });
+  for(const n in POS){
+    const [x,y] = POS[n];
+    html += `<circle id="node-${n}" class="node-circle" cx="${x}" cy="${y}" r="26" fill="#ffffff" stroke="#94a3b8" stroke-width="2.5"/>`;
+    html += `<text x="${x}" y="${y+2}" text-anchor="middle" font-family="Fira Code, monospace" font-weight="700" font-size="15" fill="#334155" style="pointer-events:none">${n}</text>`;
+    html += `<text id="h-${n}" x="${x}" y="${y+18}" text-anchor="middle" font-family="Fira Code, monospace" font-size="9" fill="#9333ea" style="pointer-events:none"></text>`;
+  }
+  svg.innerHTML = html;
+}
+function renderHValues(h){
+  for(const n in h){
+    const el = document.getElementById(`h-${n}`);
+    if(el) el.textContent = `h=${h[n].toFixed(1)}`;
+  }
+}
+function updateGraphVisual(currentNode, visited, pathNodes, pathEdges){
+  for(const n in POS){
+    const circle = document.getElementById(`node-${n}`);
+    if(pathNodes && pathNodes.includes(n)){
+      circle.setAttribute('fill', '#bfdbfe'); circle.setAttribute('stroke', '#2563eb');
+    } else if(n === currentNode){
+      circle.setAttribute('fill', '#fbbf24'); circle.setAttribute('stroke', '#d97706');
+    } else if(visited && visited.includes(n)){
+      circle.setAttribute('fill', '#a7f3d0'); circle.setAttribute('stroke', '#059669');
+    } else {
+      circle.setAttribute('fill', '#ffffff'); circle.setAttribute('stroke', '#94a3b8');
+    }
+  }
+  sim.edgesUsed.forEach(k=>{
+    const el = document.getElementById(`edge-${k}`);
+    if(el){ el.setAttribute('stroke', '#f43f5e'); el.setAttribute('stroke-width', '4'); }
+  });
+  if(pathEdges){
+    pathEdges.forEach(k=>{
+      const el = document.getElementById(`edge-${k}`);
+      if(el){ el.setAttribute('stroke', '#2563eb'); el.setAttribute('stroke-width', '5'); }
+    });
+  }
+}
+
+function renderOpenAndClosed(openList, closedList){
+  const openPanel = document.getElementById('openPanel');
+  openPanel.innerHTML = openList.length ? openList.map((o,i)=>`<span class="stack-item font-mono text-xs px-2.5 py-1.5 rounded-lg border ${i===0?'bg-amber-100 border-amber-400 text-amber-700 font-bold':'bg-slate-100 border-slate-300 text-slate-600'}">${o.node} (h=${o.h.toFixed(2)})</span>`).join('') : '<span class="text-xs text-slate-400 italic">empty</span>';
+  const closedPanel = document.getElementById('closedPanel');
+  closedPanel.innerHTML = closedList.length ? closedList.map(n=>`<span class="font-mono text-xs px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-700">${n}</span>`).join('') : '<span class="text-xs text-slate-400 italic">none yet</span>';
+}
+
+function startSimulation(startNode, goalNode){
+  clearInterval(sim.timer);
+  const start = startNode || sim.start || 'S';
+  const goal = goalNode || sim.goal || 'G';
+  const { h, expandedOrder, trace, path } = computeGbfsTrace(ADJ, start, goal);
+  sim = { start, goal, trace, idx:0, timer:null, edgesUsed:new Set(), h, path, fullOrder:expandedOrder };
+  renderGraph();
+  renderHValues(h);
+  updateGraphVisual(null, [], null, null);
+  renderOpenAndClosed([{node:start,h:h[start]}], []);
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('val1').innerText = '0';
+  document.getElementById('val2').innerText = '--';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('currentStepBadge').innerText = 'Step: Ready';
+  document.getElementById('explanationText').innerText = `Start=${start}, Goal=${goal}. h(${start})=${h[start].toFixed(2)}. Click 'Step Execution' or 'Run All'.`;
+  appendConsole(`&gt;&gt;&gt; GBFS initialised. Goal=${goal}. open=[${start} (h=${h[start].toFixed(2)})]`);
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95 flex items-center gap-2';
+}
+
+function stepExecute(){
+  if(sim.idx >= sim.trace.length) return;
+  const entry = sim.trace[sim.idx];
+  sim.idx++;
+  if(entry.type === 'skip'){
+    appendConsole(`Pop <strong>${entry.node}</strong> — already expanded, skip.`);
+    renderOpenAndClosed(entry.openSnapshot.slice(1), entry.visited);
+  } else {
+    appendConsole(`Pop <strong class="text-amber-400">${entry.node}</strong> (lowest h=${sim.h[entry.node].toFixed(2)}) → expand.${entry.added.length?` Add to open: [${entry.added.map(n=>`${n} (h=${sim.h[n].toFixed(2)})`).join(', ')}]`:' No new neighbours to add.'}`);
+    document.getElementById('explanationText').innerText = `Expanding ${entry.node} (h=${sim.h[entry.node].toFixed(2)}) — the lowest-h node currently in the open list.`;
+    ADJ[entry.node].forEach(nb=>{
+      if(entry.visited.includes(nb)){ sim.edgesUsed.add(edgeKeyOf(entry.node, nb)); }
+    });
+    document.getElementById('val1').innerText = entry.visited.length;
+    document.getElementById('val2').innerText = entry.node;
+    renderOpenAndClosed(entry.openAfter, entry.visited);
+    updateGraphVisual(entry.node, entry.visited, null, null);
+    if(entry.isGoal){
+      const pathEdges = [];
+      for(let i=0;i<sim.path.length-1;i++) pathEdges.push(edgeKeyOf(sim.path[i], sim.path[i+1]));
+      updateGraphVisual(entry.node, entry.visited, sim.path, pathEdges);
+      appendConsole(`<span class="text-emerald-400">&gt;&gt;&gt; GOAL popped! Search stops immediately — no further expansion.</span>`);
+      appendConsole(`<span class="text-sky-400">&gt;&gt;&gt; Path (via parent pointers): ${sim.path.join(' → ')}</span>`);
+      showResultBanner(`${sim.path.join(' → ')}  (${sim.fullOrder.length} nodes expanded)`);
+    }
+  }
+  document.getElementById('progressFill').style.width = `${Math.min(100,(sim.idx/sim.trace.length)*100)}%`;
+  document.getElementById('currentStepBadge').innerText = `Step ${sim.idx}/${sim.trace.length}`;
+  if(sim.idx >= sim.trace.length){
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = 'bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed flex items-center gap-2';
+  }
+}
+
+function runAll(){
+  if(!sim.trace.length) startSimulation();
+  clearInterval(sim.timer);
+  sim.timer = setInterval(()=>{
+    if(sim.idx >= sim.trace.length){ clearInterval(sim.timer); return; }
+    stepExecute();
+  }, 650);
+}
+
+function resetSimulation(){ startSimulation(sim.start, sim.goal); }
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+function showResultBanner(text){
+  document.getElementById('resultBannerText').innerText = text;
+  document.getElementById('resultBanner').classList.remove('hidden');
+}
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try the 'S → G (far goal)' preset then 'Run All' and watch how the Open List panel re-sorts by h(n) after every expansion!";
+  if (q.includes('heuristic') || q.includes('h(n)') || q.includes('h(')) response = "h(n) is the straight-line (Euclidean) distance from node n to the goal, computed live from each node's real (x,y) coordinates via √((n.x−goal.x)² + (n.y−goal.y)²) — you can see it labelled under every node in the graph, and it changes if you switch the goal in the presets.";
+  else if (q.includes('open list') || q.includes('frontier')) response = "The open list only ever holds actual neighbours of already-expanded nodes (plus the start) — never the whole graph at once. It's kept sorted by h(n), and GBFS always pops the minimum.";
+  else if (q.includes('optimal') || q.includes('shortest') || q.includes('not guarantee')) response = "GBFS is NOT guaranteed optimal because it only looks at h(n) — the estimated distance FROM here TO the goal — and completely ignores how much it already cost to GET here. A node that 'looks close' can still be reached via an expensive, roundabout path.";
+  else if (q.includes('stop') || q.includes('goal popped')) response = "The search halts the instant the goal is popped from the open list — continuing to expand after that would be pure wasted computation, since the parent-pointer path to the goal is already fixed at that point.";
+  else if (q.includes('a*') || q.includes('astar') || q.includes('a star')) response = "A* uses f(n) = g(n) + h(n) instead of just h(n) — g(n) is the real cost accumulated so far. That extra g(n) term is what gives A* its optimality guarantee (with an admissible heuristic), fixing exactly the weakness GBFS has.";
+  else if (q.includes('parent') || q.includes('path reconstruct')) response = "Every time a node is added to the open list, we record WHICH node added it as its parent. Once the goal is found, we walk backward through parent pointers from goal to start, then reverse that list — that's the reconstructed path.";
+  else if (q.includes('coordinate') || q.includes('euclidean') || q.includes('distance')) response = "Every node has a real (x,y) coordinate pair. h(n) is computed with the actual Euclidean distance formula against the goal's coordinates — nothing is hardcoded, so changing the goal preset changes every h(n) value automatically.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  startSimulation('S','G');
+});
+</script>
+</body>
+</html>

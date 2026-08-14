@@ -1,0 +1,844 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Lab: Data Preprocessing & Feature Engineering - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .code-line { transition: background-color 0.2s ease, border-color 0.2s ease; }
+        .code-line.active { background-color: rgba(99, 102, 241, 0.25); border-left: 4px solid #6366f1; }
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes pulseMem {
+            0% { transform: scale(1); border-color: #6366f1; }
+            50% { transform: scale(1.03); border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+            100% { transform: scale(1); border-color: #374151; }
+        }
+        .data-card.updated { animation: pulseMem 0.5s ease-in-out; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-brain"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Machine Learning & Data Science</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 1: Data Preprocessing & Feature Engineering (Scikit-Learn)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <!-- Main Tab Navigation -->
+    <nav class="bg-slate-800/80 border-b border-slate-700 px-6 py-2">
+        <div class="flex flex-wrap gap-2 text-sm font-medium">
+            <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-lg text-indigo-400 bg-slate-700/60 border border-slate-600 flex items-center gap-2 transition">
+                <i class="fa-solid fa-book-open"></i> Theory
+            </button>
+            <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-list-check"></i> Procedure
+            </button>
+            <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+            </button>
+            <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-flask"></i> Simulation
+            </button>
+            <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-graduation-cap"></i> Post-Test
+            </button>
+            <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-robot"></i> AI Socratic Assistant
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+        <!-- TAB 1: THEORY -->
+        <div id="content-theory" class="tab-content bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Theory: Data Preprocessing & Feature Engineering</h2>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                Raw real-world datasets often contain missing values, categorical string features, and unscaled numerical variables with vast dynamic ranges. <strong>Data Preprocessing</strong> transforms dirty raw data into a clean matrix suitable for machine learning algorithms.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-filter-circle-xmark text-emerald-400"></i> 1. Missing Value Imputation</span>
+                        <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-sans">SimpleImputer</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Replaces missing <code class="text-amber-300">NaN</code> cells using column statistics: <strong>Mean</strong> (for continuous Gaussian features) or <strong>Median</strong> (robust against extreme outliers).
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-barcode text-amber-400"></i> 2. Categorical Encoding</span>
+                        <span class="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-sans">OneHot / Label</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Converts string labels into numbers. <strong>One-Hot Encoding</strong> expands nominal features into binary columns ($0$ or $1$) to avoid artificial ordinal bias.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-sliders text-cyan-400"></i> 3. Feature Scaling</span>
+                        <span class="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded font-sans">MinMax / Standard</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        <strong>StandardScaler</strong> converts features to $\mu=0, \sigma=1$: $x' = \frac{x - \mu}{\sigma}$. <strong>MinMaxScaler</strong> bounds values to $[0, 1]$: $x' = \frac{x - x_{min}}{x_{max} - x_{min}}$.
+                    </p>
+                </div>
+
+            </div>
+
+            <div class="bg-slate-900/60 p-4 rounded-lg border border-slate-700 text-xs text-slate-300 space-y-2">
+                <h4 class="font-bold text-indigo-300 text-sm"><i class="fa-solid fa-circle-info text-amber-300"></i> Why Feature Scaling is Essential</h4>
+                <p class="text-slate-400">
+                    Distance-based ML algorithms (like k-NN, SVM, Gradient Descent, or Neural Networks) are sensitive to feature scales. If Age ranges from $18-65$ and Salary ranges from $\$20,000-\$150,000$, Salary will completely dominate the distance calculations unless scaled!
+                </p>
+            </div>
+        </div>
+
+        <!-- TAB 2: PROCEDURE -->
+        <div id="content-procedure" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Simulator Procedure</h2>
+            <ol class="list-decimal list-inside space-y-3 text-sm text-slate-300 leading-relaxed">
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Select a <strong>Preprocessing Transformation Pipeline</strong> (e.g. Mean Imputation, One-Hot Encoding, or Standard Scaling) from the dropdown or click a Quick Preset.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Start Simulation"</strong> to load the raw dirty dataset into memory.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Step Execution"</strong> to trace Scikit-Learn Python transformations line-by-line (`fit_transform()`).</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Observe the <strong>Raw vs. Preprocessed Data Matrix Table</strong> update live as transformations apply.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Run / Execute All"</strong> to complete execution instantly and view final pipeline statistics.</li>
+            </ol>
+        </div>
+
+        <!-- TAB 3: PRE-TEST -->
+        <div id="content-pretest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Pre-Lab Assessment Quiz</h2>
+                <span id="pretest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="preq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. Why is One-Hot Encoding preferred over Label Encoding for unordered categorical features (e.g., Country names)?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> One-hot encoding reduces matrix dimensions</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> Label encoding introduces unintended ordinal ranking (e.g. 2 > 1)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Label encoding cannot process string data</label>
+                    </div>
+                    <p id="preq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="preq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What statistical formula represents StandardScaler normalization?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> $(x - x_{min}) / (x_{max} - x_{min})$</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> $(x - \mu) / \sigma$</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> $x / \text{mean}(x)$</label>
+                    </div>
+                    <p id="preq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPretest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Pre-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 4: SIMULATION WORKSPACE -->
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <!-- Controls Bar -->
+            <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Select Preprocessing Pipeline</label>
+                            <select id="mlScenario" onchange="updateScenarioDisplay()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="imputation">1. Missing Value Imputation (SimpleImputer: Mean)</option>
+                                <option value="encoding">2. Categorical Encoding (OneHotEncoder: Country)</option>
+                                <option value="scaling">3. Feature Scaling (StandardScaler: Age & Salary)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="startSimulation()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95">
+                            <i class="fa-solid fa-play"></i> Start Simulation
+                        </button>
+                        <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 cursor-not-allowed">
+                            <i class="fa-solid fa-forward-step"></i> Step Execution
+                        </button>
+                        <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95">
+                            <i class="fa-solid fa-bolt"></i> Run / Execute All
+                        </button>
+                        <button onclick="resetSimulation()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium px-3 py-2 rounded-lg text-sm transition flex items-center gap-1 active:scale-95">
+                            <i class="fa-solid fa-rotate-left"></i> Reset
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick Preset Shortcuts -->
+                <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-700/60 text-xs">
+                    <span class="text-slate-400 font-medium"><i class="fa-solid fa-bolt text-amber-400"></i> Quick Presets:</span>
+                    <button onclick="loadPreset('imputation')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Mean Imputer</button>
+                    <button onclick="loadPreset('encoding')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">One-Hot Encoding</button>
+                    <button onclick="loadPreset('scaling')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Standard Scaler</button>
+                </div>
+            </div>
+
+            <!-- Execution Workspace Split View -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left Column: Source Code Panel -->
+                <div class="lg:col-span-5 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md">
+                    <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <i class="fa-solid fa-code text-indigo-400"></i> Python Code Trace Window
+                        </span>
+                        <span id="currentStepBadge" class="text-xs bg-slate-700 text-slate-300 px-2.5 py-0.5 rounded-full font-mono">Step: Ready</span>
+                    </div>
+                    <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 flex-1 space-y-1 overflow-x-auto min-h-[260px]">
+                    </div>
+                    <div class="p-4 border-t border-slate-700/80 bg-slate-800/50">
+                        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Pipeline Status</h4>
+                        <p id="explanationText" class="text-xs text-slate-300 leading-relaxed min-h-[36px]">
+                            Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Right Column: Interactive Data Matrix & Terminal -->
+                <div class="lg:col-span-7 flex flex-col gap-6">
+                    
+                    <!-- Dataset Matrix Table Inspector -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md space-y-3">
+                        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                            <span class="flex items-center gap-2"><i class="fa-solid fa-table text-indigo-400"></i> Preprocessing Data Matrix Inspector</span>
+                            <span id="matrixStatusBadge" class="text-[10px] bg-slate-900 text-slate-400 px-2 py-0.5 rounded border border-slate-700 font-mono">State: Raw Input</span>
+                        </h3>
+                        
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-left border-collapse font-mono text-xs">
+                                <thead>
+                                    <tr id="tableHeader" class="bg-slate-900 text-indigo-300 border-b border-slate-700">
+                                        <th class="p-2">ID</th>
+                                        <th class="p-2">Country</th>
+                                        <th class="p-2">Age</th>
+                                        <th class="p-2">Salary ($)</th>
+                                        <th class="p-2">Purchased</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="tableBody" class="divide-y divide-slate-800 text-slate-300">
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Terminal Output -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md flex-1">
+                        <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-2.5 flex justify-between items-center">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                                <i class="fa-solid fa-terminal text-emerald-400"></i> Output Terminal
+                            </span>
+                            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition">
+                                <i class="fa-solid fa-trash-can"></i> Clear
+                            </button>
+                        </div>
+                        <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-300 min-h-[120px] max-h-[160px] overflow-y-auto space-y-1">
+                            <p class="text-slate-500 italic">>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+                        </div>
+                    </div>
+
+                    <!-- Pop-out Result Banner -->
+                    <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-950 to-indigo-950 border-2 border-emerald-500/50 p-4 rounded-xl shadow-xl flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
+                                <i class="fa-solid fa-square-check"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs uppercase font-semibold text-emerald-400 tracking-wider">Final Execution Output</h4>
+                                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-300">Preprocessing Complete</p>
+                            </div>
+                        </div>
+                        <span id="bannerStatus" class="text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1 rounded-md border border-slate-700">
+                            Completed
+                        </span>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: POST-TEST -->
+        <div id="content-posttest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Post-Lab Evaluation Quiz</h2>
+                <span id="posttest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="postq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. What is the value bound range produced by Scikit-Learn `MinMaxScaler()`?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="a"> $[-1.0, +1.0]$</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="b"> $[0.0, 1.0]$</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="c"> $[-\infty, +\infty]$</label>
+                    </div>
+                    <p id="postq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="postq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What parameter strategy in `SimpleImputer` replaces missing numerical values with the central tendency?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="a"> `strategy="mean"` or `strategy="median"`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="b"> `strategy="drop_row"`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="c"> `strategy="zero"`</label>
+                    </div>
+                    <p id="postq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPosttest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Post-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 6: AI SOCRATIC ASSISTANT -->
+        <div id="content-ai" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md flex flex-col h-[520px]">
+            <h2 class="text-lg font-bold text-indigo-400 border-b border-slate-700 pb-2 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+            </h2>
+
+            <div id="aiChatBox" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-4 overflow-y-auto space-y-3 text-xs">
+                <div class="flex items-start gap-3">
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        Hello! I am your AI Socratic Assistant. Ask me any question about Machine Learning Data Preprocessing (`SimpleImputer`, `OneHotEncoder`, or `StandardScaler`)!
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 mt-4">
+                <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., When should I use StandardScaler vs MinMaxScaler?)...." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                <button onclick="sendAiQuery()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-xs font-semibold transition active:scale-95">
+                    Send
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let scenario = 'imputation';
+        let stepList = [];
+        let currentStepIdx = 0;
+
+        // Raw Initial Dataset State
+        const rawData = [
+            { id: 1, country: "India", age: 34, salary: 72000, purchased: "No" },
+            { id: 2, country: "France", age: 27, salary: 48000, purchased: "Yes" },
+            { id: 3, country: "Spain", age: "NaN", salary: 54000, purchased: "No" },
+            { id: 4, country: "India", age: 42, salary: "NaN", purchased: "Yes" },
+            { id: 5, country: "France", age: 39, salary: 61000, purchased: "No" }
+        ];
+
+        document.addEventListener("DOMContentLoaded", () => {
+            updateScenarioDisplay();
+            renderTable(rawData);
+        });
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+                el.classList.add('text-slate-400');
+            });
+
+            const targetContent = document.getElementById(`content-${tabName}`);
+            if (targetContent) targetContent.classList.remove('hidden');
+
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('text-slate-400');
+                activeBtn.classList.add('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+            }
+        }
+
+        function loadPreset(presetScenario) {
+            const dropdown = document.getElementById('mlScenario');
+            if (dropdown) dropdown.value = presetScenario;
+            updateScenarioDisplay();
+            runAll();
+        }
+
+        function updateScenarioDisplay() {
+            scenario = document.getElementById('mlScenario').value;
+            const codeContainer = document.getElementById('codeContainer');
+
+            if (scenario === 'imputation') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>from sklearn.impute import SimpleImputer</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>imputer = SimpleImputer(strategy=<span class="text-emerald-300">"mean"</span>)</span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>df[[<span class="text-emerald-300">'Age'</span>, <span class="text-emerald-300">'Salary'</span>]] = imputer.fit_transform(df[[<span class="text-emerald-300">'Age'</span>, <span class="text-emerald-300">'Salary'</span>]])</span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Imputed Missing Values! Cleaned shape: {df.shape}"</span>)</span></div>
+                `;
+            } else if (scenario === 'encoding') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>from sklearn.preprocessing import OneHotEncoder</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>encoder = OneHotEncoder(sparse_output=False)</span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>encoded_cols = encoder.fit_transform(df[[<span class="text-emerald-300">'Country'</span>]])</span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Categories Encoded: {encoder.categories_[0]}"</span>)</span></div>
+                `;
+            } else if (scenario === 'scaling') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>from sklearn.preprocessing import StandardScaler</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>scaler = StandardScaler()</span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>scaled_features = scaler.fit_transform(df[[<span class="text-emerald-300">'Age'</span>, <span class="text-emerald-300">'Salary'</span>]])</span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Scaled Features Mean: ~0, Std: ~1"</span>)</span></div>
+                `;
+            }
+        }
+
+        function renderTable(data, customHeaders = null) {
+            const headerRow = document.getElementById('tableHeader');
+            const tbody = document.getElementById('tableBody');
+
+            if (customHeaders) {
+                headerRow.innerHTML = customHeaders.map(h => `<th class="p-2">${h}</th>`).join('');
+            } else {
+                headerRow.innerHTML = `
+                    <th class="p-2">ID</th>
+                    <th class="p-2">Country</th>
+                    <th class="p-2">Age</th>
+                    <th class="p-2">Salary ($)</th>
+                    <th class="p-2">Purchased</th>
+                `;
+            }
+
+            tbody.innerHTML = '';
+            data.forEach(row => {
+                const tr = document.createElement('tr');
+                tr.className = "hover:bg-slate-800/60 transition";
+                
+                let cellsHtml = '';
+                if (row.isEncoded) {
+                    cellsHtml = `
+                        <td class="p-2 font-bold text-amber-400">${row.id}</td>
+                        <td class="p-2 text-emerald-400 font-bold">${row.france}</td>
+                        <td class="p-2 text-emerald-400 font-bold">${row.india}</td>
+                        <td class="p-2 text-emerald-400 font-bold">${row.spain}</td>
+                        <td class="p-2">${row.age}</td>
+                        <td class="p-2">${row.salary}</td>
+                    `;
+                } else {
+                    const isAgeNan = row.age === "NaN";
+                    const isSalNan = row.salary === "NaN";
+
+                    cellsHtml = `
+                        <td class="p-2 font-bold text-amber-400">${row.id}</td>
+                        <td class="p-2 text-indigo-300">${row.country}</td>
+                        <td class="p-2 ${isAgeNan ? 'text-rose-400 font-bold bg-rose-500/10' : 'text-slate-200'}">${row.age}</td>
+                        <td class="p-2 ${isSalNan ? 'text-rose-400 font-bold bg-rose-500/10' : 'text-slate-200'}">${row.salary}</td>
+                        <td class="p-2">${row.purchased}</td>
+                    `;
+                }
+
+                tr.innerHTML = cellsHtml;
+                tbody.appendChild(tr);
+            });
+        }
+
+        function buildExecutionSteps() {
+            stepList = [];
+
+            if (scenario === 'imputation') {
+                const imputedData = [
+                    { id: 1, country: "India", age: 34, salary: 72000, purchased: "No" },
+                    { id: 2, country: "France", age: 27, salary: 48000, purchased: "Yes" },
+                    { id: 3, country: "Spain", age: "35.5 (mean)", salary: 54000, purchased: "No" },
+                    { id: 4, country: "India", age: 42, salary: "58750 (mean)", purchased: "Yes" },
+                    { id: 5, country: "France", age: 39, salary: 61000, purchased: "No" }
+                ];
+
+                stepList = [
+                    {
+                        line: 1,
+                        tableData: rawData,
+                        headers: null,
+                        badgeText: 'State: Raw Input',
+                        consoleMsg: `> Loaded SimpleImputer from sklearn.impute`,
+                        explanation: `Line 1: Imported SimpleImputer class.`
+                    },
+                    {
+                        line: 2,
+                        tableData: rawData,
+                        headers: null,
+                        badgeText: 'State: Imputer Configured',
+                        consoleMsg: `> Configured SimpleImputer(strategy="mean")`,
+                        explanation: `Line 2: Configured imputer to calculate mean value for NaN substitution.`
+                    },
+                    {
+                        line: 3,
+                        tableData: imputedData,
+                        headers: null,
+                        badgeText: 'State: Imputed Clean Matrix',
+                        consoleMsg: `> fit_transform(): Replaced Age NaN with 35.5 and Salary NaN with 58750.0`,
+                        explanation: `Line 3: Replaced missing NaN entries with column arithmetic mean.`
+                    },
+                    {
+                        line: 4,
+                        tableData: imputedData,
+                        headers: null,
+                        badgeText: 'State: Completed',
+                        consoleMsg: `<span class='text-emerald-300 font-bold'>Imputed Missing Values! Cleaned shape: (5, 5)</span>`,
+                        explanation: `Line 4: Printed imputed dataset verification summary.`
+                    }
+                ];
+            } else if (scenario === 'encoding') {
+                const encodedData = [
+                    { id: 1, france: 0, india: 1, spain: 0, age: 34, salary: 72000, isEncoded: true },
+                    { id: 2, france: 1, india: 0, spain: 0, age: 27, salary: 48000, isEncoded: true },
+                    { id: 3, france: 0, india: 0, spain: 1, age: 35.5, salary: 54000, isEncoded: true },
+                    { id: 4, france: 0, india: 1, spain: 0, age: 42, salary: 58750, isEncoded: true },
+                    { id: 5, france: 1, india: 0, spain: 0, age: 39, salary: 61000, isEncoded: true }
+                ];
+
+                const encodedHeaders = ["ID", "Country_France", "Country_India", "Country_Spain", "Age", "Salary ($)"];
+
+                stepList = [
+                    {
+                        line: 1,
+                        tableData: rawData,
+                        headers: null,
+                        badgeText: 'State: Raw Input',
+                        consoleMsg: `> Loaded OneHotEncoder from sklearn.preprocessing`,
+                        explanation: `Line 1: Imported OneHotEncoder module.`
+                    },
+                    {
+                        line: 2,
+                        tableData: rawData,
+                        headers: null,
+                        badgeText: 'State: Encoder Configured',
+                        consoleMsg: `> Configured OneHotEncoder(sparse_output=False)`,
+                        explanation: `Line 2: Configured dense array binary output.`
+                    },
+                    {
+                        line: 3,
+                        tableData: encodedData,
+                        headers: encodedHeaders,
+                        badgeText: 'State: One-Hot Encoded Matrix',
+                        consoleMsg: `> Encoded 'Country' nominal string into 3 binary columns [France, India, Spain]`,
+                        explanation: `Line 3: Expanded Country categorical variable into One-Hot dummy columns.`
+                    },
+                    {
+                        line: 4,
+                        tableData: encodedData,
+                        headers: encodedHeaders,
+                        badgeText: 'State: Completed',
+                        consoleMsg: `<span class='text-emerald-300 font-bold'>Categories Encoded: ['France', 'India', 'Spain']</span>`,
+                        explanation: `Line 4: Displayed encoder categories.`
+                    }
+                ];
+            } else if (scenario === 'scaling') {
+                const scaledData = [
+                    { id: 1, country: "India", age: "-0.28 (scaled)", salary: "+1.21 (scaled)", purchased: "No" },
+                    { id: 2, country: "France", age: "-1.48 (scaled)", salary: "-1.23 (scaled)", purchased: "Yes" },
+                    { id: 3, country: "Spain", age: "-0.02 (scaled)", salary: "-0.62 (scaled)", purchased: "No" },
+                    { id: 4, country: "India", age: "+1.09 (scaled)", salary: "-0.14 (scaled)", purchased: "Yes" },
+                    { id: 5, country: "France", age: "+0.58 (scaled)", salary: "+0.09 (scaled)", purchased: "No" }
+                ];
+
+                stepList = [
+                    {
+                        line: 1,
+                        tableData: rawData,
+                        headers: null,
+                        badgeText: 'State: Raw Input',
+                        consoleMsg: `> Loaded StandardScaler from sklearn.preprocessing`,
+                        explanation: `Line 1: Loaded StandardScaler module.`
+                    },
+                    {
+                        line: 2,
+                        tableData: rawData,
+                        headers: null,
+                        badgeText: 'State: Scaler Configured',
+                        consoleMsg: `> Configured StandardScaler()`,
+                        explanation: `Line 2: Configured Standard score scaler.`
+                    },
+                    {
+                        line: 3,
+                        tableData: scaledData,
+                        headers: null,
+                        badgeText: 'State: Standardized Features (z-scores)',
+                        consoleMsg: `> fit_transform(): Calculated z-scores z = (x - mean) / std_dev`,
+                        explanation: `Line 3: Normalized Age & Salary features to mean = 0, std = 1.`
+                    },
+                    {
+                        line: 4,
+                        tableData: scaledData,
+                        headers: null,
+                        badgeText: 'State: Completed',
+                        consoleMsg: `<span class='text-emerald-300 font-bold'>Scaled Features Mean: ~0, Std: ~1</span>`,
+                        explanation: `Line 4: Verified standardized distribution stats.`
+                    }
+                ];
+            }
+        }
+
+        function startSimulation() {
+            updateScenarioDisplay();
+            buildExecutionSteps();
+            currentStepIdx = 0;
+
+            hideResultBanner();
+            clearConsole();
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = false;
+            btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95 shadow-lg shadow-emerald-600/20";
+
+            appendConsole(`>>> Executing: ml_preprocessing.py [Pipeline: ${scenario}]`);
+            executeStepAtIndex(0);
+        }
+
+        function executeStepAtIndex(idx) {
+            const step = stepList[idx];
+            highlightLine(step.line);
+
+            renderTable(step.tableData, step.headers);
+
+            const badge = document.getElementById('matrixStatusBadge');
+            badge.innerText = step.badgeText;
+
+            appendConsole(step.consoleMsg);
+            document.getElementById('explanationText').innerText = step.explanation;
+            document.getElementById('currentStepBadge').innerText = `Step ${idx + 1}/${stepList.length}`;
+
+            if (idx === stepList.length - 1) {
+                showResultBanner("Data Preprocessing & Feature Engineering Completed", false);
+                const btnStep = document.getElementById('btnStep');
+                btnStep.disabled = true;
+                btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+                document.getElementById('currentStepBadge').innerText = "Finished";
+            }
+        }
+
+        function stepExecute() {
+            if (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function runAll() {
+            startSimulation();
+            while (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function resetSimulation() {
+            currentStepIdx = 0;
+            highlightLine(0);
+            clearConsole();
+            hideResultBanner();
+            renderTable(rawData, null);
+
+            const badge = document.getElementById('matrixStatusBadge');
+            badge.innerText = "State: Raw Input";
+
+            appendConsole("<p class='text-slate-500 italic'>>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>");
+            document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+            document.getElementById('currentStepBadge').innerText = "Step: Ready";
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = true;
+            btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+        }
+
+        function highlightLine(lineNum) {
+            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+            if (lineNum > 0) {
+                const target = document.getElementById(`line${lineNum}`);
+                if (target) target.classList.add('active');
+            }
+        }
+
+        function clearConsole() {
+            document.getElementById('terminal').innerHTML = '';
+        }
+
+        function appendConsole(htmlContent) {
+            const term = document.getElementById('terminal');
+            const p = document.createElement('p');
+            p.innerHTML = htmlContent;
+            term.appendChild(p);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function showResultBanner(text, isError) {
+            const banner = document.getElementById('resultBanner');
+            const bannerText = document.getElementById('resultBannerText');
+            bannerText.innerText = text;
+            banner.classList.remove('hidden');
+        }
+
+        function hideResultBanner() {
+            document.getElementById('resultBanner').classList.add('hidden');
+        }
+
+        function checkPretest() {
+            const q1 = document.querySelector('input[name="pq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="pq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('preq1-box');
+            const q1fb = document.getElementById('preq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! Label encoding introduces fake numerical order (e.g., France=0 < India=1 < Spain=2).";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. One-Hot encoding prevents ordinal bias in unordered string labels.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('preq2-box');
+            const q2fb = document.getElementById('preq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'b') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! StandardScaler computes standard z-scores: (x - mean) / std_dev.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. The formula for StandardScaler is (x - mean) / std_dev.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('pretest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function checkPosttest() {
+            const q1 = document.querySelector('input[name="postq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="postq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('postq1-box');
+            const q1fb = document.getElementById('postq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! MinMaxScaler bounds values strictly to range [0.0, 1.0].";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. MinMaxScaler scales features into [0, 1].";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('postq2-box');
+            const q2fb = document.getElementById('postq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'a') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! strategy='mean' or 'median' imputes central tendency values.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. SimpleImputer uses 'mean', 'median', 'most_frequent', or 'constant'.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('posttest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function sendAiQuery() {
+            const input = document.getElementById('aiQueryInput');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const chatBox = document.getElementById('aiChatBox');
+
+            const userDiv = document.createElement('div');
+            userDiv.className = 'flex items-start gap-3 justify-end';
+            userDiv.innerHTML = `
+                <div class="bg-indigo-600/30 border border-indigo-500/40 p-3 rounded-lg text-slate-200">
+                    ${query}
+                </div>
+                <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 text-xs shrink-0">You</div>
+            `;
+            chatBox.appendChild(userDiv);
+            input.value = '';
+
+            let response = "Try executing the preprocessing scenarios in the simulator to see how raw data converts to clean matrices!";
+            const qLower = query.toLowerCase();
+            if (qLower.includes('scaler') || qLower.includes('standard') || qLower.includes('minmax')) {
+                response = "`StandardScaler` standardizes features to mean=0 and std_dev=1 (great for Gaussian distributions and SVMs). `MinMaxScaler` scales features into [0, 1] range (ideal for Neural Networks and distance metrics)!";
+            } else if (qLower.includes('onehot') || qLower.includes('label') || qLower.includes('encoding')) {
+                response = "`OneHotEncoder` converts nominal string features into multiple binary columns to prevent ML algorithms from assuming false numerical order (like France=0 < India=1 < Spain=2)!";
+            } else if (qLower.includes('impute') || qLower.includes('missing') || qLower.includes('nan')) {
+                response = "`SimpleImputer` replaces `NaN` missing values with column statistics like `mean` or `median` so that models can process complete matrices without throwing errors!";
+            }
+
+            setTimeout(() => {
+                const aiDiv = document.createElement('div');
+                aiDiv.className = 'flex items-start gap-3';
+                aiDiv.innerHTML = `
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        ${response}
+                    </div>
+                `;
+                chatBox.appendChild(aiDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 500);
+        }
+    </script>
+</body>
+</html>
+```
+
+I have generated the complete **Machine Learning Experiment 1: Data Preprocessing & Feature Engineering** Virtual Lab Simulation (`ml_data_preprocessing_simulation.html`).
+
+### Key Features Included:
+1. **IIT Virtual Labs Alignment**: Structured with Theory, Procedure, Pre-Test, Simulation Workspace, Post-Test, and an AI Socratic Assistant.
+2. **3 Core Scenarios**:
+   - Missing Value Imputation (`SimpleImputer` with Mean substitution)
+   - Categorical Encoding (`OneHotEncoder` for dummy columns)
+   - Feature Scaling (`StandardScaler` z-score normalization)
+3. **Interactive Matrix Inspector**: Displays raw input tables vs. clean preprocessed arrays live step-by-step.
+4. **Assessment & Chatbot**: Pre/post quizzes with feedback and a Socratic AI Assistant for preprocessing inquiries.

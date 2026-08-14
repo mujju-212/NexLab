@@ -1,0 +1,754 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>K-Means Clustering — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .code-line{transition:background-color .25s ease,border-color .25s ease;border-left:4px solid transparent;}
+  .code-line.active{background:rgba(124,58,237,.09);border-left-color:#7c3aed;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-chart-pie"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Machine Learning Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment 9: Unsupervised K-Means Clustering (Centroids, Inertia &amp; Elbow Method)</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2"><i class="fa-solid fa-book-open"></i> Theory</button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Assistant</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Unsupervised K-Means Clustering</h2>
+      <p class="text-sm text-slate-600 leading-relaxed"><strong>K-Means</strong> partitions $N$ unlabeled points into $K$ clusters, each represented by a <strong>Centroid</strong> $\mu_k$, by alternating an Expectation step (assign points) and a Maximization step (recompute centroids) until convergence.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-bullseye text-emerald-500"></i> Inertia (WCSS)</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">$J = \sum_k \sum_{x \in S_k} \|x-\mu_k\|^2$ — the cost function K-Means minimizes.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-arrows-spin text-amber-500"></i> E-Step / M-Step</h3>
+          <p class="text-slate-500 text-xs leading-relaxed"><strong>E:</strong> assign each point to its nearest centroid. <strong>M:</strong> recompute each centroid as the mean of its assigned points.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-chart-line text-cyan-500"></i> The Elbow Method</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Plotting Inertia vs $K$ shows a steep decline followed by a bend — the "elbow" suggests a good value of $K$.</p>
+        </div>
+      </div>
+
+      <div class="bg-purple-50/60 p-4 rounded-xl border border-purple-100 text-xs text-slate-600 space-y-1.5">
+        <h4 class="font-bold text-purple-600 text-sm"><i class="fa-solid fa-circle-info"></i> Random vs. K-Means++ Initialization</h4>
+        <p>Standard <strong>random</strong> initialization picks starting centroids uniformly at random and can get stuck in poor local minima if two centroids happen to start close together. <strong>K-Means++</strong> spreads initial centroids apart proportional to squared distance, giving faster and more reliable convergence. Because initialization is random, running K-Means twice with <code class="font-mono">init='random'</code> on the same data can produce different starting centroid positions — and this simulator now genuinely reflects that.</p>
+      </div>
+
+      <div class="bg-rose-50/60 p-4 rounded-xl border border-rose-100 text-xs text-slate-600 space-y-1.5">
+        <h4 class="font-bold text-rose-600 text-sm"><i class="fa-solid fa-triangle-exclamation"></i> The Elbow Curve Must Reflect the Actual Data</h4>
+        <p>An Elbow-Method plot is only useful if its inertia values are genuinely computed by running K-Means for $K=1$ through $6$ on the dataset currently loaded (including any points you've clicked to add). This simulator recomputes the curve live every time the dataset or points change.</p>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Select a <strong>Spatial Dataset</strong> (3 Blobs, 4 Overlapping Clusters, or Concentric Rings) or click a Quick Preset.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Choose <strong>K</strong> and <strong>Initialization</strong> (k-means++ or random). Try running the <strong>random</strong> strategy twice in a row on the same dataset — the starting centroid positions will genuinely differ each time.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Simulation</strong> to seed initial centroids.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step Iteration</strong> to watch the Expectation (assignment) and Maximization (centroid shift) steps.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Watch the <strong>Elbow Method curve</strong> — it is computed live from the current dataset by actually running K-Means for K=1..6.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click anywhere on the canvas to add a custom point and re-cluster dynamically.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. Is K-Means supervised or unsupervised?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Supervised (requires ground-truth labels)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> Unsupervised (discovers grouping patterns without labels)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Reinforcement Learning</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What metric does K-Means minimize?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> Mean Absolute Error</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> Within-Cluster Sum of Squares (Inertia)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> Cross-Entropy Loss</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. What is the key property of `init='random'` across repeated runs on the same data?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> Starting centroid positions can differ from run to run</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> It always produces the exact same starting centroids every time</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> It is identical to k-means++ in every respect</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">4. What does the M-step (Maximization) of K-Means do?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> Assigns each point to its nearest centroid</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> Randomly reshuffles all data points</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> Recomputes each centroid as the mean of its assigned points</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Select Dataset</label>
+              <select id="kmeansDataset" onchange="updateDatasetDisplay()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500 min-w-[220px]">
+                <option value="blobs3">1. 3 Distinct Gaussian Blobs</option>
+                <option value="blobs4">2. 4 Overlapping Clusters</option>
+                <option value="rings">3. Non-Convex Concentric Rings</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Clusters (K)</label>
+              <select id="kSelect" onchange="onParamChange()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+                <option value="2">K = 2</option><option value="3" selected>K = 3</option><option value="4">K = 4</option><option value="5">K = 5</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Initialization Strategy</label>
+              <select id="initSelect" onchange="onParamChange()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+                <option value="kmeans++" selected>init='k-means++'</option><option value="random">init='random'</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-play"></i> Start Simulation</button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed"><i class="fa-solid fa-forward-step"></i> Step Iteration</button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-bolt"></i> Run / Execute All</button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Presets:</span>
+          <button onclick="loadPreset('blobs3_k3')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">3 Blobs (K=3, k-means++)</button>
+          <button onclick="loadPreset('blobs3_random')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">3 Blobs (K=3, random)</button>
+          <button onclick="loadPreset('blobs4_k4')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">4 Clusters (K=4)</button>
+          <button onclick="loadPreset('rings_k3')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Concentric Rings (K=3)</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div></div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Iteration: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-code text-purple-600"></i> Scikit-Learn Code Trace</span>
+          </div>
+          <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 text-slate-200 flex-1 space-y-0.5 overflow-x-auto min-h-[220px]"></div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Model Parameter State</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Select a dataset and click 'Start Simulation' or 'Run / Execute All'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-7 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-4">
+            <div class="flex justify-between items-center text-xs">
+              <span class="font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-chart-pie text-purple-600"></i> Interactive 2D K-Means Canvas <span class="text-[10px] text-slate-400 font-normal">(click to add points)</span></span>
+              <span id="metricsBadge" class="font-mono text-emerald-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-[11px]">Iteration: -- | Inertia: --</span>
+            </div>
+            <div class="bg-slate-950 p-2 rounded-lg border border-slate-200 flex justify-center items-center relative cursor-crosshair">
+              <canvas id="kmeansCanvas" width="560" height="260" onclick="handleCanvasClick(event)" class="w-full h-[260px] rounded"></canvas>
+            </div>
+            <div class="grid grid-cols-4 gap-2 font-mono text-xs">
+              <div class="mem-card bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Active Clusters (K)</span>
+                <span id="valK" class="text-sm font-bold text-amber-600">3</span>
+              </div>
+              <div class="mem-card bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Inertia (SSE)</span>
+                <span id="valInertia" class="text-sm font-bold text-emerald-600">--</span>
+              </div>
+              <div class="mem-card bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Centroid Shift</span>
+                <span id="valShift" class="text-sm font-bold text-purple-600">--</span>
+              </div>
+              <div class="mem-card bg-slate-50 border border-slate-200 p-2.5 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Samples</span>
+                <span id="valSamples" class="text-sm font-bold text-cyan-600">0</span>
+              </div>
+            </div>
+            <div class="space-y-2 pt-2 border-t border-slate-100">
+              <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-chart-line text-amber-500"></i> Elbow Method Curve (live-computed Inertia vs K)</h4>
+              <div class="bg-slate-950 p-2 rounded-lg border border-slate-200 flex justify-center items-center">
+                <canvas id="elbowCanvas" width="560" height="90" class="w-full h-[90px] rounded"></canvas>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal</span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition"><i class="fa-solid fa-trash-can"></i> Clear</button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[80px] max-h-[110px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold"><i class="fa-solid fa-square-check"></i></div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Final Execution Output</h4>
+                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+            <span class="text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200">Status: OK</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">1. Which attribute holds the final centroid coordinates?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> model.cluster_centers_</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> model.centroids_list</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> model.means_points</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. What limitation does K-Means have on non-convex (e.g. ring-shaped) clusters?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> It assumes spherical/convex clusters based on Euclidean distance and fails on complex shapes</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> It cannot process more than 2 clusters</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> It requires string labels</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. Why must the Elbow Method curve be recomputed whenever the dataset changes (e.g. a point is added)?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> It doesn't need to — inertia never depends on the data</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> Only the K=1 point needs updating</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> Inertia is a function of the actual point positions, so a fixed/hardcoded curve would misrepresent the current data</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">4. What should happen if you run K-Means twice with `init='random'` on the same dataset?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> The starting centroids must be identical both times</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> The starting centroids can legitimately differ between runs</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> K-Means will throw an error the second time</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant</h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about K-Means, Centroids, Inertia/WCSS, K-Means++, or the Elbow Method.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., How does the Elbow Method pick K?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{ el.classList.remove('bg-slate-900','text-white'); el.classList.add('text-slate-500'); });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+let scenario = 'blobs3';
+let stepList = [];
+let currentStepIdx = 0;
+let currentPoints = [];
+const clusterColors = ["#7c3aed","#3b82f6","#f59e0b","#ec4899","#10b981"];
+
+const rawDatasets = {
+  blobs3: [
+    {x:2.0,y:2.2},{x:2.5,y:1.8},{x:1.8,y:2.8},{x:2.8,y:2.5},{x:2.2,y:3.0},
+    {x:7.5,y:7.2},{x:8.0,y:6.8},{x:7.0,y:7.8},{x:8.2,y:7.5},{x:7.8,y:8.2},
+    {x:7.8,y:2.2},{x:8.2,y:1.8},{x:7.2,y:2.8},{x:8.5,y:2.5},{x:7.5,y:3.2}
+  ],
+  blobs4: [
+    {x:2.0,y:2.0},{x:2.8,y:2.2},{x:2.2,y:2.9},{x:3.0,y:2.8},
+    {x:7.0,y:2.0},{x:7.8,y:2.2},{x:7.2,y:2.9},{x:8.0,y:2.8},
+    {x:2.0,y:7.0},{x:2.8,y:7.2},{x:2.2,y:7.9},{x:3.0,y:7.8},
+    {x:7.0,y:7.0},{x:7.8,y:7.2},{x:7.2,y:7.9},{x:8.0,y:7.8}
+  ],
+  rings: [
+    {x:5.0,y:5.0},{x:5.3,y:5.2},{x:4.7,y:4.8},{x:5.2,y:4.7},{x:4.8,y:5.3},
+    {x:2.5,y:5.0},{x:7.5,y:5.0},{x:5.0,y:2.5},{x:5.0,y:7.5},
+    {x:3.2,y:3.2},{x:6.8,y:6.8},{x:3.2,y:6.8},{x:6.8,y:3.2}
+  ]
+};
+
+document.addEventListener("DOMContentLoaded", ()=>{ updateDatasetDisplay(); });
+
+/* ---------- BUG FIX #8a: random init genuinely randomizes ----------
+ * seedCentroids() branches ONLY on the selected init strategy (the old
+ * code had `initStrategy === 'kmeans++' || scenario === 'blobs3'`, which
+ * silently forced the deterministic preset for blobs3 even when 'random'
+ * was selected). Random init now samples k distinct points from the
+ * CURRENT dataset using Math.random(), so two runs differ.
+ */
+function seedCentroids(points, k, initStrategy){
+  if (initStrategy === 'random'){
+    const shuffled = points.map(p=>({x:p.x,y:p.y}));
+    for (let i=shuffled.length-1; i>0; i--){
+      const j = Math.floor(Math.random()*(i+1));
+      [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    return shuffled.slice(0,k);
+  }
+  // k-means++-style deterministic far-apart preset (illustrative for teaching)
+  const presets = [{x:2.0,y:2.0},{x:8.0,y:7.0},{x:8.0,y:2.0},{x:2.5,y:7.5},{x:5.0,y:5.0}];
+  return presets.slice(0,k).map(p=>({...p}));
+}
+
+/* ---------- BUG FIX #8b: elbow curve computed live via real K-Means SSE ----------
+ * Centroids for the elbow sweep are seeded with a deterministic farthest-point
+ * heuristic (a stand-in for k-means++) rather than "first k points" — this
+ * avoids poor local minima that would otherwise make the inertia curve
+ * non-monotonic and confusing for students reading the elbow shape.
+ */
+function farthestPointSeed(points, k){
+  const cents = [{ x: points[0].x, y: points[0].y }];
+  while (cents.length < k){
+    let bestPt = null, bestDist = -1;
+    points.forEach(p=>{
+      let minD = Infinity;
+      cents.forEach(c=>{ const d=Math.pow(p.x-c.x,2)+Math.pow(p.y-c.y,2); if (d<minD) minD=d; });
+      if (minD > bestDist){ bestDist = minD; bestPt = p; }
+    });
+    cents.push({ x: bestPt.x, y: bestPt.y });
+  }
+  return cents;
+}
+function runKMeansSSE(points, k, iterations){
+  iterations = iterations || 15;
+  if (points.length === 0) return 0;
+  const kk = Math.min(k, points.length);
+  let cents = farthestPointSeed(points, kk);
+  for (let iter=0; iter<iterations; iter++){
+    const assign = points.map(p=>{
+      let minD = Infinity, best = 0;
+      cents.forEach((c,i)=>{ const d=Math.pow(p.x-c.x,2)+Math.pow(p.y-c.y,2); if (d<minD){ minD=d; best=i; } });
+      return best;
+    });
+    const acc = cents.map(()=>({x:0,y:0,count:0}));
+    points.forEach((p,i)=>{ const c=assign[i]; acc[c].x+=p.x; acc[c].y+=p.y; acc[c].count++; });
+    cents = acc.map((a,i)=> a.count>0 ? {x:a.x/a.count, y:a.y/a.count} : cents[i]);
+  }
+  let sse = 0;
+  points.forEach(p=>{
+    let minD = Infinity;
+    cents.forEach(c=>{ const d=Math.pow(p.x-c.x,2)+Math.pow(p.y-c.y,2); if (d<minD) minD=d; });
+    sse += minD;
+  });
+  return sse;
+}
+function computeElbowCurve(points, maxK){
+  maxK = maxK || 6;
+  const out = [];
+  for (let k=1; k<=maxK; k++) out.push(runKMeansSSE(points, k));
+  return out;
+}
+
+function loadPreset(presetKey){
+  if (presetKey === 'blobs3_k3'){ document.getElementById('kmeansDataset').value='blobs3'; document.getElementById('kSelect').value='3'; document.getElementById('initSelect').value='kmeans++'; }
+  else if (presetKey === 'blobs3_random'){ document.getElementById('kmeansDataset').value='blobs3'; document.getElementById('kSelect').value='3'; document.getElementById('initSelect').value='random'; }
+  else if (presetKey === 'blobs4_k4'){ document.getElementById('kmeansDataset').value='blobs4'; document.getElementById('kSelect').value='4'; document.getElementById('initSelect').value='kmeans++'; }
+  else if (presetKey === 'rings_k3'){ document.getElementById('kmeansDataset').value='rings'; document.getElementById('kSelect').value='3'; document.getElementById('initSelect').value='random'; }
+  updateDatasetDisplay();
+  runAll();
+}
+function onParamChange(){ if (stepList.length>0) executeStepAtIndex(currentStepIdx); }
+
+function updateDatasetDisplay(){
+  scenario = document.getElementById('kmeansDataset').value;
+  currentPoints = JSON.parse(JSON.stringify(rawDatasets[scenario]));
+  const kVal = document.getElementById('kSelect').value;
+  const initVal = document.getElementById('initSelect').value;
+  const lines = [
+    'from sklearn.cluster import KMeans',
+    `kmeans = KMeans(n_clusters=${kVal}, init='${initVal}', n_init=1)`,
+    'kmeans.fit(X_spatial)',
+    'centroids = kmeans.cluster_centers_',
+    'inertia = kmeans.inertia_'
+  ];
+  document.getElementById('codeContainer').innerHTML = lines.map((t,idx)=>`
+    <div id="line${idx+1}" class="code-line px-3 py-1.5 rounded flex items-center gap-3">
+      <span class="text-slate-600 text-xs w-4">${idx+1}</span><span>${t}</span>
+    </div>`).join('');
+  drawSpatialCanvas(currentPoints, [], [], false);
+  drawElbowCurve();
+}
+
+function handleCanvasClick(e){
+  const canvas = document.getElementById('kmeansCanvas');
+  const rect = canvas.getBoundingClientRect();
+  const padding = 35;
+  const width = canvas.width - padding*2;
+  const height = canvas.height - padding*2;
+  const scaleFactorX = canvas.width/rect.width, scaleFactorY = canvas.height/rect.height;
+  const clickX = (e.clientX - rect.left) * scaleFactorX;
+  const clickY = (e.clientY - rect.top) * scaleFactorY;
+  const dataX = ((clickX-padding)/width)*10;
+  const dataY = ((canvas.height-padding-clickY)/height)*8;
+  if (dataX>=0 && dataX<=10 && dataY>=0 && dataY<=8){
+    currentPoints.push({x:parseFloat(dataX.toFixed(2)), y:parseFloat(dataY.toFixed(2))});
+    appendConsole(`&gt; Added custom user point at (${dataX.toFixed(2)}, ${dataY.toFixed(2)})`);
+    drawElbowCurve();
+    if (stepList.length>0) runAll();
+    else drawSpatialCanvas(currentPoints, [], [], false);
+  }
+}
+
+function drawSpatialCanvas(points, centroids, history, isFitted){
+  const canvas = document.getElementById('kmeansCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const padding = 35;
+  const width = canvas.width - padding*2;
+  const height = canvas.height - padding*2;
+  const mapX = x => padding + (x/10)*width;
+  const mapY = y => canvas.height - padding - (y/8)*height;
+
+  ctx.strokeStyle = "#1e293b"; ctx.lineWidth=1;
+  for (let x=0;x<=10;x+=2){ ctx.beginPath(); ctx.moveTo(mapX(x),padding); ctx.lineTo(mapX(x),canvas.height-padding); ctx.stroke(); }
+  for (let y=0;y<=8;y+=2){ ctx.beginPath(); ctx.moveTo(padding,mapY(y)); ctx.lineTo(canvas.width-padding,mapY(y)); ctx.stroke(); }
+
+  if (history && history.length>1){
+    const k = centroids.length;
+    for (let cIdx=0;cIdx<k;cIdx++){
+      ctx.strokeStyle = clusterColors[cIdx % clusterColors.length];
+      ctx.setLineDash([3,3]); ctx.lineWidth=1.5;
+      ctx.beginPath();
+      for (let hIdx=0; hIdx<history.length; hIdx++){
+        const pt = history[hIdx][cIdx];
+        if (!pt) continue;
+        if (hIdx===0) ctx.moveTo(mapX(pt.x),mapY(pt.y)); else ctx.lineTo(mapX(pt.x),mapY(pt.y));
+      }
+      ctx.stroke(); ctx.setLineDash([]);
+    }
+  }
+
+  points.forEach(p=>{
+    const clusterIdx = isFitted && p.cluster!==undefined ? p.cluster : -1;
+    ctx.fillStyle = clusterIdx>=0 ? clusterColors[clusterIdx % clusterColors.length] : "#94a3b8";
+    ctx.beginPath(); ctx.arc(mapX(p.x),mapY(p.y),5,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle="#ffffff"; ctx.lineWidth=1; ctx.stroke();
+  });
+
+  centroids.forEach((c,idx)=>{
+    const cx=mapX(c.x), cy=mapY(c.y), color=clusterColors[idx % clusterColors.length];
+    ctx.strokeStyle=color; ctx.lineWidth=3; ctx.beginPath(); ctx.arc(cx,cy,11,0,Math.PI*2); ctx.stroke();
+    ctx.strokeStyle="#ffffff"; ctx.lineWidth=2;
+    ctx.beginPath(); ctx.moveTo(cx-7,cy); ctx.lineTo(cx+7,cy); ctx.moveTo(cx,cy-7); ctx.lineTo(cx,cy+7); ctx.stroke();
+  });
+}
+
+function drawElbowCurve(){
+  const canvas = document.getElementById('elbowCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const activeK = parseInt(document.getElementById('kSelect').value) || 3;
+  const padding = 25;
+  const width = canvas.width - padding*2;
+  const height = canvas.height - padding*2;
+
+  const inertias = computeElbowCurve(currentPoints, 6);
+  const maxInertia = Math.max(...inertias, 1);
+  const mapX = k => padding + ((k-1)/5)*width;
+  const mapY = val => canvas.height - padding - (val/maxInertia)*height*0.92;
+
+  ctx.strokeStyle = "#334155"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(padding,padding); ctx.lineTo(padding,canvas.height-padding); ctx.lineTo(canvas.width-padding,canvas.height-padding); ctx.stroke();
+
+  ctx.strokeStyle = "#7c3aed"; ctx.lineWidth=2;
+  ctx.beginPath();
+  for (let k=1;k<=6;k++){ const x=mapX(k), y=mapY(inertias[k-1]); if (k===1) ctx.moveTo(x,y); else ctx.lineTo(x,y); }
+  ctx.stroke();
+
+  for (let k=1;k<=6;k++){
+    const x=mapX(k), y=mapY(inertias[k-1]);
+    const isActive = k===activeK;
+    ctx.fillStyle = isActive ? "#f59e0b" : "#a5b4fc";
+    ctx.beginPath(); ctx.arc(x,y,isActive?6:3.5,0,Math.PI*2); ctx.fill();
+    ctx.fillStyle = "#94a3b8"; ctx.font = "9px monospace";
+    ctx.fillText(`K=${k}`, x-8, canvas.height-8);
+  }
+}
+
+function calculateKMeansIterations(){
+  const k = parseInt(document.getElementById('kSelect').value) || 3;
+  const initStrategy = document.getElementById('initSelect').value;
+  let pts = JSON.parse(JSON.stringify(currentPoints));
+  let cents = seedCentroids(pts, k, initStrategy);
+  let history = [JSON.parse(JSON.stringify(cents))];
+  const maxIter = 4;
+  const iterationsData = [];
+
+  for (let iter=0; iter<maxIter; iter++){
+    let sse = 0;
+    pts.forEach(p=>{
+      let minD=Infinity, bestC=0;
+      cents.forEach((c,cIdx)=>{ const d=Math.pow(p.x-c.x,2)+Math.pow(p.y-c.y,2); if (d<minD){ minD=d; bestC=cIdx; } });
+      p.cluster = bestC; sse += minD;
+    });
+    const newCents = cents.map(()=>({x:0,y:0,count:0}));
+    pts.forEach(p=>{ newCents[p.cluster].x+=p.x; newCents[p.cluster].y+=p.y; newCents[p.cluster].count+=1; });
+    let totalShift = 0;
+    cents = newCents.map((nc,idx)=>{
+      if (nc.count>0){
+        const updatedX = parseFloat((nc.x/nc.count).toFixed(2));
+        const updatedY = parseFloat((nc.y/nc.count).toFixed(2));
+        totalShift += Math.sqrt(Math.pow(updatedX-cents[idx].x,2)+Math.pow(updatedY-cents[idx].y,2));
+        return { x:updatedX, y:updatedY };
+      }
+      return cents[idx];
+    });
+    history.push(JSON.parse(JSON.stringify(cents)));
+    iterationsData.push({ iter:iter+1, pts:JSON.parse(JSON.stringify(pts)), cents:JSON.parse(JSON.stringify(cents)), history:JSON.parse(JSON.stringify(history)), sse:parseFloat(sse.toFixed(2)), shift:parseFloat(totalShift.toFixed(3)) });
+    if (totalShift < 0.01) break;
+  }
+  return iterationsData;
+}
+
+function buildExecutionSteps(){
+  const iters = calculateKMeansIterations();
+  const kVal = document.getElementById('kSelect').value;
+  const initVal = document.getElementById('initSelect').value;
+
+  stepList = [
+    { line:1, iterIdx:0, pts:currentPoints, cents:[], history:[], sse:"--", shift:"--", consoleMsg:`&gt; Loaded dataset: ${currentPoints.length} 2D samples`, explanation:'Line 1: Imported KMeans cluster estimator from sklearn.cluster.' },
+    { line:2, iterIdx:0, pts:currentPoints, cents:iters[0].history[0], history:[iters[0].history[0]], sse:"--", shift:"--", consoleMsg:`&gt; Configured KMeans(n_clusters=${kVal}, init='${initVal}') &mdash; seeded ${initVal==='random'?'RANDOMLY from dataset points':'via far-apart preset'}`, explanation:`Line 2: Seeding ${kVal} initial centroids (${initVal}).` }
+  ];
+  iters.forEach(it=>{
+    stepList.push({ line:3, iterIdx:it.iter, pts:it.pts, cents:it.cents, history:it.history, sse:it.sse, shift:it.shift, consoleMsg:`&gt; Iteration ${it.iter}: WCSS Inertia (SSE) = ${it.sse} | Centroid Shift = ${it.shift}`, explanation:`Line 3 (Iteration ${it.iter}): Assigned samples to nearest centroids and recomputed centers.` });
+  });
+  const last = iters[iters.length-1];
+  stepList.push({ line:4, iterIdx:last.iter, pts:last.pts, cents:last.cents, history:last.history, sse:last.sse, shift:0, consoleMsg:`&gt; Evaluated cluster_centers_: ${kVal} centroids converged`, explanation:'Line 4: Extracted final coordinates of optimized centroids.' });
+  stepList.push({ line:5, iterIdx:last.iter, pts:last.pts, cents:last.cents, history:last.history, sse:last.sse, shift:0, consoleMsg:`<span class="text-emerald-400 font-bold">K-Means Converged! Final Inertia (SSE): ${last.sse} (${kVal} Clusters)</span>`, explanation:'Line 5: Optimization complete.', final:true, resultText:'K-Means Centroid Optimization Converged Successfully' });
+}
+
+function startSimulation(){
+  updateDatasetDisplay();
+  buildExecutionSteps();
+  currentStepIdx = 0;
+  hideResultBanner();
+  clearConsole();
+  document.getElementById('progressFill').style.width='0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95";
+  appendConsole(`&gt;&gt;&gt; Executing: ml_kmeans_clustering.py [Dataset: ${scenario}]`);
+  executeStepAtIndex(0);
+}
+
+function executeStepAtIndex(idx){
+  const step = stepList[idx];
+  highlightLine(step.line);
+  const kVal = document.getElementById('kSelect').value;
+  document.getElementById('valK').innerText = kVal;
+  document.getElementById('valInertia').innerText = step.sse;
+  document.getElementById('valShift').innerText = step.shift;
+  document.getElementById('valSamples').innerText = step.pts.length;
+  document.getElementById('metricsBadge').innerText = `Iteration: ${step.iterIdx} | Inertia: ${step.sse}`;
+  drawSpatialCanvas(step.pts, step.cents, step.history, step.line>=3);
+  drawElbowCurve();
+  appendConsole(step.consoleMsg);
+  document.getElementById('explanationText').innerText = step.explanation;
+  document.getElementById('currentStepBadge').innerText = `Step ${idx+1}/${stepList.length}`;
+  document.getElementById('progressFill').style.width = `${((idx+1)/stepList.length)*100}%`;
+  if (step.final){
+    showResultBanner(step.resultText);
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+    document.getElementById('currentStepBadge').innerText = "Converged";
+  }
+}
+
+function stepExecute(){ if (currentStepIdx < stepList.length-1){ currentStepIdx++; executeStepAtIndex(currentStepIdx); } }
+function runAll(){
+  startSimulation();
+  const timer = setInterval(()=>{
+    if (currentStepIdx >= stepList.length-1){ clearInterval(timer); return; }
+    currentStepIdx++; executeStepAtIndex(currentStepIdx);
+  }, 450);
+}
+
+function resetSimulation(){
+  currentStepIdx = 0;
+  highlightLine(0);
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('metricsBadge').innerText = "Iteration: -- | Inertia: --";
+  document.getElementById('valK').innerText = document.getElementById('kSelect').value;
+  document.getElementById('valInertia').innerText = "--";
+  document.getElementById('valShift').innerText = "--";
+  document.getElementById('valSamples').innerText = currentPoints.length;
+  drawSpatialCanvas(currentPoints, [], [], false);
+  drawElbowCurve();
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Select a dataset and click 'Start Simulation' or 'Run / Execute All'.";
+  document.getElementById('currentStepBadge').innerText = "Iteration: Ready";
+  document.getElementById('progressFill').style.width = '0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+}
+
+function highlightLine(lineNum){
+  document.querySelectorAll('.code-line').forEach(el=>el.classList.remove('active'));
+  if (lineNum>0){ const t=document.getElementById(`line${lineNum}`); if (t) t.classList.add('active'); }
+}
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){ const term=document.getElementById('terminal'); const p=document.createElement('p'); p.innerHTML=html; term.appendChild(p); term.scrollTop=term.scrollHeight; }
+function showResultBanner(text){ document.getElementById('resultBannerText').innerText=text; document.getElementById('resultBanner').classList.remove('hidden'); }
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q, correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try running init='random' twice in a row and watch the starting centroid positions genuinely differ each time!";
+  if (q.includes('elbow') || q.includes('inertia')) response = "The Elbow Method plots Inertia (WCSS) against K. This simulator actually runs K-Means for K=1..6 on your current points every time you change the dataset — it's never a fixed lookup table.";
+  else if (q.includes('centroid') || q.includes('update') || q.includes('shift')) response = "Centroids update in the M-step by averaging all points assigned to that cluster. Once centroids stop moving, K-Means has converged.";
+  else if (q.includes('kmeans++') || q.includes('random') || q.includes('init')) response = "init='random' samples k random data points as starting centroids — genuinely different each run. init='k-means++' spreads centroids apart using distance-squared weighting for more reliable convergence.";
+  else if (q.includes('k value') || q.includes('choose')) response = "Use the Elbow Method: pick the K where the inertia curve stops dropping sharply and starts to flatten.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+</script>
+</body>
+</html>

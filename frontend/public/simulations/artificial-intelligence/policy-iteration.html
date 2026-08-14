@@ -1,0 +1,652 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Policy Iteration — AI Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  .grid-cell{transition:all .25s ease;}
+  .grid-cell.updated{animation:pulseCard .4s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-diagram-project"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Artificial Intelligence Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment: Policy Iteration on a Markov Decision Process</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <!-- Tab Nav -->
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> Theory
+      </button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-list-check"></i> Procedure
+      </button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+      </button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-flask"></i> Simulation
+      </button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-graduation-cap"></i> Post-Test
+      </button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Policy Iteration</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">Policy Iteration solves the same MDP as Value Iteration but works with an <strong>explicit policy π</strong> the whole time. It alternates two phases until the policy stops changing: <strong>Policy Evaluation</strong> (compute how good the current policy actually is) and <strong>Policy Improvement</strong> (make the policy greedy with respect to that evaluation).</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <div class="bg-slate-900 text-emerald-300 font-mono text-xs p-4 rounded-xl overflow-x-auto">
+          <p class="text-amber-300 mb-1">// 1. Policy Evaluation (repeat to convergence)</p>
+          V(s) &larr; R(s) + &gamma; &middot; V( result(s, π(s)) )
+        </div>
+        <div class="bg-slate-900 text-emerald-300 font-mono text-xs p-4 rounded-xl overflow-x-auto">
+          <p class="text-amber-300 mb-1">// 2. Policy Improvement (one greedy pass)</p>
+          π(s) &larr; argmax<sub>a</sub> V( result(s,a) )
+        </div>
+      </div>
+      <p class="text-xs text-slate-500 leading-relaxed">Notice Evaluation uses the fixed action π(s) — no <code class="font-mono">max</code> — and is itself an iterative sweep repeated until its own Δ &lt; ε. Improvement then looks at every action's resulting value and greedily switches π(s) to whichever action leads to the highest-value neighbour. If <em>no</em> state's action changed during improvement, the policy is <strong>stable</strong> — it is provably optimal, and the algorithm stops.</p>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Worked Micro-Example</h3>
+      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-600 leading-relaxed space-y-2">
+        <p>Start with an arbitrary policy, e.g. π(s) = "right" for every non-terminal cell. Policy Evaluation sweeps V(s) = R(s) + γ·V(result(s,"right")) repeatedly for THIS fixed policy until it converges — even if "right" is a bad choice in some cells, evaluation faithfully computes how much reward you'd actually get by blindly always going right from there.</p>
+        <p>Then Improvement checks, cell by cell: "given these evaluated values, is 'right' still the best action, or would 'up' or 'left' reach a higher-value neighbour?" Any cell where a better action exists gets switched. Because the policy actually changed, we run Evaluation again on the NEW policy, then Improve again — repeating until a full Improvement pass makes zero changes.</p>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Policy Iteration</th><th class="p-2 text-left">Value Iteration</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2">Each outer cycle = full evaluation (many sweeps) + one improvement pass. Fewer outer cycles needed.</td><td class="p-2">Each sweep does one Bellman max-update. More sweeps, but each is cheaper.</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2">Converges to the EXACT optimal policy in a finite number of cycles (finite MDP).</td><td class="p-2">Converges to the optimal value function in the limit; policy is derived once V is "close enough".</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2">Better when the number of possible policies is small relative to sweep cost.</td><td class="p-2">Simpler to implement — no need to track/compare a full policy each cycle.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab and pick a <strong>Quick Preset</strong> grid layout.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start</strong> — this initialises an arbitrary starting policy (every cell points "right") and V(s)=0.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step (1 Cycle)</strong> to run ONE full Evaluate→Improve cycle: watch the value grid converge under the current policy, then the arrows update wherever a better action was found.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Or click <strong>Run All</strong> to repeat cycles automatically until the policy is stable (no arrow changes in an improvement pass).</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">The status panel shows how many inner evaluation sweeps ran and whether the last improvement pass changed any actions.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> to clear the policy/values and start over.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What are the two phases of Policy Iteration?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Expansion and Pruning</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> Policy Evaluation and Policy Improvement</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Forward pass and Backward pass</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. During Policy Evaluation, which action is used to compute V(s)?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> Only the action the CURRENT policy π(s) prescribes for that state</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> The action with the maximum resulting value (like Value Iteration)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> A random action</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. When does Policy Iteration stop?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> After exactly 1 cycle</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> When V(s) reaches exactly 1.0 everywhere</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> When a full Policy Improvement pass changes no state's action (policy is stable)</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">4. Policy Improvement changes π(s) to the action that...</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> Was used most often in Evaluation</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> Leads to the neighbouring state with the highest evaluated value</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> Is alphabetically first</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Discount γ</label>
+              <input type="number" id="inputGamma" value="0.9" step="0.05" min="0.1" max="0.99" class="w-24 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Eval. ε</label>
+              <input type="number" id="inputEps" value="0.001" step="0.001" min="0.0001" max="0.1" class="w-24 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Start
+            </button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-forward-step"></i> Step (1 Cycle)
+            </button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-bolt"></i> Run All
+            </button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('A')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Grid A — Goal top-right</button>
+          <button onclick="loadPreset('B')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Grid B — Goal bottom-right</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-table-cells text-purple-600"></i> GridWorld — V(s) &amp; Policy π(s)
+            </span>
+            <span class="text-xs text-slate-400 font-mono">S = start · G = goal · P = pit · # = wall</span>
+          </div>
+          <div class="p-5 flex items-center justify-center bg-slate-50/50 flex-1">
+            <div id="gridContainer" class="grid gap-2" style="grid-template-columns:repeat(4,minmax(80px,1fr))"></div>
+          </div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Click 'Start' to initialise an arbitrary policy, then 'Step (1 Cycle)' or 'Run All'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-5 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-microchip text-purple-600"></i> Cycle State
+            </h3>
+            <div class="grid grid-cols-3 gap-3" id="memCardsContainer">
+              <div id="mem1" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">Cycle</span>
+                <span id="val1" class="text-xl font-bold font-mono text-purple-600 block my-1">0</span>
+              </div>
+              <div id="mem2" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">Eval. Sweeps</span>
+                <span id="val2" class="text-xl font-bold font-mono text-purple-600 block my-1">--</span>
+              </div>
+              <div id="mem3" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">Status</span>
+                <span id="val3" class="text-lg font-bold font-mono text-emerald-600 block my-1">--</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal
+              </span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[160px] max-h-[260px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Start' then 'Run All' or 'Step (1 Cycle)' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-square-check"></i>
+              </div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Policy Stable</h4>
+                <p id="resultBannerText" class="text-sm font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">1. Why can a single Policy Evaluation phase require many inner sweeps?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> Because V(s) under a fixed policy must itself converge iteratively, just like Value Iteration's V does</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> Because the grid changes size each sweep</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> It never takes more than 1 sweep</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">2. If Policy Improvement changes even ONE state's action, what happens next?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> The algorithm stops immediately, that's the final answer</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> Only that one state is re-evaluated</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> The whole grid re-enters Policy Evaluation under the new policy before Improvement runs again</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">3. For a finite MDP (finite states and actions), Policy Iteration is guaranteed to...</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> Loop forever</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> Converge to the exact optimal policy in a finite number of cycles</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> Only find an approximate policy, never exact</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. Given the same converged GridWorld, how do the final V(s) values from Policy Iteration compare to Value Iteration's?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> They converge to the same optimal values (both compute V*), just via different routes</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> Policy Iteration always gives lower values</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> They are unrelated numbers</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+      </h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about policy evaluation, policy improvement, policy stability, or how this differs from Value Iteration.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., what is policy evaluation?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ==========================================================================
+   CORE MDP / POLICY ITERATION LOGIC (pure functions — verified in Node.js)
+   ========================================================================== */
+const GRID_PRESETS = {
+  A: { rows:4, cols:4, walls:[[1,1]], goal:[0,3], pit:[1,3], start:[3,0] },
+  B: { rows:4, cols:4, walls:[[0,1],[2,2]], goal:[3,3], pit:[1,3], start:[0,0] }
+};
+const ACTIONS = ['up','down','left','right'];
+const ARROW = { up:'&uarr;', down:'&darr;', left:'&larr;', right:'&rarr;' };
+
+function isWall(g,r,c){ return g.walls.some(w=>w[0]===r&&w[1]===c); }
+function isTerminal(g,r,c){ return (r===g.goal[0]&&c===g.goal[1])||(r===g.pit[0]&&c===g.pit[1]); }
+function cellReward(g,r,c){
+  if(r===g.goal[0]&&c===g.goal[1]) return 1;
+  if(r===g.pit[0]&&c===g.pit[1]) return -1;
+  return -0.04;
+}
+function moveResult(g,r,c,a){
+  let nr=r,nc=c;
+  if(a==='up') nr=r-1; else if(a==='down') nr=r+1; else if(a==='left') nc=c-1; else if(a==='right') nc=c+1;
+  if(nr<0||nr>=g.rows||nc<0||nc>=g.cols||isWall(g,nr,nc)) return [r,c];
+  return [nr,nc];
+}
+function initPolicy(g){
+  const pol = {};
+  for(let r=0;r<g.rows;r++)for(let c=0;c<g.cols;c++){
+    if(isWall(g,r,c)||isTerminal(g,r,c)) continue;
+    pol[`${r},${c}`] = 'right';
+  }
+  return pol;
+}
+// One inner evaluation sweep under the FIXED policy. Returns {V, delta}.
+function evalSweep(g, V, pol, gamma){
+  const newV = V.map(row=>row.slice());
+  let delta = 0;
+  for(let r=0;r<g.rows;r++)for(let c=0;c<g.cols;c++){
+    if(isWall(g,r,c)) continue;
+    if(isTerminal(g,r,c)){ newV[r][c] = cellReward(g,r,c); continue; }
+    const a = pol[`${r},${c}`];
+    const [nr,nc] = moveResult(g,r,c,a);
+    newV[r][c] = cellReward(g,r,c) + gamma*V[nr][nc];
+    delta = Math.max(delta, Math.abs(newV[r][c]-V[r][c]));
+  }
+  return { V:newV, delta };
+}
+// Runs evaluation sweeps to convergence for the current policy. Returns {V, sweeps}.
+function policyEvaluation(g, V, pol, gamma, eps, maxSweeps){
+  let sweeps = 0, delta = Infinity;
+  while(delta > eps && sweeps < maxSweeps){
+    const res = evalSweep(g, V, pol, gamma);
+    V = res.V; delta = res.delta; sweeps++;
+  }
+  return { V, sweeps, delta };
+}
+// One greedy improvement pass. Mutates a COPY of pol, returns {pol, changed}.
+function policyImprovement(g, V, pol){
+  const newPol = { ...pol };
+  let changed = false;
+  for(let r=0;r<g.rows;r++)for(let c=0;c<g.cols;c++){
+    if(isWall(g,r,c)||isTerminal(g,r,c)) continue;
+    let best=null, bestVal=-Infinity;
+    for(const a of ACTIONS){
+      const [nr,nc] = moveResult(g,r,c,a);
+      if(V[nr][nc] > bestVal){ bestVal = V[nr][nc]; best = a; }
+    }
+    if(newPol[`${r},${c}`] !== best){ changed = true; newPol[`${r},${c}`] = best; }
+  }
+  return { pol:newPol, changed };
+}
+
+/* ---------- UI state & controller ---------- */
+let sim = { grid:null, V:null, pol:null, cycle:0, timer:null, stable:false };
+
+function makeZeroV(g){ return Array.from({length:g.rows},()=>Array(g.cols).fill(0)); }
+
+function loadPreset(name){
+  document.getElementById('inputGamma').value = 0.9;
+  document.getElementById('inputEps').value = 0.001;
+  startSimulation(name);
+}
+
+function renderGrid(){
+  const g = sim.grid;
+  const cont = document.getElementById('gridContainer');
+  cont.innerHTML = '';
+  for(let r=0;r<g.rows;r++){
+    for(let c=0;c<g.cols;c++){
+      const div = document.createElement('div');
+      div.id = `cell-${r}-${c}`;
+      div.className = 'grid-cell rounded-xl border-2 flex flex-col items-center justify-center h-20 font-mono text-xs relative';
+      if(isWall(g,r,c)){
+        div.className += ' bg-slate-300 border-slate-400 text-slate-500';
+        div.innerHTML = '<i class="fa-solid fa-ban"></i>';
+      } else if(r===g.goal[0]&&c===g.goal[1]){
+        div.className += ' bg-emerald-100 border-emerald-400 text-emerald-700 font-bold';
+        div.innerHTML = 'GOAL<br>+1.00';
+      } else if(r===g.pit[0]&&c===g.pit[1]){
+        div.className += ' bg-rose-100 border-rose-400 text-rose-700 font-bold';
+        div.innerHTML = 'PIT<br>-1.00';
+      } else {
+        div.className += ' bg-white border-slate-200 text-slate-700';
+        const isStart = (r===g.start[0]&&c===g.start[1]);
+        div.innerHTML = `${isStart?'<span class="absolute top-1 left-1.5 text-[9px] text-purple-500 font-bold">S</span>':''}<span class="val text-sm font-bold">0.000</span><span class="arrow text-purple-500 text-lg"></span>`;
+      }
+      cont.appendChild(div);
+    }
+  }
+}
+function colorForValue(v){
+  if(v>=0){ const t=Math.min(1,v); return `rgb(${Math.round(240-t*130)},${Math.round(240-t*90)},${Math.round(240-t*140)})`; }
+  const t=Math.min(1,-v); return `rgb(240,${Math.round(240-t*130)},${Math.round(240-t*130)})`;
+}
+function renderValues(pulse){
+  const g = sim.grid, V = sim.V, pol = sim.pol;
+  for(let r=0;r<g.rows;r++)for(let c=0;c<g.cols;c++){
+    if(isWall(g,r,c) || isTerminal(g,r,c)) continue;
+    const cell = document.getElementById(`cell-${r}-${c}`);
+    cell.querySelector('.val').innerText = V[r][c].toFixed(3);
+    cell.style.background = colorForValue(V[r][c]);
+    cell.querySelector('.arrow').innerHTML = ARROW[pol[`${r},${c}`]];
+    if(pulse){ cell.classList.add('updated'); setTimeout(()=>cell.classList.remove('updated'),400); }
+  }
+}
+
+function startSimulation(presetName){
+  clearInterval(sim.timer);
+  const name = presetName || sim.presetName || 'A';
+  const gamma = parseFloat(document.getElementById('inputGamma').value) || 0.9;
+  const eps = parseFloat(document.getElementById('inputEps').value) || 0.001;
+  sim = { grid: JSON.parse(JSON.stringify(GRID_PRESETS[name])), V:null, pol:null, cycle:0, gamma, eps, timer:null, stable:false, presetName:name };
+  sim.V = makeZeroV(sim.grid);
+  sim.pol = initPolicy(sim.grid);
+  renderGrid();
+  renderValues(false);
+  clearConsole();
+  hideResultBanner();
+  updateMemCards('--');
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('currentStepBadge').innerText = 'Cycle: Ready';
+  document.getElementById('explanationText').innerText = `Grid ${name} loaded. Arbitrary initial policy π(s)='right' everywhere. Click 'Step (1 Cycle)' or 'Run All'.`;
+  appendConsole(`&gt;&gt;&gt; GridWorld ${name} initialised. Initial policy: every non-terminal cell → 'right'.`);
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95 flex items-center gap-2';
+}
+
+function stepExecute(){
+  if(sim.stable || !sim.grid) return;
+  sim.cycle++;
+  const evalRes = policyEvaluation(sim.grid, sim.V, sim.pol, sim.gamma, sim.eps, 200);
+  sim.V = evalRes.V;
+  renderValues(true);
+  appendConsole(`Cycle ${sim.cycle} — Policy Evaluation: ${evalRes.sweeps} inner sweeps to converge (Δ=${evalRes.delta.toFixed(5)}).`);
+  const improveRes = policyImprovement(sim.grid, sim.V, sim.pol);
+  sim.pol = improveRes.pol;
+  renderValues(true);
+  updateMemCards(evalRes.sweeps);
+  if(improveRes.changed){
+    appendConsole(`Cycle ${sim.cycle} — Policy Improvement: at least one action changed. Continuing.`);
+    document.getElementById('explanationText').innerText = `Cycle ${sim.cycle}: evaluated policy in ${evalRes.sweeps} sweeps, then improvement changed one or more actions. Policy not yet stable.`;
+  } else {
+    sim.stable = true;
+    clearInterval(sim.timer);
+    appendConsole(`<span class="text-emerald-400">&gt;&gt;&gt; Cycle ${sim.cycle} — Policy Improvement made NO changes. Policy is stable = OPTIMAL.</span>`);
+    document.getElementById('explanationText').innerText = `Policy stable after ${sim.cycle} evaluate/improve cycles. This is the optimal policy π*.`;
+    document.getElementById('val3').innerText = 'Stable';
+    showResultBanner(`Optimal policy found after ${sim.cycle} cycles (${evalRes.sweeps} sweeps in final evaluation).`);
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = 'bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed flex items-center gap-2';
+  }
+  document.getElementById('progressFill').style.width = `${Math.min(100,(sim.cycle/10)*100)}%`;
+  document.getElementById('currentStepBadge').innerText = `Cycle ${sim.cycle}`;
+}
+
+function runAll(){
+  if(!sim.grid) startSimulation();
+  clearInterval(sim.timer);
+  sim.timer = setInterval(()=>{
+    if(sim.stable){ clearInterval(sim.timer); return; }
+    stepExecute();
+  }, 700);
+}
+
+function resetSimulation(){
+  clearInterval(sim.timer);
+  if(sim.grid){
+    sim.V = makeZeroV(sim.grid);
+    sim.pol = initPolicy(sim.grid);
+    sim.cycle = 0; sim.stable = false;
+    renderValues(false);
+  }
+  updateMemCards('--');
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('currentStepBadge').innerText = 'Cycle: Ready';
+  document.getElementById('explanationText').innerText = "Click 'Step (1 Cycle)' or 'Run All' to execute.";
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95 flex items-center gap-2';
+}
+
+function updateMemCards(sweeps){
+  document.getElementById('val1').innerText = sim.cycle;
+  document.getElementById('val2').innerText = sweeps;
+  document.getElementById('val3').innerText = sim.stable ? 'Stable' : (sim.cycle===0?'--':'Improving');
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+function showResultBanner(text){
+  document.getElementById('resultBannerText').innerText = text;
+  document.getElementById('resultBanner').classList.remove('hidden');
+}
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Click 'Step (1 Cycle)' and watch the console log — it reports exactly how many inner evaluation sweeps ran and whether improvement changed anything!";
+  if (q.includes('evaluat')) response = "Policy Evaluation computes V(s) = R(s) + γ·V(result(s, π(s))) — notice there's no max here, we're just measuring how good the CURRENT fixed policy is, repeated as a sweep until it converges (Δ<ε), exactly like a mini Value-Iteration but with the action locked in.";
+  else if (q.includes('improv')) response = "Policy Improvement is a single greedy pass: for every state, look at the (now correctly evaluated) values of all 4 possible next-states and switch π(s) to whichever action leads to the best one. If NOTHING changes in this pass, we've proven the policy is optimal.";
+  else if (q.includes('stable') || q.includes('stop') || q.includes('converge')) response = "The algorithm stops the moment a full Policy Improvement pass makes zero changes to the policy. At that point the policy π satisfies the Bellman optimality equation exactly — it's the true optimal policy π*, not an approximation.";
+  else if (q.includes('value iteration') || q.includes('vs value')) response = "Value Iteration folds evaluation and improvement into ONE step per sweep (it uses max instead of the fixed policy action). Policy Iteration keeps them separate: fully evaluate, THEN improve once. Policy Iteration usually needs far fewer outer cycles, but each cycle is more expensive.";
+  else if (q.includes('arbitrary') || q.includes('initial policy') || q.includes('start')) response = "The starting policy can be ANYTHING — even a deliberately bad one like always going 'right'. Policy Iteration is guaranteed to improve it monotonically cycle after cycle until it reaches optimality; the starting point only affects how many cycles it takes.";
+  else if (q.includes('sweep')) response = "A 'sweep' is one full pass updating every state once. Policy Evaluation needs MULTIPLE sweeps (until its own Δ<ε) per single Improvement pass — that's the key structural difference from Value Iteration.";
+  else if (q.includes('optimal')) response = "For a finite MDP, Policy Iteration is guaranteed to converge to the exact optimal policy in a finite number of cycles, because there are only finitely many possible policies and each cycle either improves the policy or terminates.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  startSimulation('A');
+});
+</script>
+</body>
+</html>

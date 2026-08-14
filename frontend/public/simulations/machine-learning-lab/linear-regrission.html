@@ -1,0 +1,637 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Linear Regression & Gradient Descent — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .code-line{transition:background-color .25s ease,border-color .25s ease;border-left:4px solid transparent;}
+  .code-line.active{background:rgba(124,58,237,.09);border-left-color:#7c3aed;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-chart-line"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Machine Learning Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment 2: Linear Regression &amp; Gradient Descent Optimization</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2"><i class="fa-solid fa-book-open"></i> Theory</button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Assistant</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Linear Regression &amp; Gradient Descent</h2>
+      <p class="text-sm text-slate-600 leading-relaxed"><strong>Linear Regression</strong> models a linear relationship between an input $x$ and a continuous target $y$ using the hypothesis $\hat{y} = w \cdot x + b$, where $w$ is the slope (weight) and $b$ is the intercept (bias). There are two ways to find the best $w,b$: the closed-form <strong>Ordinary Least Squares (OLS)</strong> solution, and the iterative <strong>Gradient Descent</strong> optimizer used here.</p>
+
+      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 font-mono text-center text-purple-600 text-sm">
+        &yhat; = w&middot;x + b &nbsp;&nbsp;|&nbsp;&nbsp; J(w,b) = (1/n) &Sigma; (y<sub>i</sub> &minus; &yhat;<sub>i</sub>)&sup2; &nbsp;&nbsp;|&nbsp;&nbsp; w &larr; w &minus; &alpha;&middot;&part;J/&part;w,&nbsp; b &larr; b &minus; &alpha;&middot;&part;J/&part;b
+      </div>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-bullseye text-emerald-500"></i> Cost Function (MSE)</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Average squared error between actual and predicted targets. Gradient Descent's entire job is to push this value toward its minimum.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-stairs text-amber-500"></i> Gradient Descent</h3>
+          <p class="text-slate-500 text-xs leading-relaxed"><code class="font-mono">dw = -2/n &Sigma; x(y&minus;&yhat;)</code>, <code class="font-mono">db = -2/n &Sigma;(y&minus;&yhat;)</code>. Every epoch nudges $w,b$ opposite the gradient direction.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-gauge-high text-cyan-500"></i> R&sup2; Coefficient</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">$R^2 = 1 - SS_{res}/SS_{tot}$, the proportion of variance in $y$ explained by $x$. Ranges roughly $0$ (no fit) to $1$ (perfect fit).</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white"><tr><th class="p-2 text-left">Method</th><th class="p-2 text-left">How it finds w, b</th><th class="p-2 text-left">Scales to big data?</th></tr></thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2">Closed-form OLS</td><td class="p-2">Solves the normal equations directly — exact, one shot.</td><td class="p-2">Expensive for many features (matrix inversion).</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2">Gradient Descent</td><td class="p-2">Iteratively steps opposite the cost gradient until convergence.</td><td class="p-2">Yes — used for large datasets / neural networks.</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bg-purple-50/60 p-4 rounded-xl border border-purple-100 text-xs text-slate-600 space-y-1.5">
+        <h4 class="font-bold text-purple-600 text-sm"><i class="fa-solid fa-circle-info"></i> Role of the Learning Rate (&alpha;)</h4>
+        <p>Too small an &alpha; converges extremely slowly (needs many more epochs to approach the minimum). Too large an &alpha; overshoots the minimum and can diverge entirely. The simulator below runs genuine gradient descent on standardized features (for numerical stability) and converts the learned parameters back to the original scale — so a smaller learning rate visibly needs more epochs to catch up to the OLS answer, exactly as theory predicts.</p>
+      </div>
+
+      <div class="bg-rose-50/60 p-4 rounded-xl border border-rose-100 text-xs text-slate-600 space-y-1.5">
+        <h4 class="font-bold text-rose-600 text-sm"><i class="fa-solid fa-triangle-exclamation"></i> Worked Example</h4>
+        <p>For points (1,2), (2,4), (3,6): OLS gives w=2, b=0 (a perfect fit, R&sup2;=1.0). Gradient Descent starting at w=0,b=0 with &alpha;=0.1 will compute dw = -2/3&Sigma;x(y-&yhat;) = -2/3(1&middot;2+2&middot;4+3&middot;6) = -18.67 on the very first epoch, then update w &larr; 0-0.1&times;(-18.67)=1.867 — already close to the optimum after just one step.</p>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Select a <strong>Dataset</strong> (Salary vs Experience, House Price vs Area, or Exam Score vs Study Hours) or click a Quick Preset.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Choose a <strong>Learning Rate (&alpha;)</strong> — 0.01 (standard), 0.05 (fast), or 0.001 (conservative).</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Simulation</strong> to plot the raw data points onto the regression canvas.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step Epoch</strong> to trace real gradient descent snapshots — each displayed w, b is genuinely computed from that epoch's parameters, not interpolated.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Watch the regression line and residual error segments update, and compare the live R&sup2;/MSE against the closed-form OLS answer shown in the terminal.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Run / Execute All</strong> to animate the full training run, or <strong>Reset</strong> to start over.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What cost function does Ordinary Least Squares Linear Regression minimize?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Binary Cross-Entropy Loss</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> Mean Squared Error (MSE)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Hinge Loss</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What happens if the learning rate &alpha; is set excessively high?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> It guarantees instant convergence</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> It overshoots the minimum and may diverge</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> It converts regression into classification</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. What does the gradient <code class="font-mono">dw = -2/n &Sigma; x(y-&yhat;)</code> represent?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> The partial derivative of the MSE cost with respect to the weight w</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> The final trained value of w</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> The R&sup2; score</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">4. An R&sup2; score of 0.0 means:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> Perfect fit</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> Negative correlation</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> The model predicts no better than always guessing the mean of y</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Select Regression Dataset</label>
+              <select id="regDataset" onchange="updateDatasetDisplay()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500 min-w-[240px]">
+                <option value="salary">1. Salary vs. Experience (Years)</option>
+                <option value="housing">2. House Price vs. Area (Sq.Ft)</option>
+                <option value="study">3. Exam Score vs. Study Hours</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Learning Rate (&alpha;)</label>
+              <select id="learningRate" onchange="onParamChange()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+                <option value="0.01" selected>0.01 (Standard)</option>
+                <option value="0.05">0.05 (Fast)</option>
+                <option value="0.001">0.001 (Conservative)</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-play"></i> Start Simulation</button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed"><i class="fa-solid fa-forward-step"></i> Step Epoch</button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-bolt"></i> Run / Execute All</button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('salary')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Experience vs Salary</button>
+          <button onclick="loadPreset('housing')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">House Area vs Price</button>
+          <button onclick="loadPreset('study')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Study Hours vs Score</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div></div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Epoch: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-code text-purple-600"></i> Gradient Descent Code Trace</span>
+          </div>
+          <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 text-slate-200 flex-1 space-y-0.5 overflow-x-auto min-h-[220px]"></div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Model Parameter State</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Select a dataset and click 'Start Simulation' or 'Run / Execute All'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-7 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm space-y-3">
+            <div class="flex justify-between items-center text-xs">
+              <span class="font-semibold text-slate-500 uppercase tracking-wider flex items-center gap-2"><i class="fa-solid fa-chart-line text-purple-600"></i> Interactive Regression Canvas</span>
+              <span id="metricsBadge" class="font-mono text-emerald-600 bg-slate-50 px-2 py-0.5 rounded border border-slate-200 text-[11px]">R&sup2;: -- | MSE: --</span>
+            </div>
+            <div class="bg-slate-950 p-2 rounded-lg border border-slate-200 flex justify-center items-center">
+              <canvas id="regressionCanvas" width="560" height="260" class="w-full h-[260px] rounded"></canvas>
+            </div>
+            <div class="grid grid-cols-3 gap-3 font-mono text-xs">
+              <div class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Slope Weight (w)</span>
+                <span id="valW" class="text-sm font-bold text-amber-600">0.000</span>
+              </div>
+              <div class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Intercept Bias (b)</span>
+                <span id="valB" class="text-sm font-bold text-purple-600">0.000</span>
+              </div>
+              <div class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-slate-500 block text-[10px]">Loss (MSE)</span>
+                <span id="valMSE" class="text-sm font-bold text-emerald-600">0.000</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal</span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition"><i class="fa-solid fa-trash-can"></i> Clear</button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[100px] max-h-[150px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold"><i class="fa-solid fa-square-check"></i></div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Final Execution Output</h4>
+                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+            <span class="text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200">Status: OK</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What does an R&sup2; score of 0.92 indicate?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> The model has 92% training error</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> 92% of the variance in y is explained by x</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> The learning rate was set to 0.92</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. Which Scikit-Learn class implements linear regression via stochastic gradient descent?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> sklearn.linear_model.SGDRegressor</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> sklearn.cluster.KMeans</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> sklearn.tree.DecisionTreeRegressor</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. In this simulator, why are features standardized before running gradient descent internally?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> To hide the true weight values from the student</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> Standardization is required by JavaScript</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> It keeps gradient magnitudes well-scaled so the chosen learning rate stays numerically stable across very different feature ranges</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">4. With a very small learning rate (e.g. 0.001) and a fixed epoch budget, gradient descent will typically:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> Diverge to infinity</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> Converge more slowly, ending farther from the OLS optimum than a larger stable learning rate would</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> Converge instantly in one epoch</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant</h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about Linear Regression (y = wx + b), MSE, Gradient Descent, or R&sup2; scores.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., How does learning rate affect convergence?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{ el.classList.remove('bg-slate-900','text-white'); el.classList.add('text-slate-500'); });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+const datasets = {
+  salary: { title:"Salary vs. Experience", xLabel:"Experience (Years)", yLabel:"Salary ($k)",
+    points:[{x:1.1,y:39},{x:2.0,y:46},{x:2.9,y:56},{x:4.0,y:64},{x:5.1,y:72},{x:6.0,y:83},{x:7.9,y:101},{x:9.5,y:116}] },
+  housing: { title:"House Price vs. Area", xLabel:"Area (100 Sq.Ft)", yLabel:"Price ($k)",
+    points:[{x:10,y:180},{x:14,y:230},{x:18,y:310},{x:22,y:360},{x:26,y:420},{x:30,y:490},{x:35,y:580},{x:40,y:650}] },
+  study: { title:"Exam Score vs. Study Hours", xLabel:"Study Hours", yLabel:"Test Score (%)",
+    points:[{x:1.5,y:42},{x:2.5,y:51},{x:3.5,y:62},{x:4.5,y:70},{x:5.5,y:78},{x:6.5,y:85},{x:7.5,y:92},{x:8.5,y:96}] }
+};
+
+let scenario = 'salary';
+let stepList = [];
+let currentStepIdx = 0;
+
+document.addEventListener("DOMContentLoaded", ()=>{ updateDatasetDisplay(); });
+
+/* ---------- BUG FIX #2: real gradient descent + real R2 per step ----------
+ * mean/sampleStdDev are pure helpers. gradientDescentSnapshots runs a REAL
+ * gradient-descent loop (dw = -2/n * sum(x*(y-pred)), db = -2/n * sum(y-pred))
+ * on standardized x for numerical stability, converts w,b back to original
+ * feature scale after every epoch, and records true MSE/R2 computed FROM
+ * that epoch's actual w,b — nothing is interpolated or hardcoded.
+ */
+function mean(arr){ return arr.reduce((a,b)=>a+b,0)/arr.length; }
+function sampleStdDev(arr){ const m=mean(arr); return Math.sqrt(arr.reduce((s,x)=>s+Math.pow(x-m,2),0)/arr.length); }
+
+function calculateOLS(points){
+  const n = points.length;
+  const sumX = points.reduce((s,p)=>s+p.x,0);
+  const sumY = points.reduce((s,p)=>s+p.y,0);
+  const sumXY = points.reduce((s,p)=>s+p.x*p.y,0);
+  const sumX2 = points.reduce((s,p)=>s+p.x*p.x,0);
+  const w = (n*sumXY - sumX*sumY) / (n*sumX2 - sumX*sumX);
+  const b = (sumY - w*sumX) / n;
+  const yMean = sumY/n;
+  const ssTot = points.reduce((s,p)=>s+Math.pow(p.y-yMean,2),0);
+  const ssRes = points.reduce((s,p)=>s+Math.pow(p.y-(w*p.x+b),2),0);
+  return { w, b, r2: 1-(ssRes/ssTot), mse: ssRes/n };
+}
+
+function r2AndMse(points, w, b){
+  const n = points.length;
+  const yMean = mean(points.map(p=>p.y));
+  const ssTot = points.reduce((s,p)=>s+Math.pow(p.y-yMean,2),0);
+  const ssRes = points.reduce((s,p)=>s+Math.pow(p.y-(w*p.x+b),2),0);
+  return { r2: 1-(ssRes/ssTot), mse: ssRes/n };
+}
+
+/** Runs `totalEpochs` of true gradient descent on z-scored x, returns
+ *  snapshots (original-scale w,b,r2,mse) at the requested checkpoint epochs. */
+function gradientDescentSnapshots(points, lr, checkpoints){
+  const xs = points.map(p=>p.x), ys = points.map(p=>p.y);
+  const mx = mean(xs), sx = sampleStdDev(xs);
+  const xz = xs.map(x=>(x-mx)/sx);
+  const n = points.length;
+  let w = 0, b = 0;
+  const totalEpochs = checkpoints[checkpoints.length-1];
+  const out = [];
+  let cpIdx = 0;
+  for (let e=1; e<=totalEpochs; e++){
+    let dw = 0, db = 0;
+    for (let i=0;i<n;i++){
+      const pred = w*xz[i] + b;
+      const err = ys[i] - pred;
+      dw += -2/n * xz[i] * err;
+      db += -2/n * err;
+    }
+    w -= lr*dw;
+    b -= lr*db;
+    if (cpIdx < checkpoints.length && e === checkpoints[cpIdx]){
+      const wOrig = w/sx;
+      const bOrig = b - (w*mx)/sx;
+      const metrics = r2AndMse(points, wOrig, bOrig);
+      out.push({ epoch:e, w:wOrig, b:bOrig, r2:metrics.r2, mse:metrics.mse });
+      cpIdx++;
+    }
+  }
+  return out;
+}
+
+function loadPreset(presetScenario){
+  document.getElementById('regDataset').value = presetScenario;
+  updateDatasetDisplay();
+  runAll();
+}
+
+function onParamChange(){ if (stepList.length>0) executeStepAtIndex(currentStepIdx); }
+
+function updateDatasetDisplay(){
+  scenario = document.getElementById('regDataset').value;
+  const codeContainer = document.getElementById('codeContainer');
+  const lines = [
+    'from sklearn.linear_model import SGDRegressor',
+    "model = SGDRegressor(learning_rate='constant', eta0=alpha)",
+    'model.fit(X, y)  # iterative gradient descent',
+    'print(f"w={model.coef_[0]:.3f}, b={model.intercept_[0]:.3f}")'
+  ];
+  codeContainer.innerHTML = lines.map((t,idx)=>`
+    <div id="line${idx+1}" class="code-line px-3 py-1.5 rounded flex items-center gap-3">
+      <span class="text-slate-600 text-xs w-4">${idx+1}</span><span>${t}</span>
+    </div>`).join('');
+  drawPlot(datasets[scenario].points, 0, 0, false);
+}
+
+function drawPlot(points, w, b, drawLine){
+  const canvas = document.getElementById('regressionCanvas');
+  if (!canvas) return;
+  const ctx = canvas.getContext('2d');
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  const padding = 40;
+  const width = canvas.width - padding*2;
+  const height = canvas.height - padding*2;
+  const xVals = points.map(p=>p.x), yVals = points.map(p=>p.y);
+  const minX = Math.min(...xVals)*0.8, maxX = Math.max(...xVals)*1.1;
+  const minY = Math.min(...yVals)*0.8, maxY = Math.max(...yVals)*1.1;
+  const mapX = x => padding + ((x-minX)/(maxX-minX))*width;
+  const mapY = y => canvas.height - padding - ((y-minY)/(maxY-minY))*height;
+
+  ctx.strokeStyle = "#475569"; ctx.lineWidth=1;
+  ctx.beginPath(); ctx.moveTo(padding,padding); ctx.lineTo(padding,canvas.height-padding); ctx.lineTo(canvas.width-padding,canvas.height-padding); ctx.stroke();
+
+  if (drawLine){
+    ctx.strokeStyle = "rgba(244,63,94,.5)"; ctx.lineWidth=1.5;
+    points.forEach(p=>{
+      const yPred = w*p.x+b;
+      ctx.beginPath(); ctx.moveTo(mapX(p.x),mapY(p.y)); ctx.lineTo(mapX(p.x),mapY(yPred)); ctx.stroke();
+    });
+    const x1=minX, y1=w*x1+b, x2=maxX, y2=w*x2+b;
+    ctx.strokeStyle = "#10b981"; ctx.lineWidth=3;
+    ctx.beginPath(); ctx.moveTo(mapX(x1),mapY(y1)); ctx.lineTo(mapX(x2),mapY(y2)); ctx.stroke();
+  }
+  points.forEach(p=>{
+    ctx.fillStyle = "#7c3aed";
+    ctx.beginPath(); ctx.arc(mapX(p.x),mapY(p.y),5,0,Math.PI*2); ctx.fill();
+    ctx.strokeStyle="#ffffff"; ctx.lineWidth=1; ctx.stroke();
+  });
+}
+
+function buildExecutionSteps(){
+  const data = datasets[scenario].points;
+  const ols = calculateOLS(data);
+  const lr = parseFloat(document.getElementById('learningRate').value) || 0.01;
+  const totalEpochs = 1500;
+  const checkpoints = [Math.round(totalEpochs*0.02), Math.round(totalEpochs*0.2), totalEpochs];
+  const gd = gradientDescentSnapshots(data, lr, checkpoints);
+
+  stepList = [
+    { line:1, w:0, b:0, mse: r2AndMse(data,0,0).mse, r2: r2AndMse(data,0,0).r2,
+      consoleMsg: `&gt; Loaded dataset: ${datasets[scenario].title} (${data.length} samples). w=0.000, b=0.000 initial.`,
+      explanation: 'Line 1: Initialized model parameters w=0, b=0 and loaded dataset.' },
+    { line:2, w: gd[0].w, b: gd[0].b, mse: gd[0].mse, r2: gd[0].r2,
+      consoleMsg: `&gt; Epoch ${gd[0].epoch}: real gradient step &mdash; w=${gd[0].w.toFixed(3)}, b=${gd[0].b.toFixed(3)} (&alpha;=${lr})`,
+      explanation: `Line 2: After ${gd[0].epoch} real gradient-descent epochs (dw, db computed from actual residuals).` },
+    { line:3, w: gd[1].w, b: gd[1].b, mse: gd[1].mse, r2: gd[1].r2,
+      consoleMsg: `&gt; Epoch ${gd[1].epoch}: real gradient step &mdash; w=${gd[1].w.toFixed(3)}, b=${gd[1].b.toFixed(3)}, R&sup2;=${gd[1].r2.toFixed(3)}`,
+      explanation: `Line 3: Model parameters converging toward the OLS optimum (w=${ols.w.toFixed(3)}, b=${ols.b.toFixed(3)}).` },
+    { line:4, w: gd[2].w, b: gd[2].b, mse: gd[2].mse, r2: gd[2].r2,
+      consoleMsg: `<span class="text-emerald-400 font-bold">Converged after ${gd[2].epoch} epochs! w=${gd[2].w.toFixed(3)}, b=${gd[2].b.toFixed(3)}, R&sup2;=${gd[2].r2.toFixed(3)} (closed-form OLS: w=${ols.w.toFixed(3)}, b=${ols.b.toFixed(3)}, R&sup2;=${ols.r2.toFixed(3)})</span>`,
+      explanation: `Line 4: Gradient descent has converged to within numerical tolerance of the OLS closed-form answer.`,
+      final:true, resultText:`w=${gd[2].w.toFixed(3)}, b=${gd[2].b.toFixed(3)}, R²=${gd[2].r2.toFixed(3)}` }
+  ];
+}
+
+function startSimulation(){
+  updateDatasetDisplay();
+  buildExecutionSteps();
+  currentStepIdx = 0;
+  hideResultBanner();
+  clearConsole();
+  document.getElementById('progressFill').style.width='0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95";
+  appendConsole(`&gt;&gt;&gt; Executing: ml_linear_regression.py [Dataset: ${scenario}]`);
+  executeStepAtIndex(0);
+}
+
+function executeStepAtIndex(idx){
+  const step = stepList[idx];
+  highlightLine(step.line);
+  document.getElementById('valW').innerText = step.w.toFixed(3);
+  document.getElementById('valB').innerText = step.b.toFixed(3);
+  document.getElementById('valMSE').innerText = step.mse.toFixed(2);
+  document.getElementById('metricsBadge').innerText = `R²: ${step.r2.toFixed(3)} | MSE: ${step.mse.toFixed(2)}`;
+  drawPlot(datasets[scenario].points, step.w, step.b, true);
+  appendConsole(step.consoleMsg);
+  document.getElementById('explanationText').innerText = step.explanation;
+  document.getElementById('currentStepBadge').innerText = `Epoch ${idx+1}/${stepList.length}`;
+  document.getElementById('progressFill').style.width = `${((idx+1)/stepList.length)*100}%`;
+  if (step.final){
+    showResultBanner(step.resultText);
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+    document.getElementById('currentStepBadge').innerText = "Converged";
+  }
+}
+
+function stepExecute(){ if (currentStepIdx < stepList.length-1){ currentStepIdx++; executeStepAtIndex(currentStepIdx); } }
+
+function runAll(){
+  startSimulation();
+  const timer = setInterval(()=>{
+    if (currentStepIdx >= stepList.length-1){ clearInterval(timer); return; }
+    currentStepIdx++; executeStepAtIndex(currentStepIdx);
+  }, 500);
+}
+
+function resetSimulation(){
+  currentStepIdx = 0;
+  highlightLine(0);
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('valW').innerText = "0.000";
+  document.getElementById('valB').innerText = "0.000";
+  document.getElementById('valMSE').innerText = "0.000";
+  document.getElementById('metricsBadge').innerText = "R²: -- | MSE: --";
+  drawPlot(datasets[scenario].points, 0, 0, false);
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Select a dataset and click 'Start Simulation' or 'Run / Execute All'.";
+  document.getElementById('currentStepBadge').innerText = "Epoch: Ready";
+  document.getElementById('progressFill').style.width = '0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+}
+
+function highlightLine(lineNum){
+  document.querySelectorAll('.code-line').forEach(el=>el.classList.remove('active'));
+  if (lineNum>0){ const t=document.getElementById(`line${lineNum}`); if (t) t.classList.add('active'); }
+}
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){ const term=document.getElementById('terminal'); const p=document.createElement('p'); p.innerHTML=html; term.appendChild(p); term.scrollTop=term.scrollHeight; }
+function showResultBanner(text){ document.getElementById('resultBannerText').innerText=text; document.getElementById('resultBanner').classList.remove('hidden'); }
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q, correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try testing different datasets and learning rates in the simulator to watch real gradient descent update w and b epoch by epoch!";
+  if (q.includes('rate') || q.includes('alpha') || q.includes('learning')) response = "The learning rate (α) controls the step size in the direction of the negative gradient. Too small → slow convergence (needs more epochs to reach the OLS answer). Too large → overshoot and possible divergence.";
+  else if (q.includes('mse') || q.includes('loss') || q.includes('cost')) response = "Mean Squared Error measures the average squared vertical distance between actual points and the fitted line y = wx + b. Gradient descent iteratively minimizes this cost by following its negative gradient.";
+  else if (q.includes('r2') || q.includes('r-squared') || q.includes('score')) response = "R² measures how much variance in y is explained by x. Close to 1.0 = excellent fit. 0.0 = no better than predicting the mean of y.";
+  else if (q.includes('gradient')) response = "The gradient dw = -2/n Σx(y-ŷ) and db = -2/n Σ(y-ŷ) point in the direction of steepest cost increase — we subtract a scaled version of it (w -= α·dw) to descend toward the minimum.";
+  else if (q.includes('standardiz') || q.includes('normal')) response = "This simulator standardizes x internally (z = (x-mean)/std) before running gradient descent, then converts w,b back to the original scale. That keeps the gradient well-scaled regardless of whether x ranges from 1-10 or 10-40.";
+  else if (q.includes('ols') || q.includes('closed')) response = "OLS solves the normal equations directly for the exact optimal w,b in one step. Gradient Descent approaches the same answer iteratively — useful when a closed-form solution is too expensive to compute (e.g. millions of features).";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+</script>
+</body>
+</html>

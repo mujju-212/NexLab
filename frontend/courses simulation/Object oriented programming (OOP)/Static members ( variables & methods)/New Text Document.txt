@@ -1,0 +1,180 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>OOP Lab: Static Members - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; }
+        .tab-btn.active { background-color: #334155; color: #818cf8; border: 1px solid #475569; }
+        .lang-btn.active { color: #818cf8; font-weight: bold; border-bottom: 2px solid #818cf8; }
+        .tab-content { display: none; }
+        .tab-content.active { display: block; }
+        .memory-slot { transition: all 0.5s ease-out; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <header class="bg-[#1e293b] border-b border-[#334155] px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-cube"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Object Oriented Programming</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 8: Static Members (Variables & Methods)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <nav class="bg-[#1e293b] border-b border-[#334155] px-6 py-2">
+        <div class="flex gap-4 text-sm font-medium">
+            <button onclick="switchTab('theory')" id="btn-theory" class="tab-btn active px-4 py-2 rounded-lg flex items-center gap-2"><i class="fa-solid fa-book"></i> Theory</button>
+            <button onclick="switchTab('procedure')" id="btn-procedure" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+            <button onclick="switchTab('pretest')" id="btn-pretest" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+            <button onclick="switchTab('simulation')" id="btn-simulation" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+            <button onclick="switchTab('posttest')" id="btn-posttest" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+            <button onclick="switchTab('ai')" id="btn-ai" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Socratic Assistant</button>
+        </div>
+    </nav>
+
+    <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
+        <!-- Theory Tab -->
+        <div id="content-theory" class="tab-content active bg-[#1e293b] p-8 rounded-xl border border-[#334155] shadow-xl space-y-6">
+            <h2 class="text-2xl font-bold text-indigo-400 flex items-center gap-3"><i class="fa-solid fa-cube"></i> Theory: Static Members</h2>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                Static members belong to the class rather than any specific instance. They are shared among all instances, meaning changes to a static variable are reflected across all objects.
+            </p>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-slate-900 p-5 rounded-lg border border-slate-700">
+                    <h4 class="font-bold text-indigo-300 mb-2">Java</h4>
+                    <p class="text-xs text-slate-400">Uses <code>static</code> keyword for variables and methods.</p>
+                </div>
+                <div class="bg-slate-900 p-5 rounded-lg border border-slate-700">
+                    <h4 class="font-bold text-indigo-300 mb-2">Python</h4>
+                    <p class="text-xs text-slate-400">Uses class-level variables defined inside class scope.</p>
+                </div>
+                <div class="bg-slate-900 p-5 rounded-lg border border-slate-700">
+                    <h4 class="font-bold text-indigo-300 mb-2">C++</h4>
+                    <p class="text-xs text-slate-400">Uses <code>static</code> keyword with class scope resolution.</p>
+                </div>
+            </div>
+        </div>
+
+        <!-- Procedure Tab -->
+        <div id="content-procedure" class="tab-content hidden bg-[#1e293b] p-8 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-6">Procedure</h2>
+            <ol class="list-decimal list-inside text-sm text-slate-300 space-y-3">
+                <li>Select a language to see static member syntax.</li>
+                <li>Create multiple instances and modify the static variable.</li>
+                <li>Verify that all instances reflect the updated static member.</li>
+            </ol>
+        </div>
+
+        <!-- Pre-Test Tab -->
+        <div id="content-pretest" class="tab-content hidden bg-[#1e293b] p-8 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-6">Pre-Test Assessment</h2>
+            <div class="space-y-4 text-sm text-slate-300">
+                <div><p>1. What does 'static' mean?</p><textarea class="w-full bg-slate-900 border border-slate-700 p-2 mt-1" rows="1"></textarea></div>
+                <div><p>2. Are static methods instance-specific?</p><textarea class="w-full bg-slate-900 border border-slate-700 p-2 mt-1" rows="1"></textarea></div>
+                <div><p>3. How do you access a static member?</p><textarea class="w-full bg-slate-900 border border-slate-700 p-2 mt-1" rows="1"></textarea></div>
+                <div><p>4. Explain static vs instance variables.</p><textarea class="w-full bg-slate-900 border border-slate-700 p-2 mt-1" rows="1"></textarea></div>
+                <div><p>5. Can static methods access instance variables?</p><textarea class="w-full bg-slate-900 border border-slate-700 p-2 mt-1" rows="1"></textarea></div>
+                <div><p>6. Define static block in Java.</p><textarea class="w-full bg-slate-900 border border-slate-700 p-2 mt-1" rows="1"></textarea></div>
+                <button onclick="alert('Submitted!')" class="bg-indigo-600 px-6 py-2 rounded text-white font-bold text-sm">Submit</button>
+            </div>
+        </div>
+
+        <!-- Simulation Tab -->
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <div class="flex gap-6 border-b border-[#334155] pb-2">
+                <button onclick="loadSim('java')" id="lang-java" class="lang-btn active font-bold text-indigo-400 text-sm">Java</button>
+                <button onclick="loadSim('python')" id="lang-python" class="lang-btn text-slate-400 font-bold text-sm">Python</button>
+                <button onclick="loadSim('cpp')" id="lang-cpp" class="lang-btn text-slate-400 font-bold text-sm">C++</button>
+            </div>
+            <div id="codeDisplay" class="font-mono text-xs text-emerald-400 bg-slate-950 p-8 rounded border border-slate-700 min-h-[100px]"></div>
+            <button onclick="modifyStatic()" class="bg-indigo-600 px-6 py-3 rounded w-64 text-white font-bold text-sm">Increment Static Member</button>
+            
+            <div class="bg-slate-900 p-6 rounded border border-slate-700">
+                <h3 class="text-sm font-bold text-indigo-300 mb-4 uppercase tracking-wider">Static Member Log</h3>
+                <div id="heapDisplay" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div class="p-4 border-2 border-slate-700 rounded-lg text-center text-slate-500 italic text-sm">Awaiting update...</div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Post-Test Tab -->
+        <div id="content-posttest" class="tab-content hidden bg-[#1e293b] p-8 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-6">Post-Test Assessment</h2>
+            <div class="space-y-4 text-sm text-slate-300">
+                <p>1. Memory implications of static variables.</p>
+                <p>2. When should you use a static method?</p>
+                <p>3. Can a static method be overridden?</p>
+                <p>4. Compare static vs global variables.</p>
+                <p>5. Explain static initialization.</p>
+                <p>6. How does JVM handle static members?</p>
+                <textarea class="w-full bg-slate-900 border border-slate-700 p-4 text-sm text-white h-24 mt-2" placeholder="Your answers here..."></textarea>
+                <button onclick="alert('Submitted!')" class="bg-indigo-600 px-6 py-2 rounded text-white font-bold text-sm">Submit</button>
+            </div>
+        </div>
+
+        <!-- AI Assistant Tab -->
+        <div id="content-ai" class="tab-content hidden bg-[#1e293b] p-8 rounded-xl border border-[#334155]">
+            <h2 class="text-lg font-bold text-indigo-400 mb-4 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Socratic Assistant</h2>
+            <div id="chatBox" class="h-48 bg-slate-950 p-4 rounded mb-4 overflow-y-auto text-xs font-mono text-slate-300 border border-slate-700"></div>
+            <div class="flex gap-2">
+                <input type="text" id="aiInput" class="flex-1 bg-slate-900 border border-slate-700 p-3 rounded text-sm text-white" placeholder="Ask about static members...">
+                <button onclick="askAI()" class="bg-indigo-600 px-4 py-3 rounded text-white text-sm font-bold">Ask</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        const codes = {
+            java: "class Counter { static int count = 0; }<br>Counter c1 = new Counter(); Counter.count++;",
+            python: "class Counter: count = 0<br>c1 = Counter(); Counter.count += 1",
+            cpp: "class Counter { public: static int count; };<br>int Counter::count = 0;<br>Counter c1; Counter::count++;"
+        };
+        let staticVal = 0;
+        
+        function switchTab(t) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.remove('active') || el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('content-' + t).classList.add('active');
+            document.getElementById('content-' + t).classList.remove('hidden');
+            document.getElementById('btn-' + t).classList.add('active');
+        }
+        function loadSim(lang) { 
+            document.getElementById('codeDisplay').innerHTML = codes[lang]; 
+            document.querySelectorAll('.lang-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('lang-' + lang).classList.add('active');
+            resetSim();
+        }
+        function resetSim() { staticVal = 0; document.getElementById('heapDisplay').innerHTML = '<div class="p-4 border-2 border-slate-700 rounded-lg text-center text-slate-500 italic text-sm">Awaiting update...</div>'; }
+        function modifyStatic() {
+            staticVal++;
+            document.getElementById('heapDisplay').innerHTML = `
+                <div class="memory-slot bg-slate-800 p-4 rounded-lg border border-emerald-500/50">
+                    <p class="text-[10px] text-emerald-400 font-bold mb-1">Execution Log</p>
+                    <p class="text-sm font-bold text-white">Member: count</p>
+                    <p class="text-xs text-slate-300">New Value: ${staticVal} (Shared across all instances)</p>
+                </div>
+            `;
+        }
+        function askAI() {
+            const q = document.getElementById('aiInput').value;
+            document.getElementById('chatBox').innerHTML += `<p class="mb-2"><span class="text-indigo-400">You:</span> ${q}</p><p class="mb-2"><span class="text-emerald-400">AI:</span> Static members are shared by all objects of the class.</p>`;
+            document.getElementById('aiInput').value = '';
+        }
+        loadSim('java');
+    </script>
+</body>
+</html>

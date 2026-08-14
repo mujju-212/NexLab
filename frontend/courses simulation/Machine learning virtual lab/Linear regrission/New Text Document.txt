@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Lab: Linear Regression & Gradient Descent - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .code-line { transition: background-color 0.2s ease, border-color 0.2s ease; }
+        .code-line.active { background-color: rgba(99, 102, 241, 0.25); border-left: 4px solid #6366f1; }
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes pulseMem {
+            0% { transform: scale(1); border-color: #6366f1; }
+            50% { transform: scale(1.03); border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+            100% { transform: scale(1); border-color: #374151; }
+        }
+        .stat-card.updated { animation: pulseMem 0.5s ease-in-out; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-chart-line"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Machine Learning & Data Science</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 2: Linear Regression & Gradient Descent Optimization (Scikit-Learn)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <!-- Main Tab Navigation -->
+    <nav class="bg-slate-800/80 border-b border-slate-700 px-6 py-2">
+        <div class="flex flex-wrap gap-2 text-sm font-medium">
+            <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-lg text-indigo-400 bg-slate-700/60 border border-slate-600 flex items-center gap-2 transition">
+                <i class="fa-solid fa-book-open"></i> Theory
+            </button>
+            <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-list-check"></i> Procedure
+            </button>
+            <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+            </button>
+            <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-flask"></i> Simulation
+            </button>
+            <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-graduation-cap"></i> Post-Test
+            </button>
+            <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-robot"></i> AI Socratic Assistant
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+        <!-- TAB 1: THEORY -->
+        <div id="content-theory" class="tab-content bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Theory: Linear Regression & Gradient Descent Optimization</h2>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                <strong>Linear Regression</strong> is a foundational supervised learning algorithm used to model the linear relationship between an independent input variable $X$ and a continuous dependent target variable $Y$. The hypothesis function is modeled as a line:
+            </p>
+
+            <div class="bg-slate-950 p-4 rounded-lg border border-slate-700 font-mono text-center text-indigo-300 text-sm">
+                $\hat{y} = w \cdot x + b$ &nbsp;&nbsp;&nbsp;&nbsp; where $w$ = Slope / Weight, $b$ = Y-Intercept / Bias
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-bullseye text-emerald-400"></i> 1. Cost Function (MSE)</span>
+                        <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-sans">Loss Metric</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Measures average squared error between actual targets $y_i$ and predictions $\hat{y}_i$:
+                        <br><code class="text-amber-300 font-mono">J(w, b) = (1 / 2n) * Σ (y_i - (w*x_i + b))^2</code>.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-stairs text-amber-400"></i> 2. Gradient Descent</span>
+                        <span class="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-sans">Optimization</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Iteratively updates parameters $w$ and $b$ in the direction of steepest loss reduction:
+                        <br><code class="text-emerald-300 font-mono">w = w - α * (∂J / ∂w)</code>, <code class="text-emerald-300 font-mono">b = b - α * (∂J / ∂b)</code>.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-gauge-high text-cyan-400"></i> 3. R² Coefficient of Determination</span>
+                        <span class="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded font-sans">Metric [0 to 1]</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Evaluates model fit goodness ($0.0 \to 1.0$). $R^2 = 1 - \frac{\text{SS}_{res}}{\text{SS}_{tot}}$, representing the proportion of variance explained.
+                    </p>
+                </div>
+
+            </div>
+
+            <div class="bg-slate-900/60 p-4 rounded-lg border border-slate-700 text-xs text-slate-300 space-y-2">
+                <h4 class="font-bold text-indigo-300 text-sm"><i class="fa-solid fa-circle-info text-amber-300"></i> Role of Learning Rate ($\alpha$)</h4>
+                <p class="text-slate-400">
+                    If learning rate $\alpha$ is too small, gradient descent converges extremely slowly. If $\alpha$ is too large, the updates overshoot the minimum cost and can diverge completely!
+                </p>
+            </div>
+        </div>
+
+        <!-- TAB 2: PROCEDURE -->
+        <div id="content-procedure" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Simulator Procedure</h2>
+            <ol class="list-decimal list-inside space-y-3 text-sm text-slate-300 leading-relaxed">
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Select a <strong>Dataset Scenario</strong> (e.g. Experience vs Salary, House Area vs Price, or Hours vs Score) from the dropdown or click a Quick Preset.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Adjust the <strong>Learning Rate ($\alpha$)</strong> and initial <strong>Weight / Bias</strong> parameters if desired.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Start Simulation"</strong> to load data points onto the regression canvas workspace.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Step Execution"</strong> to trace gradient descent updates line-by-line and observe the regression line fit data points.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Observe the <strong>Regression Canvas & Loss Curve</strong> updating residual error lines live.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Run / Execute All"</strong> to complete convergence instantly and view final $R^2$ and MSE metrics.</li>
+            </ol>
+        </div>
+
+        <!-- TAB 3: PRE-TEST -->
+        <div id="content-pretest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Pre-Lab Assessment Quiz</h2>
+                <span id="pretest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="preq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. What is the standard cost function minimized in Ordinary Least Squares (OLS) Linear Regression?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Binary Cross Entropy Loss</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> Mean Squared Error (MSE)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Hinge Loss</label>
+                    </div>
+                    <p id="preq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="preq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What happens to gradient descent optimization if the learning rate ($\alpha$) is set excessively high?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> It guarantees instant convergence to global minimum</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> It overshoots the minimum and may diverge</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> It converts linear regression into a classification model</label>
+                    </div>
+                    <p id="preq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPretest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Pre-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 4: SIMULATION WORKSPACE -->
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <!-- Controls Bar -->
+            <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Select Regression Dataset</label>
+                            <select id="regDataset" onchange="updateDatasetDisplay()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="salary">1. Salary vs. Experience (Years)</option>
+                                <option value="housing">2. House Price vs. Area (Sq.Ft)</option>
+                                <option value="study">3. Exam Score vs. Study Hours</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Learning Rate ($\alpha$)</label>
+                            <select id="learningRate" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="0.01">0.01 (Standard)</option>
+                                <option value="0.05">0.05 (Fast)</option>
+                                <option value="0.001">0.001 (Conservative)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="startSimulation()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95">
+                            <i class="fa-solid fa-play"></i> Start Simulation
+                        </button>
+                        <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 cursor-not-allowed">
+                            <i class="fa-solid fa-forward-step"></i> Step Epoch
+                        </button>
+                        <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95">
+                            <i class="fa-solid fa-bolt"></i> Run / Execute All
+                        </button>
+                        <button onclick="resetSimulation()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium px-3 py-2 rounded-lg text-sm transition flex items-center gap-1 active:scale-95">
+                            <i class="fa-solid fa-rotate-left"></i> Reset
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick Preset Shortcuts -->
+                <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-700/60 text-xs">
+                    <span class="text-slate-400 font-medium"><i class="fa-solid fa-bolt text-amber-400"></i> Quick Presets:</span>
+                    <button onclick="loadPreset('salary')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Experience vs Salary</button>
+                    <button onclick="loadPreset('housing')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">House Area vs Price</button>
+                    <button onclick="loadPreset('study')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Study Hours vs Score</button>
+                </div>
+            </div>
+
+            <!-- Execution Workspace Split View -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left Column: Source Code Panel -->
+                <div class="lg:col-span-5 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md">
+                    <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <i class="fa-solid fa-code text-indigo-400"></i> Scikit-Learn Code Trace
+                        </span>
+                        <span id="currentStepBadge" class="text-xs bg-slate-700 text-slate-300 px-2.5 py-0.5 rounded-full font-mono">Epoch: Ready</span>
+                    </div>
+                    <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 flex-1 space-y-1 overflow-x-auto min-h-[260px]">
+                    </div>
+                    <div class="p-4 border-t border-slate-700/80 bg-slate-800/50">
+                        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Model Parameter State</h4>
+                        <p id="explanationText" class="text-xs text-slate-300 leading-relaxed min-h-[36px]">
+                            Select dataset and click 'Start Simulation' or 'Run / Execute All' to execute.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Right Column: Interactive Scatter Canvas & Metrics -->
+                <div class="lg:col-span-7 flex flex-col gap-6">
+                    
+                    <!-- Canvas Regression Plotter -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md space-y-3">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-chart-line text-indigo-400"></i> Interactive Regression Canvas Plotter
+                            </span>
+                            <span id="metricsBadge" class="font-mono text-emerald-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-700 text-[11px]">
+                                R²: -- | MSE: --
+                            </span>
+                        </div>
+
+                        <!-- Canvas Box -->
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-700 flex justify-center items-center">
+                            <canvas id="regressionCanvas" width="560" height="260" class="w-full h-[260px] rounded"></canvas>
+                        </div>
+
+                        <!-- Live Equation & Loss Metrics Cards -->
+                        <div class="grid grid-cols-3 gap-3 font-mono text-xs">
+                            <div class="stat-card bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center">
+                                <span class="text-slate-400 block text-[10px]">Slope Weight ($w$)</span>
+                                <span id="valW" class="text-sm font-bold text-amber-400">0.000</span>
+                            </div>
+                            <div class="stat-card bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center">
+                                <span class="text-slate-400 block text-[10px]">Intercept Bias ($b$)</span>
+                                <span id="valB" class="text-sm font-bold text-indigo-400">0.000</span>
+                            </div>
+                            <div class="stat-card bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center">
+                                <span class="text-slate-400 block text-[10px]">Loss (MSE)</span>
+                                <span id="valMSE" class="text-sm font-bold text-emerald-400">0.000</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Terminal Output -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md flex-1">
+                        <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-2.5 flex justify-between items-center">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                                <i class="fa-solid fa-terminal text-emerald-400"></i> Output Terminal
+                            </span>
+                            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition">
+                                <i class="fa-solid fa-trash-can"></i> Clear
+                            </button>
+                        </div>
+                        <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-300 min-h-[100px] max-h-[140px] overflow-y-auto space-y-1">
+                            <p class="text-slate-500 italic">>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+                        </div>
+                    </div>
+
+                    <!-- Pop-out Result Banner -->
+                    <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-950 to-indigo-950 border-2 border-emerald-500/50 p-4 rounded-xl shadow-xl flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
+                                <i class="fa-solid fa-square-check"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs uppercase font-semibold text-emerald-400 tracking-wider">Final Execution Output</h4>
+                                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-300">Model Converged Successfully</p>
+                            </div>
+                        </div>
+                        <span id="bannerStatus" class="text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1 rounded-md border border-slate-700">
+                            Completed
+                        </span>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: POST-TEST -->
+        <div id="content-posttest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Post-Lab Evaluation Quiz</h2>
+                <span id="posttest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="postq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. What does an $R^2$ score of $0.92$ indicate about a linear regression model?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="a"> The model has 92% training error</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="b"> 92% of the total target variance is explained by the input feature</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="c"> The learning rate was set to 0.92</label>
+                    </div>
+                    <p id="postq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="postq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What Scikit-Learn class implements Linear Regression using Stochastic Gradient Descent?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="a"> `sklearn.linear_model.SGDRegressor`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="b"> `sklearn.cluster.KMeans`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="c"> `sklearn.tree.DecisionTreeRegressor`</label>
+                    </div>
+                    <p id="postq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPosttest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Post-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 6: AI SOCRATIC ASSISTANT -->
+        <div id="content-ai" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md flex flex-col h-[520px]">
+            <h2 class="text-lg font-bold text-indigo-400 border-b border-slate-700 pb-2 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+            </h2>
+
+            <div id="aiChatBox" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-4 overflow-y-auto space-y-3 text-xs">
+                <div class="flex items-start gap-3">
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        Hello! I am your AI Socratic Assistant. Ask me any question about Linear Regression ($y = wx + b$), Mean Squared Error (MSE), Gradient Descent, or $R^2$ scores!
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 mt-4">
+                <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., How does learning rate affect gradient descent convergence?)...." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                <button onclick="sendAiQuery()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-xs font-semibold transition active:scale-95">
+                    Send
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let scenario = 'salary';
+        let stepList = [];
+        let currentStepIdx = 0;
+
+        // Datasets (Normalized for canvas plotting)
+        const datasets = {
+            salary: {
+                title: "Salary vs. Experience",
+                xLabel: "Experience (Years)",
+                yLabel: "Salary ($k)",
+                points: [
+                    { x: 1.1, y: 39 }, { x: 2.0, y: 46 }, { x: 2.9, y: 56 },
+                    { x: 4.0, y: 64 }, { x: 5.1, y: 72 }, { x: 6.0, y: 83 },
+                    { x: 7.9, y: 101 }, { x: 9.5, y: 116 }
+                ]
+            },
+            housing: {
+                title: "House Price vs. Area",
+                xLabel: "Area (100 Sq.Ft)",
+                yLabel: "Price ($k)",
+                points: [
+                    { x: 10, y: 180 }, { x: 14, y: 230 }, { x: 18, y: 310 },
+                    { x: 22, y: 360 }, { x: 26, y: 420 }, { x: 30, y: 490 },
+                    { x: 35, y: 580 }, { x: 40, y: 650 }
+                ]
+            },
+            study: {
+                title: "Exam Score vs. Study Hours",
+                xLabel: "Study Hours",
+                yLabel: "Test Score (%)",
+                points: [
+                    { x: 1.5, y: 42 }, { x: 2.5, y: 51 }, { x: 3.5, y: 62 },
+                    { x: 4.5, y: 70 }, { x: 5.5, y: 78 }, { x: 6.5, y: 85 },
+                    { x: 7.5, y: 92 }, { x: 8.5, y: 96 }
+                ]
+            }
+        };
+
+        document.addEventListener("DOMContentLoaded", () => {
+            updateDatasetDisplay();
+        });
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+                el.classList.add('text-slate-400');
+            });
+
+            const targetContent = document.getElementById(`content-${tabName}`);
+            if (targetContent) targetContent.classList.remove('hidden');
+
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('text-slate-400');
+                activeBtn.classList.add('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+            }
+        }
+
+        function loadPreset(presetScenario) {
+            const dropdown = document.getElementById('regDataset');
+            if (dropdown) dropdown.value = presetScenario;
+            updateDatasetDisplay();
+            runAll();
+        }
+
+        function updateDatasetDisplay() {
+            scenario = document.getElementById('regDataset').value;
+            const codeContainer = document.getElementById('codeContainer');
+
+            if (scenario === 'salary') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>from sklearn.linear_model import SGDRegressor</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>model = SGDRegressor(learning_rate=<span class="text-emerald-300">'constant'</span>, eta0=0.01)</span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>model.fit(X_experience, y_salary)</span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"w: {model.coef_[0]:.2f}, b: {model.intercept_[0]:.2f}"</span>)</span></div>
+                `;
+            } else if (scenario === 'housing') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>from sklearn.linear_model import LinearRegression</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>model = LinearRegression()</span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>model.fit(X_area, y_price)</span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Model R2 Score: {model.score(X_area, y_price):.4f}"</span>)</span></div>
+                `;
+            } else if (scenario === 'study') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>from sklearn.linear_model import LinearRegression</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>reg = LinearRegression().fit(X_hours, y_scores)</span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>y_pred = reg.predict(X_hours)</span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"MSE Loss: {mean_squared_error(y_scores, y_pred):.2f}"</span>)</span></div>
+                `;
+            }
+
+            drawPlot(datasets[scenario].points, 0, 0, false);
+        }
+
+        function drawPlot(points, w, b, drawLine = false) {
+            const canvas = document.getElementById('regressionCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const padding = 40;
+            const width = canvas.width - padding * 2;
+            const height = canvas.height - padding * 2;
+
+            const xVals = points.map(p => p.x);
+            const yVals = points.map(p => p.y);
+
+            const minX = Math.min(...xVals) * 0.8;
+            const maxX = Math.max(...xVals) * 1.1;
+            const minY = Math.min(...yVals) * 0.8;
+            const maxY = Math.max(...yVals) * 1.1;
+
+            const mapX = x => padding + ((x - minX) / (maxX - minX)) * width;
+            const mapY = y => canvas.height - padding - ((y - minY) / (maxY - minY)) * height;
+
+            // Draw Axes
+            ctx.strokeStyle = "#475569";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(padding, padding);
+            ctx.lineTo(padding, canvas.height - padding);
+            ctx.lineTo(canvas.width - padding, canvas.height - padding);
+            ctx.stroke();
+
+            // Draw Residual Lines if regression line active
+            if (drawLine) {
+                ctx.strokeStyle = "rgba(244, 63, 94, 0.4)";
+                ctx.lineWidth = 1.5;
+                points.forEach(p => {
+                    const yPred = w * p.x + b;
+                    ctx.beginPath();
+                    ctx.moveTo(mapX(p.x), mapY(p.y));
+                    ctx.lineTo(mapX(p.x), mapY(yPred));
+                    ctx.stroke();
+                });
+
+                // Draw Regression Line
+                const x1 = minX;
+                const y1 = w * x1 + b;
+                const x2 = maxX;
+                const y2 = w * x2 + b;
+
+                ctx.strokeStyle = "#10b981";
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.moveTo(mapX(x1), mapY(y1));
+                ctx.lineTo(mapX(x2), mapY(y2));
+                ctx.stroke();
+            }
+
+            // Draw Data Points
+            points.forEach(p => {
+                ctx.fillStyle = "#6366f1";
+                ctx.beginPath();
+                ctx.arc(mapX(p.x), mapY(p.y), 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = "#ffffff";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+        }
+
+        function calculateOLS(points) {
+            const n = points.length;
+            const sumX = points.reduce((s, p) => s + p.x, 0);
+            const sumY = points.reduce((s, p) => s + p.y, 0);
+            const sumXY = points.reduce((s, p) => s + p.x * p.y, 0);
+            const sumX2 = points.reduce((s, p) => s + p.x * p.x, 0);
+
+            const w = (n * sumXY - sumX * sumY) / (n * sumX2 - sumX * sumX);
+            const b = (sumY - w * sumX) / n;
+
+            const yMean = sumY / n;
+            const ssTot = points.reduce((s, p) => s + Math.pow(p.y - yMean, 2), 0);
+            const ssRes = points.reduce((s, p) => s + Math.pow(p.y - (w * p.x + b), 2), 0);
+            const r2 = 1 - (ssRes / ssTot);
+            const mse = ssRes / n;
+
+            return { w, b, r2, mse };
+        }
+
+        function buildExecutionSteps() {
+            const data = datasets[scenario].points;
+            const ols = calculateOLS(data);
+
+            const lr = parseFloat(document.getElementById('learningRate').value) || 0.01;
+
+            // Generate gradient descent trajectory towards OLS solution
+            stepList = [
+                {
+                    line: 1,
+                    w: 0.1 * ols.w,
+                    b: 0.1 * ols.b,
+                    mse: ols.mse * 4.5,
+                    r2: 0.12,
+                    consoleMsg: `> Loaded dataset: ${datasets[scenario].title} (${data.length} samples)`,
+                    explanation: `Line 1: Initialized regression model and dataset.`
+                },
+                {
+                    line: 2,
+                    w: 0.5 * ols.w,
+                    b: 0.5 * ols.b,
+                    mse: ols.mse * 2.1,
+                    r2: 0.58,
+                    consoleMsg: `> Configured model optimizer (learning_rate=${lr})`,
+                    explanation: `Line 2: Configured SGD optimizer hyperparameters.`
+                },
+                {
+                    line: 3,
+                    w: 0.85 * ols.w,
+                    b: 0.85 * ols.b,
+                    mse: ols.mse * 1.25,
+                    r2: 0.84,
+                    consoleMsg: `> Executing fit(): Iterating Gradient Descent updates...`,
+                    explanation: `Line 3: Model parameters (w, b) converging toward minimum cost.`
+                },
+                {
+                    line: 4,
+                    w: ols.w,
+                    b: ols.b,
+                    mse: ols.mse,
+                    r2: ols.r2,
+                    consoleMsg: `<span class='text-emerald-300 font-bold'>Optimal Fit Reached! w=${ols.w.toFixed(2)}, b=${ols.b.toFixed(2)}, R²=${ols.r2.toFixed(3)}</span>`,
+                    explanation: `Line 4: Converged to optimal least squares linear regression line.`
+                }
+            ];
+        }
+
+        function startSimulation() {
+            updateDatasetDisplay();
+            buildExecutionSteps();
+            currentStepIdx = 0;
+
+            hideResultBanner();
+            clearConsole();
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = false;
+            btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95 shadow-lg shadow-emerald-600/20";
+
+            appendConsole(`>>> Executing: ml_linear_regression.py [Dataset: ${scenario}]`);
+            executeStepAtIndex(0);
+        }
+
+        function executeStepAtIndex(idx) {
+            const step = stepList[idx];
+            highlightLine(step.line);
+
+            document.getElementById('valW').innerText = step.w.toFixed(3);
+            document.getElementById('valB').innerText = step.b.toFixed(3);
+            document.getElementById('valMSE').innerText = step.mse.toFixed(2);
+            document.getElementById('metricsBadge').innerText = `R²: ${step.r2.toFixed(3)} | MSE: ${step.mse.toFixed(2)}`;
+
+            drawPlot(datasets[scenario].points, step.w, step.b, true);
+
+            appendConsole(step.consoleMsg);
+            document.getElementById('explanationText').innerText = step.explanation;
+            document.getElementById('currentStepBadge').innerText = `Epoch ${idx + 1}/${stepList.length}`;
+
+            if (idx === stepList.length - 1) {
+                showResultBanner("Linear Regression Convergence Completed", false);
+                const btnStep = document.getElementById('btnStep');
+                btnStep.disabled = true;
+                btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+                document.getElementById('currentStepBadge').innerText = "Converged";
+            }
+        }
+
+        function stepExecute() {
+            if (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function runAll() {
+            startSimulation();
+            while (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function resetSimulation() {
+            currentStepIdx = 0;
+            highlightLine(0);
+            clearConsole();
+            hideResultBanner();
+
+            document.getElementById('valW').innerText = "0.000";
+            document.getElementById('valB').innerText = "0.000";
+            document.getElementById('valMSE').innerText = "0.000";
+            document.getElementById('metricsBadge').innerText = "R²: -- | MSE: --";
+
+            drawPlot(datasets[scenario].points, 0, 0, false);
+
+            appendConsole("<p class='text-slate-500 italic'>>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>");
+            document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+            document.getElementById('currentStepBadge').innerText = "Epoch: Ready";
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = true;
+            btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+        }
+
+        function highlightLine(lineNum) {
+            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+            if (lineNum > 0) {
+                const target = document.getElementById(`line${lineNum}`);
+                if (target) target.classList.add('active');
+            }
+        }
+
+        function clearConsole() {
+            document.getElementById('terminal').innerHTML = '';
+        }
+
+        function appendConsole(htmlContent) {
+            const term = document.getElementById('terminal');
+            const p = document.createElement('p');
+            p.innerHTML = htmlContent;
+            term.appendChild(p);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function showResultBanner(text, isError) {
+            const banner = document.getElementById('resultBanner');
+            const bannerText = document.getElementById('resultBannerText');
+            bannerText.innerText = text;
+            banner.classList.remove('hidden');
+        }
+
+        function hideResultBanner() {
+            document.getElementById('resultBanner').classList.add('hidden');
+        }
+
+        function checkPretest() {
+            const q1 = document.querySelector('input[name="pq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="pq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('preq1-box');
+            const q1fb = document.getElementById('preq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! Mean Squared Error (MSE) is the loss metric minimized in Ordinary Least Squares.";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. OLS Linear Regression minimizes Mean Squared Error (MSE).";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('preq2-box');
+            const q2fb = document.getElementById('preq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'b') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! An excessively high learning rate overshoots cost minimums and causes divergence.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. Setting α too high overshoots the minimum.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('pretest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function checkPosttest() {
+            const q1 = document.querySelector('input[name="postq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="postq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('postq1-box');
+            const q1fb = document.getElementById('postq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! R² = 0.92 means 92% of the variance in target Y is explained by X.";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. R² represents the proportion of variance explained by the feature.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('postq2-box');
+            const q2fb = document.getElementById('postq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'a') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! sklearn.linear_model.SGDRegressor implements linear regression with gradient descent.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. Use SGDRegressor for gradient descent linear regression in Scikit-Learn.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('posttest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function sendAiQuery() {
+            const input = document.getElementById('aiQueryInput');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const chatBox = document.getElementById('aiChatBox');
+
+            const userDiv = document.createElement('div');
+            userDiv.className = 'flex items-start gap-3 justify-end';
+            userDiv.innerHTML = `
+                <div class="bg-indigo-600/30 border border-indigo-500/40 p-3 rounded-lg text-slate-200">
+                    ${query}
+                </div>
+                <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 text-xs shrink-0">You</div>
+            `;
+            chatBox.appendChild(userDiv);
+            input.value = '';
+
+            let response = "Try testing different datasets and learning rates in the simulator to see how gradient descent updates slope (w) and bias (b)!";
+            const qLower = query.toLowerCase();
+            if (qLower.includes('rate') || qLower.includes('alpha') || qLower.includes('learning')) {
+                response = "The learning rate ($\alpha$) controls the step size taken in the direction of negative gradient during weight updates. A rate that is too small leads to slow convergence, while an overly large rate risks overshooting!";
+            } else if (qLower.includes('mse') || qLower.includes('loss') || qLower.includes('cost')) {
+                response = "Mean Squared Error (MSE) measures the average squared vertical distance between target data points and our fitted line $y = wx + b$. Gradient descent iteratively minimizes this cost!";
+            } else if (qLower.includes('r2') || qLower.includes('r-squared') || qLower.includes('score')) {
+                response = "The $R^2$ score measures how much variance in $Y$ is captured by $X$. An $R^2$ score close to $1.0$ indicates an excellent fit, whereas $0.0$ means the model performs no better than predicting the mean value!";
+            }
+
+            setTimeout(() => {
+                const aiDiv = document.createElement('div');
+                aiDiv.className = 'flex items-start gap-3';
+                aiDiv.innerHTML = `
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        ${response}
+                    </div>
+                `;
+                chatBox.appendChild(aiDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 500);
+        }
+    </script>
+</body>
+</html>

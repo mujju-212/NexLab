@@ -1,0 +1,123 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DSA Lab: Advanced Search Trees - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; }
+        .tab-btn.active { background-color: #334155; color: #818cf8; border: 1px solid #475569; }
+        .tree-node { transition: all 0.3s ease; }
+        .node-23 { background-color: #1e3a8a; border: 2px solid #3b82f6; }
+        .node-rb { background-color: #7f1d1d; border: 2px solid #ef4444; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <header class="bg-[#1e293b] border-b border-[#334155] px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-code-branch"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Data Structures & Algorithms</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 4: Advanced Search Trees (2-3 Tree & Red-Black Tree)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <nav class="bg-[#1e293b] border-b border-[#334155] px-6 py-2">
+        <div class="flex gap-4 text-sm font-medium">
+            <button onclick="switchTab('theory')" class="tab-btn active px-4 py-2 rounded-lg flex items-center gap-2"><i class="fa-solid fa-book"></i> Theory</button>
+            <button onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+            <button onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+            <button onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+            <button onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+            <button onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Socratic Assistant</button>
+        </div>
+    </nav>
+
+    <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
+        <div id="content-theory" class="tab-content bg-[#1e293b] p-6 rounded-xl border border-[#334155] shadow-xl space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Theory: 2-3 Trees & Red-Black Trees</h2>
+            <ul class="list-disc list-inside text-sm text-slate-300 space-y-2">
+                <li><strong>2-3 Trees:</strong> A B-tree of order 3 where each node can hold 1 or 2 keys.</li>
+                <li><strong>Red-Black Trees:</strong> Self-balancing BST where nodes are marked red or black to ensure $O(\log n)$ height.</li>
+            </ul>
+        </div>
+
+        <div id="content-procedure" class="tab-content hidden bg-[#1e293b] p-6 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Procedure</h2>
+            <ol class="list-decimal list-inside text-sm text-slate-300 space-y-2">
+                <li>Select either 2-3 Tree or Red-Black Tree.</li>
+                <li>Perform insertions or deletions.</li>
+                <li>Watch the tree balance itself via rotations or splits.</li>
+            </ol>
+        </div>
+
+        <div id="content-pretest" class="tab-content hidden bg-[#1e293b] p-6 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Pre-Test</h2>
+            <p class="text-sm text-slate-300">1. What is the maximum number of children for a node in a 2-3 tree?</p>
+            <button onclick="alert('Submitted!')" class="bg-indigo-600 px-4 py-2 rounded mt-2 text-sm text-white font-bold">Submit</button>
+        </div>
+
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <div class="bg-[#1e293b] p-4 rounded-xl border border-[#334155] flex flex-wrap gap-4 items-center">
+                <select id="treeSelect" class="bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white">
+                    <option value="23">2-3 Tree</option>
+                    <option value="rb">Red-Black Tree</option>
+                </select>
+                <button onclick="runTree()" class="bg-indigo-600 px-4 py-2 rounded text-white font-bold text-sm">Insert Value</button>
+            </div>
+            <div id="viz" class="h-64 flex items-center justify-center gap-6 bg-[#1e293b] p-6 rounded-xl border border-[#334155]">
+                <div class="tree-node node-23 w-16 h-16 flex items-center justify-center rounded-lg font-bold">50</div>
+                <div class="tree-node node-23 w-16 h-16 flex items-center justify-center rounded-lg font-bold">25</div>
+                <div class="tree-node node-23 w-16 h-16 flex items-center justify-center rounded-lg font-bold">75</div>
+            </div>
+        </div>
+
+        <div id="content-posttest" class="tab-content hidden bg-[#1e293b] p-6 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Post-Test</h2>
+            <textarea class="w-full bg-slate-950 p-4 border border-slate-700 rounded text-xs" placeholder="Compare balancing mechanisms in 2-3 vs Red-Black trees..."></textarea>
+            <button onclick="alert('Submitted!')" class="bg-indigo-600 px-4 py-2 rounded mt-4 text-white font-bold text-sm">Submit</button>
+        </div>
+
+        <div id="content-ai" class="tab-content hidden bg-[#1e293b] p-6 rounded-xl border border-[#334155]">
+            <h2 class="text-lg font-bold text-indigo-400 mb-4">AI Socratic Assistant</h2>
+            <div id="chatBox" class="h-48 bg-slate-950 p-4 rounded mb-4 overflow-y-auto text-xs font-mono text-slate-300 border border-slate-700"></div>
+            <div class="flex gap-2">
+                <input type="text" id="aiInput" class="flex-1 bg-slate-900 border border-slate-700 p-2 rounded text-sm text-white" placeholder="Ask a question...">
+                <button onclick="askAI()" class="bg-indigo-600 px-4 py-2 rounded text-white text-sm">Ask</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function switchTab(t) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('content-' + t).classList.remove('hidden');
+            const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.innerText.toLowerCase().includes(t));
+            if (activeBtn) activeBtn.classList.add('active');
+        }
+        async function runTree() {
+            const viz = document.getElementById('viz');
+            viz.innerHTML += `<div class="tree-node node-rb w-16 h-16 flex items-center justify-center rounded-lg font-bold">New</div>`;
+        }
+        function askAI() {
+            const q = document.getElementById('aiInput').value;
+            document.getElementById('chatBox').innerHTML += `<p class="mb-2"><span class="text-indigo-400">You:</span> ${q}</p><p class="mb-2"><span class="text-emerald-400">AI:</span> A Red-Black tree enforces node color properties to ensure the tree height remains logarithmic.</p>`;
+            document.getElementById('aiInput').value = '';
+        }
+    </script>
+</body>
+</html>
+```eof

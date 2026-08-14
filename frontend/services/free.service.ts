@@ -22,11 +22,13 @@ export interface FreeExercise {
   description: string;
   hint_text: string | null;
   difficulty: 'easy' | 'medium' | 'hard';
-  exercise_type: 'coding' | 'mcq' | 'reading';
+  exercise_type: 'coding' | 'mcq' | 'reading' | 'simulation';
   allowed_languages: string[];
   starter_code: Record<string, string>;
   test_cases: Array<{ input: string; expected: string; hidden: boolean }>;
   mcq_options?: string[];
+  /** Static HTML lab path for simulation exercises (e.g. '/simulations/...') */
+  simulation_path?: string;
   xp_reward: number;
 }
 
@@ -88,6 +90,11 @@ export const freeService = {
 
   async submitMcq(exerciseId: string, answer: string) {
     const { data } = await apiClient.post(`/free/exercises/${exerciseId}/answer`, { answer });
+    return data;
+  },
+
+  async completeSimulation(exerciseId: string): Promise<SubmitResult> {
+    const { data } = await apiClient.post<SubmitResult>(`/free/exercises/${exerciseId}/complete`);
     return data;
   },
 

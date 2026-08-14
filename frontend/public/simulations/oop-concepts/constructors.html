@@ -1,0 +1,431 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OOP Virtual Lab: Constructors</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-cube"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">OOP Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment 2: Constructors (Java, Python, C++)</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2"><i class="fa-solid fa-book-open"></i> Theory</button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Assistant</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Constructors</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">A <strong>constructor</strong> is a special member function invoked automatically the moment an object is created. Its job is to initialize the object's attributes so the object is never left in an incomplete state.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1">Java</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">A method with the exact same name as the class, no return type. Java allows <strong>constructor overloading</strong> — multiple constructors with different parameter lists.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1">Python</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Uses the <code class="font-mono">__init__</code> special method. A class has exactly one <code class="font-mono">__init__</code>; default arguments simulate optional parameters.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1">C++</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Same name as the class, optionally using a <strong>member initializer list</strong> (<code class="font-mono">: name(n)</code>) for efficient direct initialization.</p>
+        </div>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Constructor Syntax — Multi-Language</h3>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">Java</p>
+          <pre class="whitespace-pre-wrap">public class Student {
+  String name;
+  public Student(String n) {
+    name = n;
+  }
+}
+Student s1 = new Student("Alice");</pre>
+        </div>
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">Python</p>
+          <pre class="whitespace-pre-wrap">class Student:
+    def __init__(self, name):
+        self.name = name
+
+s1 = Student("Alice")</pre>
+        </div>
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">C++</p>
+          <pre class="whitespace-pre-wrap">class Student {
+  public:
+    string name;
+    Student(string n) : name(n) {}
+};
+Student s1("Alice");</pre>
+        </div>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Constructor Types</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><strong class="text-slate-700">Default constructor</strong> — takes no parameters; sets attributes to standard initial values.</div>
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><strong class="text-slate-700">Parameterized constructor</strong> — accepts arguments used to initialize attributes with caller-supplied values.</div>
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><strong class="text-slate-700">Constructor overloading (Java/C++)</strong> — multiple constructors distinguished by parameter list.</div>
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><strong class="text-slate-700">Python's single __init__</strong> — one initializer per class; optional params via default values emulate overloading.</div>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab and select a language pill — <strong>Java</strong>, <strong>Python</strong>, or <strong>C++</strong>.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Examine the constructor syntax and how it initializes the <code class="font-mono">name</code> attribute.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Instantiate Object</strong> to trigger the constructor and visualize heap memory allocation with a real address.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click it again to see a second, independently-constructed object appear.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Watch the Output Terminal record every constructor call.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset Heap</strong> to clear all instances and start again.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">1. When is a constructor called?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Automatically, the moment an object is created</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> Only when explicitly called like a normal method</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Only when the program ends</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. How is a constructor defined in Python?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> Using a method with the same name as the class</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> Using the special <code class="font-mono">__init__</code> method</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> Using the keyword <code class="font-mono">construct</code></label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. Can a Java class have multiple constructors?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> Yes, via constructor overloading with different parameter lists</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> No, only one constructor is ever allowed</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> Only if they all take zero parameters</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">4. What is a <em>default</em> constructor?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> A constructor that always throws an error</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> A constructor that takes no parameters and sets standard initial values</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> A constructor that can only be called once per program</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-slate-500 font-medium mr-1">Language:</span>
+            <button id="lang-java" onclick="loadSim('java')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-slate-900 text-white">Java</button>
+            <button id="lang-python" onclick="loadSim('python')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-500 hover:bg-slate-100">Python</button>
+            <button id="lang-cpp" onclick="loadSim('cpp')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-500 hover:bg-slate-100">C++</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="instantiateObject()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-plus"></i> Instantiate Object</button>
+            <button onclick="resetHeap()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95"><i class="fa-solid fa-rotate-left"></i> Reset Heap</button>
+          </div>
+        </div>
+        <div id="codeDisplay" class="font-mono text-xs bg-slate-950 text-slate-200 p-4 rounded-xl border border-slate-800 min-h-[130px] overflow-x-auto"></div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-microchip text-purple-600"></i> Heap Memory (Constructed Instances)</h3>
+          <div id="heapDisplay" class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div class="p-4 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 italic text-xs col-span-2">No instances allocated yet.</div>
+          </div>
+        </div>
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal</span>
+            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition"><i class="fa-solid fa-trash-can"></i> Clear</button>
+          </div>
+          <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[160px] max-h-[260px] overflow-y-auto space-y-1">
+            <p class="text-slate-500 italic">&gt;&gt;&gt; Select a language and click 'Instantiate Object'.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">1. Why does Python use <code class="font-mono">__init__</code> instead of a class-named method?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> Python uses a uniform dunder-method convention rather than name-matching for special methods</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> Python does not support constructors at all</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> __init__ is only used for static classes</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What does a C++ member initializer list (<code class="font-mono">: name(n)</code>) do?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> Deletes the member variable</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> Initializes member variables directly, before the constructor body runs</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> Declares the class as abstract</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">3. What is constructor overloading?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> Calling a constructor recursively</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> Defining multiple constructors in the same class with different parameter lists</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> Making a constructor private</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. In a subclass, when does the parent class's constructor run?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> Before the subclass's own constructor body finishes initializing (parent first)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> It never runs unless manually deleted</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> Only after the whole program terminates</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant</h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about constructors, __init__, overloading, or member initializer lists.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., what is a default constructor?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('#tab-theory,#tab-procedure,#tab-pretest,#tab-simulation,#tab-posttest,#tab-ai').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ---------- Simulation ---------- */
+const codes = {
+  java: `public class Student {
+  String name;
+  public Student(String n) {
+    name = n;
+  }
+}
+Student s1 = new Student("Alice");`,
+  python: `class Student:
+    def __init__(self, name):
+        self.name = name
+
+s1 = Student("Alice")`,
+  cpp: `class Student {
+  public:
+    string name;
+    Student(string n) : name(n) {}
+};
+Student s1("Alice");`
+};
+const names = ["Alice","Ben","Cara","Dev","Elin","Farah"];
+let currentLang = 'java';
+let objectCount = 0;
+
+function loadSim(lang){
+  currentLang = lang;
+  document.getElementById('codeDisplay').textContent = codes[lang];
+  ['java','python','cpp'].forEach(l=>{
+    const b = document.getElementById('lang-'+l);
+    b.classList.remove('bg-slate-900','text-white');
+    b.classList.add('text-slate-500');
+  });
+  const active = document.getElementById('lang-'+lang);
+  active.classList.add('bg-slate-900','text-white');
+  active.classList.remove('text-slate-500');
+}
+
+function instantiateObject(){
+  objectCount++;
+  const heap = document.getElementById('heapDisplay');
+  if (objectCount === 1) heap.innerHTML = '';
+  const addr = (0x1000 + Math.floor(Math.random()*0xEFFF)).toString(16).toUpperCase();
+  const name = names[(objectCount-1) % names.length];
+  const card = document.createElement('div');
+  card.className = 'mem-card animate-pop bg-slate-50 p-4 rounded-xl border border-emerald-200';
+  card.innerHTML = `
+    <p class="text-[10px] text-emerald-600 font-bold font-mono mb-1">Heap Allocation @ 0x${addr}</p>
+    <p class="text-sm font-bold text-slate-800">s${objectCount} (${currentLang.toUpperCase()})</p>
+    <p class="text-xs text-slate-500 font-mono">Constructor set name = "${name}"</p>
+  `;
+  heap.appendChild(card);
+  appendConsole(`&gt;&gt;&gt; Constructor called &rarr; s${objectCount} initialized with name="${name}" @ 0x${addr}`);
+}
+
+function resetHeap(){
+  objectCount = 0;
+  document.getElementById('heapDisplay').innerHTML = '<div class="p-4 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 italic text-xs col-span-2">No instances allocated yet.</div>';
+  clearConsole();
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Heap cleared. Select a language and click 'Instantiate Object'.</span>");
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try instantiating an object in the simulator and watch the constructor initialize its attributes in real time!";
+  if (q.includes('overload')) response = "Constructor overloading means defining several constructors in one class, each with a different parameter list — Java and C++ pick the right one based on the arguments you pass. Python has only one __init__, so default arguments are used instead.";
+  else if (q.includes('__init__') || q.includes('init')) response = "__init__ is Python's constructor method. It runs automatically right after a new object is created and is where you assign attribute values via 'self'.";
+  else if (q.includes('default constructor')) response = "A default constructor takes no parameters and initializes attributes to standard/fallback values. If you don't write any constructor in Java/C++, the compiler provides an empty one.";
+  else if (q.includes('parameterized')) response = "A parameterized constructor accepts arguments so the caller can supply specific initial values, like Student(\"Alice\") setting name directly.";
+  else if (q.includes('initializer list') || q.includes('member initializer')) response = "In C++, a member initializer list (': name(n)') initializes member variables directly as the object is built, which is more efficient than assigning inside the constructor body.";
+  else if (q.includes('this') || q.includes('self')) response = "'this' (Java/C++) and 'self' (Python) refer to the object currently being constructed, letting the constructor set that specific object's attributes.";
+  else if (q.includes('constructor')) response = "A constructor is a special function that runs automatically when an object is created, guaranteeing attributes are initialized before any other code can use the object.";
+  else if (q.includes('destructor')) response = "A destructor (C++: ~ClassName()) runs automatically when an object is destroyed, used to release resources. Java and Python instead rely on garbage collection.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{ loadSim('java'); });
+</script>
+</body>
+</html>

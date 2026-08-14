@@ -1,0 +1,752 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Classes & Objects - Virtual Lab Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .code-line { transition: background-color 0.2s ease, border-color 0.2s ease; }
+        .code-line.active { background-color: rgba(99, 102, 241, 0.25); border-left: 4px solid #6366f1; }
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes pulseMem {
+            0% { transform: scale(1); border-color: #6366f1; }
+            50% { transform: scale(1.03); border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+            100% { transform: scale(1); border-color: #374151; }
+        }
+        .mem-card.updated { animation: pulseMem 0.5s ease-in-out; }
+        .object-box { transition: all 0.3s ease; }
+        .object-box.active-obj { border-color: #10b981; background-color: rgba(16, 185, 129, 0.1); }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-brands fa-python"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Computer Science & Engineering</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 6: Python Classes & Objects (Basic Instantiation & Attributes)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <!-- Main Tab Navigation -->
+    <nav class="bg-slate-800/80 border-b border-slate-700 px-6 py-2">
+        <div class="flex flex-wrap gap-2 text-sm font-medium">
+            <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-lg text-indigo-400 bg-slate-700/60 border border-slate-600 flex items-center gap-2 transition">
+                <i class="fa-solid fa-book-open"></i> Theory
+            </button>
+            <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-list-check"></i> Procedure
+            </button>
+            <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+            </button>
+            <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-flask"></i> Simulation
+            </button>
+            <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-graduation-cap"></i> Post-Test
+            </button>
+            <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-robot"></i> AI Socratic Assistant
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+        <!-- TAB 1: THEORY -->
+        <div id="content-theory" class="tab-content bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Theory: Classes & Objects</h2>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                In Python, a <strong>Class</strong> is a blueprint or template for creating data structures. An <strong>Object</strong> is a specific instance of a class created in memory.
+            </p>
+
+            <!-- Grid of Concepts -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-cube text-emerald-400"></i> Class Definition</span>
+                        <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded font-sans">class Name:</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Defined using the <code class="text-amber-300">class</code> keyword. E.g., <code class="text-amber-300">class Car: pass</code>.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-layer-group text-amber-400"></i> Object Instantiation</span>
+                        <span class="text-[10px] bg-indigo-500/20 text-indigo-300 px-2 py-0.5 rounded font-sans">obj = ClassName()</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        An object is instantiated by calling the class name followed by parentheses: <code class="text-emerald-300">c1 = Car()</code>.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-tag text-cyan-400"></i> Object Attributes</span>
+                        <span class="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded font-sans">obj.attribute</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Attributes can be dynamically assigned to objects using dot notation: <code class="text-emerald-300">c1.color = "Red"</code>.
+                    </p>
+                </div>
+
+            </div>
+        </div>
+
+        <!-- TAB 2: PROCEDURE -->
+        <div id="content-procedure" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Simulator Procedure</h2>
+            <ol class="list-decimal list-inside space-y-3 text-sm text-slate-300 leading-relaxed">
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Select an <strong>OOP Scenario</strong> (e.g. Basic Class & Object, __init__ Constructor, Calling Methods, Modifying Attributes, or Inheritance) from the dropdown or click a Quick Preset.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Start Simulation"</strong> to load the Python class definition into memory.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Step Execution"</strong> to trace code execution line-by-line. Observe how objects are instantiated and how `self` binds attributes in memory.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Inspect the <strong>Heap Object Inspector Window</strong> to see instance variables (`name`, `score`, `grade`) dynamically created and updated.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Run / Execute All"</strong> to complete execution instantly and view final terminal results.</li>
+            </ol>
+        </div>
+
+        <!-- TAB 3: PRE-TEST -->
+        <div id="content-pretest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Pre-Lab Assessment Quiz</h2>
+                <span id="pretest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="preq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. What is the role of the `__init__` method in a Python class?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> To delete an object from RAM</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> It is the constructor method that initializes object attributes when instantiated</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> To convert a class into a list</label>
+                    </div>
+                    <p id="preq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="preq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What does the `self` parameter represent inside a class method?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> The class definition itself</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> Reference to the current instance (object) being called</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> A global system variable</label>
+                    </div>
+                    <p id="preq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPretest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Pre-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 4: SIMULATION -->
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <!-- Controls Bar -->
+            <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div>
+                        <label class="block text-xs font-medium text-slate-400 mb-1">Select OOP Scenario</label>
+                        <select id="oopScenario" onchange="updateScenarioDisplay()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                            <option value="basic_class">Class Definition & Object Creation</option>
+                            <option value="attributes">Assigning & Accessing Object Attributes</option>
+                            <option value="multiple_objects">Multiple Independent Objects</option>
+                        </select>
+                    </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="startSimulation()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95">
+                            <i class="fa-solid fa-play"></i> Start Simulation
+                        </button>
+                        <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 cursor-not-allowed">
+                            <i class="fa-solid fa-forward-step"></i> Step Execution
+                        </button>
+                        <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95">
+                            <i class="fa-solid fa-bolt"></i> Run / Execute All
+                        </button>
+                        <button onclick="resetSimulation()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium px-3 py-2 rounded-lg text-sm transition flex items-center gap-1 active:scale-95">
+                            <i class="fa-solid fa-rotate-left"></i> Reset
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick Preset Shortcuts -->
+                <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-700/60 text-xs">
+                    <span class="text-slate-400 font-medium"><i class="fa-solid fa-bolt text-amber-400"></i> Quick Presets:</span>
+                    <button onclick="loadPreset('basic_class')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Create Object</button>
+                    <button onclick="loadPreset('attributes')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Object Attributes</button>
+                    <button onclick="loadPreset('multiple_objects')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Multiple Objects</button>
+                </div>
+            </div>
+
+            <!-- Execution Workspace Split View -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left Column: Source Code Panel -->
+                <div class="lg:col-span-5 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md">
+                    <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <i class="fa-solid fa-code text-indigo-400"></i> Code Trace Window
+                        </span>
+                        <span id="currentStepBadge" class="text-xs bg-slate-700 text-slate-300 px-2.5 py-0.5 rounded-full font-mono">Step: Ready</span>
+                    </div>
+                    <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 flex-1 space-y-1 overflow-x-auto min-h-[260px]">
+                        <!-- Dynamic code trace lines rendered by JS -->
+                    </div>
+                    <div class="p-4 border-t border-slate-700/80 bg-slate-800/50">
+                        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Execution Status</h4>
+                        <p id="explanationText" class="text-xs text-slate-300 leading-relaxed min-h-[36px]">
+                            Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Right Column: Object Heap Inspector & Terminal -->
+                <div class="lg:col-span-7 flex flex-col gap-6">
+                    
+                    <!-- Object Memory Inspector -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md space-y-4">
+                        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center justify-between">
+                            <span class="flex items-center gap-2"><i class="fa-solid fa-cubes text-indigo-400"></i> Heap RAM Memory & Object Inspector</span>
+                            <span class="text-[10px] bg-slate-900 text-slate-400 px-2 py-0.5 rounded border border-slate-700 font-mono">Object Heap References</span>
+                        </h3>
+                        
+                        <div id="heapObjectsContainer" class="grid grid-cols-1 md:grid-cols-2 gap-3 min-h-[110px]">
+                            <div class="col-span-2 text-slate-500 italic text-xs p-4 text-center border border-dashed border-slate-700 rounded-lg">
+                                Select scenario and click 'Start Simulation' to view object instantiation in heap memory.
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Terminal Output -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md flex-1">
+                        <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-2.5 flex justify-between items-center">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                                <i class="fa-solid fa-terminal text-emerald-400"></i> Output Terminal
+                            </span>
+                            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition">
+                                <i class="fa-solid fa-trash-can"></i> Clear
+                            </button>
+                        </div>
+                        <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-300 min-h-[140px] max-h-[180px] overflow-y-auto space-y-1">
+                            <p class="text-slate-500 italic">>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+                        </div>
+                    </div>
+
+                    <!-- Pop-out Result Banner -->
+                    <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-950 to-indigo-950 border-2 border-emerald-500/50 p-4 rounded-xl shadow-xl flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
+                                <i class="fa-solid fa-square-check"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs uppercase font-semibold text-emerald-400 tracking-wider">Final Execution Output</h4>
+                                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-300">Execution Completed</p>
+                            </div>
+                        </div>
+                        <span id="bannerStatus" class="text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1 rounded-md border border-slate-700">
+                            Completed
+                        </span>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: POST-TEST -->
+        <div id="content-posttest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Post-Lab Evaluation Quiz</h2>
+                <span id="posttest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="postq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. How do you instantiate an object of class `Car` in Python?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="a"> `my_car = new Car()`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="b"> `my_car = Car()`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="c"> `Car my_car = Car.create()`</label>
+                    </div>
+                    <p id="postq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="postq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What keyword is used in a class definition to inherit from a parent class?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="a"> `class Child inherits Parent:`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="b"> `class Child(Parent):`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="c"> `class Child extends Parent:`</label>
+                    </div>
+                    <p id="postq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPosttest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Post-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 6: AI ASSISTANT -->
+        <div id="content-ai" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md flex flex-col h-[520px]">
+            <h2 class="text-lg font-bold text-indigo-400 border-b border-slate-700 pb-2 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+            </h2>
+
+            <div id="aiChatBox" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-4 overflow-y-auto space-y-3 text-xs">
+                <div class="flex items-start gap-3">
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        Hello! I am your AI Socratic Assistant. Ask me any question about Python classes, objects, the `__init__` constructor, `self` parameter, methods, or inheritance!
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 mt-4">
+                <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., Why do we pass 'self' as the first parameter?)...." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                <button onclick="sendAiQuery()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-xs font-semibold transition active:scale-95">
+                    Send
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let scenario = 'basic_class';
+        let stepList = [];
+        let currentStepIdx = 0;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            updateScenarioDisplay();
+        });
+
+        // UI Tab Switcher
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+                el.classList.add('text-slate-400');
+            });
+
+            const targetContent = document.getElementById(`content-${tabName}`);
+            if (targetContent) targetContent.classList.remove('hidden');
+
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('text-slate-400');
+                activeBtn.classList.add('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+            }
+        }
+
+        // Quick Preset Shortcut Loader
+        function loadPreset(presetScenario) {
+            const dropdown = document.getElementById('oopScenario');
+            if (dropdown) dropdown.value = presetScenario;
+            updateScenarioDisplay();
+            runAll();
+        }
+
+        function updateScenarioDisplay() {
+            scenario = document.getElementById('oopScenario').value;
+            const codeContainer = document.getElementById('codeContainer');
+
+            if (scenario === 'basic_class') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>class Student:</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>&nbsp;&nbsp;&nbsp;&nbsp;pass</span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>s1 = Student()</span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Object s1: {s1}"</span>)</span></div>
+                `;
+            } else if (scenario === 'attributes') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>class Student: pass</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>s1 = Student()</span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>s1.name = <span class="text-emerald-300">"Alice"</span></span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>s1.score = 92</span></div>
+                    <div id="line5" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">5</span><span>print(<span class="text-emerald-300">f"{s1.name} score: {s1.score}"</span>)</span></div>
+                `;
+            } else if (scenario === 'multiple_objects') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>class Student: pass</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>s1 = Student(); s1.name = <span class="text-emerald-300">"David"</span></span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>s2 = Student(); s2.name = <span class="text-emerald-300">"Emma"</span></span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"s1: {s1.name}, s2: {s2.name}"</span>)</span></div>
+                `;
+            }
+        }
+
+        function buildExecutionSteps() {
+            stepList = [];
+
+            if (scenario === 'basic_class') {
+                stepList = [
+                    {
+                        line: 1,
+                        objects: [],
+                        consoleMsg: `> Class 'Student' defined in memory.`,
+                        explanation: `Lines 1-2: Defined empty class blueprint 'Student'.`
+                    },
+                    {
+                        line: 3,
+                        objects: [{ varName: 's1', className: 'Student', addr: '0x7f8a91', attrs: {} }],
+                        consoleMsg: `> Instantiated s1 = Student() -> Object at 0x7f8a91`,
+                        explanation: `Line 3: Allocated new object instance s1 in Heap RAM memory.`
+                    },
+                    {
+                        line: 4,
+                        objects: [{ varName: 's1', className: 'Student', addr: '0x7f8a91', attrs: {} }],
+                        consoleMsg: `<span class='text-emerald-300 font-bold'>Object s1: &lt;__main__.Student object at 0x7f8a91&gt;</span>`,
+                        explanation: `Line 4: Printed string representation and memory address of object s1.`
+                    }
+                ];
+            } else if (scenario === 'attributes') {
+                stepList = [
+                    {
+                        line: 1,
+                        objects: [],
+                        consoleMsg: `> Class 'Student' defined.`,
+                        explanation: `Line 1: Class blueprint loaded.`
+                    },
+                    {
+                        line: 2,
+                        objects: [{ varName: 's1', className: 'Student', addr: '0x7f8a92', attrs: {} }],
+                        consoleMsg: `> Instantiated s1 = Student()`,
+                        explanation: `Line 2: Object s1 instantiated.`
+                    },
+                    {
+                        line: 3,
+                        objects: [{ varName: 's1', className: 'Student', addr: '0x7f8a92', attrs: { name: '"Alice"' } }],
+                        consoleMsg: `> Assigned s1.name = "Alice"`,
+                        explanation: `Line 3: Added attribute 'name' to object s1.`
+                    },
+                    {
+                        line: 4,
+                        objects: [{ varName: 's1', className: 'Student', addr: '0x7f8a92', attrs: { name: '"Alice"', score: 92 } }],
+                        consoleMsg: `> Assigned s1.score = 92`,
+                        explanation: `Line 4: Added attribute 'score' to object s1.`
+                    },
+                    {
+                        line: 5,
+                        objects: [{ varName: 's1', className: 'Student', addr: '0x7f8a92', attrs: { name: '"Alice"', score: 92 } }],
+                        consoleMsg: `<span class='text-emerald-300 font-bold'>Alice score: 92</span>`,
+                        explanation: `Line 5: Printed object attributes s1.name and s1.score.`
+                    }
+                ];
+            } else if (scenario === 'multiple_objects') {
+                stepList = [
+                    {
+                        line: 1,
+                        objects: [],
+                        consoleMsg: `> Class 'Student' defined.`,
+                        explanation: `Line 1: Class blueprint ready.`
+                    },
+                    {
+                        line: 2,
+                        objects: [{ varName: 's1', className: 'Student', addr: '0x7f8a94', attrs: { name: '"David"' } }],
+                        consoleMsg: `> Created s1 = Student(); s1.name = "David"`,
+                        explanation: `Line 2: Object s1 allocated with attribute name = "David".`
+                    },
+                    {
+                        line: 3,
+                        objects: [
+                            { varName: 's1', className: 'Student', addr: '0x7f8a94', attrs: { name: '"David"' } },
+                            { varName: 's2', className: 'Student', addr: '0x7f8a95', attrs: { name: '"Emma"' } }
+                        ],
+                        consoleMsg: `> Created s2 = Student(); s2.name = "Emma"`,
+                        explanation: `Line 3: Second distinct object instance s2 allocated.`
+                    },
+                    {
+                        line: 4,
+                        objects: [
+                            { varName: 's1', className: 'Student', addr: '0x7f8a94', attrs: { name: '"David"' } },
+                            { varName: 's2', className: 'Student', addr: '0x7f8a95', attrs: { name: '"Emma"' } }
+                        ],
+                        consoleMsg: `<span class='text-emerald-300 font-bold'>s1: David, s2: Emma</span>`,
+                        explanation: `Line 4: Accessed attributes of separate object instances.`
+                    }
+                ];
+            }
+        }
+
+        function renderHeapObjects(objectsList) {
+            const container = document.getElementById('heapObjectsContainer');
+            if (!objectsList || objectsList.length === 0) {
+                container.innerHTML = `
+                    <div class="col-span-2 text-slate-500 italic text-xs p-4 text-center border border-dashed border-slate-700 rounded-lg">
+                        Class defined in memory. Click 'Step Execution' to instantiate objects in Heap RAM.
+                    </div>
+                `;
+                return;
+            }
+
+            let html = '';
+            objectsList.forEach(obj => {
+                html += `
+                    <div class="object-box active-obj bg-slate-900 border-2 border-indigo-500/60 p-3 rounded-lg font-mono space-y-1.5 shadow-md">
+                        <div class="flex justify-between items-center border-b border-slate-700 pb-1 text-xs">
+                            <span class="font-bold text-amber-400">${obj.varName} <span class="text-slate-400 font-normal">(${obj.className})</span></span>
+                            <span class="text-[9px] bg-slate-800 text-emerald-400 px-1.5 py-0.5 rounded border border-slate-700">${obj.addr}</span>
+                        </div>
+                        <div class="text-xs space-y-1 pt-1">
+                `;
+
+                for (const [key, val] of Object.entries(obj.attrs)) {
+                    html += `
+                        <div class="flex justify-between items-center bg-slate-950 px-2 py-1 rounded text-[11px] border border-slate-800">
+                            <span class="text-indigo-300">self.${key}:</span>
+                            <span class="text-emerald-300 font-bold">${val}</span>
+                        </div>
+                    `;
+                }
+
+                html += `
+                        </div>
+                    </div>
+                `;
+            });
+
+            container.innerHTML = html;
+        }
+
+        function startSimulation() {
+            updateScenarioDisplay();
+            buildExecutionSteps();
+            currentStepIdx = 0;
+
+            hideResultBanner();
+            clearConsole();
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = false;
+            btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95 shadow-lg shadow-emerald-600/20";
+
+            appendConsole(`>>> Executing: oop_demo.py [Scenario: ${scenario}]`);
+            executeStepAtIndex(0);
+        }
+
+        function executeStepAtIndex(idx) {
+            const step = stepList[idx];
+            highlightLine(step.line);
+
+            renderHeapObjects(step.objects);
+
+            appendConsole(step.consoleMsg);
+            document.getElementById('explanationText').innerText = step.explanation;
+            document.getElementById('currentStepBadge').innerText = `Step ${idx + 1}/${stepList.length}`;
+
+            if (idx === stepList.length - 1) {
+                showResultBanner("Object Execution Completed Successfully", false);
+                const btnStep = document.getElementById('btnStep');
+                btnStep.disabled = true;
+                btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+                document.getElementById('currentStepBadge').innerText = "Finished";
+            }
+        }
+
+        function stepExecute() {
+            if (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function runAll() {
+            startSimulation();
+            while (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function resetSimulation() {
+            currentStepIdx = 0;
+            highlightLine(0);
+            clearConsole();
+            hideResultBanner();
+            renderHeapObjects([]);
+            appendConsole("<p class='text-slate-500 italic'>>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>");
+            document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+            document.getElementById('currentStepBadge').innerText = "Step: Ready";
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = true;
+            btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+        }
+
+        function highlightLine(lineNum) {
+            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+            if (lineNum > 0) {
+                const target = document.getElementById(`line${lineNum}`);
+                if (target) target.classList.add('active');
+            }
+        }
+
+        function clearConsole() {
+            document.getElementById('terminal').innerHTML = '';
+        }
+
+        function appendConsole(htmlContent) {
+            const term = document.getElementById('terminal');
+            const p = document.createElement('p');
+            p.innerHTML = htmlContent;
+            term.appendChild(p);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function showResultBanner(text, isError) {
+            const banner = document.getElementById('resultBanner');
+            const bannerText = document.getElementById('resultBannerText');
+            bannerText.innerText = text;
+            banner.classList.remove('hidden');
+        }
+
+        function hideResultBanner() {
+            document.getElementById('resultBanner').classList.add('hidden');
+        }
+
+        function checkPretest() {
+            const q1 = document.querySelector('input[name="pq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="pq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('preq1-box');
+            const q1fb = document.getElementById('preq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! __init__ is the constructor method used to initialize instance variables.";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. __init__ initializes attributes when an object is instantiated.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('preq2-box');
+            const q2fb = document.getElementById('preq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'b') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! self refers to the instance object currently being operated on.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. 'self' represents the instance reference of the object.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('pretest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function checkPosttest() {
+            const q1 = document.querySelector('input[name="postq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="postq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('postq1-box');
+            const q1fb = document.getElementById('postq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! Objects are instantiated in Python by calling the ClassName().";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. Python does not use the 'new' keyword for instantiation.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('postq2-box');
+            const q2fb = document.getElementById('postq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'b') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! Inheritance syntax is class Child(Parent):.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. Python passes parent classes inside parentheses.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('posttest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function sendAiQuery() {
+            const input = document.getElementById('aiQueryInput');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const chatBox = document.getElementById('aiChatBox');
+
+            const userDiv = document.createElement('div');
+            userDiv.className = 'flex items-start gap-3 justify-end';
+            userDiv.innerHTML = `
+                <div class="bg-indigo-600/30 border border-indigo-500/40 p-3 rounded-lg text-slate-200">
+                    ${query}
+                </div>
+                <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 text-xs shrink-0">You</div>
+            `;
+            chatBox.appendChild(userDiv);
+            input.value = '';
+
+            let response = "Try testing different scenarios in the simulator and watch how objects and their attributes are allocated in Heap RAM!";
+            const qLower = query.toLowerCase();
+            if (qLower.includes('init') || qLower.includes('constructor')) {
+                response = "The `__init__` method is automatically called when a new object instance is created. It sets up initial instance attributes like `self.name = name`. Try the '__init__ Constructor' preset!";
+            } else if (qLower.includes('self')) {
+                response = "`self` is a reference to the current object instance being called. It allows each object to maintain its own independent data attributes in RAM memory!";
+            } else if (qLower.includes('inherit')) {
+                response = "Inheritance allows a Child class to inherit attributes and methods from a Parent class using `class Child(Parent):`. Use `super().__init__()` to call the parent constructor!";
+            }
+
+            setTimeout(() => {
+                const aiDiv = document.createElement('div');
+                aiDiv.className = 'flex items-start gap-3';
+                aiDiv.innerHTML = `
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        ${response}
+                    </div>
+                `;
+                chatBox.appendChild(aiDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 500);
+        }
+    </script>
+</body>
+</html>

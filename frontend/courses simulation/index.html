@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Virtual Labs — Computer Science &amp; Engineering</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .lab-card{transition:all .18s ease;}
+  .lab-card:hover{transform:translateY(-2px);box-shadow:0 8px 20px -6px rgba(15,23,42,.12);border-color:#c7d2fe;}
+  .fade-in{animation:fadeIn .35s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(6px);}to{opacity:1;transform:translateY(0);}}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+</style>
+</head>
+<body class="min-h-screen text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-6">
+    <div class="max-w-7xl mx-auto flex flex-wrap items-center justify-between gap-4">
+      <div class="flex items-center gap-3">
+        <div class="bg-slate-900 text-amber-400 p-3 rounded-xl font-bold text-2xl shadow-sm"><i class="fa-solid fa-flask-vial"></i></div>
+        <div>
+          <h1 class="text-xl font-bold text-slate-900 leading-tight">Virtual Labs</h1>
+          <p class="text-xs text-indigo-600 font-medium">Computer Science &amp; Engineering — Interactive Experiment Suite</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200">
+          <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> All Labs Active
+        </span>
+      </div>
+    </div>
+    <div class="max-w-7xl mx-auto mt-5 flex flex-wrap gap-3">
+      <div class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-500"><span class="text-slate-900 font-bold font-mono text-sm">48</span> Experiments</div>
+      <div class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-500"><span class="text-slate-900 font-bold font-mono text-sm">7</span> Modules</div>
+      <div class="bg-slate-50 border border-slate-200 rounded-xl px-4 py-2 text-xs text-slate-500"><span class="text-slate-900 font-bold font-mono text-sm">6</span> Tabs per Lab — Theory · Procedure · Pre-Test · Simulation · Post-Test · AI Assistant</div>
+    </div>
+    <div class="max-w-7xl mx-auto mt-5">
+      <div class="relative">
+        <i class="fa-solid fa-magnifying-glass absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 text-sm"></i>
+        <input id="searchBox" oninput="filterLabs()" type="text" placeholder="Search experiments (e.g. sorting, minimax, PCA, inheritance)..." class="w-full bg-slate-50 border border-slate-300 rounded-full pl-10 pr-4 py-2.5 text-sm focus:outline-none focus:border-indigo-500">
+      </div>
+    </div>
+  </header>
+
+  <main id="moduleContainer" class="max-w-7xl mx-auto p-6 space-y-10"></main>
+
+  <footer class="text-center text-xs text-slate-400 py-8">Open any experiment directly — each lab page is fully self-contained and works offline.</footer>
+
+<script>
+const MODULES = [
+  {
+    title: 'Python Programming Lab',
+    folder: 'python programming lab',
+    icon: 'fa-brands fa-python',
+    color: 'text-amber-500 bg-amber-50 border-amber-200',
+    labs: [
+      ['Arithmetic Operations','Arithmetic Operations'],
+      ['Built-in Functions','Built in function'],
+      ['Built-in Modules','built in modules'],
+      ['Classes & Objects','Classes and objects'],
+      ['Constructors & Inheritance','Constructors and inheritance'],
+      ['Data Types','Data types'],
+      ['File Operators','File operators'],
+      ['Loops, Iteration & Control Flow','loops'],
+      ['Strings','Strings']
+    ]
+  },
+  {
+    title: 'Python Programming Lab — Advanced',
+    folder: 'python programming lab - advanced',
+    icon: 'fa-solid fa-layer-group',
+    color: 'text-amber-500 bg-amber-50 border-amber-200',
+    labs: [
+      ['Complex Datatypes','complex datatypes'],
+      ['Higher Order Functions','Higher order functions'],
+      ['Lambda Functions','lambda functions'],
+      ['Extended Formal Argument Syntax','Extended formal argument syntax'],
+      ['Exception Handling','Exception handling']
+    ]
+  },
+  {
+    title: 'Machine Learning Virtual Lab',
+    folder: 'Machine learning virtual lab',
+    icon: 'fa-solid fa-brain',
+    color: 'text-rose-500 bg-rose-50 border-rose-200',
+    labs: [
+      ['Data Preprocessing & Feature Engineering','Data preprocessing and feature engineer'],
+      ['Linear Regression','Linear regrission'],
+      ['Logistic Regression & Decision Boundary','Binary classification and decision boundary analysis using logistic regression'],
+      ['k-Nearest Neighbors (KNN)','k-Nearest Neighbors(KNN)'],
+      ['Naive Bayes Classification','Naive bayes classification for text and categorical data using prior and posterior probabilities'],
+      ['Decision Tree','Decision Tree'],
+      ['Random Forest','Random forest'],
+      ['Support Vector Machine (SVM)','Support vector machine(SVM)'],
+      ['K-Means Clustering','Clustering  K-means Algorithm'],
+      ['Principal Component Analysis (PCA)','Dimensionality Reduction principal component Analysis(PCA)']
+    ]
+  },
+  {
+    title: 'Artificial Intelligence',
+    folder: 'Artificial intelligence',
+    icon: 'fa-solid fa-robot',
+    color: 'text-indigo-500 bg-indigo-50 border-indigo-200',
+    labs: [
+      ['Value Iteration','value iteration'],
+      ['Policy Iteration','Policy iteration'],
+      ['Q-Learning','Q learning'],
+      ['Depth-First Search','AI depth first search'],
+      ['Greedy Best-First Search','Greedy best first search'],
+      ['Minimax Search (+ Alpha-Beta)','Minimax search']
+    ]
+  },
+  {
+    title: 'Data Structures — 1',
+    folder: 'Data structure - 1',
+    icon: 'fa-solid fa-diagram-project',
+    color: 'text-cyan-600 bg-cyan-50 border-cyan-200',
+    labs: [
+      ['Sorting Algorithms','sorting'],
+      ['Graphs (BFS / DFS)','Graphs'],
+      ['Binary Search Trees','Trees'],
+      ['Stacks, Queues & Infix→Postfix','Stacks queues'],
+      ['Linked Lists & Polynomial Addition','Linked list'],
+      ['Linear & Binary Search + Hashing','Searching']
+    ]
+  },
+  {
+    title: 'Data Structures — 2',
+    folder: 'Data structure - 2',
+    icon: 'fa-solid fa-sitemap',
+    color: 'text-cyan-600 bg-cyan-50 border-cyan-200',
+    labs: [
+      ['Sorting (Selection / Radix)','Sorting'],
+      ['Graphs (Topo Sort / MST / Dijkstra)','Graphs'],
+      ['AVL Self-Balancing Search Tree','Search tree'],
+      ['Tries & KMP String Matching','String']
+    ]
+  },
+  {
+    title: 'Object-Oriented Programming (OOP)',
+    folder: 'Object oriented programming (OOP)',
+    icon: 'fa-solid fa-cubes',
+    color: 'text-violet-600 bg-violet-50 border-violet-200',
+    labs: [
+      ['Class & Object','Class and object'],
+      ['Constructors','Constructors'],
+      ['Encapsulation','Encapsulation'],
+      ['Abstraction','Abstraction'],
+      ['Inheritance','Inheritance'],
+      ['Polymorphism (Overloading)','polymorphism (overloading)'],
+      ['Polymorphism (Method Overriding)','polymorphism (method overriding)'],
+      ['Static Members (Variables & Methods)','Static members ( variables & methods)', 'final.html']
+    ]
+  }
+];
+
+function renderModules(){
+  const container = document.getElementById('moduleContainer');
+  container.innerHTML = MODULES.map((mod, mi) => `
+    <section class="module-section" data-module="${mi}">
+      <div class="flex items-center gap-3 mb-4">
+        <div class="w-10 h-10 rounded-xl border flex items-center justify-center ${mod.color}"><i class="${mod.icon}"></i></div>
+        <div>
+          <h2 class="text-base font-bold text-slate-900">${mod.title}</h2>
+          <p class="text-xs text-slate-400">${mod.labs.length} experiments</p>
+        </div>
+      </div>
+      <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        ${mod.labs.map(lab => {
+          const [name, folder, file] = lab;
+          const href = `${encodeURIComponentPath(mod.folder)}/${encodeURIComponentPath(folder)}/${file || 'index.html'}`;
+          return `
+          <a href="${href}" class="lab-card fade-in bg-white border border-slate-200 rounded-2xl p-4 flex items-center justify-between gap-3 shadow-sm" data-name="${name.toLowerCase()}">
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-slate-800 truncate">${name}</p>
+              <p class="text-[11px] text-slate-400 mt-0.5">6-tab interactive lab</p>
+            </div>
+            <span class="w-8 h-8 rounded-full bg-slate-50 border border-slate-200 flex items-center justify-center text-slate-400 shrink-0"><i class="fa-solid fa-arrow-right text-xs"></i></span>
+          </a>`;
+        }).join('')}
+      </div>
+    </section>
+  `).join('');
+}
+
+function encodeURIComponentPath(p){
+  // Preserve readability for local file links while safely encoding special chars per path segment.
+  return p.split('/').map(seg => encodeURIComponent(seg)).join('/');
+}
+
+function filterLabs(){
+  const q = document.getElementById('searchBox').value.trim().toLowerCase();
+  document.querySelectorAll('.module-section').forEach(section => {
+    let visibleCount = 0;
+    section.querySelectorAll('.lab-card').forEach(card => {
+      const match = !q || card.dataset.name.includes(q) || section.querySelector('h2').innerText.toLowerCase().includes(q);
+      card.style.display = match ? '' : 'none';
+      if (match) visibleCount++;
+    });
+    section.style.display = visibleCount > 0 ? '' : 'none';
+  });
+}
+
+renderModules();
+</script>
+</body>
+</html>

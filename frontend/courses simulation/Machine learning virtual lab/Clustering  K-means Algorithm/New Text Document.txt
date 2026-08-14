@@ -1,0 +1,1038 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Lab: K-Means Clustering Algorithm - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .code-line { transition: background-color 0.2s ease, border-color 0.2s ease; }
+        .code-line.active { background-color: rgba(99, 102, 241, 0.25); border-left: 4px solid #6366f1; }
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes pulseMem {
+            0% { transform: scale(1); border-color: #6366f1; }
+            50% { transform: scale(1.03); border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+            100% { transform: scale(1); border-color: #374151; }
+        }
+        .stat-card.updated { animation: pulseMem 0.5s ease-in-out; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-chart-pie"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Machine Learning & Data Science</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 9: Unsupervised K-Means Clustering (Centroids, Inertia SSE & Elbow Method)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <nav class="bg-slate-800/80 border-b border-slate-700 px-6 py-2">
+        <div class="flex flex-wrap gap-2 text-sm font-medium">
+            <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-lg text-indigo-400 bg-slate-700/60 border border-slate-600 flex items-center gap-2 transition">
+                <i class="fa-solid fa-book-open"></i> Theory
+            </button>
+            <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-list-check"></i> Procedure
+            </button>
+            <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+            </button>
+            <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-flask"></i> Simulation
+            </button>
+            <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-graduation-cap"></i> Post-Test
+            </button>
+            <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-robot"></i> AI Socratic Assistant
+            </button>
+        </div>
+    </nav>
+
+    <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+        <!-- TAB 1: THEORY -->
+        <div id="content-theory" class="tab-content bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Theory: Unsupervised K-Means Clustering Algorithm</h2>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                <strong>K-Means</strong> is an unsupervised vector quantization and clustering algorithm that partitions $N$ unlabeled data points into $K$ distinct, non-overlapping clusters. Each cluster is represented by its geometric center called a <strong>Centroid</strong> ($\mu_k$).
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-bullseye text-emerald-400"></i> 1. Objective / Inertia $J$</span>
+                        <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-sans">Cost Function</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Minimizes Within-Cluster Sum of Squares (WCSS / Inertia):
+                        <br><code class="text-amber-300 font-mono">J = \sum_{k=1}^{K} \sum_{x \in S_k} \|x - \mu_k\|^2</code>.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-arrows-spin text-amber-400"></i> 2. Expectation-Maximization</span>
+                        <span class="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-sans">Two Steps</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        <strong>E-Step (Assignment):</strong> Assign each sample to its nearest centroid $c^{(i)} = \arg\min_k \|x^{(i)} - \mu_k\|^2$.
+                        <br><strong>M-Step (Update):</strong> Recalculate centroids $\mu_k = \frac{1}{|S_k|} \sum_{x \in S_k} x$.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-chart-line text-cyan-400"></i> 3. The Elbow Method</span>
+                        <span class="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded font-sans">Choosing K</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Plotting Inertia vs. $K$ yields a steep decline followed by a bend (an "elbow"). The point where the rate of decrease abruptly flattens indicates the optimal number of clusters.
+                    </p>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/60 p-4 rounded-lg border border-slate-700 text-xs text-slate-300 space-y-2">
+                <h4 class="font-bold text-indigo-300 text-sm"><i class="fa-solid fa-circle-info text-amber-300"></i> Centroid Initialization: Random vs. K-Means++</h4>
+                <p class="text-slate-400 leading-relaxed">
+                    Standard random initialization can get trapped in poor local minima if initial centroids start close together. <strong>K-Means++</strong> initializes centroids smart-proportional to distance squared ($\propto d(x)^2$), spreading initial centers far apart for faster and reliable convergence!
+                </p>
+            </div>
+        </div>
+
+        <!-- TAB 2: PROCEDURE -->
+        <div id="content-procedure" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Simulator Procedure</h2>
+            <ol class="list-decimal list-inside space-y-3 text-sm text-slate-300 leading-relaxed">
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Select a <strong>Spatial Dataset</strong> (3 Blobs, 4 Overlapping Clusters, or Non-Convex Rings) or click a Quick Preset.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Select number of clusters <strong>$K$</strong> ($2, 3, 4, 5$) and Initialization strategy (`k-means++` vs `random`).</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Start Simulation"</strong> to seed initial centroids onto the 2D spatial canvas.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Step Iteration"</strong> to observe Expectation (Point Assignment) and Maximization (Centroid Shift) steps phase-by-phase.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Observe centroid trajectory lines and track live <strong>Inertia (SSE)</strong> reduction.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click anywhere on the spatial canvas to add <strong>Custom Points</strong> and re-cluster dynamically!</li>
+            </ol>
+        </div>
+
+        <!-- TAB 3: PRE-TEST -->
+        <div id="content-pretest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Pre-Lab Assessment Quiz</h2>
+                <span id="pretest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="preq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. Is K-Means a Supervised or Unsupervised Machine Learning algorithm?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Supervised (requires ground truth target labels)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> Unsupervised (discovers inherent grouping patterns without labels)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Reinforcement Learning</label>
+                    </div>
+                    <p id="preq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="preq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What metric does K-Means minimize during training?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> Mean Absolute Error (MAE)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> Within-Cluster Sum of Squares (WCSS / Inertia)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> Cross-Entropy Loss</label>
+                    </div>
+                    <p id="preq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPretest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Pre-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 4: SIMULATION WORKSPACE -->
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Select Dataset</label>
+                            <select id="kmeansDataset" onchange="updateDatasetDisplay()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="blobs3">1. 3 Distinct Gaussian Blobs</option>
+                                <option value="blobs4">2. 4 Overlapping Clusters</option>
+                                <option value="rings">3. Non-Convex Concentric Rings</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Number of Clusters ($K$)</label>
+                            <select id="kSelect" onchange="onParamChange()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="2">K = 2</option>
+                                <option value="3" selected>K = 3</option>
+                                <option value="4">K = 4</option>
+                                <option value="5">K = 5</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Initialization Strategy</label>
+                            <select id="initSelect" onchange="onParamChange()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="kmeans++" selected>init='k-means++'</option>
+                                <option value="random">init='random'</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="startSimulation()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95">
+                            <i class="fa-solid fa-play"></i> Start Simulation
+                        </button>
+                        <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 cursor-not-allowed">
+                            <i class="fa-solid fa-forward-step"></i> Step Iteration
+                        </button>
+                        <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95">
+                            <i class="fa-solid fa-bolt"></i> Run / Execute All
+                        </button>
+                        <button onclick="resetSimulation()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium px-3 py-2 rounded-lg text-sm transition flex items-center gap-1 active:scale-95">
+                            <i class="fa-solid fa-rotate-left"></i> Reset
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-700/60 text-xs">
+                    <span class="text-slate-400 font-medium"><i class="fa-solid fa-bolt text-amber-400"></i> Presets:</span>
+                    <button onclick="loadPreset('blobs3_k3')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">3 Blobs (K=3, k-means++)</button>
+                    <button onclick="loadPreset('blobs4_k4')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">4 Clusters (K=4)</button>
+                    <button onclick="loadPreset('rings_k3')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Concentric Rings (K=3)</button>
+                </div>
+            </div>
+
+            <!-- Execution Workspace Split View -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left Column: Source Code Panel -->
+                <div class="lg:col-span-5 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md">
+                    <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <i class="fa-solid fa-code text-indigo-400"></i> Scikit-Learn Code Trace
+                        </span>
+                        <span id="currentStepBadge" class="text-xs bg-slate-700 text-slate-300 px-2.5 py-0.5 rounded-full font-mono">Iteration: Ready</span>
+                    </div>
+                    <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 flex-1 space-y-1 overflow-x-auto min-h-[260px]">
+                    </div>
+                    <div class="p-4 border-t border-slate-700/80 bg-slate-800/50">
+                        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Model Parameter State</h4>
+                        <p id="explanationText" class="text-xs text-slate-300 leading-relaxed min-h-[36px]">
+                            Select dataset and click 'Start Simulation' or 'Run / Execute All' to execute.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Right Column: Interactive Spatial Canvas & Elbow Method Inspector -->
+                <div class="lg:col-span-7 flex flex-col gap-6">
+                    
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md space-y-4">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-chart-pie text-indigo-400"></i> Interactive 2D K-Means Spatial Canvas
+                                <span class="text-[10px] text-slate-400 font-normal">(Click canvas to add points)</span>
+                            </span>
+                            <span id="metricsBadge" class="font-mono text-emerald-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-700 text-[11px]">
+                                Iteration: -- | Inertia: --
+                            </span>
+                        </div>
+
+                        <!-- Canvas Box -->
+                        <div class="bg-slate-950 p-2 rounded-lg border border-slate-700 flex justify-center items-center relative cursor-crosshair">
+                            <canvas id="kmeansCanvas" width="560" height="260" onclick="handleCanvasClick(event)" class="w-full h-[260px] rounded"></canvas>
+                        </div>
+
+                        <!-- Live Metrics Cards -->
+                        <div class="grid grid-cols-4 gap-2 font-mono text-xs">
+                            <div class="stat-card bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center">
+                                <span class="text-slate-400 block text-[10px]">Active Clusters ($K$)</span>
+                                <span id="valK" class="text-sm font-bold text-amber-400">3</span>
+                            </div>
+                            <div class="stat-card bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center">
+                                <span class="text-slate-400 block text-[10px]">Inertia (SSE)</span>
+                                <span id="valInertia" class="text-sm font-bold text-emerald-400">--</span>
+                            </div>
+                            <div class="stat-card bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center">
+                                <span class="text-slate-400 block text-[10px]">Centroid Shift ($\Delta\mu$)</span>
+                                <span id="valShift" class="text-sm font-bold text-indigo-400">--</span>
+                            </div>
+                            <div class="stat-card bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center">
+                                <span class="text-slate-400 block text-[10px]">Samples Count</span>
+                                <span id="valSamples" class="text-sm font-bold text-cyan-400">0</span>
+                            </div>
+                        </div>
+
+                        <!-- Elbow Method Graph Preview -->
+                        <div class="space-y-2 pt-2 border-t border-slate-700/60">
+                            <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-chart-line text-amber-400"></i> Elbow Method Curve (Inertia vs. $K$)
+                            </h4>
+                            <div class="bg-slate-950 p-2 rounded-lg border border-slate-700 flex justify-center items-center">
+                                <canvas id="elbowCanvas" width="560" height="90" class="w-full h-[90px] rounded"></canvas>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Output Terminal -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md flex-1">
+                        <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-2.5 flex justify-between items-center">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                                <i class="fa-solid fa-terminal text-emerald-400"></i> Output Terminal
+                            </span>
+                            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition">
+                                <i class="fa-solid fa-trash-can"></i> Clear
+                            </button>
+                        </div>
+                        <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-300 min-h-[90px] max-h-[120px] overflow-y-auto space-y-1">
+                            <p class="text-slate-500 italic">>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+                        </div>
+                    </div>
+
+                    <!-- Pop-out Result Banner -->
+                    <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-950 to-indigo-950 border-2 border-emerald-500/50 p-4 rounded-xl shadow-xl flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
+                                <i class="fa-solid fa-square-check"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs uppercase font-semibold text-emerald-400 tracking-wider">Final Execution Output</h4>
+                                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-300">K-Means Centroids Converged Successfully</p>
+                            </div>
+                        </div>
+                        <span id="bannerStatus" class="text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1 rounded-md border border-slate-700">
+                            Completed
+                        </span>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: POST-TEST -->
+        <div id="content-posttest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Post-Lab Evaluation Quiz</h2>
+                <span id="posttest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="postq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. In Scikit-Learn `KMeans`, what attribute contains the final 2D coordinates of optimized cluster centroids?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="a"> `model.cluster_centers_`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="b"> `model.centroids_list`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="c"> `model.means_points`</label>
+                    </div>
+                    <p id="postq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="postq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What limitation does standard K-Means have when dealing with non-convex (e.g. concentric ring) data shapes?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="a"> K-Means assumes spherical / convex clusters based on Euclidean distance, failing on complex non-convex geometries</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="b"> K-Means cannot process more than 2 clusters</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="c"> K-Means requires string labels</label>
+                    </div>
+                    <p id="postq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPosttest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Post-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 6: AI SOCRATIC ASSISTANT -->
+        <div id="content-ai" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md flex flex-col h-[520px]">
+            <h2 class="text-lg font-bold text-indigo-400 border-b border-slate-700 pb-2 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+            </h2>
+
+            <div id="aiChatBox" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-4 overflow-y-auto space-y-3 text-xs">
+                <div class="flex items-start gap-3">
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        Hello! I am your AI Socratic Assistant. Ask me any question about K-Means Clustering, Centroids, Expectation-Maximization, Inertia / WCSS, K-Means++, or the Elbow Method!
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 mt-4">
+                <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., How does the Elbow Method determine the best value for K?)...." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                <button onclick="sendAiQuery()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-xs font-semibold transition active:scale-95">
+                    Send
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let scenario = 'blobs3';
+        let stepList = [];
+        let currentStepIdx = 0;
+        let currentPoints = [];
+        let currentCentroids = [];
+        let centroidHistory = [];
+        let clusterColors = ["#10b981", "#3b82f6", "#f59e0b", "#ec4899", "#8b5cf6"];
+
+        const rawDatasets = {
+            blobs3: [
+                // Cluster 1
+                { x: 2.0, y: 2.2 }, { x: 2.5, y: 1.8 }, { x: 1.8, y: 2.8 }, { x: 2.8, y: 2.5 }, { x: 2.2, y: 3.0 },
+                // Cluster 2
+                { x: 7.5, y: 7.2 }, { x: 8.0, y: 6.8 }, { x: 7.0, y: 7.8 }, { x: 8.2, y: 7.5 }, { x: 7.8, y: 8.2 },
+                // Cluster 3
+                { x: 7.8, y: 2.2 }, { x: 8.2, y: 1.8 }, { x: 7.2, y: 2.8 }, { x: 8.5, y: 2.5 }, { x: 7.5, y: 3.2 }
+            ],
+            blobs4: [
+                { x: 2.0, y: 2.0 }, { x: 2.8, y: 2.2 }, { x: 2.2, y: 2.9 }, { x: 3.0, y: 2.8 },
+                { x: 7.0, y: 2.0 }, { x: 7.8, y: 2.2 }, { x: 7.2, y: 2.9 }, { x: 8.0, y: 2.8 },
+                { x: 2.0, y: 7.0 }, { x: 2.8, y: 7.2 }, { x: 2.2, y: 7.9 }, { x: 3.0, y: 7.8 },
+                { x: 7.0, y: 7.0 }, { x: 7.8, y: 7.2 }, { x: 7.2, y: 7.9 }, { x: 8.0, y: 7.8 }
+            ],
+            rings: [
+                // Inner Ring
+                { x: 5.0, y: 5.0 }, { x: 5.3, y: 5.2 }, { x: 4.7, y: 4.8 }, { x: 5.2, y: 4.7 }, { x: 4.8, y: 5.3 },
+                // Outer Ring
+                { x: 2.5, y: 5.0 }, { x: 7.5, y: 5.0 }, { x: 5.0, y: 2.5 }, { x: 5.0, y: 7.5 },
+                { x: 3.2, y: 3.2 }, { x: 6.8, y: 6.8 }, { x: 3.2, y: 6.8 }, { x: 6.8, y: 3.2 }
+            ]
+        };
+
+        document.addEventListener("DOMContentLoaded", () => {
+            updateDatasetDisplay();
+        });
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+                el.classList.add('text-slate-400');
+            });
+
+            const targetContent = document.getElementById(`content-${tabName}`);
+            if (targetContent) targetContent.classList.remove('hidden');
+
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('text-slate-400');
+                activeBtn.classList.add('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+            }
+        }
+
+        function loadPreset(presetKey) {
+            if (presetKey === 'blobs3_k3') {
+                document.getElementById('kmeansDataset').value = 'blobs3';
+                document.getElementById('kSelect').value = '3';
+                document.getElementById('initSelect').value = 'kmeans++';
+            } else if (presetKey === 'blobs4_k4') {
+                document.getElementById('kmeansDataset').value = 'blobs4';
+                document.getElementById('kSelect').value = '4';
+                document.getElementById('initSelect').value = 'kmeans++';
+            } else if (presetKey === 'rings_k3') {
+                document.getElementById('kmeansDataset').value = 'rings';
+                document.getElementById('kSelect').value = '3';
+                document.getElementById('initSelect').value = 'random';
+            }
+            updateDatasetDisplay();
+            runAll();
+        }
+
+        function onParamChange() {
+            if (stepList.length > 0) {
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function updateDatasetDisplay() {
+            scenario = document.getElementById('kmeansDataset').value;
+            currentPoints = JSON.parse(JSON.stringify(rawDatasets[scenario]));
+
+            const codeContainer = document.getElementById('codeContainer');
+            const kVal = document.getElementById('kSelect').value;
+            const initVal = document.getElementById('initSelect').value;
+
+            codeContainer.innerHTML = `
+                <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>from sklearn.cluster import KMeans</span></div>
+                <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>kmeans = KMeans(n_clusters=<span class="text-amber-400 font-bold">${kVal}</span>, init=<span class="text-amber-400 font-bold">'${initVal}'</span>)</span></div>
+                <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>kmeans.fit(X_spatial)</span></div>
+                <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>centroids = kmeans.cluster_centers_</span></div>
+                <div id="line5" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">5</span><span>inertia = kmeans.inertia_</span></div>
+            `;
+
+            drawSpatialCanvas(currentPoints, [], [], false);
+            drawElbowCurve();
+        }
+
+        function handleCanvasClick(e) {
+            const canvas = document.getElementById('kmeansCanvas');
+            const rect = canvas.getBoundingClientRect();
+            const padding = 35;
+            const width = canvas.width - padding * 2;
+            const height = canvas.height - padding * 2;
+
+            const clickX = e.clientX - rect.left;
+            const clickY = e.clientY - rect.top;
+
+            const dataX = ((clickX - padding) / width) * 10;
+            const dataY = ((canvas.height - padding - clickY) / height) * 8;
+
+            if (dataX >= 0 && dataX <= 10 && dataY >= 0 && dataY <= 8) {
+                currentPoints.push({ x: parseFloat(dataX.toFixed(2)), y: parseFloat(dataY.toFixed(2)) });
+                appendConsole(`> Added custom user point at (${dataX.toFixed(2)}, ${dataY.toFixed(2)})`);
+                if (stepList.length > 0) {
+                    runAll();
+                } else {
+                    drawSpatialCanvas(currentPoints, [], [], false);
+                }
+            }
+        }
+
+        function drawSpatialCanvas(points, centroids, history = [], isFitted = false) {
+            const canvas = document.getElementById('kmeansCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const padding = 35;
+            const width = canvas.width - padding * 2;
+            const height = canvas.height - padding * 2;
+
+            const mapX = x => padding + (x / 10) * width;
+            const mapY = y => canvas.height - padding - (y / 8) * height;
+
+            // Background Grid
+            ctx.strokeStyle = "#1e293b";
+            ctx.lineWidth = 1;
+            for (let x = 0; x <= 10; x += 2) {
+                ctx.beginPath();
+                ctx.moveTo(mapX(x), padding);
+                ctx.lineTo(mapX(x), canvas.height - padding);
+                ctx.stroke();
+            }
+            for (let y = 0; y <= 8; y += 2) {
+                ctx.beginPath();
+                ctx.moveTo(padding, mapY(y));
+                ctx.lineTo(canvas.width - padding, mapY(y));
+                ctx.stroke();
+            }
+
+            // Draw Centroid Trajectory Lines
+            if (history.length > 1) {
+                const k = centroids.length;
+                for (let cIdx = 0; cIdx < k; cIdx++) {
+                    ctx.strokeStyle = clusterColors[cIdx % clusterColors.length];
+                    ctx.setLineDash([3, 3]);
+                    ctx.lineWidth = 1.5;
+                    ctx.beginPath();
+                    for (let hIdx = 0; hIdx < history.length; hIdx++) {
+                        const pt = history[hIdx][cIdx];
+                        if (hIdx === 0) ctx.moveTo(mapX(pt.x), mapY(pt.y));
+                        else ctx.lineTo(mapX(pt.x), mapY(pt.y));
+                    }
+                    ctx.stroke();
+                    ctx.setLineDash([]);
+                }
+            }
+
+            // Draw Data Points
+            points.forEach(p => {
+                const px = mapX(p.x);
+                const py = mapY(p.y);
+                const clusterIdx = isFitted && p.cluster !== undefined ? p.cluster : -1;
+
+                ctx.fillStyle = clusterIdx >= 0 ? clusterColors[clusterIdx % clusterColors.length] : "#94a3b8";
+                ctx.beginPath();
+                ctx.arc(px, py, 5, 0, Math.PI * 2);
+                ctx.fill();
+                ctx.strokeStyle = "#ffffff";
+                ctx.lineWidth = 1;
+                ctx.stroke();
+            });
+
+            // Draw Centroid Markers (Glowing Large Stars/Crosshairs)
+            centroids.forEach((c, idx) => {
+                const cx = mapX(c.x);
+                const cy = mapY(c.y);
+                const color = clusterColors[idx % clusterColors.length];
+
+                // Outer Halo
+                ctx.strokeStyle = color;
+                ctx.lineWidth = 3;
+                ctx.beginPath();
+                ctx.arc(cx, cy, 11, 0, Math.PI * 2);
+                ctx.stroke();
+
+                // Crosshair Plus
+                ctx.strokeStyle = "#ffffff";
+                ctx.lineWidth = 2;
+                ctx.beginPath();
+                ctx.moveTo(cx - 7, cy);
+                ctx.lineTo(cx + 7, cy);
+                ctx.moveTo(cx, cy - 7);
+                ctx.lineTo(cx, cy + 7);
+                ctx.stroke();
+            });
+        }
+
+        function drawElbowCurve() {
+            const canvas = document.getElementById('elbowCanvas');
+            if (!canvas) return;
+            const ctx = canvas.getContext('2d');
+            ctx.clearRect(0, 0, canvas.width, canvas.height);
+
+            const activeK = parseInt(document.getElementById('kSelect').value) || 3;
+            const padding = 25;
+            const width = canvas.width - padding * 2;
+            const height = canvas.height - padding * 2;
+
+            // Simulated Inertia values for K=1 to 6
+            const inertias = [220.0, 110.0, 32.5, 24.1, 18.0, 14.2];
+
+            const mapX = k => padding + ((k - 1) / 5) * width;
+            const mapY = val => canvas.height - padding - ((val - 10) / 220) * height;
+
+            // Draw Axes
+            ctx.strokeStyle = "#334155";
+            ctx.lineWidth = 1;
+            ctx.beginPath();
+            ctx.moveTo(padding, padding);
+            ctx.lineTo(padding, canvas.height - padding);
+            ctx.lineTo(canvas.width - padding, canvas.height - padding);
+            ctx.stroke();
+
+            // Draw Line
+            ctx.strokeStyle = "#6366f1";
+            ctx.lineWidth = 2;
+            ctx.beginPath();
+            for (let k = 1; k <= 6; k++) {
+                const x = mapX(k);
+                const y = mapY(inertias[k - 1]);
+                if (k === 1) ctx.moveTo(x, y);
+                else ctx.lineTo(x, y);
+            }
+            ctx.stroke();
+
+            // Draw Points
+            for (let k = 1; k <= 6; k++) {
+                const x = mapX(k);
+                const y = mapY(inertias[k - 1]);
+                const isActive = k === activeK;
+
+                ctx.fillStyle = isActive ? "#f59e0b" : "#a5b4fc";
+                ctx.beginPath();
+                ctx.arc(x, y, isActive ? 6 : 3.5, 0, Math.PI * 2);
+                ctx.fill();
+
+                ctx.fillStyle = "#94a3b8";
+                ctx.font = "9px Fira Code";
+                ctx.fillText(`K=${k}`, x - 8, canvas.height - 8);
+            }
+        }
+
+        function calculateKMeansIterations() {
+            const k = parseInt(document.getElementById('kSelect').value) || 3;
+            const initStrategy = document.getElementById('initSelect').value;
+            let pts = JSON.parse(JSON.stringify(currentPoints));
+
+            // Seed Initial Centroids
+            let cents = [];
+            if (initStrategy === 'kmeans++' || scenario === 'blobs3') {
+                cents = [
+                    { x: 2.0, y: 2.0 },
+                    { x: 8.0, y: 7.0 },
+                    { x: 8.0, y: 2.0 },
+                    { x: 2.5, y: 7.5 },
+                    { x: 5.0, y: 5.0 }
+                ].slice(0, k);
+            } else {
+                cents = [
+                    { x: 1.0, y: 1.0 },
+                    { x: 3.0, y: 3.0 },
+                    { x: 5.0, y: 5.0 },
+                    { x: 7.0, y: 7.0 },
+                    { x: 9.0, y: 9.0 }
+                ].slice(0, k);
+            }
+
+            let history = [JSON.parse(JSON.stringify(cents))];
+            let maxIter = 4;
+
+            let iterationsData = [];
+
+            for (let iter = 0; iter < maxIter; iter++) {
+                // E-Step: Assign Points to Nearest Centroid
+                let sse = 0;
+                pts.forEach(p => {
+                    let minD = Infinity;
+                    let bestC = 0;
+                    cents.forEach((c, cIdx) => {
+                        let d = Math.pow(p.x - c.x, 2) + Math.pow(p.y - c.y, 2);
+                        if (d < minD) {
+                            minD = d;
+                            bestC = cIdx;
+                        }
+                    });
+                    p.cluster = bestC;
+                    sse += minD;
+                });
+
+                // M-Step: Recalculate Centroid Coordinates
+                let newCents = cents.map(() => ({ x: 0, y: 0, count: 0 }));
+                pts.forEach(p => {
+                    newCents[p.cluster].x += p.x;
+                    newCents[p.cluster].y += p.y;
+                    newCents[p.cluster].count += 1;
+                });
+
+                let totalShift = 0;
+                cents = newCents.map((nc, idx) => {
+                    if (nc.count > 0) {
+                        let updatedX = parseFloat((nc.x / nc.count).toFixed(2));
+                        let updatedY = parseFloat((nc.y / nc.count).toFixed(2));
+                        let shift = Math.sqrt(Math.pow(updatedX - cents[idx].x, 2) + Math.pow(updatedY - cents[idx].y, 2));
+                        totalShift += shift;
+                        return { x: updatedX, y: updatedY };
+                    }
+                    return cents[idx];
+                });
+
+                history.push(JSON.parse(JSON.stringify(cents)));
+
+                iterationsData.push({
+                    iter: iter + 1,
+                    pts: JSON.parse(JSON.stringify(pts)),
+                    cents: JSON.parse(JSON.stringify(cents)),
+                    history: JSON.parse(JSON.stringify(history)),
+                    sse: parseFloat(sse.toFixed(2)),
+                    shift: parseFloat(totalShift.toFixed(3))
+                });
+
+                if (totalShift < 0.01) break;
+            }
+
+            return iterationsData;
+        }
+
+        function buildExecutionSteps() {
+            const iters = calculateKMeansIterations();
+            const kVal = document.getElementById('kSelect').value;
+
+            stepList = [
+                {
+                    line: 1,
+                    iterIdx: 0,
+                    pts: currentPoints,
+                    cents: [],
+                    history: [],
+                    sse: "--",
+                    shift: "--",
+                    consoleMsg: `> Loaded dataset: ${rawDatasets[scenario].length} 2D samples`,
+                    explanation: `Line 1: Imported KMeans cluster estimator from sklearn.cluster.`
+                },
+                {
+                    line: 2,
+                    iterIdx: 0,
+                    pts: currentPoints,
+                    cents: iters[0].history[0],
+                    history: [iters[0].history[0]],
+                    sse: "--",
+                    shift: "--",
+                    consoleMsg: `> Configured KMeans(n_clusters=${kVal}, init='${document.getElementById('initSelect').value}')`,
+                    explanation: `Line 2: Seeding ${kVal} initial centroids onto spatial domain.`
+                }
+            ];
+
+            iters.forEach((it, idx) => {
+                stepList.push({
+                    line: 3,
+                    iterIdx: it.iter,
+                    pts: it.pts,
+                    cents: it.cents,
+                    history: it.history,
+                    sse: it.sse,
+                    shift: it.shift,
+                    consoleMsg: `> Iteration ${it.iter}: WCSS Inertia (SSE) = ${it.sse} | Centroid Shift = ${it.shift}`,
+                    explanation: `Line 3 (Iteration ${it.iter}): Assigned samples to nearest centroids & updated center coordinates.`
+                });
+            });
+
+            const last = iters[iters.length - 1];
+
+            stepList.push({
+                line: 4,
+                iterIdx: last.iter,
+                pts: last.pts,
+                cents: last.cents,
+                history: last.history,
+                sse: last.sse,
+                shift: 0.000,
+                consoleMsg: `> Evaluated cluster_centers_: ${kVal} centroids converged!`,
+                explanation: `Line 4: Extracted final coordinates of optimized centroids.`
+            });
+
+            stepList.push({
+                line: 5,
+                iterIdx: last.iter,
+                pts: last.pts,
+                cents: last.cents,
+                history: last.history,
+                sse: last.sse,
+                shift: 0.000,
+                consoleMsg: `<span class='text-emerald-300 font-bold'>K-Means Converged! Final Inertia (SSE): ${last.sse} (${kVal} Clusters)</span>`,
+                explanation: `Line 5: Optimization complete. Extracted model inertia score.`
+            });
+        }
+
+        function startSimulation() {
+            updateDatasetDisplay();
+            buildExecutionSteps();
+            currentStepIdx = 0;
+
+            hideResultBanner();
+            clearConsole();
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = false;
+            btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95 shadow-lg shadow-emerald-600/20";
+
+            appendConsole(`>>> Executing: ml_kmeans_clustering.py [Dataset: ${scenario}]`);
+            executeStepAtIndex(0);
+        }
+
+        function executeStepAtIndex(idx) {
+            const step = stepList[idx];
+            highlightLine(step.line);
+
+            const kVal = document.getElementById('kSelect').value;
+
+            document.getElementById('valK').innerText = kVal;
+            document.getElementById('valInertia').innerText = step.sse;
+            document.getElementById('valShift').innerText = step.shift;
+            document.getElementById('valSamples').innerText = step.pts.length;
+
+            document.getElementById('metricsBadge').innerText = `Iteration: ${step.iterIdx} | Inertia: ${step.sse}`;
+
+            drawSpatialCanvas(step.pts, step.cents, step.history, step.line >= 3);
+
+            appendConsole(step.consoleMsg);
+            document.getElementById('explanationText').innerText = step.explanation;
+            document.getElementById('currentStepBadge').innerText = `Epoch ${idx + 1}/${stepList.length}`;
+
+            if (idx === stepList.length - 1) {
+                showResultBanner("K-Means Centroid Optimization Converged Successfully", false);
+                const btnStep = document.getElementById('btnStep');
+                btnStep.disabled = true;
+                btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+                document.getElementById('currentStepBadge').innerText = "Converged";
+            }
+        }
+
+        function stepExecute() {
+            if (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function runAll() {
+            startSimulation();
+            while (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function resetSimulation() {
+            currentStepIdx = 0;
+            highlightLine(0);
+            clearConsole();
+            hideResultBanner();
+
+            document.getElementById('metricsBadge').innerText = "Iteration: -- | Inertia: --";
+            document.getElementById('valK').innerText = "3";
+            document.getElementById('valInertia').innerText = "--";
+            document.getElementById('valShift').innerText = "--";
+            document.getElementById('valSamples').innerText = currentPoints.length;
+
+            drawSpatialCanvas(currentPoints, [], [], false);
+
+            appendConsole("<p class='text-slate-500 italic'>>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>");
+            document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+            document.getElementById('currentStepBadge').innerText = "Iteration: Ready";
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = true;
+            btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+        }
+
+        function highlightLine(lineNum) {
+            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+            if (lineNum > 0) {
+                const target = document.getElementById(`line${lineNum}`);
+                if (target) target.classList.add('active');
+            }
+        }
+
+        function clearConsole() {
+            document.getElementById('terminal').innerHTML = '';
+        }
+
+        function appendConsole(htmlContent) {
+            const term = document.getElementById('terminal');
+            const p = document.createElement('p');
+            p.innerHTML = htmlContent;
+            term.appendChild(p);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function showResultBanner(text, isError) {
+            const banner = document.getElementById('resultBanner');
+            const bannerText = document.getElementById('resultBannerText');
+            bannerText.innerText = text;
+            banner.classList.remove('hidden');
+        }
+
+        function hideResultBanner() {
+            document.getElementById('resultBanner').classList.add('hidden');
+        }
+
+        function checkPretest() {
+            const q1 = document.querySelector('input[name="pq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="pq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('preq1-box');
+            const q1fb = document.getElementById('preq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! K-Means is an unsupervised clustering algorithm.";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. K-Means discovers groupings without labeled data.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('preq2-box');
+            const q2fb = document.getElementById('preq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'b') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! K-Means minimizes Within-Cluster Sum of Squares (Inertia).";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. K-Means minimizes WCSS / Inertia.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('pretest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function checkPosttest() {
+            const q1 = document.querySelector('input[name="postq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="postq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('postq1-box');
+            const q1fb = document.getElementById('postq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'a') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! cluster_centers_ holds 2D coordinates of optimized centroids.";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. Use model.cluster_centers_ in Scikit-Learn.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('postq2-box');
+            const q2fb = document.getElementById('postq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'a') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! K-Means assumes spherical clusters and struggles with non-convex geometric shapes.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. K-Means struggles with non-spherical/non-convex clusters.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('posttest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function sendAiQuery() {
+            const input = document.getElementById('aiQueryInput');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const chatBox = document.getElementById('aiChatBox');
+
+            const userDiv = document.createElement('div');
+            userDiv.className = 'flex items-start gap-3 justify-end';
+            userDiv.innerHTML = `
+                <div class="bg-indigo-600/30 border border-indigo-500/40 p-3 rounded-lg text-slate-200">
+                    ${query}
+                </div>
+                <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 text-xs shrink-0">You</div>
+            `;
+            chatBox.appendChild(userDiv);
+            input.value = '';
+
+            let response = "Try stepping through iterations or testing different values of K in the simulator to see how centroids shift and inertia decreases!";
+            const qLower = query.toLowerCase();
+            if (qLower.includes('elbow') || qLower.includes('k') || qLower.includes('inertia')) {
+                response = "The Elbow Method plots Inertia (WCSS) against $K$. The 'elbow' point represents a threshold where adding more centroids yields diminishing returns in variance reduction!";
+            } else if (qLower.includes('centroid') || qLower.includes('update') || qLower.includes('shift')) {
+                response = "Centroids update during the M-step by taking the mean of all data points assigned to that cluster: $\\mu_k = \\frac{1}{|S_k|} \\sum_{x \\in S_k} x$. Once centroids stop shifting, the algorithm converges!";
+            } else if (qLower.includes('kmeans++') || qLower.includes('init') || qLower.includes('random')) {
+                response = "K-Means++ initializes centroids far apart by choosing subsequent centers proportional to squared distance $d(x)^2$ from existing centroids, preventing poor local minima!";
+            }
+
+            setTimeout(() => {
+                const aiDiv = document.createElement('div');
+                aiDiv.className = 'flex items-start gap-3';
+                aiDiv.innerHTML = `
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        ${response}
+                    </div>
+                `;
+                chatBox.appendChild(aiDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 500);
+        }
+    </script>
+</body>
+</html>

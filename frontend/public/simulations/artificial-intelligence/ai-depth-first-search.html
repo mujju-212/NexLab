@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Depth-First Search — AI Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+  .node-circle{transition:all .25s ease;}
+  .edge-line{transition:all .25s ease;}
+  .stack-item{animation:slideIn .25s ease;}
+  @keyframes slideIn{from{transform:translateX(-8px);opacity:0;}to{transform:translateX(0);opacity:1;}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-sitemap"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Artificial Intelligence Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment: Depth-First Search (Stack-Based Graph Traversal)</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <!-- Tab Nav -->
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> Theory
+      </button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-list-check"></i> Procedure
+      </button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+      </button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-flask"></i> Simulation
+      </button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-graduation-cap"></i> Post-Test
+      </button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Depth-First Search</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">Depth-First Search (DFS) explores a graph by always diving as deep as possible along one branch before <strong>backtracking</strong>. It is implemented with an explicit <strong>stack</strong> (Last-In-First-Out) holding nodes still to be visited, plus a <strong>visited set</strong> to avoid revisiting.</p>
+
+      <div class="bg-slate-900 text-emerald-300 font-mono text-xs p-4 rounded-xl overflow-x-auto leading-relaxed">
+stack &larr; [start]<br>
+visited &larr; {}<br>
+<span class="text-amber-300">while</span> stack is not empty:<br>
+&nbsp;&nbsp;node &larr; stack.pop()<br>
+&nbsp;&nbsp;<span class="text-amber-300">if</span> node not in visited:<br>
+&nbsp;&nbsp;&nbsp;&nbsp;mark node visited; record in DFS order<br>
+&nbsp;&nbsp;&nbsp;&nbsp;<span class="text-amber-300">for</span> each neighbour of node (in reverse adjacency order):<br>
+&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span class="text-amber-300">if</span> neighbour not visited: stack.push(neighbour)
+      </div>
+      <p class="text-xs text-slate-500 leading-relaxed">Neighbours are pushed in <em>reverse</em> adjacency order so that, once popped (LIFO), they come out in the ORIGINAL left-to-right adjacency order — this is purely a bookkeeping detail to make traversal order predictable and match how DFS is usually hand-traced. When every neighbour of the current node has already been visited, the next <code class="font-mono">pop()</code> naturally returns an earlier, unfinished branch — this is <strong>backtracking</strong>, and it falls out of the stack automatically with no extra code.</p>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Worked Micro-Example</h3>
+      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-xs text-slate-600 leading-relaxed space-y-2">
+        <p>Graph: A→{B,C}, B→{D}, C→{} (D and C are dead ends). Start at A.</p>
+        <p class="font-mono bg-white p-2 rounded border border-slate-200">stack=[A] → pop A, visit A, push C,B (reversed) → stack=[C,B]<br>pop B, visit B, push D → stack=[C,D]<br>pop D, visit D, no unvisited neighbours → stack=[C]<br>pop C, visit C, no unvisited neighbours → stack=[]<br>Order: A, B, D, C</p>
+        <p>Notice D is a dead end — after visiting it, the algorithm doesn't "know" to go back to C explicitly; it simply pops the next item still sitting in the stack (C), which is exactly backtracking.</p>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Depth-First Search (DFS)</th><th class="p-2 text-left">Breadth-First Search (BFS)</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2">Uses a stack (LIFO) — explores one branch fully before trying the next.</td><td class="p-2">Uses a queue (FIFO) — explores all neighbours at the current depth before going deeper.</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2">Memory: O(branching × max depth) — only needs to remember the current path.</td><td class="p-2">Memory: O(branching<sup>depth</sup>) — must remember an entire "frontier" layer, which can be huge.</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2">NOT guaranteed to find the shortest path (in edges).</td><td class="p-2">Guaranteed to find the shortest path in an unweighted graph.</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2">Complete on finite graphs (with a visited set to avoid infinite loops on cycles).</td><td class="p-2">Also complete on finite graphs.</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab. The 8-node graph is drawn on the left; pick a <strong>Quick Preset</strong> to choose the start node.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start</strong> to push the start node onto the stack.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step Execution</strong> repeatedly — each step pops one node from the stack, marks it visited (highlighted on the graph), and pushes its unvisited neighbours.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Watch the <strong>Stack panel</strong> on the right update live, and edges light up as they're traversed.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Or click <strong>Run All</strong> to animate the full traversal automatically.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">When a node's neighbours are all already visited, the next step visibly "jumps back" to an earlier branch — that's backtracking, visible directly in the stack panel.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">The final DFS order is printed in the terminal once the stack empties. Click <strong>Reset</strong> to try again.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What data structure does DFS use to keep track of nodes to visit?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> A queue (FIFO)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> A stack (LIFO)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> A priority heap</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. Why is a "visited set" needed?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> To avoid revisiting nodes and looping forever on cyclic graphs</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> To store edge weights</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> It's optional and never needed</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. What causes "backtracking" in a stack-based DFS?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> A special backtrack() function call</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> Restarting the search from scratch</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> Popping the next item off the stack once a branch's neighbours are exhausted — it's automatic, no special-case code needed</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. Is DFS guaranteed to find the shortest path (fewest edges) to a target node?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> No — it may find a much longer path first</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> Yes, always</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> Only on trees, never on graphs</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="text-xs text-slate-500">8-node graph &middot; adjacency list is fixed &middot; choose the start node below</div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Start
+            </button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-forward-step"></i> Step Execution
+            </button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-bolt"></i> Run All
+            </button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('A')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Start at Node A</button>
+          <button onclick="loadPreset('E')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Start at Node E</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-diagram-project text-purple-600"></i> Graph
+            </span>
+            <span class="text-xs text-slate-400 font-mono">amber = current · emerald = visited · red edge = traversed</span>
+          </div>
+          <div class="p-4 flex items-center justify-center bg-slate-50/50 flex-1">
+            <svg id="graphSvg" viewBox="0 0 600 340" class="w-full max-w-2xl"></svg>
+          </div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Click 'Start' to push the start node onto the stack.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-5 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-layer-group text-purple-600"></i> Stack (top &rarr; bottom shown left &rarr; right)
+            </h3>
+            <div id="stackPanel" class="flex flex-wrap gap-2 min-h-[46px] items-center"></div>
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 mt-4">Visited Set</h3>
+            <div id="visitedPanel" class="flex flex-wrap gap-2 min-h-[32px] items-center"></div>
+          </div>
+
+          <div class="grid grid-cols-2 gap-3">
+            <div id="mem1" class="mem-card bg-white border border-slate-200 p-3 rounded-xl text-center shadow-sm">
+              <span class="text-xs text-slate-500 block font-mono">Nodes Visited</span>
+              <span id="val1" class="text-xl font-bold font-mono text-purple-600 block my-1">0 / 8</span>
+            </div>
+            <div id="mem2" class="mem-card bg-white border border-slate-200 p-3 rounded-xl text-center shadow-sm">
+              <span class="text-xs text-slate-500 block font-mono">Current Node</span>
+              <span id="val2" class="text-xl font-bold font-mono text-emerald-600 block my-1">--</span>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal
+              </span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[140px] max-h-[220px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Start' or 'Run All' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-square-check"></i>
+              </div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">DFS Order</h4>
+                <p id="resultBannerText" class="text-sm font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. In this lab's graph (A's neighbours in order B,C,D), which node is visited immediately after A when starting DFS at A?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> C</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> B</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> D</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. Why do we push a node's neighbours in REVERSE adjacency order onto the stack?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> So that, once popped (LIFO), they come out in the original left-to-right adjacency order</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> It's required for correctness — DFS is undefined otherwise</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> To make the algorithm run faster</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. What is DFS's memory complexity relative to BFS, and why does it matter?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> DFS uses more memory than BFS always</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> They use identical memory in all cases</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> DFS only needs to remember the current path (much less memory) while BFS must store an entire frontier layer, which can grow exponentially</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. If node D in this lab's graph had already been visited via another branch, what happens when it's popped again from the stack?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> It's skipped (the visited check fails) and the loop moves to the next pop</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> It's visited again and added to the order a second time</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> The algorithm crashes</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+      </h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about the stack, backtracking, visited sets, or how DFS compares to BFS.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., what is backtracking?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ==========================================================================
+   CORE DFS LOGIC (pure functions — verified in Node.js against hand traces)
+   ========================================================================== */
+const ADJ = {
+  A: ['B','C','D'],
+  B: ['A','E','F'],
+  C: ['A','G'],
+  D: ['A','H'],
+  E: ['B','F'],
+  F: ['B','E'],
+  G: ['C','H'],
+  H: ['D','G']
+};
+const POS = {
+  A:[300,40], B:[140,140], C:[300,140], D:[460,140],
+  E:[80,260], F:[220,260], G:[300,260], H:[460,260]
+};
+const EDGES = [['A','B'],['A','C'],['A','D'],['B','E'],['B','F'],['C','G'],['D','H'],['E','F'],['G','H']];
+
+// Generator-style step function: computes the FULL trace up front (pure, testable),
+// the UI then just walks through the recorded trace one entry at a time.
+function computeDfsTrace(adj, start){
+  const visited = new Set();
+  const order = [];
+  const stack = [start];
+  const trace = []; // one entry per pop
+  while(stack.length){
+    const node = stack.pop();
+    if(visited.has(node)){
+      trace.push({type:'skip', node, stackAfter:stack.slice(), visitedAfter:[...visited], order:[...order]});
+      continue;
+    }
+    visited.add(node);
+    order.push(node);
+    const pushed = [];
+    const neighbors = adj[node];
+    for(let i=neighbors.length-1;i>=0;i--){
+      if(!visited.has(neighbors[i])){ stack.push(neighbors[i]); pushed.push(neighbors[i]); }
+    }
+    trace.push({type:'visit', node, pushed, stackAfter:stack.slice(), visitedAfter:[...visited], order:[...order]});
+  }
+  return { order, trace };
+}
+
+/* ---------- UI state & controller ---------- */
+let sim = { start:'A', trace:[], idx:0, timer:null, edgesUsed:new Set() };
+
+function loadPreset(startNode){ startSimulation(startNode); }
+
+function edgeKey(a,b){ return [a,b].sort().join('-'); }
+
+function renderGraph(){
+  const svg = document.getElementById('graphSvg');
+  let html = '';
+  EDGES.forEach(([a,b])=>{
+    const [x1,y1]=POS[a], [x2,y2]=POS[b];
+    html += `<line id="edge-${edgeKey(a,b)}" class="edge-line" x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#cbd5e1" stroke-width="3"/>`;
+  });
+  for(const n in POS){
+    const [x,y] = POS[n];
+    html += `<circle id="node-${n}" class="node-circle" cx="${x}" cy="${y}" r="24" fill="#ffffff" stroke="#94a3b8" stroke-width="2.5"/>`;
+    html += `<text x="${x}" y="${y+6}" text-anchor="middle" font-family="Fira Code, monospace" font-weight="700" font-size="16" fill="#334155" style="pointer-events:none">${n}</text>`;
+  }
+  svg.innerHTML = html;
+}
+
+function updateGraphVisual(currentNode){
+  for(const n in POS){
+    const circle = document.getElementById(`node-${n}`);
+    if(n === currentNode){
+      circle.setAttribute('fill', '#fbbf24'); circle.setAttribute('stroke', '#d97706');
+    } else if(sim.visitedSoFar && sim.visitedSoFar.includes(n)){
+      circle.setAttribute('fill', '#a7f3d0'); circle.setAttribute('stroke', '#059669');
+    } else {
+      circle.setAttribute('fill', '#ffffff'); circle.setAttribute('stroke', '#94a3b8');
+    }
+  }
+  sim.edgesUsed.forEach(k=>{
+    const el = document.getElementById(`edge-${k}`);
+    if(el){ el.setAttribute('stroke', '#f43f5e'); el.setAttribute('stroke-width', '4'); }
+  });
+}
+
+function renderStackAndVisited(stack, visited){
+  const stackPanel = document.getElementById('stackPanel');
+  stackPanel.innerHTML = stack.length ? stack.slice().reverse().map((n,i)=>`<span class="stack-item font-mono text-xs px-2.5 py-1.5 rounded-lg border ${i===0?'bg-amber-100 border-amber-400 text-amber-700 font-bold':'bg-slate-100 border-slate-300 text-slate-600'}">${n}${i===0?' (top)':''}</span>`).join('') : '<span class="text-xs text-slate-400 italic">empty</span>';
+  const visitedPanel = document.getElementById('visitedPanel');
+  visitedPanel.innerHTML = visited.length ? visited.map(n=>`<span class="font-mono text-xs px-2.5 py-1 rounded-full bg-emerald-50 border border-emerald-300 text-emerald-700">${n}</span>`).join('') : '<span class="text-xs text-slate-400 italic">none yet</span>';
+}
+
+function startSimulation(startNode){
+  clearInterval(sim.timer);
+  const start = startNode || sim.start || 'A';
+  const { order, trace } = computeDfsTrace(ADJ, start);
+  sim = { start, trace, idx:0, timer:null, edgesUsed:new Set(), visitedSoFar:[], fullOrder:order };
+  renderGraph();
+  updateGraphVisual(null);
+  renderStackAndVisited([start], []);
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('val1').innerText = '0 / 8';
+  document.getElementById('val2').innerText = '--';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('currentStepBadge').innerText = 'Step: Ready';
+  document.getElementById('explanationText').innerText = `Start node: ${start}. Stack = [${start}]. Click 'Step Execution' or 'Run All'.`;
+  appendConsole(`&gt;&gt;&gt; DFS initialised. stack = [${start}], visited = {}`);
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95 flex items-center gap-2';
+}
+
+function stepExecute(){
+  if(sim.idx >= sim.trace.length) return;
+  const entry = sim.trace[sim.idx];
+  sim.idx++;
+  if(entry.type === 'skip'){
+    appendConsole(`Pop <strong>${entry.node}</strong> — already visited, skip.`);
+    document.getElementById('explanationText').innerText = `Popped ${entry.node} but it was already visited — skipped (no re-processing).`;
+  } else {
+    sim.visitedSoFar = entry.visitedAfter;
+    if(entry.pushed.length){
+      const prevNode = findParent(entry.node);
+      entry.pushed.forEach(p=>{ /* edge highlight from node to pushed neighbour */ });
+    }
+    // highlight traversed edge from the node we came from (previous visited node adjacent to this one via stack push)
+    appendConsole(`Pop <strong class="text-amber-400">${entry.node}</strong> → visit. Push unvisited neighbours: [${entry.pushed.join(', ')||'none'}]`);
+    document.getElementById('explanationText').innerText = `Visiting ${entry.node}. Pushed neighbours [${entry.pushed.join(', ')||'none'}] onto the stack.`;
+    // mark edges between this node and each neighbour already visited (parent edge) as traversed
+    ADJ[entry.node].forEach(nb=>{
+      if(entry.visitedAfter.includes(nb)){ sim.edgesUsed.add(edgeKey(entry.node, nb)); }
+    });
+    document.getElementById('val1').innerText = `${entry.order.length} / 8`;
+    document.getElementById('val2').innerText = entry.node;
+  }
+  updateGraphVisual(entry.type==='visit' ? entry.node : null);
+  renderStackAndVisited(entry.stackAfter, entry.visitedAfter);
+  document.getElementById('progressFill').style.width = `${Math.min(100,(sim.idx/sim.trace.length)*100)}%`;
+  document.getElementById('currentStepBadge').innerText = `Step ${sim.idx}/${sim.trace.length}`;
+  if(sim.idx >= sim.trace.length){
+    appendConsole(`<span class="text-emerald-400">&gt;&gt;&gt; Stack empty. DFS order: ${sim.fullOrder.join(' → ')}</span>`);
+    showResultBanner(`${sim.fullOrder.join(' → ')}`);
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = 'bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed flex items-center gap-2';
+  }
+}
+function findParent(){ return null; }
+
+function runAll(){
+  if(!sim.trace.length) startSimulation();
+  clearInterval(sim.timer);
+  sim.timer = setInterval(()=>{
+    if(sim.idx >= sim.trace.length){ clearInterval(sim.timer); return; }
+    stepExecute();
+  }, 550);
+}
+
+function resetSimulation(){ startSimulation(sim.start); }
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+function showResultBanner(text){
+  document.getElementById('resultBannerText').innerText = text;
+  document.getElementById('resultBanner').classList.remove('hidden');
+}
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try 'Run All' and watch the Stack panel — every push and pop is shown live, top item highlighted in amber.";
+  if (q.includes('stack')) response = "The stack is what makes DFS 'depth-first' — the most RECENTLY pushed node is always explored NEXT (LIFO), so the algorithm keeps diving deeper along one path instead of spreading out sideways like BFS's queue would.";
+  else if (q.includes('backtrack')) response = "Backtracking isn't special code — it emerges naturally from the stack. Once a node's neighbours are all visited, nothing new gets pushed, so the next pop() automatically returns to whatever earlier, unfinished branch is still sitting underneath in the stack.";
+  else if (q.includes('visited')) response = "The visited set prevents infinite loops on graphs with cycles (this lab's graph has several, e.g. A-B-E-F-B). Without it, DFS could bounce between two connected nodes forever.";
+  else if (q.includes('bfs') || q.includes('breadth')) response = "BFS uses a QUEUE instead of a stack, and explores level-by-level, guaranteeing the shortest path in an unweighted graph — but it needs to store a whole frontier layer in memory, which can be much bigger than DFS's single active path.";
+  else if (q.includes('reverse') || q.includes('order')) response = "We push neighbours in reverse adjacency order specifically so popping them (LIFO) processes them in the ORIGINAL left-to-right order — e.g. A's neighbours [B,C,D] get pushed as D,C,B so B pops first, matching the intuitive 'visit first neighbour first' expectation.";
+  else if (q.includes('complete') || q.includes('memory') || q.includes('complexity')) response = "DFS is complete on finite graphs (with a visited set) and uses only O(branching × depth) memory — it only needs to remember the current path, unlike BFS which must hold an entire frontier.";
+  else if (q.includes('shortest')) response = "No — DFS is NOT guaranteed to find the shortest path. It might tunnel all the way down one long branch before ever trying a much shorter route through a different neighbour.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  startSimulation('A');
+});
+</script>
+</body>
+</html>

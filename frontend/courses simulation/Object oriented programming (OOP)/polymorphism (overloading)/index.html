@@ -1,0 +1,461 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OOP Virtual Lab: Polymorphism (Overloading)</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-cube"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">OOP Virtual Lab</h1>
+        <p class="text-xs text-indigo-600 font-medium">Experiment 7: Polymorphism (Method Overloading)</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2"><i class="fa-solid fa-book-open"></i> Theory</button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Assistant</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Theory: Polymorphism (Overloading)</h2>
+      <p class="text-sm text-slate-600 leading-relaxed"><strong>Method overloading</strong> allows multiple methods in the same class to share a name but differ in parameter list (count/type). The correct version is chosen at <strong>compile time</strong> based on the arguments passed — this is why it's called compile-time (static) polymorphism.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1">Java</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Directly supported — define several methods with the same name but different signatures.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1">Python</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Not truly supported — see the important nuance below.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1">C++</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Native support for function and method overloading, resolved by the compiler.</p>
+        </div>
+      </div>
+
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-4">
+        <h3 class="font-bold text-amber-700 mb-1 text-sm flex items-center gap-2"><i class="fa-solid fa-triangle-exclamation"></i> Important nuance: Python does NOT have true method overloading</h3>
+        <p class="text-xs text-amber-800 leading-relaxed">If you define <code class="font-mono">def add(self, a, b): ...</code> and then <code class="font-mono">def add(self, a, b, c): ...</code> in the same Python class, the <strong>second definition simply replaces the first</strong> — Python keeps only the last method with a given name. There is no overload resolution at all. Python code that looks like overloading is really <strong>emulating</strong> it with <strong>default argument values</strong> or <code class="font-mono">*args</code>, e.g. <code class="font-mono">def add(self, a, b, c=0)</code>. This lab's simulator reflects that honestly: Java/C++ show real overload resolution across distinct signatures; Python shows one flexible method with default parameters.</p>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Overloading Syntax — Multi-Language</h3>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">Java (true overloading)</p>
+          <pre class="whitespace-pre-wrap">class MathOps {
+  int add(int a, int b) {
+    return a + b;
+  }
+  int add(int a, int b, int c) {
+    return a + b + c;
+  }
+}</pre>
+        </div>
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">Python (emulated only)</p>
+          <pre class="whitespace-pre-wrap">class MathOps:
+    # Only ONE add() can exist —
+    # default arg emulates overloading
+    def add(self, a, b, c=0):
+        return a + b + c</pre>
+        </div>
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">C++ (true overloading)</p>
+          <pre class="whitespace-pre-wrap">class MathOps {
+  public:
+    int add(int a, int b) {
+      return a + b;
+    }
+    int add(int a, int b, int c) {
+      return a + b + c;
+    }
+};</pre>
+        </div>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab and select a language pill — <strong>Java</strong>, <strong>Python</strong>, or <strong>C++</strong>.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Read the code panel closely — for Python, note the comment explaining that only one <code class="font-mono">add()</code> can exist.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Call add(2, 3)</strong> — two arguments — and observe which version of the method actually runs.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Call add(2, 3, 4)</strong> — three arguments — and compare: in Java/C++ a genuinely different overloaded method runs; in Python the same single method runs with its default parameter filled in.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Read the Execution Log message for each call — it states explicitly whether true overload resolution or default-argument emulation occurred.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">1. What is method overloading?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Multiple methods in a class sharing a name but with different parameter lists</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> A subclass redefining a parent's method</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Running the same method twice in a row</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. Can Python truly overload methods the way Java does?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> Yes, identically</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> No — a later method definition simply replaces the earlier one with the same name; Python only emulates overloading via default args/*args</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> Yes, but only for constructors</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. What distinguishes overloaded methods from each other?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> Their parameter list (number and/or type of parameters)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> Their return type alone</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> Their access modifier alone</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">4. Overloading is resolved at...</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> Runtime, based on the object's actual class</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> Compile time, based on the arguments in the call</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> Never — it isn't resolved at all</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-slate-500 font-medium mr-1">Language:</span>
+            <button id="lang-java" onclick="loadSim('java')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-slate-900 text-white">Java</button>
+            <button id="lang-python" onclick="loadSim('python')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-500 hover:bg-slate-100">Python</button>
+            <button id="lang-cpp" onclick="loadSim('cpp')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-500 hover:bg-slate-100">C++</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="callAdd(2)" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-play"></i> Call add(2, 3)</button>
+            <button onclick="callAdd(3)" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-play"></i> Call add(2, 3, 4)</button>
+            <button onclick="resetLog()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+          </div>
+        </div>
+        <div id="codeDisplay" class="font-mono text-xs bg-slate-950 text-slate-200 p-4 rounded-xl border border-slate-800 min-h-[150px] overflow-x-auto"></div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-code-branch text-indigo-600"></i> Polymorphism Execution Log</h3>
+          <div id="heapDisplay" class="grid grid-cols-1 gap-3">
+            <div class="p-4 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 italic text-xs">Awaiting a method call...</div>
+          </div>
+        </div>
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal</span>
+            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition"><i class="fa-solid fa-trash-can"></i> Clear</button>
+          </div>
+          <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[160px] max-h-[260px] overflow-y-auto space-y-1">
+            <p class="text-slate-500 italic">&gt;&gt;&gt; Call add() with 2 and 3 arguments and compare the results.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">1. Overloading vs. overriding — which statement is correct?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> They are the same thing</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> Overloading happens across parent/child classes; overriding happens in a single class</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> Overloading is same name/different params in one class (compile-time); overriding is same signature redefined in a subclass (runtime)</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. In this lab's Python class, if you write two <code class="font-mono">def add(...)</code> methods with different parameter counts, what actually happens?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> Python picks the right one automatically based on argument count</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> The second definition overwrites the first; only the last one is ever callable</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> Python raises a SyntaxError immediately</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. Is return type alone sufficient to overload a method in Java?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> No — the parameter list must differ; return type alone is not enough</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> Yes, return type alone is always enough</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> Only for constructors</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">4. Can constructors be overloaded?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> No, never, in any language</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> Yes in Java/C++ (multiple constructors with different params); Python still allows only one __init__, using defaults to emulate it</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> Only static methods can be overloaded</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-indigo-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant</h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about method overloading, compile-time polymorphism, or why Python doesn't truly support overloading.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., does Python support overloading?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('#tab-theory,#tab-procedure,#tab-pretest,#tab-simulation,#tab-posttest,#tab-ai').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ---------- Simulation ---------- */
+const codes = {
+  java: `class MathOps {
+  int add(int a, int b) {
+    return a + b;
+  }
+  int add(int a, int b, int c) {
+    return a + b + c;
+  }
+}
+MathOps m = new MathOps();
+m.add(2, 3);     // calls 2-param version
+m.add(2, 3, 4);  // calls 3-param version`,
+  python: `class MathOps:
+    # Only ONE add() can exist in the class.
+    # This is NOT true overloading -
+    # default arg emulates optional params.
+    def add(self, a, b, c=0):
+        return a + b + c
+
+m = MathOps()
+m.add(2, 3)     # c defaults to 0
+m.add(2, 3, 4)  # same method, c=4`,
+  cpp: `class MathOps {
+  public:
+    int add(int a, int b) {
+      return a + b;
+    }
+    int add(int a, int b, int c) {
+      return a + b + c;
+    }
+};
+MathOps m;
+m.add(2, 3);     // calls 2-param version
+m.add(2, 3, 4);  // calls 3-param version`
+};
+
+let currentLang = 'java';
+
+function loadSim(lang){
+  currentLang = lang;
+  document.getElementById('codeDisplay').textContent = codes[lang];
+  ['java','python','cpp'].forEach(l=>{
+    const b = document.getElementById('lang-'+l);
+    b.classList.remove('bg-slate-900','text-white');
+    b.classList.add('text-slate-500');
+  });
+  const active = document.getElementById('lang-'+lang);
+  active.classList.add('bg-slate-900','text-white');
+  active.classList.remove('text-slate-500');
+}
+
+function callAdd(argCount){
+  const heap = document.getElementById('heapDisplay');
+  if (heap.querySelector('.italic')) heap.innerHTML = '';
+  const card = document.createElement('div');
+  let title, sub, result, border;
+  if (argCount === 2){
+    result = 5;
+    if (currentLang === 'python'){
+      title = 'CALL: add(2, 3) — c defaults to 0';
+      sub = 'Only one add() exists. Python fills the default parameter c=0.';
+      border = 'border-amber-300';
+    } else {
+      title = 'CALL: add(2, 3) — 2-parameter overload resolved';
+      sub = `The compiler picked the matching 2-parameter add(int,int) at compile time.`;
+      border = 'border-emerald-300';
+    }
+  } else {
+    result = 9;
+    if (currentLang === 'python'){
+      title = 'CALL: add(2, 3, 4) — same single method, c=4';
+      sub = 'Still the exact same add() as before — no second method was ever defined; the earlier attempt would have simply overwritten it.';
+      border = 'border-amber-300';
+    } else {
+      title = 'CALL: add(2, 3, 4) — 3-parameter overload resolved';
+      sub = `A genuinely different method, add(int,int,int), was selected by the compiler based on the argument count.`;
+      border = 'border-indigo-300';
+    }
+  }
+  card.className = `mem-card animate-pop bg-slate-50 p-4 rounded-xl border ${border}`;
+  card.innerHTML = `<p class="text-[10px] text-indigo-600 font-bold font-mono mb-1">${title}</p><p class="text-xs text-slate-600 mb-1">${sub}</p><p class="text-xs font-mono text-slate-500">Return value: ${result}</p>`;
+  heap.prepend(card);
+  appendConsole(`&gt;&gt;&gt; ${title} &rarr; <span class="text-emerald-400">${result}</span>`);
+}
+
+function resetLog(){
+  document.getElementById('heapDisplay').innerHTML = '<div class="p-4 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 italic text-xs">Awaiting a method call...</div>';
+  clearConsole();
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Call add() with 2 and 3 arguments and compare the results.</span>");
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-indigo-50 border border-indigo-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try calling add() with 2 and then 3 arguments in the simulator, and compare how each language handles it in the log!";
+  if (q.includes('python') && (q.includes('overload') || q.includes('support'))) response = "No — Python does NOT truly support method overloading. If you define add() twice with different parameter counts, the second definition simply replaces the first in the class namespace. What looks like overloading in Python is emulated using default argument values (or *args), not real overload resolution.";
+  else if (q.includes('overload') && q.includes('overrid')) response = "Overloading = same method name, different parameter list, within ONE class, resolved at compile time. Overriding = a subclass redefines a method with the SAME signature it inherited, resolved at runtime based on the actual object type.";
+  else if (q.includes('compile') || q.includes('static polymorphism')) response = "Overloading is called compile-time (static) polymorphism because the compiler decides which method version to call just by looking at the arguments in your source code — no runtime lookup needed.";
+  else if (q.includes('default arg') || q.includes('*args') || q.includes('emulat')) response = "Since Python can't have two methods named add() in one class, developers use default parameter values (def add(self,a,b,c=0)) or *args to accept a variable number of arguments — this achieves similar flexibility without real overloading.";
+  else if (q.includes('constructor') && q.includes('overload')) response = "Yes, in Java/C++ you can define multiple constructors with different parameter lists. Python's __init__ can only exist once per class, so default arguments are used instead.";
+  else if (q.includes('return type')) response = "Return type alone is never enough to overload a method in Java or C++ — the compiler distinguishes overloads only by the parameter list, not the return type.";
+  else if (q.includes('overload')) response = "Method overloading lets a class offer several versions of the same-named method, each accepting a different set of parameters, so callers can use whichever form fits their data.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{ loadSim('java'); });
+</script>
+</body>
+</html>

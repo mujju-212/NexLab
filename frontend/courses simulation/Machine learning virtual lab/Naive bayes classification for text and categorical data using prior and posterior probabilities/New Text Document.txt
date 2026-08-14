@@ -1,0 +1,853 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Lab: Naïve Bayes Classification - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .code-line { transition: background-color 0.2s ease, border-color 0.2s ease; }
+        .code-line.active { background-color: rgba(99, 102, 241, 0.25); border-left: 4px solid #6366f1; }
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes pulseMem {
+            0% { transform: scale(1); border-color: #6366f1; }
+            50% { transform: scale(1.03); border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+            100% { transform: scale(1); border-color: #374151; }
+        }
+        .stat-card.updated { animation: pulseMem 0.5s ease-in-out; }
+        .prob-bar { transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-calculator"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Machine Learning & Data Science</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 5: Naïve Bayes Classification (Priors, Likelihoods & Posteriors)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <nav class="bg-slate-800/80 border-b border-slate-700 px-6 py-2">
+        <div class="flex flex-wrap gap-2 text-sm font-medium">
+            <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-lg text-indigo-400 bg-slate-700/60 border border-slate-600 flex items-center gap-2 transition">
+                <i class="fa-solid fa-book-open"></i> Theory
+            </button>
+            <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-list-check"></i> Procedure
+            </button>
+            <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+            </button>
+            <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-flask"></i> Simulation
+            </button>
+            <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-graduation-cap"></i> Post-Test
+            </button>
+            <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-robot"></i> AI Socratic Assistant
+            </button>
+        </div>
+    </nav>
+
+    <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+        <!-- TAB 1: THEORY -->
+        <div id="content-theory" class="tab-content bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Theory: Naïve Bayes Classification & Bayes' Theorem</h2>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                <strong>Naïve Bayes</strong> is a probabilistic supervised learning algorithm based on <strong>Bayes' Theorem</strong>. It calculates the <strong>Posterior Probability</strong> of a class label $y \in \{C_1, C_2, ... C_k\}$ given a set of input feature vectors $X = (x_1, x_2, ... x_n)$. It is called <em>"Naïve"</em> because it makes the simplifying assumption that all input features are conditionally independent given the class label.
+            </p>
+
+            <div class="bg-slate-950 p-4 rounded-lg border border-slate-700 font-mono text-center text-indigo-300 text-sm space-y-1">
+                <p>$P(Y | X) = \frac{P(X | Y) \cdot P(Y)}{P(X)} = \frac{P(Y) \cdot \prod_{i=1}^{n} P(x_i | Y)}{P(X)}$</p>
+                <p class="text-xs text-amber-300">Posterior Probability $\propto$ Prior Probability $\times$ Likelihood Product</p>
+            </div>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-chart-pie text-emerald-400"></i> 1. Prior Probability $P(Y)$</span>
+                        <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-sans">Class Odds</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        The baseline probability of observing class $Y$ in the training dataset prior to observing any input features $X$:
+                        <br><code class="text-amber-300 font-mono">P(Y) = Count(Y) / Total Samples</code>.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-filter text-amber-400"></i> 2. Likelihood $P(X_i | Y)$</span>
+                        <span class="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-sans">Feature Probability</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        The conditional probability of observing feature $x_i$ given class $Y$. For text classification, it represents the frequency of a word appearing in class documents.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-wand-magic-sparkles text-cyan-400"></i> 3. Laplace Smoothing ($\alpha$)</span>
+                        <span class="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded font-sans">Zero-Count Fix</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Prevents zero-frequency problem ($P(x_i|Y)=0$ zeroing entire likelihood product) by adding pseudo-counts:
+                        <br><code class="text-emerald-300 font-mono">P(x_i|Y) = (Count(x_i, Y) + α) / (Count(Y) + α|V|)</code>.
+                    </p>
+                </div>
+
+            </div>
+
+            <div class="bg-slate-900/60 p-4 rounded-lg border border-slate-700 text-xs text-slate-300 space-y-2">
+                <h4 class="font-bold text-indigo-300 text-sm"><i class="fa-solid fa-circle-info text-amber-300"></i> Variants of Naïve Bayes Classifiers</h4>
+                <ul class="list-disc list-inside space-y-1 text-slate-400 font-mono">
+                    <li><strong class="text-slate-200 font-sans">MultinomialNB:</strong> Used for discrete word counts / term frequency text classification.</li>
+                    <li><strong class="text-slate-200 font-sans">CategoricalNB:</strong> Used for categorical discrete features (e.g. Weather: Sunny, Rainy, Overcast).</li>
+                    <li><strong class="text-slate-200 font-sans">GaussianNB:</strong> Used for continuous numerical features assuming Gaussian (normal) distribution.</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- TAB 2: PROCEDURE -->
+        <div id="content-procedure" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Simulator Procedure</h2>
+            <ol class="list-decimal list-inside space-y-3 text-sm text-slate-300 leading-relaxed">
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Select a <strong>Classification Dataset</strong> (e.g., Spam vs Ham SMS Text, Play Tennis Weather, or Movie Review Sentiment) from the dropdown or click a Quick Preset.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Configure <strong>Laplace Smoothing ($\alpha$)</strong> ($\alpha = 1.0$ Add-1 smoothing or $\alpha = 0.0$ No smoothing).</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Type or select a <strong>Sample Query Text / Input Feature Vector</strong> in the simulation controls bar.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Start Simulation"</strong> to tokenize inputs and load training prior probabilities into memory.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Step Execution"</strong> to trace Scikit-Learn code line-by-line (`fit()` and `predict_proba()`).</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Observe the <strong>Bayes Math & Term Likelihood Inspector Table</strong> calculate term likelihoods and log-probability sums step-by-step.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Review the live <strong>Posterior Probability Bar Chart</strong> and final classification output banner.</li>
+            </ol>
+        </div>
+
+        <!-- TAB 3: PRE-TEST -->
+        <div id="content-pretest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Pre-Lab Assessment Quiz</h2>
+                <span id="pretest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="preq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. Why is Naïve Bayes called "Naïve"?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> It requires zero training data</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> It assumes all input features are conditionally independent given the class label</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> It only works with binary $0$ and $1$ numbers</label>
+                    </div>
+                    <p id="preq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="preq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What problem does Laplace Smoothing ($\alpha=1$) solve in Naïve Bayes text classification?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> Prevents zero probabilities ($P=0$) when encountering unseen words in a class</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> Converts Naïve Bayes into a Linear Regression line</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> Speeds up matrix multiplication</label>
+                    </div>
+                    <p id="preq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPretest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Pre-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 4: SIMULATION WORKSPACE -->
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <!-- Controls Bar -->
+            <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Select Dataset</label>
+                            <select id="nbDataset" onchange="updateDatasetDisplay()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="spam">1. Spam vs Ham SMS Text Filter (MultinomialNB)</option>
+                                <option value="tennis">2. Play Tennis Weather Predictor (CategoricalNB)</option>
+                                <option value="sentiment">3. Movie Review Sentiment Analysis (MultinomialNB)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Laplace Smoothing ($\alpha$)</label>
+                            <select id="alphaSelect" onchange="onParamChange()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="1.0" selected>α = 1.0 (Add-1 Laplace)</option>
+                                <option value="0.0">α = 0.0 (No Smoothing)</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="startSimulation()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95">
+                            <i class="fa-solid fa-play"></i> Start Simulation
+                        </button>
+                        <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 cursor-not-allowed">
+                            <i class="fa-solid fa-forward-step"></i> Step Epoch
+                        </button>
+                        <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95">
+                            <i class="fa-solid fa-bolt"></i> Run / Execute All
+                        </button>
+                        <button onclick="resetSimulation()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium px-3 py-2 rounded-lg text-sm transition flex items-center gap-1 active:scale-95">
+                            <i class="fa-solid fa-rotate-left"></i> Reset
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Query Text Input / Feature Selection -->
+                <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-700/60 text-xs">
+                    <span class="text-slate-400 font-medium"><i class="fa-solid fa-pen-to-square text-amber-400"></i> Sample Query Input:</span>
+                    <input type="text" id="queryInput" value="FREE PRIZE WINNER CLAIM CASH" class="flex-1 min-w-[280px] bg-slate-900 border border-slate-700 rounded px-3 py-1.5 font-mono text-slate-200 focus:outline-none focus:border-indigo-500">
+                    
+                    <span class="text-slate-400 font-medium ml-2"><i class="fa-solid fa-bolt text-amber-400"></i> Presets:</span>
+                    <button onclick="loadPreset('spam1')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Spam Winner</button>
+                    <button onclick="loadPreset('ham1')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Ham Meeting</button>
+                    <button onclick="loadPreset('sent_pos')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Positive Sentiment</button>
+                </div>
+            </div>
+
+            <!-- Execution Workspace Split View -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left Column: Source Code Panel -->
+                <div class="lg:col-span-5 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md">
+                    <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <i class="fa-solid fa-code text-indigo-400"></i> Scikit-Learn Code Trace
+                        </span>
+                        <span id="currentStepBadge" class="text-xs bg-slate-700 text-slate-300 px-2.5 py-0.5 rounded-full font-mono">Epoch: Ready</span>
+                    </div>
+                    <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 flex-1 space-y-1 overflow-x-auto min-h-[260px]">
+                    </div>
+                    <div class="p-4 border-t border-slate-700/80 bg-slate-800/50">
+                        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Model Parameter State</h4>
+                        <p id="explanationText" class="text-xs text-slate-300 leading-relaxed min-h-[36px]">
+                            Select dataset and click 'Start Simulation' or 'Run / Execute All' to execute.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Right Column: Interactive Bayes Math & Probability Inspector -->
+                <div class="lg:col-span-7 flex flex-col gap-6">
+                    
+                    <!-- Probability Bar Chart & Likelihood Inspector -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md space-y-4">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-chart-bar text-indigo-400"></i> Posterior Class Probabilities $P(C_k | X)$
+                            </span>
+                            <span id="metricsBadge" class="font-mono text-emerald-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-700 text-[11px]">
+                                Pred: -- | Max Prob: --
+                            </span>
+                        </div>
+
+                        <!-- Posterior Probability Progress Bars -->
+                        <div class="bg-slate-950 p-4 rounded-lg border border-slate-700 space-y-3 font-mono">
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span id="lblClass0" class="text-blue-400 font-bold">Class 0 (Ham)</span>
+                                    <span id="probClass0" class="text-blue-300 font-bold">0.0%</span>
+                                </div>
+                                <div class="w-full bg-slate-900 h-3.5 rounded-full overflow-hidden border border-slate-800">
+                                    <div id="barClass0" class="prob-bar bg-blue-500 h-full rounded-full w-0"></div>
+                                </div>
+                            </div>
+
+                            <div>
+                                <div class="flex justify-between text-xs mb-1">
+                                    <span id="lblClass1" class="text-emerald-400 font-bold">Class 1 (Spam)</span>
+                                    <span id="probClass1" class="text-emerald-300 font-bold">0.0%</span>
+                                </div>
+                                <div class="w-full bg-slate-900 h-3.5 rounded-full overflow-hidden border border-slate-800">
+                                    <div id="barClass1" class="prob-bar bg-emerald-500 h-full rounded-full w-0"></div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <!-- Term Likelihood Breakdown Table -->
+                        <div class="space-y-2">
+                            <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-table text-indigo-400"></i> Term / Token Likelihood Breakdown Table
+                            </h4>
+                            <div class="overflow-x-auto max-h-[140px] overflow-y-auto bg-slate-950 rounded-lg border border-slate-700">
+                                <table class="w-full text-left border-collapse font-mono text-xs">
+                                    <thead>
+                                        <tr class="bg-slate-900 text-indigo-300 border-b border-slate-700">
+                                            <th class="p-2">Token / Feature</th>
+                                            <th class="p-2">Likelihood P(x|Class 0)</th>
+                                            <th class="p-2">Likelihood P(x|Class 1)</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody id="likelihoodTableBody" class="divide-y divide-slate-800 text-slate-300">
+                                        <tr><td colspan="3" class="p-2 text-slate-500 italic text-center">Click 'Start Simulation' to compute token likelihoods.</td></tr>
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Terminal Output -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md flex-1">
+                        <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-2.5 flex justify-between items-center">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                                <i class="fa-solid fa-terminal text-emerald-400"></i> Output Terminal
+                            </span>
+                            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition">
+                                <i class="fa-solid fa-trash-can"></i> Clear
+                            </button>
+                        </div>
+                        <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-300 min-h-[90px] max-h-[120px] overflow-y-auto space-y-1">
+                            <p class="text-slate-500 italic">>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+                        </div>
+                    </div>
+
+                    <!-- Pop-out Result Banner -->
+                    <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-950 to-indigo-950 border-2 border-emerald-500/50 p-4 rounded-xl shadow-xl flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
+                                <i class="fa-solid fa-square-check"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs uppercase font-semibold text-emerald-400 tracking-wider">Final Execution Output</h4>
+                                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-300">Naïve Bayes Prediction Completed</p>
+                            </div>
+                        </div>
+                        <span id="bannerStatus" class="text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1 rounded-md border border-slate-700">
+                            Completed
+                        </span>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: POST-TEST -->
+        <div id="content-posttest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Post-Lab Evaluation Quiz</h2>
+                <span id="posttest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="postq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. In Scikit-Learn, which Naïve Bayes class is best suited for word count / term-frequency text classification?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="a"> `MultinomialNB`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="b"> `GaussianNB`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="c"> `LinearDiscriminantAnalysis`</label>
+                    </div>
+                    <p id="postq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="postq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What method in Scikit-Learn returns predicted class probabilities $P(C_0|X)$ and $P(C_1|X)$?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="a"> `model.predict_proba(X)`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="b"> `model.score_prob(X)`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="c"> `model.get_bayes(X)`</label>
+                    </div>
+                    <p id="postq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPosttest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Post-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 6: AI SOCRATIC ASSISTANT -->
+        <div id="content-ai" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md flex flex-col h-[520px]">
+            <h2 class="text-lg font-bold text-indigo-400 border-b border-slate-700 pb-2 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+            </h2>
+
+            <div id="aiChatBox" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-4 overflow-y-auto space-y-3 text-xs">
+                <div class="flex items-start gap-3">
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        Hello! I am your AI Socratic Assistant. Ask me any question about Naïve Bayes Classification, Bayes' Theorem, Priors, Likelihoods, Posteriors, or Laplace Smoothing!
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 mt-4">
+                <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., How does Laplace smoothing prevent zero probabilities?)...." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                <button onclick="sendAiQuery()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-xs font-semibold transition active:scale-95">
+                    Send
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let scenario = 'spam';
+        let stepList = [];
+        let currentStepIdx = 0;
+
+        // Naive Bayes Reference Training Vocabularies & Probabilities
+        const datasets = {
+            spam: {
+                title: "Spam vs Ham SMS Text Filter (MultinomialNB)",
+                classLabels: { 0: "Ham (Legitimate)", 1: "Spam" },
+                priors: { 0: 0.60, 1: 0.40 }, // P(Ham)=0.60, P(Spam)=0.40
+                wordLikelihoods: {
+                    "free":    { 0: 0.02, 1: 0.28 },
+                    "prize":   { 0: 0.01, 1: 0.22 },
+                    "winner":  { 0: 0.01, 1: 0.20 },
+                    "claim":   { 0: 0.02, 1: 0.25 },
+                    "cash":    { 0: 0.03, 1: 0.18 },
+                    "urgent":  { 0: 0.02, 1: 0.21 },
+                    "meeting": { 0: 0.22, 1: 0.01 },
+                    "today":   { 0: 0.18, 1: 0.04 },
+                    "dinner":  { 0: 0.15, 1: 0.01 },
+                    "hello":   { 0: 0.25, 1: 0.05 }
+                }
+            },
+            tennis: {
+                title: "Play Tennis Weather Predictor (CategoricalNB)",
+                classLabels: { 0: "Don't Play (0)", 1: "Play Tennis (1)" },
+                priors: { 0: 0.36, 1: 0.64 },
+                wordLikelihoods: {
+                    "sunny":    { 0: 0.60, 1: 0.22 },
+                    "overcast": { 0: 0.05, 1: 0.44 },
+                    "rainy":    { 0: 0.35, 1: 0.34 },
+                    "humidity_high":   { 0: 0.80, 1: 0.33 },
+                    "humidity_normal": { 0: 0.20, 1: 0.67 }
+                }
+            },
+            sentiment: {
+                title: "Movie Review Sentiment Analysis (MultinomialNB)",
+                classLabels: { 0: "Negative (0)", 1: "Positive (1)" },
+                priors: { 0: 0.50, 1: 0.50 },
+                wordLikelihoods: {
+                    "great":    { 0: 0.02, 1: 0.25 },
+                    "brilliant":{ 0: 0.01, 1: 0.20 },
+                    "loved":    { 0: 0.02, 1: 0.22 },
+                    "terrible": { 0: 0.28, 1: 0.01 },
+                    "boring":   { 0: 0.24, 1: 0.02 },
+                    "waste":    { 0: 0.20, 1: 0.01 }
+                }
+            }
+        };
+
+        document.addEventListener("DOMContentLoaded", () => {
+            updateDatasetDisplay();
+        });
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+                el.classList.add('text-slate-400');
+            });
+
+            const targetContent = document.getElementById(`content-${tabName}`);
+            if (targetContent) targetContent.classList.remove('hidden');
+
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('text-slate-400');
+                activeBtn.classList.add('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+            }
+        }
+
+        function loadPreset(presetKey) {
+            if (presetKey === 'spam1') {
+                document.getElementById('nbDataset').value = 'spam';
+                document.getElementById('queryInput').value = "FREE PRIZE WINNER CLAIM CASH";
+            } else if (presetKey === 'ham1') {
+                document.getElementById('nbDataset').value = 'spam';
+                document.getElementById('queryInput').value = "hello meeting today for dinner";
+            } else if (presetKey === 'sent_pos') {
+                document.getElementById('nbDataset').value = 'sentiment';
+                document.getElementById('queryInput').value = "great brilliant acting loved it";
+            }
+            updateDatasetDisplay();
+            runAll();
+        }
+
+        function onParamChange() {
+            if (stepList.length > 0) {
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function updateDatasetDisplay() {
+            scenario = document.getElementById('nbDataset').value;
+            const codeContainer = document.getElementById('codeContainer');
+            const alpha = parseFloat(document.getElementById('alphaSelect').value) || 1.0;
+
+            if (scenario === 'spam') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>from sklearn.naive_bayes import MultinomialNB</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>model = MultinomialNB(alpha=<span class="text-amber-400 font-bold">${alpha}</span>)</span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>model.fit(X_train_vec, y_spam)</span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>probs = model.predict_proba(X_query_vec)</span></div>
+                `;
+            } else if (scenario === 'tennis') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>from sklearn.naive_bayes import CategoricalNB</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>clf = CategoricalNB(alpha=<span class="text-amber-400 font-bold">${alpha}</span>)</span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>clf.fit(X_weather, y_play)</span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Play Odds: {clf.predict_proba(X_query)}"</span>)</span></div>
+                `;
+            } else if (scenario === 'sentiment') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>from sklearn.naive_bayes import MultinomialNB</span></div>
+                    <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>nb = MultinomialNB(alpha=<span class="text-amber-400 font-bold">${alpha}</span>)</span></div>
+                    <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>nb.fit(X_reviews, y_sentiment)</span></div>
+                    <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>pred = nb.predict(X_query_review)</span></div>
+                `;
+            }
+
+            renderProbabilityUI(0.5, 0.5, []);
+        }
+
+        function calculateBayesPosterior() {
+            const queryRaw = document.getElementById('queryInput').value.toLowerCase();
+            const tokens = queryRaw.split(/\s+/).filter(t => t.length > 0);
+            const ds = datasets[scenario];
+            const alpha = parseFloat(document.getElementById('alphaSelect').value) || 1.0;
+
+            let logProd0 = Math.log(ds.priors[0]);
+            let logProd1 = Math.log(ds.priors[1]);
+
+            const tableRows = [];
+
+            tokens.forEach(tok => {
+                let p0 = ds.wordLikelihoods[tok] ? ds.wordLikelihoods[tok][0] : 0.05;
+                let p1 = ds.wordLikelihoods[tok] ? ds.wordLikelihoods[tok][1] : 0.05;
+
+                // Adjust for Laplace smoothing alpha
+                if (alpha === 0 && !ds.wordLikelihoods[tok]) {
+                    p0 = 1e-12; // Zero probability
+                    p1 = 1e-12;
+                }
+
+                logProd0 += Math.log(p0);
+                logProd1 += Math.log(p1);
+
+                tableRows.push({ token: tok, p0, p1 });
+            });
+
+            // Exponentiate log sums safely
+            const maxLog = Math.max(logProd0, logProd1);
+            const unnorm0 = Math.exp(logProd0 - maxLog);
+            const unnorm1 = Math.exp(logProd1 - maxLog);
+
+            const post0 = unnorm0 / (unnorm0 + unnorm1);
+            const post1 = unnorm1 / (unnorm0 + unnorm1);
+
+            return { post0, post1, tableRows, predictedLabel: post1 > post0 ? 1 : 0 };
+        }
+
+        function renderProbabilityUI(p0, p1, tableRows) {
+            const ds = datasets[scenario];
+            document.getElementById('lblClass0').innerText = ds.classLabels[0];
+            document.getElementById('lblClass1').innerText = ds.classLabels[1];
+
+            const p0Pct = (p0 * 100).toFixed(1);
+            const p1Pct = (p1 * 100).toFixed(1);
+
+            document.getElementById('probClass0').innerText = `${p0Pct}%`;
+            document.getElementById('probClass1').innerText = `${p1Pct}%`;
+
+            document.getElementById('barClass0').style.width = `${p0Pct}%`;
+            document.getElementById('barClass1').style.width = `${p1Pct}%`;
+
+            const tbody = document.getElementById('likelihoodTableBody');
+            if (!tableRows || tableRows.length === 0) {
+                tbody.innerHTML = `<tr><td colspan="3" class="p-2 text-slate-500 italic text-center">Click 'Start Simulation' to compute token likelihoods.</td></tr>`;
+                return;
+            }
+
+            tbody.innerHTML = tableRows.map(r => `
+                <tr class="hover:bg-slate-800/60 transition">
+                    <td class="p-2 font-bold text-amber-300">${r.token}</td>
+                    <td class="p-2 text-blue-400 font-bold">${r.p0.toFixed(4)}</td>
+                    <td class="p-2 text-emerald-400 font-bold">${r.p1.toFixed(4)}</td>
+                </tr>
+            `).join('');
+        }
+
+        function buildExecutionSteps() {
+            const bayesRes = calculateBayesPosterior();
+            const ds = datasets[scenario];
+            const classNameStr = ds.classLabels[bayesRes.predictedLabel];
+
+            stepList = [
+                {
+                    line: 1,
+                    bayesRes,
+                    consoleMsg: `> Loaded dataset: ${ds.title}`,
+                    explanation: `Line 1: Imported Naïve Bayes Classifier module.`
+                },
+                {
+                    line: 2,
+                    bayesRes,
+                    consoleMsg: `> Configured Naïve Bayes Classifier (alpha=${document.getElementById('alphaSelect').value})`,
+                    explanation: `Line 2: Configured Laplace smoothing hyperparameter.`
+                },
+                {
+                    line: 3,
+                    bayesRes,
+                    consoleMsg: `> Executing fit(): Computed Priors P(C0)=${ds.priors[0]}, P(C1)=${ds.priors[1]}`,
+                    explanation: `Line 3: Model calculated training class priors and feature likelihoods.`
+                },
+                {
+                    line: 4,
+                    bayesRes,
+                    consoleMsg: `<span class='text-emerald-300 font-bold'>Predicted Class: ${classNameStr} (Probabilities: P(C0)=${(bayesRes.post0*100).toFixed(1)}%, P(C1)=${(bayesRes.post1*100).toFixed(1)}%)</span>`,
+                    explanation: `Line 4: Computed posterior probabilities. Sample classified as ${classNameStr}!`
+                }
+            ];
+        }
+
+        function startSimulation() {
+            updateDatasetDisplay();
+            buildExecutionSteps();
+            currentStepIdx = 0;
+
+            hideResultBanner();
+            clearConsole();
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = false;
+            btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95 shadow-lg shadow-emerald-600/20";
+
+            appendConsole(`>>> Executing: ml_naive_bayes.py [Dataset: ${scenario}]`);
+            executeStepAtIndex(0);
+        }
+
+        function executeStepAtIndex(idx) {
+            const step = stepList[idx];
+            highlightLine(step.line);
+
+            const res = step.bayesRes;
+            const ds = datasets[scenario];
+            const classNameStr = ds.classLabels[res.predictedLabel];
+            const maxProb = Math.max(res.post0, res.post1);
+
+            renderProbabilityUI(res.post0, res.post1, res.tableRows);
+
+            document.getElementById('metricsBadge').innerText = `Pred: ${classNameStr} | Max Prob: ${(maxProb*100).toFixed(1)}%`;
+
+            appendConsole(step.consoleMsg);
+            document.getElementById('explanationText').innerText = step.explanation;
+            document.getElementById('currentStepBadge').innerText = `Epoch ${idx + 1}/${stepList.length}`;
+
+            if (idx === stepList.length - 1) {
+                showResultBanner(`Sample Classified as ${classNameStr}`, false);
+                const btnStep = document.getElementById('btnStep');
+                btnStep.disabled = true;
+                btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+                document.getElementById('currentStepBadge').innerText = "Classified";
+            }
+        }
+
+        function stepExecute() {
+            if (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function runAll() {
+            startSimulation();
+            while (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function resetSimulation() {
+            currentStepIdx = 0;
+            highlightLine(0);
+            clearConsole();
+            hideResultBanner();
+
+            document.getElementById('metricsBadge').innerText = "Pred: -- | Max Prob: --";
+            renderProbabilityUI(0.5, 0.5, []);
+
+            appendConsole("<p class='text-slate-500 italic'>>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>");
+            document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+            document.getElementById('currentStepBadge').innerText = "Epoch: Ready";
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = true;
+            btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+        }
+
+        function highlightLine(lineNum) {
+            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+            if (lineNum > 0) {
+                const target = document.getElementById(`line${lineNum}`);
+                if (target) target.classList.add('active');
+            }
+        }
+
+        function clearConsole() {
+            document.getElementById('terminal').innerHTML = '';
+        }
+
+        function appendConsole(htmlContent) {
+            const term = document.getElementById('terminal');
+            const p = document.createElement('p');
+            p.innerHTML = htmlContent;
+            term.appendChild(p);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function showResultBanner(text, isError) {
+            const banner = document.getElementById('resultBanner');
+            const bannerText = document.getElementById('resultBannerText');
+            bannerText.innerText = text;
+            banner.classList.remove('hidden');
+        }
+
+        function hideResultBanner() {
+            document.getElementById('resultBanner').classList.add('hidden');
+        }
+
+        function checkPretest() {
+            const q1 = document.querySelector('input[name="pq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="pq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('preq1-box');
+            const q1fb = document.getElementById('preq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! Naïve Bayes assumes feature conditional independence given the class label.";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. It is called naïve because of the conditional independence assumption.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('preq2-box');
+            const q2fb = document.getElementById('preq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'a') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! Laplace smoothing adds pseudo-counts so zero-frequency words don't zero out total probability.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. Laplace smoothing handles unseen words with zero likelihood counts.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('pretest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function checkPosttest() {
+            const q1 = document.querySelector('input[name="postq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="postq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('postq1-box');
+            const q1fb = document.getElementById('postq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'a') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! MultinomialNB is designed for discrete word frequencies/counts.";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. Use MultinomialNB for text term-frequency data.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('postq2-box');
+            const q2fb = document.getElementById('postq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'a') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! predict_proba(X) calculates posterior class probabilities.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. Use predict_proba(X) to get probability scores.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('posttest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function sendAiQuery() {
+            const input = document.getElementById('aiQueryInput');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const chatBox = document.getElementById('aiChatBox');
+
+            const userDiv = document.createElement('div');
+            userDiv.className = 'flex items-start gap-3 justify-end';
+            userDiv.innerHTML = `
+                <div class="bg-indigo-600/30 border border-indigo-500/40 p-3 rounded-lg text-slate-200">
+                    ${query}
+                </div>
+                <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 text-xs shrink-0">You</div>
+            `;
+            chatBox.appendChild(userDiv);
+            input.value = '';
+
+            let response = "Try testing different query phrases or toggling Laplace Smoothing in the simulator to see how prior and posterior probabilities update!";
+            const qLower = query.toLowerCase();
+            if (qLower.includes('prior') || qLower.includes('posterior') || qLower.includes('bayes')) {
+                response = "Bayes' Theorem updates our prior belief $P(Y)$ using observed feature likelihoods $P(X|Y)$ to calculate posterior probability $P(Y|X) = \\frac{P(X|Y) P(Y)}{P(X)}$.";
+            } else if (qLower.includes('laplace') || qLower.includes('smoothing') || qLower.includes('alpha') || qLower.includes('zero')) {
+                response = "Laplace Add-1 Smoothing ($\alpha=1$) adds $1$ to word frequency counts, preventing an unseen word from having $P(x|Y)=0$ and completely zeroing out the posterior probability product!";
+            } else if (qLower.includes('multinomial') || qLower.includes('text') || qLower.includes('spam')) {
+                response = "For text processing, `MultinomialNB` multiplies word likelihoods across all tokens in a document to determine whether Spam or Ham has the higher log-posterior probability!";
+            }
+
+            setTimeout(() => {
+                const aiDiv = document.createElement('div');
+                aiDiv.className = 'flex items-start gap-3';
+                aiDiv.innerHTML = `
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        ${response}
+                    </div>
+                `;
+                chatBox.appendChild(aiDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 500);
+        }
+    </script>
+</body>
+</html>

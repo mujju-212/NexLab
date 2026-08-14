@@ -1,0 +1,636 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Python Complex Data Types — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .code-line{transition:background-color .25s ease,border-color .25s ease;border-left:4px solid transparent;}
+  .code-line.active{background:rgba(124,58,237,.09);border-left-color:#7c3aed;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-brands fa-python"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Python Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment 10: Complex Data Types (Sets, Dictionaries &amp; Tuples)</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <!-- Tab Nav -->
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> Theory
+      </button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-list-check"></i> Procedure
+      </button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+      </button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-flask"></i> Simulation
+      </button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-graduation-cap"></i> Post-Test
+      </button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Complex Data Types in Python</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">Beyond scalar primitives (int, float, str), Python ships with three built-in <strong>composite data structures</strong> that hold collections of values: <code class="bg-slate-100 text-purple-600 px-1.5 py-0.5 rounded font-mono">set</code> (unordered, unique items), <code class="bg-slate-100 text-purple-600 px-1.5 py-0.5 rounded font-mono">dict</code> (key → value mapping), and <code class="bg-slate-100 text-purple-600 px-1.5 py-0.5 rounded font-mono">tuple</code> (ordered, immutable sequence). Choosing the right one is a core design decision in any Python program.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-layer-group text-emerald-500"></i> set</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Unordered collection with <strong>no duplicate elements</strong> — inserting a value already present is a no-op. Supports set algebra: union <code class="font-mono">|</code>, intersection <code class="font-mono">&amp;</code>, difference <code class="font-mono">-</code>, symmetric difference <code class="font-mono">^</code>.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-key text-amber-500"></i> dict</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Associative array mapping unique, hashable keys to values with average O(1) lookup. Core methods: <code class="font-mono">.keys()</code>, <code class="font-mono">.values()</code>, <code class="font-mono">.items()</code>, <code class="font-mono">.update()</code>, <code class="font-mono">.get()</code>.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono flex items-center gap-2"><i class="fa-solid fa-arrows-rotate text-cyan-500"></i> tuple ↔ list</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Tuples are immutable and 0-indexed. To "modify" one, cast to a mutable list with <code class="font-mono">list(t)</code>, edit it, then cast back with <code class="font-mono">tuple(l)</code> — this creates a brand new tuple object.</p>
+        </div>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Feature</th><th class="p-2 text-left">set</th><th class="p-2 text-left">dict</th><th class="p-2 text-left">tuple</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2 font-semibold text-slate-700">Mutable?</td><td class="p-2">Yes</td><td class="p-2">Yes</td><td class="p-2">No</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-semibold text-slate-700">Ordered?</td><td class="p-2">No</td><td class="p-2">Yes (insertion order, 3.7+)</td><td class="p-2">Yes</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2 font-semibold text-slate-700">Duplicates allowed?</td><td class="p-2">No</td><td class="p-2">No (keys), values may repeat</td><td class="p-2">Yes</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-semibold text-slate-700">Indexed access?</td><td class="p-2">No</td><td class="p-2">By key</td><td class="p-2">By integer position</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2 font-semibold text-slate-700">Typical use</td><td class="p-2">Deduplication, membership tests</td><td class="p-2">Lookups, records, counters</td><td class="p-2">Fixed records, dict keys, return multiple values</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bg-amber-50 border border-amber-200 rounded-xl p-4 text-xs text-amber-800 space-y-1.5">
+        <h4 class="font-bold flex items-center gap-2"><i class="fa-solid fa-triangle-exclamation"></i> Common Pitfalls</h4>
+        <ul class="list-disc list-inside space-y-1">
+          <li><code class="font-mono">{}</code> creates an <strong>empty dict</strong>, not an empty set — use <code class="font-mono">set()</code> for an empty set.</li>
+          <li>A single-element tuple needs a trailing comma: <code class="font-mono">(5,)</code> — without it, <code class="font-mono">(5)</code> is just the integer 5.</li>
+          <li>Dictionary keys must be hashable (immutable) — a <code class="font-mono">list</code> cannot be a key, but a <code class="font-mono">tuple</code> can.</li>
+          <li>Never assume set or dict iteration order matches insertion order in older Python versions (guaranteed for dict since 3.7, sets remain unordered).</li>
+        </ul>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Patterns Covered in This Lab</h3>
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-3 text-xs">
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><strong class="text-slate-700">Set Algebra</strong> — building sets, deduplication, and computing a union with <code class="font-mono">|</code>.</div>
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><strong class="text-slate-700">Dictionary Update</strong> — reading keys and merging new key-value pairs in place.</div>
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><strong class="text-slate-700">Tuple/List Casting</strong> — round-tripping an immutable tuple through a mutable list to "modify" it.</div>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab and pick a <strong>Complex Data Type Scenario</strong> from the dropdown, or click a <strong>Quick Preset</strong> to load one instantly.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Simulation</strong> to load the code and reset the trace to the first line.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step Execution</strong> repeatedly to move through the script one operation at a time — watch the highlighted code line, the Variable Memory panel (value + live type tag), and the Output Terminal update together.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Or click <strong>Run / Execute All</strong> to animate every step automatically at a readable pace.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Pay attention to when a variable's <strong>type tag</strong> changes — e.g. a tuple becomes a list, then becomes a new tuple — this is the core concept of type conversion.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> at any time to clear the trace and start over.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What is the output of <code class="font-mono">len({1, 2, 2, 3, 3, 3})</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> 6</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> 3</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> TypeError</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. Which dictionary method updates key-value pairs from another dictionary?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> dict.append()</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> dict.update()</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> dict.add()</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. Why can't a tuple be modified directly?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> Tuples are immutable by design</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> Tuples can only store strings</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> Tuples have no index positions</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">4. What does <code class="font-mono">{}</code> create in Python?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> An empty set</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> An empty tuple</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> An empty dictionary</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Select Complex Data Type Scenario</label>
+              <select id="scenarioSelect" onchange="onScenarioChange()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500 min-w-[300px]">
+                <option value="set_ops">Set Unique Elements &amp; Operations (Union / Add)</option>
+                <option value="dict_methods">Dictionary Key-Value Operations (keys, update)</option>
+                <option value="tuple_conversion">Tuple to List Conversion &amp; Modification</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Start Simulation
+            </button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-forward-step"></i> Step Execution
+            </button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-bolt"></i> Run / Execute All
+            </button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('set_ops')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Set Operations</button>
+          <button onclick="loadPreset('dict_methods')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Dictionary Update</button>
+          <button onclick="loadPreset('tuple_conversion')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Tuple/List Conversion</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-code text-purple-600"></i> Code Trace Window
+            </span>
+          </div>
+          <div id="codeLines" class="p-4 font-mono text-sm bg-slate-950 text-slate-200 flex-1 space-y-0.5 overflow-x-auto min-h-[220px]"></div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Select a scenario and click 'Start Simulation' or 'Run / Execute All'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-7 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-microchip text-purple-600"></i> Variable RAM Memory State
+            </h3>
+            <div class="grid grid-cols-3 gap-3" id="memCardsContainer">
+              <div id="mem1" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span id="label1" class="text-xs text-slate-500 block font-mono">var1</span>
+                <span id="val1" class="text-base font-bold font-mono text-purple-600 block my-1 truncate">--</span>
+                <span id="type1" class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">--</span>
+              </div>
+              <div id="mem2" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span id="label2" class="text-xs text-slate-500 block font-mono">var2</span>
+                <span id="val2" class="text-base font-bold font-mono text-purple-600 block my-1 truncate">--</span>
+                <span id="type2" class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">--</span>
+              </div>
+              <div id="mem3" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span id="label3" class="text-xs text-slate-500 block font-mono">var3</span>
+                <span id="val3" class="text-base font-bold font-mono text-emerald-600 block my-1 truncate">--</span>
+                <span id="type3" class="text-[10px] bg-slate-100 text-slate-500 px-1.5 py-0.5 rounded font-mono">--</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal
+              </span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[140px] max-h-[180px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-square-check"></i>
+              </div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Final Execution Output</h4>
+                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+            <span class="text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200">Status: OK</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What is the result of <code class="font-mono">{1, 2} | {2, 3}</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> {1, 2, 2, 3}</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> {1, 2, 3}</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> {2}</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. How do you modify an element in a tuple <code class="font-mono">t = (1, 2, 3)</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> Directly assign t[0] = 99</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> Convert to a list, modify it, then convert back to a tuple</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> Use t.update([99])</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. Which set operator returns elements present in BOTH sets?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> &amp; (intersection)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> | (union)</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> - (difference)</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">4. What can be used as a Python dictionary key?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> A list</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> A set</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> A tuple</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+      </h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me anything about sets, dictionaries, tuples, or converting between them.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., why do sets remove duplicates?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ---------- Code definitions per scenario ---------- */
+function buildCodeLines(scenario){
+  switch(scenario){
+    case 'set_ops': return [
+      {indent:0, text:'s1 = {10, 20, 20, 30}'},
+      {indent:0, text:'s1.add(40)'},
+      {indent:0, text:'s2 = {30, 40, 50}'},
+      {indent:0, text:'union_set = s1 | s2'},
+      {indent:0, text:'print(f"Union Set: {union_set}")'}
+    ];
+    case 'dict_methods': return [
+      {indent:0, text:'student = {"name": "Alice", "marks": 88}'},
+      {indent:0, text:'keys_list = list(student.keys())'},
+      {indent:0, text:'student.update({"grade": "A"})'},
+      {indent:0, text:'print(f"Keys: {keys_list}, Dict: {student}")'}
+    ];
+    case 'tuple_conversion': return [
+      {indent:0, text:'tup = (10, 20, 30)'},
+      {indent:0, text:'temp_list = list(tup)'},
+      {indent:0, text:'temp_list.append(40)'},
+      {indent:0, text:'new_tup = tuple(temp_list)'},
+      {indent:0, text:'print(f"Updated Tuple: {new_tup}")'}
+    ];
+  }
+}
+
+const VAR_LABELS = {
+  set_ops: [{id:'s1',label:'s1'},{id:'s2',label:'s2'},{id:'union_set',label:'union_set'}],
+  dict_methods: [{id:'student',label:'student'},{id:'keys_list',label:'keys_list'},{id:'status',label:'update status'}],
+  tuple_conversion: [{id:'tup',label:'tup'},{id:'temp_list',label:'temp_list'},{id:'new_tup',label:'new_tup'}]
+};
+
+/* ---------- Step builders (pure, mirrors real Python semantics) ---------- */
+function buildSteps(scenario){
+  const steps = [];
+  if (scenario === 'set_ops'){
+    steps.push({line:1, mem:{s1:{val:'{10, 20, 30}',type:'set'}, s2:{val:'--',type:'--'}, union_set:{val:'--',type:'--'}}, console:'Created set s1 = {10, 20, 30} (duplicate 20 removed)', note:'Line 1: Created set s1. Notice the duplicate 20 was automatically eliminated.', pulse:['s1']});
+    steps.push({line:2, mem:{s1:{val:'{10, 20, 30, 40}',type:'set'}, s2:{val:'--',type:'--'}, union_set:{val:'--',type:'--'}}, console:'s1.add(40) -> set s1 mutated in place', note:'Line 2: Added element 40 to mutable set s1.', pulse:['s1']});
+    steps.push({line:3, mem:{s1:{val:'{10, 20, 30, 40}',type:'set'}, s2:{val:'{30, 40, 50}',type:'set'}, union_set:{val:'--',type:'--'}}, console:'Created second set s2 = {30, 40, 50}', note:'Line 3: Initialized second set s2.', pulse:['s2']});
+    steps.push({line:4, mem:{s1:{val:'{10, 20, 30, 40}',type:'set'}, s2:{val:'{30, 40, 50}',type:'set'}, union_set:{val:'{10, 20, 30, 40, 50}',type:'set'}}, console:'union_set = s1 | s2 -> combined unique elements', note:'Line 4: Computed set union — elements shared between s1 and s2 (30, 40) appear only once.', pulse:['union_set']});
+    steps.push({line:5, mem:{s1:{val:'{10, 20, 30, 40}',type:'set'}, s2:{val:'{30, 40, 50}',type:'set'}, union_set:{val:'{10, 20, 30, 40, 50}',type:'set'}}, console:'Union Set: {10, 20, 30, 40, 50}', note:'Line 5: Printed the final computed union.', final:true, resultText:'Union Set: {10, 20, 30, 40, 50}'});
+  }
+  else if (scenario === 'dict_methods'){
+    steps.push({line:1, mem:{student:{val:'{"name": "Alice", "marks": 88}',type:'dict'}, keys_list:{val:'--',type:'--'}, status:{val:'--',type:'--'}}, console:'Initialized dictionary student', note:'Line 1: Stored a key-value dictionary in memory.', pulse:['student']});
+    steps.push({line:2, mem:{student:{val:'{"name": "Alice", "marks": 88}',type:'dict'}, keys_list:{val:"['name', 'marks']",type:'list'}, status:{val:'--',type:'--'}}, console:"keys_list = list(student.keys()) -> ['name', 'marks']", note:'Line 2: Retrieved dictionary keys and materialized them as a list.', pulse:['keys_list']});
+    steps.push({line:3, mem:{student:{val:'{"name": "Alice", "marks": 88, "grade": "A"}',type:'dict'}, keys_list:{val:"['name', 'marks']",type:'list'}, status:{val:'True',type:'bool'}}, console:'student.update({"grade": "A"}) -> dictionary updated in place', note:'Line 3: Mutated dictionary by merging a new key-value pair. Existing keys_list is unaffected.', pulse:['student','status']});
+    steps.push({line:4, mem:{student:{val:'{"name": "Alice", "marks": 88, "grade": "A"}',type:'dict'}, keys_list:{val:"['name', 'marks']",type:'list'}, status:{val:'True',type:'bool'}}, console:"Keys: ['name', 'marks'], Dict: {'name': 'Alice', 'marks': 88, 'grade': 'A'}", note:'Line 4: Printed the keys list and the fully updated dictionary.', final:true, resultText:"Keys: ['name','marks'], Dict updated with grade: 'A'"});
+  }
+  else if (scenario === 'tuple_conversion'){
+    steps.push({line:1, mem:{tup:{val:'(10, 20, 30)',type:'tuple'}, temp_list:{val:'--',type:'--'}, new_tup:{val:'--',type:'--'}}, console:'Stored read-only tuple tup = (10, 20, 30)', note:'Line 1: Initialized an immutable tuple.', pulse:['tup']});
+    steps.push({line:2, mem:{tup:{val:'(10, 20, 30)',type:'tuple'}, temp_list:{val:'[10, 20, 30]',type:'list'}, new_tup:{val:'--',type:'--'}}, console:'temp_list = list(tup) -> [10, 20, 30]', note:'Line 2: Converted the immutable tuple into a mutable list. tup itself is unchanged.', pulse:['temp_list']});
+    steps.push({line:3, mem:{tup:{val:'(10, 20, 30)',type:'tuple'}, temp_list:{val:'[10, 20, 30, 40]',type:'list'}, new_tup:{val:'--',type:'--'}}, console:'temp_list.append(40)', note:'Line 3: Appended a new element to the mutable list.', pulse:['temp_list']});
+    steps.push({line:4, mem:{tup:{val:'(10, 20, 30)',type:'tuple'}, temp_list:{val:'[10, 20, 30, 40]',type:'list'}, new_tup:{val:'(10, 20, 30, 40)',type:'tuple'}}, console:'new_tup = tuple(temp_list) -> (10, 20, 30, 40)', note:'Line 4: Cast the modified list back into a brand new immutable tuple.', pulse:['new_tup']});
+    steps.push({line:5, mem:{tup:{val:'(10, 20, 30)',type:'tuple'}, temp_list:{val:'[10, 20, 30, 40]',type:'list'}, new_tup:{val:'(10, 20, 30, 40)',type:'tuple'}}, console:'Updated Tuple: (10, 20, 30, 40)', note:'Line 5: Printed the updated tuple result.', final:true, resultText:'Updated Tuple: (10, 20, 30, 40)'});
+  }
+  return steps;
+}
+
+/* ---------- Simulation controller ---------- */
+let state = { scenario:'set_ops', steps:[], idx:0, timer:null };
+
+function onScenarioChange(){ /* no numeric params for this lab */ }
+
+function loadPreset(scenario){
+  document.getElementById('scenarioSelect').value = scenario;
+  startSimulation();
+}
+
+function renderCodeLines(scenario){
+  const defs = buildCodeLines(scenario);
+  const container = document.getElementById('codeLines');
+  container.innerHTML = defs.map((d,idx)=>`
+    <div id="line${idx+1}" class="code-line px-3 py-1.5 rounded flex items-center gap-3">
+      <span class="text-slate-600 text-xs w-4">${idx+1}</span>
+      <span style="padding-left:${d.indent*20}px">${d.text}</span>
+    </div>`).join('');
+}
+
+function renderMemLabels(scenario){
+  const labels = VAR_LABELS[scenario];
+  labels.forEach((l,idx)=>{
+    document.getElementById(`label${idx+1}`).innerText = l.label;
+    document.getElementById(`val${idx+1}`).innerText = '--';
+    document.getElementById(`type${idx+1}`).innerText = '--';
+  });
+}
+
+function highlightLine(n){
+  document.querySelectorAll('.code-line').forEach(el=>el.classList.remove('active'));
+  if (n > 0){ const t = document.getElementById(`line${n}`); if (t) t.classList.add('active'); }
+}
+
+function applyStep(step, scenario){
+  highlightLine(step.line);
+  const labels = VAR_LABELS[scenario];
+  labels.forEach((l,idx)=>{
+    const v = step.mem[l.id];
+    if (v !== undefined){
+      document.getElementById(`val${idx+1}`).innerText = v.val;
+      document.getElementById(`type${idx+1}`).innerText = v.type;
+      if (step.pulse && step.pulse.includes(l.id)){
+        const card = document.getElementById(`mem${idx+1}`);
+        card.classList.add('updated');
+        setTimeout(()=>card.classList.remove('updated'), 500);
+      }
+    }
+  });
+  if (step.console) appendConsole(step.console);
+  document.getElementById('explanationText').innerText = step.note || '';
+  if (step.final){ showResultBanner(step.resultText); }
+  const total = state.steps.length;
+  const done = state.idx;
+  document.getElementById('progressFill').style.width = `${Math.min(100,(done/total)*100)}%`;
+  document.getElementById('currentStepBadge').innerText = step.final ? 'Finished' : `Step ${done}/${total}`;
+}
+
+function startSimulation(){
+  clearInterval(state.timer);
+  const scenario = document.getElementById('scenarioSelect').value;
+  state = { scenario, steps: buildSteps(scenario), idx:0, timer:null };
+
+  renderCodeLines(scenario);
+  renderMemLabels(scenario);
+  highlightLine(0);
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('currentStepBadge').innerText = 'Step: Ready';
+  document.getElementById('explanationText').innerText = "Simulation loaded. Click 'Step Execution' or 'Run / Execute All'.";
+  appendConsole(`&gt;&gt;&gt; Executing: complex_datatypes.py [Scenario: ${scenario}]`);
+
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95';
+}
+
+function stepExecute(){
+  if (state.idx >= state.steps.length) return;
+  const step = state.steps[state.idx];
+  state.idx++;
+  applyStep(step, state.scenario);
+  if (state.idx >= state.steps.length){
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = 'bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+  }
+}
+
+function runAll(){
+  startSimulation();
+  clearInterval(state.timer);
+  state.timer = setInterval(()=>{
+    if (state.idx >= state.steps.length){ clearInterval(state.timer); return; }
+    stepExecute();
+  }, 260);
+}
+
+function resetSimulation(){
+  clearInterval(state.timer);
+  state.idx = 0;
+  highlightLine(0);
+  clearConsole();
+  hideResultBanner();
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Select a scenario and click 'Start Simulation' or 'Run / Execute All'.";
+  document.getElementById('currentStepBadge').innerText = 'Step: Ready';
+  document.getElementById('progressFill').style.width = '0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = 'bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+function showResultBanner(text){
+  document.getElementById('resultBannerText').innerText = text;
+  document.getElementById('resultBanner').classList.remove('hidden');
+}
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try running that scenario in the simulator and watch the Variable Memory panel's type tags update step by step!";
+  if (q.includes('set') && (q.includes('duplicate') || q.includes('unique'))) response = "Sets automatically discard duplicate values because they're built on a hash table that only stores each distinct hash once. That's why {1,2,2,3} becomes {1,2,3}.";
+  else if (q.includes('union') || q.includes('intersection') || q.includes('difference')) response = "Set algebra: union (|) combines all unique elements from both sets, intersection (&) keeps only shared elements, and difference (-) keeps elements in the first set but not the second.";
+  else if (q.includes('set')) response = "A set ({}) is an unordered collection of unique, hashable items. Use set() for an empty set — {} creates an empty dict instead!";
+  else if (q.includes('update') || (q.includes('dict') && q.includes('method'))) response = "dict.update({...}) merges another dictionary's key-value pairs into the current one — matching keys get overwritten, new keys get added.";
+  else if (q.includes('key') && q.includes('dict')) response = "Dictionary keys must be hashable and immutable — strings, numbers, and tuples work as keys, but lists and other dicts do not.";
+  else if (q.includes('dict')) response = "A dictionary (dict) maps unique keys to values with fast O(1) average lookup. Try dict_methods to see .keys() and .update() in action.";
+  else if (q.includes('immutable') || (q.includes('tuple') && q.includes('modify'))) response = "Tuples are immutable — you cannot change an element in place. The workaround is: convert to a list with list(t), modify the list, then convert back with tuple(l).";
+  else if (q.includes('tuple') || q.includes('list')) response = "Tuples are ordered and immutable; lists are ordered and mutable. Casting between them (list(tup) / tuple(lst)) creates a new object each time.";
+  else if (q.includes('hashable')) response = "A value is 'hashable' if its hash never changes during its lifetime — immutable types (int, str, tuple) are hashable and can be set members or dict keys; mutable types (list, dict, set) are not.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  renderCodeLines('set_ops');
+  renderMemLabels('set_ops');
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,469 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>OOP Virtual Lab: Inheritance</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-cube"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">OOP Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment 5: Inheritance &amp; Hierarchy</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2"><i class="fa-solid fa-book-open"></i> Theory</button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Assistant</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Inheritance</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">Inheritance lets a new class (the <strong>subclass</strong>/child) derive attributes and methods from an existing class (the <strong>superclass</strong>/parent), enabling code reuse and expressing an <em>"is-a"</em> relationship — a Dog <em>is an</em> Animal.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1">Java</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Uses the <code class="font-mono">extends</code> keyword. <code class="font-mono">super()</code> calls the parent constructor/methods. Java supports only single inheritance of classes.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1">Python</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Uses parenthesis notation: <code class="font-mono">class Dog(Animal):</code>. Supports multiple inheritance directly.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1">C++</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Uses <code class="font-mono">: public Parent</code> to inherit members, and also supports multiple inheritance.</p>
+        </div>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Inheritance Syntax — Multi-Language</h3>
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-4">
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">Java</p>
+          <pre class="whitespace-pre-wrap">class Animal {
+  void eat() { System.out.println("eating"); }
+}
+class Dog extends Animal {
+  void bark() { System.out.println("bark"); }
+}
+Dog d = new Dog();
+d.eat();  // inherited
+d.bark(); // own method</pre>
+        </div>
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">Python</p>
+          <pre class="whitespace-pre-wrap">class Animal:
+    def eat(self):
+        print("eating")
+
+class Dog(Animal):
+    def bark(self):
+        print("bark")
+
+d = Dog()
+d.eat()   # inherited
+d.bark()  # own method</pre>
+        </div>
+        <div class="bg-slate-950 text-slate-200 font-mono text-xs p-4 rounded-xl border border-slate-800 overflow-x-auto">
+          <p class="text-amber-400 mb-2 text-[11px] uppercase tracking-wider">C++</p>
+          <pre class="whitespace-pre-wrap">class Animal {
+  public: void eat() { cout &lt;&lt; "eating"; }
+};
+class Dog : public Animal {
+  public: void bark() { cout &lt;&lt; "bark"; }
+};
+Dog d;
+d.eat();  // inherited
+d.bark(); // own method</pre>
+        </div>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Key Terms</h3>
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-xs">
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><strong class="text-slate-700">Single inheritance</strong> — one subclass, one parent class.</div>
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><strong class="text-slate-700">Multiple inheritance</strong> — a subclass derives from more than one parent (Python, C++ support this; Java does not for classes).</div>
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><strong class="text-slate-700">Method overriding</strong> — subclass redefines a parent's method with the same signature.</div>
+        <div class="bg-slate-50 p-3 rounded-lg border border-slate-200"><strong class="text-slate-700">Diamond problem</strong> — ambiguity when two parents in multiple inheritance share a common ancestor method.</div>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab and select a language pill — <strong>Java</strong>, <strong>Python</strong>, or <strong>C++</strong>.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Examine the parent class <code class="font-mono">Animal</code> and the child class <code class="font-mono">Dog</code> that extends it.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Instantiate Child Object</strong> to create a <code class="font-mono">Dog</code> instance.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Call Inherited Method</strong> to invoke <code class="font-mono">eat()</code> — a method the Dog never defined itself, but received from Animal.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Call Own Method</strong> to invoke <code class="font-mono">bark()</code>, which Dog does define itself.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Compare both entries in the Execution Log to see how inherited vs. own methods are both callable on the same child object.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">1. What is inheritance?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> A mechanism where a subclass derives attributes/methods from a parent class</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> A way to hide data from other classes</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> A loop that repeats method calls</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What is the parent class also called?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> Child class</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> Superclass / base class</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> Interface class</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. What keyword does Java use to inherit from a class?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> implements</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> inherits</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> extends</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. If Dog extends Animal, which methods can a Dog object call?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> Both Dog's own methods and Animal's inherited methods</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> Only Animal's methods</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> Neither — inheritance blocks all method access</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-center justify-between gap-4">
+          <div class="flex flex-wrap items-center gap-2">
+            <span class="text-xs text-slate-500 font-medium mr-1">Language:</span>
+            <button id="lang-java" onclick="loadSim('java')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold bg-slate-900 text-white">Java</button>
+            <button id="lang-python" onclick="loadSim('python')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-500 hover:bg-slate-100">Python</button>
+            <button id="lang-cpp" onclick="loadSim('cpp')" class="lang-btn tab-btn px-3.5 py-1.5 rounded-full text-xs font-semibold text-slate-500 hover:bg-slate-100">C++</button>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="instantiateChild()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-plus"></i> Instantiate Child Object</button>
+            <button onclick="callInherited()" class="bg-purple-600 hover:bg-purple-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-share-from-square"></i> Call Inherited Method</button>
+            <button onclick="callOwn()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-bone"></i> Call Own Method</button>
+            <button onclick="resetLog()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+          </div>
+        </div>
+        <div id="codeDisplay" class="font-mono text-xs bg-slate-950 text-slate-200 p-4 rounded-xl border border-slate-800 min-h-[170px] overflow-x-auto"></div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+          <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-sitemap text-purple-600"></i> Inheritance Execution Log</h3>
+          <div id="heapDisplay" class="grid grid-cols-1 gap-3">
+            <div class="p-4 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 italic text-xs">Waiting for action — instantiate a Dog first.</div>
+          </div>
+        </div>
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal</span>
+            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition"><i class="fa-solid fa-trash-can"></i> Clear</button>
+          </div>
+          <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[160px] max-h-[260px] overflow-y-auto space-y-1">
+            <p class="text-slate-500 italic">&gt;&gt;&gt; Instantiate a Dog, then call its inherited and own methods.</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. Which languages allow a class to inherit from multiple parent classes directly?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> Only Java</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> Python and C++</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> None of them</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. What is the "diamond problem"?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> Ambiguity that arises when two parent classes in multiple inheritance share a common ancestor method</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> A memory leak caused by constructors</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> A syntax error unique to Python</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">3. Can a child class itself become a parent to another class?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> No, inheritance can only be one level deep</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> Yes — this forms a multi-level inheritance hierarchy</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> Only if it has no attributes</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">4. What is a key risk of very deep inheritance hierarchies?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> Programs automatically run faster</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> Classes lose the ability to have constructors</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> Code becomes harder to understand/maintain as behavior is spread across many ancestor levels</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant</h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about inheritance, super/extends, multiple inheritance, or the diamond problem.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., what is the diamond problem?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('#tab-theory,#tab-procedure,#tab-pretest,#tab-simulation,#tab-posttest,#tab-ai').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ---------- Simulation ---------- */
+const codes = {
+  java: `class Animal {
+  void eat() { System.out.println("eating"); }
+}
+class Dog extends Animal {
+  void bark() { System.out.println("bark"); }
+}
+Dog d = new Dog();
+d.eat();
+d.bark();`,
+  python: `class Animal:
+    def eat(self):
+        print("eating")
+
+class Dog(Animal):
+    def bark(self):
+        print("bark")
+
+d = Dog()
+d.eat()
+d.bark()`,
+  cpp: `class Animal {
+  public: void eat() { cout << "eating"; }
+};
+class Dog : public Animal {
+  public: void bark() { cout << "bark"; }
+};
+Dog d;
+d.eat();
+d.bark();`
+};
+const callSyntax = {
+  eat: { java: 'd.eat();', python: 'd.eat()', cpp: 'd.eat();' },
+  bark: { java: 'd.bark();', python: 'd.bark()', cpp: 'd.bark();' }
+};
+
+let currentLang = 'java';
+let childInstantiated = false;
+
+function loadSim(lang){
+  currentLang = lang;
+  document.getElementById('codeDisplay').textContent = codes[lang];
+  ['java','python','cpp'].forEach(l=>{
+    const b = document.getElementById('lang-'+l);
+    b.classList.remove('bg-slate-900','text-white');
+    b.classList.add('text-slate-500');
+  });
+  const active = document.getElementById('lang-'+lang);
+  active.classList.add('bg-slate-900','text-white');
+  active.classList.remove('text-slate-500');
+}
+
+function logEntry(title, sub, borderClass){
+  const heap = document.getElementById('heapDisplay');
+  if (heap.querySelector('.italic')) heap.innerHTML = '';
+  const card = document.createElement('div');
+  card.className = `mem-card animate-pop bg-slate-50 p-4 rounded-xl border ${borderClass}`;
+  card.innerHTML = `<p class="text-[10px] text-purple-600 font-bold font-mono mb-1">${title}</p><p class="text-xs text-slate-600">${sub}</p>`;
+  heap.prepend(card);
+}
+
+function instantiateChild(){
+  childInstantiated = true;
+  const addr = (0x1000 + Math.floor(Math.random()*0xEFFF)).toString(16).toUpperCase();
+  logEntry('OBJECT CREATED', `Instance: Dog @ 0x${addr} (${currentLang.toUpperCase()}) — inherits from Animal`, 'border-slate-300');
+  appendConsole(`&gt;&gt;&gt; new Dog instance allocated @ 0x${addr}`);
+}
+
+function callInherited(){
+  if (!childInstantiated){ appendConsole("<span class='text-rose-400'>&gt;&gt;&gt; No Dog instance yet — click 'Instantiate Child Object' first.</span>"); return; }
+  logEntry('METHOD INVOKED (INHERITED)', `Call: <span class="font-mono">${callSyntax.eat[currentLang]}</span> — defined in Animal, not Dog &rarr; Output: "eating"`, 'border-purple-300');
+  appendConsole(`&gt;&gt;&gt; ${callSyntax.eat[currentLang]} &rarr; <span class="text-purple-400">eating (inherited from Animal)</span>`);
+}
+
+function callOwn(){
+  if (!childInstantiated){ appendConsole("<span class='text-rose-400'>&gt;&gt;&gt; No Dog instance yet — click 'Instantiate Child Object' first.</span>"); return; }
+  logEntry('METHOD INVOKED (OWN)', `Call: <span class="font-mono">${callSyntax.bark[currentLang]}</span> — defined directly in Dog &rarr; Output: "bark"`, 'border-emerald-300');
+  appendConsole(`&gt;&gt;&gt; ${callSyntax.bark[currentLang]} &rarr; <span class="text-emerald-400">bark (Dog's own method)</span>`);
+}
+
+function resetLog(){
+  childInstantiated = false;
+  document.getElementById('heapDisplay').innerHTML = '<div class="p-4 border-2 border-dashed border-slate-200 rounded-xl text-center text-slate-400 italic text-xs">Waiting for action — instantiate a Dog first.</div>';
+  clearConsole();
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Instantiate a Dog, then call its inherited and own methods.</span>");
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try instantiating a Dog, then call both its inherited and its own method to see how they differ in the log!";
+  if (q.includes('diamond')) response = "The diamond problem happens when a class inherits from two classes that both inherit from a common ancestor with the same method — which version should win? Python resolves it with MRO (Method Resolution Order); C++ requires explicit disambiguation or virtual inheritance; Java sidesteps it by disallowing multiple class inheritance.";
+  else if (q.includes('multiple inheritance')) response = "Multiple inheritance means a class derives from more than one parent class at once. Python and C++ support it directly; Java only allows a class to extend one parent (though it can implement multiple interfaces).";
+  else if (q.includes('super') || q.includes('extends')) response = "'extends' (Java) declares that a class inherits from a parent. 'super' lets a subclass call the parent's constructor or an overridden method explicitly.";
+  else if (q.includes('is-a') || q.includes('is a')) response = "Inheritance models an 'is-a' relationship: a Dog is an Animal, so it makes sense for Dog to inherit Animal's behavior. Contrast this with composition ('has-a'), where one object contains another instead.";
+  else if (q.includes('override')) response = "Method overriding happens when a subclass redefines a method it inherited, replacing the parent's version with its own — the foundation of runtime polymorphism.";
+  else if (q.includes('reuse')) response = "Inheritance promotes code reuse: common behavior lives once in the parent class, and every subclass automatically gets it without copy-pasting code.";
+  else if (q.includes('inherit')) response = "Inheritance lets a subclass automatically receive the attributes and methods of a parent class, while still being free to add new members or override existing ones.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{ loadSim('java'); });
+</script>
+</body>
+</html>

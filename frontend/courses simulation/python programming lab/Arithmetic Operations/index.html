@@ -1,0 +1,715 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Python Arithmetic Operations — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .code-line{transition:background-color .25s ease,border-color .25s ease;border-left:4px solid transparent;}
+  .code-line.active{background:rgba(79,70,229,.09);border-left-color:#4f46e5;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-brands fa-python"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Python Virtual Lab</h1>
+        <p class="text-xs text-indigo-600 font-medium">Experiment 1: Python Arithmetic Operations</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <!-- Tab Nav -->
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> Theory
+      </button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-list-check"></i> Procedure
+      </button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+      </button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-flask"></i> Simulation
+      </button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-graduation-cap"></i> Post-Test
+      </button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Theory: Python Arithmetic Operators</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">Python provides seven standard arithmetic operators for numeric computation on <code class="bg-slate-100 text-indigo-600 px-1.5 py-0.5 rounded font-mono">int</code>, <code class="bg-slate-100 text-indigo-600 px-1.5 py-0.5 rounded font-mono">float</code>, and (indirectly) <code class="bg-slate-100 text-indigo-600 px-1.5 py-0.5 rounded font-mono">complex</code> values. Each operator follows precise typing and rounding rules that differ from most other languages — especially <code class="font-mono text-indigo-600">%</code> and <code class="font-mono text-indigo-600">//</code> on negative numbers.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">+ Addition</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Adds two values. <code class="font-mono">10 + 3 = 13</code>. Result is <code class="font-mono">float</code> if either operand is a float literal, otherwise <code class="font-mono">int</code>.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">- Subtraction</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Subtracts right operand from left. <code class="font-mono">10 - 3 = 7</code>. Same int/float rule as addition.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">* Multiplication</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Multiplies two numbers. <code class="font-mono">10 * 3 = 30</code>. Same int/float rule applies.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">/ True Division</h3>
+          <p class="text-slate-500 text-xs leading-relaxed"><strong>Always</strong> returns a <code class="font-mono">float</code>, even for exact divisions. <code class="font-mono">10 / 2 = 5.0</code>, not <code class="font-mono">5</code>.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">// Floor Division</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Divides and rounds <strong>toward negative infinity</strong> (not toward zero). <code class="font-mono">10 // 3 = 3</code>, but <code class="font-mono">-7 // 3 = -3</code>.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">% Modulus</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Returns the remainder, with the <strong>same sign as the divisor</strong> ("floored" modulo). <code class="font-mono">10 % 3 = 1</code>, but <code class="font-mono">-7 % 3 = 2</code>.</p>
+        </div>
+      </div>
+
+      <div class="bg-slate-50 p-4 rounded-xl border border-slate-200 text-sm">
+        <h3 class="font-bold text-indigo-600 mb-1 font-mono">** Exponentiation</h3>
+        <p class="text-slate-500 text-xs leading-relaxed">Raises the left operand to the power of the right. <code class="font-mono">2 ** 8 = 256</code>. Right-associative: <code class="font-mono">2 ** 3 ** 2</code> evaluates as <code class="font-mono">2 ** (3 ** 2) = 512</code>, not <code class="font-mono">(2 ** 3) ** 2</code>.</p>
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Operator</th><th class="p-2 text-left">Meaning</th><th class="p-2 text-left">Return Type Rule</th><th class="p-2 text-left">Example</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">+ - *</td><td class="p-2">Add / Subtract / Multiply</td><td class="p-2">float if either literal has a decimal point, else int</td><td class="p-2 font-mono">10 * 3 = 30</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">/</td><td class="p-2">True division</td><td class="p-2">always float</td><td class="p-2 font-mono">10 / 2 = 5.0</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">//</td><td class="p-2">Floor division</td><td class="p-2">float if either literal has a decimal point, else int</td><td class="p-2 font-mono">-7 // 3 = -3</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">%</td><td class="p-2">Modulus (floored)</td><td class="p-2">same rule; sign follows the divisor</td><td class="p-2 font-mono">-7 % 3 = 2</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">**</td><td class="p-2">Exponentiation</td><td class="p-2">same rule (negative int exponents are a special case)</td><td class="p-2 font-mono">2 ** 8 = 256</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bg-rose-50 border border-rose-200 rounded-xl p-4 text-xs text-rose-700 space-y-2">
+        <h4 class="font-bold text-rose-700 text-sm"><i class="fa-solid fa-triangle-exclamation"></i> Common Pitfalls</h4>
+        <ul class="list-disc list-inside space-y-1 leading-relaxed">
+          <li><strong>Modulo is NOT truncated remainder.</strong> Many languages (C, JavaScript) give <code class="font-mono">-7 % 3 == -1</code>. Python gives <code class="font-mono">-7 % 3 == 2</code> because the result always takes the sign of the divisor. Compute it as <code class="font-mono">((a % b) + b) % b</code> if you need to derive it manually.</li>
+          <li><strong>Floor division floors, it doesn't truncate.</strong> <code class="font-mono">-7 // 3 = -3</code> (rounds down to negative infinity), not <code class="font-mono">-2</code> (which would be truncation toward zero).</li>
+          <li><strong><code class="font-mono">/</code> always returns float</strong> — <code class="font-mono">4 / 2</code> is <code class="font-mono">2.0</code>, not <code class="font-mono">2</code>. This can silently change downstream type-dependent logic.</li>
+          <li><strong>Division/modulus by zero raises <code class="font-mono">ZeroDivisionError</code></strong> — Python never silently returns <code class="font-mono">Infinity</code> or <code class="font-mono">NaN</code> for ints/floats the way some languages do.</li>
+        </ul>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Set numeric values for <strong>Operand A</strong> and <strong>Operand B</strong> in the controls bar, or click a <strong>Quick Preset</strong>. Include a decimal point (e.g. <code class="font-mono">10.0</code>) if you want the value treated as a Python <code class="font-mono">float</code> literal.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Select the desired <strong>Arithmetic Operator</strong> from the dropdown menu.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Simulation</strong> to compute the result and load the code trace at line 1.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step Execution</strong> repeatedly to walk through variable assignment line-by-line and watch the Variable Memory panel populate.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Or click <strong>Run / Execute All</strong> to execute instantly and view the pop-out result banner with the computed type.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Try the negative-operand presets to confirm Python's floored modulo and floor-division behavior against your own manual calculation.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> at any time to clear the trace and start over.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">1. What is the result of <code class="font-mono">10 / 4</code> in Python 3?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> 2.5</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> 2</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> 2.0</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What does the floor division operator <code class="font-mono">//</code> do?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> Truncates the decimal part toward zero</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> Divides and rounds down toward negative infinity</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> Rounds to the nearest whole number</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">3. What is <code class="font-mono">-7 % 3</code> in Python?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> -1</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> 2</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> -2</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">4. Which operator performs exponentiation in Python?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> ^</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> ^^</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> **</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Operand A</label>
+              <input type="number" id="inputA" value="10" step="any" class="w-24 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-indigo-500">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Operator</label>
+              <select id="inputOp" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                <option value="+">+ (Addition)</option>
+                <option value="-">- (Subtraction)</option>
+                <option value="*">* (Multiplication)</option>
+                <option value="/">/ (True Division)</option>
+                <option value="//">// (Floor Division)</option>
+                <option value="%">% (Modulus)</option>
+                <option value="**">** (Exponentiation)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Operand B</label>
+              <input type="number" id="inputB" value="3" step="any" class="w-24 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-indigo-500">
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Start Simulation
+            </button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-forward-step"></i> Step Execution
+            </button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-bolt"></i> Run / Execute All
+            </button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset(10,'+',3)" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">10 + 3</button>
+          <button onclick="loadPreset(10,'/',3)" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">10 / 3</button>
+          <button onclick="loadPreset(10,'//',3)" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">10 // 3</button>
+          <button onclick="loadPreset(2,'**',8)" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">2 ** 8</button>
+          <button onclick="loadPreset(-7,'%',3)" class="bg-white hover:bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full border border-indigo-200 font-mono">-7 % 3 (Floored Modulo)</button>
+          <button onclick="loadPreset(7,'%',-3)" class="bg-white hover:bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full border border-indigo-200 font-mono">7 % -3</button>
+          <button onclick="loadPreset(-7,'//',3)" class="bg-white hover:bg-indigo-50 text-indigo-600 px-2.5 py-1 rounded-full border border-indigo-200 font-mono">-7 // 3</button>
+          <button onclick="loadPreset(15,'/',0)" class="bg-white hover:bg-rose-50 text-rose-500 px-2.5 py-1 rounded-full border border-rose-200 font-mono">15 / 0 (Error Test)</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-indigo-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-5 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-code text-indigo-600"></i> Code Trace Window
+            </span>
+          </div>
+          <div class="p-4 font-mono text-sm bg-slate-950 text-slate-200 flex-1 space-y-0.5 overflow-x-auto min-h-[220px]">
+            <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-3">
+              <span class="text-slate-600 text-xs w-4">1</span>
+              <span>a = <span id="codeValA" class="text-amber-300 font-semibold">10</span></span>
+            </div>
+            <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-3">
+              <span class="text-slate-600 text-xs w-4">2</span>
+              <span>b = <span id="codeValB" class="text-amber-300 font-semibold">3</span></span>
+            </div>
+            <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-3">
+              <span class="text-slate-600 text-xs w-4">3</span>
+              <span>c = a <span id="codeOp" class="text-rose-400 font-bold">+</span> b</span>
+            </div>
+            <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-3">
+              <span class="text-slate-600 text-xs w-4">4</span>
+              <span>print(<span class="text-emerald-300">f"Result c = {c}"</span>)</span>
+            </div>
+          </div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Select parameters and click 'Start Simulation' or 'Run / Execute All'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-7 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-microchip text-indigo-600"></i> Variable RAM Memory State
+            </h3>
+            <div class="grid grid-cols-3 gap-3">
+              <div id="memA" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">a (operand)</span>
+                <span id="valA" class="text-xl font-bold font-mono text-indigo-600 block my-1">--</span>
+                <span id="typeA" class="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded font-mono">--</span>
+              </div>
+              <div id="memB" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">b (operand)</span>
+                <span id="valB" class="text-xl font-bold font-mono text-indigo-600 block my-1">--</span>
+                <span id="typeB" class="text-[10px] bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded font-mono">--</span>
+              </div>
+              <div id="memC" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">c (result)</span>
+                <span id="valC" class="text-xl font-bold font-mono text-emerald-600 block my-1">--</span>
+                <span id="typeC" class="text-[10px] bg-emerald-50 text-emerald-600 px-2 py-0.5 rounded font-mono">--</span>
+              </div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal
+              </span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[140px] max-h-[180px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-indigo-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-square-check"></i>
+              </div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Final Execution Output</h4>
+                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+            <span id="bannerStatus" class="text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200">Status: OK</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What is <code class="font-mono">7 % -3</code> in Python?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> 1</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> -2</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> -1</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What is <code class="font-mono">-7 // 3</code> in Python?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> -2</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> -3</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> -2.33</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">3. What is the type of the result of <code class="font-mono">10 / 2</code> in Python 3?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> int</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> float</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> str</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">4. What is <code class="font-mono">2 ** 3 ** 2</code> in Python (exponentiation is right-associative)?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> 64</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> 512</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> 36</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-indigo-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+      </h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me anything about Python's arithmetic operators — division, floor division, modulus with negative numbers, or exponentiation.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., why is -7 % 3 equal to 2?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ---------- Pure computation core (testable in isolation) ---------- */
+// Given raw literal strings for operands and an operator, compute Python-accurate
+// result value + type, using floored modulo and literal-based int/float typing.
+function computeArithmetic(rawAStr, rawBStr, op){
+  const valA = parseFloat(rawAStr);
+  const valB = parseFloat(rawBStr);
+  const isFloatA = rawAStr.includes('.');
+  const isFloatB = rawBStr.includes('.');
+
+  if ((op === '/' || op === '%' || op === '//') && valB === 0){
+    return { error: true, valA, valB, isFloatA, isFloatB };
+  }
+
+  let resultC;
+  switch(op){
+    case '+': resultC = valA + valB; break;
+    case '-': resultC = valA - valB; break;
+    case '*': resultC = valA * valB; break;
+    case '/': resultC = valA / valB; break;
+    case '**': resultC = Math.pow(valA, valB); break;
+    case '//': resultC = Math.floor(valA / valB); break;
+    case '%': {
+      // BUG FIX: JS `%` is truncated remainder (sign follows dividend).
+      // Python's `%` is floored modulo (sign follows the divisor).
+      // ((a % b) + b) % b converts a truncated remainder into a floored one.
+      const rawRem = valA % valB;
+      resultC = ((rawRem) + valB) % valB;
+      break;
+    }
+    default: resultC = NaN;
+  }
+
+  // BUG FIX: type is derived from the *literal representation* of the operands,
+  // not from whether the numeric result happens to be a whole number.
+  const typeCStr = (op === '/') ? 'float' : ((isFloatA || isFloatB) ? 'float' : 'int');
+
+  return { error: false, valA, valB, isFloatA, isFloatB, resultC, typeCStr };
+}
+
+function formatFloat(x){
+  if (Number.isInteger(x)) return x.toFixed(1);
+  let s = parseFloat(x.toFixed(6)).toString();
+  if (!s.includes('.')) s += '.0';
+  return s;
+}
+function formatInt(x){ return String(Math.trunc(x)); }
+function formatByType(x, type){ return type === 'float' ? formatFloat(x) : formatInt(x); }
+
+/* ---------- Simulation controller ---------- */
+let state = { currentStep:0, valA:10, valB:3, op:'+', resultC:0, typeCStr:'int', displayA:'10', displayB:'3', displayC:'--' };
+
+function highlightLine(n){
+  document.querySelectorAll('.code-line').forEach(el=>el.classList.remove('active'));
+  if (n > 0){ const t = document.getElementById(`line${n}`); if (t) t.classList.add('active'); }
+}
+
+function clearMemory(){
+  ['valA','valB','valC'].forEach(id=>document.getElementById(id).innerText='--');
+  ['typeA','typeB','typeC'].forEach(id=>document.getElementById(id).innerText='--');
+  ['memA','memB','memC'].forEach(id=>document.getElementById(id).classList.remove('updated'));
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+function triggerMemUpdate(id){
+  const el = document.getElementById(id);
+  if (!el) return;
+  el.classList.add('updated');
+  setTimeout(()=>el.classList.remove('updated'), 500);
+}
+
+function loadPreset(a, operator, b){
+  document.getElementById('inputA').value = a;
+  document.getElementById('inputOp').value = operator;
+  document.getElementById('inputB').value = b;
+  runAll();
+}
+
+function startSimulation(){
+  const rawAStr = document.getElementById('inputA').value;
+  const rawBStr = document.getElementById('inputB').value;
+  const op = document.getElementById('inputOp').value;
+  const calc = computeArithmetic(rawAStr || '0', rawBStr || '0', op);
+
+  document.getElementById('progressFill').style.width = '0%';
+  hideResultBanner();
+  clearMemory();
+  clearConsole();
+
+  document.getElementById('codeOp').innerText = op;
+
+  if (calc.error){
+    document.getElementById('codeValA').innerText = calc.isFloatA ? formatFloat(calc.valA) : formatInt(calc.valA);
+    document.getElementById('codeValB').innerText = calc.isFloatB ? formatFloat(calc.valB) : formatInt(calc.valB);
+    appendConsole("<span class='text-rose-500 font-bold'>ZeroDivisionError: division or modulo by zero!</span>");
+    document.getElementById('explanationText').innerText = "Error: Division or modulus by zero raises ZeroDivisionError in Python.";
+    showResultBanner("Error: ZeroDivisionError", true);
+    state.currentStep = 0;
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+    document.getElementById('currentStepBadge').innerText = 'Step: Ready';
+    return;
+  }
+
+  const displayA = formatByType(calc.valA, calc.isFloatA ? 'float' : 'int');
+  const displayB = formatByType(calc.valB, calc.isFloatB ? 'float' : 'int');
+  const displayC = formatByType(calc.resultC, calc.typeCStr);
+
+  document.getElementById('codeValA').innerText = displayA;
+  document.getElementById('codeValB').innerText = displayB;
+
+  state = { currentStep:1, valA:calc.valA, valB:calc.valB, op, resultC:calc.resultC, typeCStr:calc.typeCStr,
+            displayA, displayB, displayC, typeA: calc.isFloatA?'float':'int', typeB: calc.isFloatB?'float':'int' };
+
+  highlightLine(1);
+  appendConsole(`&gt;&gt;&gt; Executing: script.py [a = ${displayA}, b = ${displayB}, op = '${op}']`);
+  document.getElementById('explanationText').innerText = "Line 1 executing: storing variable 'a'. Click 'Step Execution' or 'Run / Execute All'.";
+  document.getElementById('currentStepBadge').innerText = "Step 1/4";
+  document.getElementById('progressFill').style.width = '25%';
+
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95";
+}
+
+function stepExecute(){
+  if (state.currentStep === 1){
+    document.getElementById('valA').innerText = state.displayA;
+    document.getElementById('typeA').innerText = state.typeA;
+    triggerMemUpdate('memA');
+    highlightLine(2);
+    appendConsole(`&gt; a = ${state.displayA} (${state.typeA})`);
+    document.getElementById('explanationText').innerText = `Variable 'a' stored (${state.displayA}). Executing Line 2 for variable 'b'.`;
+    state.currentStep = 2;
+    document.getElementById('currentStepBadge').innerText = "Step 2/4";
+    document.getElementById('progressFill').style.width = '50%';
+  } else if (state.currentStep === 2){
+    document.getElementById('valB').innerText = state.displayB;
+    document.getElementById('typeB').innerText = state.typeB;
+    triggerMemUpdate('memB');
+    highlightLine(3);
+    appendConsole(`&gt; b = ${state.displayB} (${state.typeB})`);
+    document.getElementById('explanationText').innerText = `Variable 'b' stored (${state.displayB}). Line 3 evaluates expression: c = a ${state.op} b.`;
+    state.currentStep = 3;
+    document.getElementById('currentStepBadge').innerText = "Step 3/4";
+    document.getElementById('progressFill').style.width = '75%';
+  } else if (state.currentStep === 3){
+    document.getElementById('valC').innerText = state.displayC;
+    document.getElementById('typeC').innerText = state.typeCStr;
+    triggerMemUpdate('memC');
+    highlightLine(4);
+    appendConsole(`&gt; c = ${state.displayA} ${state.op} ${state.displayB}  --&gt;  c = ${state.displayC} (${state.typeCStr})`);
+    document.getElementById('explanationText').innerText = `Expression evaluated! c = ${state.displayC} (type: ${state.typeCStr}). Executing print statement.`;
+    state.currentStep = 4;
+    document.getElementById('currentStepBadge').innerText = "Step 4/4";
+    document.getElementById('progressFill').style.width = '100%';
+  } else if (state.currentStep === 4){
+    appendConsole(`<span class='text-emerald-600 font-bold'>Result c = ${state.displayC}</span>`);
+    showResultBanner(`Result c = ${state.displayC} (${state.typeCStr})`, false);
+    highlightLine(0);
+    document.getElementById('explanationText').innerText = "Execution completed! Final output displayed below.";
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+    document.getElementById('currentStepBadge').innerText = "Finished";
+    state.currentStep = 5;
+  }
+}
+
+function runAll(){
+  startSimulation();
+  if (state.currentStep === 0) return; // error case already handled
+  while (state.currentStep >= 1 && state.currentStep <= 4){
+    stepExecute();
+  }
+}
+
+function showResultBanner(text, isError){
+  const banner = document.getElementById('resultBanner');
+  const bannerText = document.getElementById('resultBannerText');
+  const bannerIcon = document.getElementById('bannerIcon');
+  const bannerStatus = document.getElementById('bannerStatus');
+  bannerText.innerText = text;
+  if (isError){
+    bannerText.className = "text-lg font-mono font-bold text-rose-600";
+    bannerIcon.className = "w-10 h-10 rounded-full bg-rose-100 text-rose-600 flex items-center justify-center text-lg font-bold";
+    bannerIcon.innerHTML = `<i class="fa-solid fa-triangle-exclamation"></i>`;
+    bannerStatus.innerText = "Status: Error";
+    bannerStatus.className = "text-xs font-mono text-rose-600 bg-white px-3 py-1 rounded-full border border-rose-200";
+  } else {
+    bannerText.className = "text-lg font-mono font-bold text-emerald-700";
+    bannerIcon.className = "w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold";
+    bannerIcon.innerHTML = `<i class="fa-solid fa-square-check"></i>`;
+    bannerStatus.innerText = "Status: OK";
+    bannerStatus.className = "text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200";
+  }
+  banner.classList.remove('hidden');
+}
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+function resetSimulation(){
+  state.currentStep = 0;
+  highlightLine(0);
+  clearMemory();
+  clearConsole();
+  hideResultBanner();
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Run / Execute All' or 'Start Simulation' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+  document.getElementById('currentStepBadge').innerText = "Step: Ready";
+  document.getElementById('progressFill').style.width = '0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = "bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed";
+}
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-indigo-50 border border-indigo-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try running that exact operation in the simulator and check the computed type of 'c' in variable memory!";
+  if (q.includes('negative') && (q.includes('%') || q.includes('modul'))) response = "Python's modulus always takes the SAME SIGN as the divisor (floored modulo), unlike C or JavaScript which use truncated remainder. So -7 % 3 = 2 (not -1), because 2 has the same sign as the divisor 3. Try the '-7 % 3' preset!";
+  else if (q.includes('%') || q.includes('modul') || q.includes('remainder')) response = "The modulus operator (%) returns the remainder after division, with the same sign as the divisor. 10 % 3 = 1. For negative operands the result can surprise you — try the negative presets!";
+  else if (q.includes('//') || q.includes('floor')) response = "Floor division (//) always rounds DOWN toward negative infinity, not toward zero. 7 // 2 = 3, but -7 // 2 = -4 (not -3, which would be truncation).";
+  else if (q.includes('/') || q.includes('float') || q.includes('true division')) response = "In Python 3, true division (/) always returns a float, even for exact divisions: 4 / 2 = 2.0, not 2. Only // and other integer-literal operators can return int.";
+  else if (q.includes('**') || q.includes('power') || q.includes('exponent')) response = "Exponentiation (**) is right-associative: 2 ** 3 ** 2 evaluates as 2 ** (3 ** 2) = 2 ** 9 = 512, not (2 ** 3) ** 2 = 64. Try the '2 ** 8' preset to see it in action.";
+  else if (q.includes('zero') || q.includes('divide')) response = "Dividing or taking the modulus by zero raises a ZeroDivisionError in Python — it never silently returns Infinity or NaN like some other languages. Try the '15 / 0' preset.";
+  else if (q.includes('type') || q.includes('int') || q.includes('float')) response = "Result typing follows Python's rule: '/' always returns float. Every other operator returns float only if at least one operand's literal has a decimal point (e.g. 10.0), otherwise it returns int.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  document.getElementById('codeValA').innerText = '10';
+  document.getElementById('codeValB').innerText = '3';
+});
+</script>
+</body>
+</html>

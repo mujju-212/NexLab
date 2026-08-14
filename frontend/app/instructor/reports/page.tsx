@@ -1,0 +1,272 @@
+'use client';
+
+import { useCallback, useEffect, useState } from 'react';
+import { Download, Table, Loader2 } from 'lucide-react';
+import InstructorShell from '@/components/layout/InstructorShell';
+import styles from '../shared.module.css';
+import { sessionService } from '@/services/session.service';
+
+interface SessionOption {
+  id: string;
+  experiment_title: string;
+  section_name?: string | null;
+  subject_name?: string | null;
+  scheduled_at?: string | null;
+  status?: string;
+}
+
+interface AttendanceRow {
+  student_id: string;
+  full_name: string;
+  roll_number: string;
+  email: string;
+  status: string;
+  joined_at?: string | null;
+  is_catchup?: boolean;
+}
+
+const fmtDate = (iso: string | null | undefined) => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
+};
+
+const fmtDateTime = (iso: string | null | undefined) => {
+  if (!iso) return '—';
+  const d = new Date(iso);
+  return Number.isNaN(d.getTime()) ? '—' : d.toLocaleString('en-US', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+};
+
+const statusBadge = (status: string) => {
+  switch (status) {
+    case 'present': return styles.greenBadge;
+    case 'late': return styles.amberBadge;
+    case 'absent': return styles.redBadge;
+    default: return styles.slateBadge;
+  }
+};
+
+export default function ReportsPage() {
+  const [sessions, setSessions] = useState<SessionOption[]>([]);
+  const [sessionId, setSessionId] = useState<string>('');
+  const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
+  const [loadingSessions, setLoadingSessions] = useState(true);
+  const [loading, setLoading] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [notice, setNotice] = useState<string | null>(null);
+  const [error, setError] = useState<string | null>(null);
+
+  const flash = (msg: string) => {
+    setNotice(msg);
+    setTimeout(() => setNotice(null), 4000);
+  };
+
+  const loadAttendance = useCallback(async (id: string) => {
+    if (!id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await sessionService.getAttendance(id);
+      setAttendance(res.attendance || []);
+    } catch {
+      setError('Could not load attendance for this session.');
+      setAttendance([]);
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const res = await sessionService.list();
+        const list: SessionOption[] = res.sessions || [];
+        setSessions(list);
+        if (list.length > 0) {
+          setSessionId(list[0].id);
+          await loadAttendance(list[0].id);
+        }
+      } catch {
+        setError('Could not load sessions.');
+      } finally {
+        setLoadingSessions(false);
+      }
+    })();
+  }, [loadAttendance]);
+
+  const selectedSession = sessions.find((s) => s.id === sessionId);
+
+  const present = attendance.filter((a) => a.status === 'present').length;
+  const late = attendance.filter((a) => a.status === 'late').length;
+  const absent = attendance.filter((a) => a.status === 'absent').length;
+  const catchups = attendance.filter((a) => a.is_catchup).length;
+
+  const handleExportServerCsv = async () => {
+    if (!sessionId) return;
+    setExporting(true);
+    try {
+      await sessionService.exportAttendanceCsv(sessionId);
+      flash('Attendance CSV downloaded from server.');
+    } catch {
+      setError('CSV export failed. Please try again.');
+    } finally {
+      setExporting(false);
+    }
+  };
+
+  const handleExportSummaryCsv = () => {
+    if (attendance.length === 0) return;
+    const header = ['Full Name', 'Roll Number', 'Email', 'Status', 'Catch-Up', 'Joined At'];
+    const rows = attendance.map((a) => [
+      a.full_name, a.roll_number, a.email, a.status,
+      a.is_catchup ? 'yes' : 'no', a.joined_at ?? '',
+    ]);
+    const csv = [header, ...rows]
+      .map((r) => r.map((cell) => `"${String(cell ?? '').replace(/"/g, '""')}"`).join(','))
+      .join('\n');
+    const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `session_report_${sessionId.slice(0, 8)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    URL.revokeObjectURL(url);
+    flash('Session report CSV generated locally.');
+  };
+
+  return (
+    <InstructorShell
+      activePage="Reports"
+      title="Class Reports & Gradebook Export"
+      subtitle="Session attendance reports with server-side CSV export for department audits"
+    >
+      {/* Session Picker + Export */}
+      <div className={styles.actionRow}>
+        <div className={styles.formGroup} style={{ marginBottom: 0, minWidth: 'min(380px, 100%)', flex: 1 }}>
+          <label className={styles.formLabel}>Session</label>
+          <select
+            className={styles.select}
+            value={sessionId}
+            onChange={(e) => {
+              setSessionId(e.target.value);
+              loadAttendance(e.target.value);
+            }}
+            disabled={loadingSessions}
+          >
+            {loadingSessions && <option>Loading sessions…</option>}
+            {!loadingSessions && sessions.length === 0 && <option>No sessions yet</option>}
+            {sessions.map((s) => (
+              <option key={s.id} value={s.id}>
+                {s.experiment_title}
+                {s.section_name ? ` · ${s.section_name}` : ''} · {fmtDate(s.scheduled_at)}
+              </option>
+            ))}
+          </select>
+        </div>
+        <div style={{ display: 'flex', gap: '10px', alignSelf: 'flex-end' }}>
+          <button
+            type="button"
+            className={styles.primaryBtn}
+            onClick={handleExportServerCsv}
+            disabled={!sessionId || exporting}
+          >
+            {exporting ? <Loader2 size={16} className="spin" /> : <Download size={16} strokeWidth={2} />} Export Attendance CSV
+          </button>
+          <button
+            type="button"
+            className={styles.secondaryBtn}
+            onClick={handleExportSummaryCsv}
+            disabled={attendance.length === 0}
+          >
+            <Table size={16} strokeWidth={1.9} /> Session Report CSV
+          </button>
+        </div>
+      </div>
+
+      {notice && (
+        <div style={{ background: '#f0fdf4', border: '1px solid #bbf7d0', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', color: '#166534', fontSize: '13.5px', fontWeight: 600 }}>
+          📊 {notice}
+        </div>
+      )}
+
+      {error && (
+        <div style={{ background: '#fef2f2', border: '1px solid #fecaca', padding: '12px 16px', borderRadius: '12px', marginBottom: '20px', color: '#b91c1c', fontSize: '13.5px', fontWeight: 600 }}>
+          {error}
+        </div>
+      )}
+
+      {/* KPI Cards */}
+      <div className={styles.kpiRow}>
+        <div className={styles.kpiCard}>
+          <p className={styles.kpiLabel}>Attendance Records</p>
+          <p className={styles.kpiValue} style={{ color: '#7c3aed' }}>{attendance.length}</p>
+          <p className={styles.kpiSub}>{selectedSession?.experiment_title ?? 'Select a session'}</p>
+        </div>
+        <div className={styles.kpiCard}>
+          <p className={styles.kpiLabel}>Present</p>
+          <p className={styles.kpiValue} style={{ color: '#16a34a' }}>{present}</p>
+          <p className={styles.kpiSub}>{late} joined late</p>
+        </div>
+        <div className={styles.kpiCard}>
+          <p className={styles.kpiLabel}>Absent</p>
+          <p className={styles.kpiValue} style={{ color: '#b91c1c' }}>{absent}</p>
+          <p className={styles.kpiSub}>{catchups} catch-up attempt{catchups === 1 ? '' : 's'}</p>
+        </div>
+        <div className={styles.kpiCard}>
+          <p className={styles.kpiLabel}>Attendance Rate</p>
+          <p className={styles.kpiValue} style={{ color: '#7c3aed' }}>
+            {attendance.length === 0 ? '—' : `${Math.round(((present + late) / attendance.length) * 100)}%`}
+          </p>
+          <p className={styles.kpiSub}>Present + late / total</p>
+        </div>
+      </div>
+
+      {/* Attendance Table */}
+      <section className={styles.sectionCard}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <h2 className={styles.sectionTitle}>Session Attendance Register</h2>
+            <p className={styles.sectionSub}>Live data from the attendance ledger</p>
+          </div>
+        </div>
+
+        {loading ? (
+          <div style={{ display: 'flex', alignItems: 'center', gap: '10px', color: '#6b7280', fontSize: '13.5px', padding: '12px 4px' }}>
+            <Loader2 size={18} className="spin" /> Loading attendance…
+          </div>
+        ) : attendance.length === 0 ? (
+          <p style={{ color: '#9ca3af', fontSize: '13.5px', margin: 0 }}>
+            No attendance records for this session yet — records appear once students join.
+          </p>
+        ) : (
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Student</th>
+                <th>Roll No.</th>
+                <th>Email</th>
+                <th>Status</th>
+                <th>Catch-Up</th>
+                <th>Joined At</th>
+              </tr>
+            </thead>
+            <tbody>
+              {attendance.map((a) => (
+                <tr key={a.student_id}>
+                  <td><span className={styles.tdStrong}>{a.full_name}</span></td>
+                  <td>{a.roll_number || '—'}</td>
+                  <td>{a.email || '—'}</td>
+                  <td><span className={`${styles.badge} ${statusBadge(a.status)}`}>{a.status}</span></td>
+                  <td>{a.is_catchup ? 'Yes' : 'No'}</td>
+                  <td>{fmtDateTime(a.joined_at)}</td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        )}
+      </section>
+    </InstructorShell>
+  );
+}

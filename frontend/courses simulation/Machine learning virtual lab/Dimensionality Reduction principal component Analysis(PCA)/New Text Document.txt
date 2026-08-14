@@ -1,0 +1,232 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Lab: Dimensionality Reduction (PCA) - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .code-line { transition: background-color 0.2s ease, border-color 0.2s ease; }
+        .code-line.active { background-color: rgba(99, 102, 241, 0.25); border-left: 4px solid #6366f1; }
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes pulseMem {
+            0% { transform: scale(1); border-color: #6366f1; }
+            50% { transform: scale(1.03); border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+            100% { transform: scale(1); border-color: #374151; }
+        }
+        .stat-card.updated { animation: pulseMem 0.5s ease-in-out; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-arrows-down-to-line"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Machine Learning & Data Science</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 10: Principal Component Analysis (PCA) & Feature Projection</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <nav class="bg-slate-800/80 border-b border-slate-700 px-6 py-2">
+        <div class="flex flex-wrap gap-2 text-sm font-medium">
+            <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-lg text-indigo-400 bg-slate-700/60 border border-slate-600 flex items-center gap-2 transition">
+                <i class="fa-solid fa-book-open"></i> Theory
+            </button>
+            <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-list-check"></i> Procedure
+            </button>
+            <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+            </button>
+            <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-flask"></i> Simulation
+            </button>
+            <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-graduation-cap"></i> Post-Test
+            </button>
+            <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-robot"></i> AI Socratic Assistant
+            </button>
+        </div>
+    </nav>
+
+    <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+        <!-- TAB 1: THEORY -->
+        <div id="content-theory" class="tab-content bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Theory: Dimensionality Reduction (PCA)</h2>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                <strong>Principal Component Analysis (PCA)</strong> is a linear dimensionality reduction technique that transforms a dataset with many correlated features into a smaller set of uncorrelated features called <strong>Principal Components</strong>. It does this by identifying the directions (eigenvectors) of maximum variance in the data.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-up-down-left-right text-emerald-400"></i> 1. Covariance Matrix</span>
+                        <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-sans">Relationships</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Measures how variables change together. PCA computes eigenvectors of this matrix to find the orthogonal axes of highest spread.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-chart-line text-amber-400"></i> 2. Explained Variance</span>
+                        <span class="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-sans">Scree Plot</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Each PC captures a portion of the total variance. <code class="text-amber-300">explained_variance_ratio_</code> ranks these components by importance.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-compress text-cyan-400"></i> 3. Data Projection</span>
+                        <span class="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded font-sans">Mapping</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Projects high-dimensional data onto the selected top $k$ principal components, achieving dimensionality compression while retaining the essential variance structure.
+                    </p>
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 2: PROCEDURE -->
+        <div id="content-procedure" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Simulator Procedure</h2>
+            <ol class="list-decimal list-inside space-y-3 text-sm text-slate-300 leading-relaxed">
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Select a <strong>High-Dimensional Dataset</strong> (Iris measurements, random multi-feature cloud, or Housing metrics).</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Set the number of <strong>Target Components</strong> to retain ($1, 2,$ or $3$).</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Start Simulation"</strong> to compute the Covariance Matrix and Eigenvectors.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Observe the **Scree Plot** and see how much variance each component captures.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Step Execution"</strong> to view the projection transformation mapping matrix $X \cdot W$.</li>
+            </ol>
+        </div>
+
+        <!-- TAB 3: PRE-TEST -->
+        <div id="content-pretest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Pre-Lab Assessment Quiz</h2>
+            <div class="space-y-4 text-sm">
+                <div id="preq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. What is the goal of PCA in Machine Learning?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Increase features to improve accuracy</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> Reduce dimensionality while preserving variance</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Transform labels for supervised learning</label>
+                    </div>
+                </div>
+                <button onclick="checkPretest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition">Submit</button>
+            </div>
+        </div>
+
+        <!-- TAB 4: SIMULATION -->
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Select Dataset</label>
+                            <select id="pcaDataset" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm">
+                                <option value="iris">1. Iris Dataset (4D)</option>
+                                <option value="housing">2. Housing Metrics (5D)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Components (k)</label>
+                            <select id="kComponents" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm">
+                                <option value="1">1 Component</option>
+                                <option value="2" selected>2 Components</option>
+                            </select>
+                        </div>
+                    </div>
+                    <div class="flex gap-2">
+                        <button onclick="startSimulation()" class="bg-indigo-600 px-4 py-2 rounded-lg text-white font-medium text-sm">Start</button>
+                        <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-700 px-4 py-2 rounded-lg text-slate-400 font-medium text-sm">Step</button>
+                    </div>
+                </div>
+            </div>
+
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                <div class="lg:col-span-5 bg-slate-800 border border-slate-700 rounded-xl p-4 h-[300px] overflow-auto font-mono text-xs text-slate-300">
+                    <div id="codeTrace"></div>
+                </div>
+                <div class="lg:col-span-7 bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md">
+                    <canvas id="pcaCanvas" width="500" height="250" class="w-full h-auto"></canvas>
+                </div>
+            </div>
+            <div id="terminal" class="bg-slate-950 p-4 font-mono text-xs text-slate-400 rounded-lg border border-slate-700 h-[100px] overflow-y-auto"></div>
+        </div>
+
+    </main>
+
+    <script>
+        let step = 0;
+        const code = [
+            "from sklearn.decomposition import PCA",
+            "pca = PCA(n_components=2)",
+            "X_projected = pca.fit_transform(X_high_dim)",
+            "var_ratio = pca.explained_variance_ratio_",
+            "print(f'Explained Variance: {var_ratio}')"
+        ];
+
+        function switchTab(tab) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.getElementById('content-' + tab).classList.remove('hidden');
+        }
+
+        function highlightLine(line) {
+            document.getElementById('codeTrace').innerHTML = code.map((l, i) => 
+                `<div class="code-line ${i === line ? 'active' : ''}">${l}</div>`
+            ).join('');
+        }
+
+        function startSimulation() {
+            step = 0;
+            document.getElementById('btnStep').disabled = false;
+            document.getElementById('btnStep').className = "bg-emerald-600 px-4 py-2 rounded-lg text-white font-medium text-sm";
+            highlightLine(0);
+            document.getElementById('terminal').innerHTML = ">>> Initializing PCA pipeline...";
+            document.getElementById('explanationText').innerText = "Step 1: Importing PCA from sklearn.";
+        }
+
+        function stepExecute() {
+            step++;
+            if (step >= code.length) {
+                document.getElementById('btnStep').disabled = true;
+                return;
+            }
+            highlightLine(step);
+            document.getElementById('terminal').innerHTML += `<br>>>> Line ${step} executed.`;
+            document.getElementById('explanationText').innerText = "Processing step: " + code[step];
+        }
+
+        function checkPretest() {
+            const val = document.querySelector('input[name="pq1"]:checked')?.value;
+            if (val === 'b') {
+                document.getElementById('preq1-box').classList.add('border-emerald-500');
+                alert("Correct!");
+            } else {
+                document.getElementById('preq1-box').classList.add('border-rose-500');
+            }
+        }
+    </script>
+</body>
+</html>

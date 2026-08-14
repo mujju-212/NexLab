@@ -1,0 +1,833 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>ML Lab: Random Forest Classification & Ensemble Learning - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .code-line { transition: background-color 0.2s ease, border-color 0.2s ease; }
+        .code-line.active { background-color: rgba(99, 102, 241, 0.25); border-left: 4px solid #6366f1; }
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes pulseMem {
+            0% { transform: scale(1); border-color: #6366f1; }
+            50% { transform: scale(1.03); border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+            100% { transform: scale(1); border-color: #374151; }
+        }
+        .stat-card.updated { animation: pulseMem 0.5s ease-in-out; }
+        .tree-card { transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1); }
+        .tree-card.voted { border-color: #10b981; background-color: rgba(16, 185, 129, 0.15); transform: translateY(-2px); }
+        .feature-bar { transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1); }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-network-wired"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Machine Learning & Data Science</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 7: Random Forest Classification (Bagging, Feature Importance & Majority Voting)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <nav class="bg-slate-800/80 border-b border-slate-700 px-6 py-2">
+        <div class="flex flex-wrap gap-2 text-sm font-medium">
+            <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-lg text-indigo-400 bg-slate-700/60 border border-slate-600 flex items-center gap-2 transition">
+                <i class="fa-solid fa-book-open"></i> Theory
+            </button>
+            <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-list-check"></i> Procedure
+            </button>
+            <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+            </button>
+            <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-flask"></i> Simulation
+            </button>
+            <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-graduation-cap"></i> Post-Test
+            </button>
+            <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-robot"></i> AI Socratic Assistant
+            </button>
+        </div>
+    </nav>
+
+    <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+        <!-- TAB 1: THEORY -->
+        <div id="content-theory" class="tab-content bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Theory: Random Forest Classification & Ensemble Learning</h2>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                A <strong>Random Forest</strong> is an <strong>Ensemble Learning</strong> algorithm that combines multiple Decision Trees using <strong>Bagging (Bootstrap Aggregating)</strong> and the <strong>Random Subspace Method</strong>. By aggregating predictions from a diverse "forest" of weak base decision trees, it significantly reduces model variance, combats overfitting, and delivers superior generalization performance.
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-4 text-sm">
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-arrows-split-up-and-left text-emerald-400"></i> 1. Bootstrap Aggregating (Bagging)</span>
+                        <span class="text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-sans">Data Sampling</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Each tree is trained on a random sample drawn from the training set with replacement. Unselected samples form the <strong>Out-Of-Bag (OOB)</strong> set used for unbiased error estimation.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-random text-amber-400"></i> 2. Random Subspace Method</span>
+                        <span class="text-[10px] bg-amber-500/20 text-amber-300 px-2 py-0.5 rounded font-sans">Feature Sampling</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        At each node split, a random subset of features ($\sqrt{M}$ for classification) is considered rather than all $M$ features, decorrelating the trees.
+                    </p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono flex items-center justify-between">
+                        <span><i class="fa-solid fa-check-to-slot text-cyan-400"></i> 3. Majority Voting & Feature Importance</span>
+                        <span class="text-[10px] bg-cyan-500/20 text-cyan-300 px-2 py-0.5 rounded font-sans">Aggregation</span>
+                    </h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        Predictions are aggregated via <strong>Majority Vote</strong>: $\hat{y} = \text{mode}(\{\hat{y}_1, \hat{y}_2, ..., \hat{y}_B\})$. Feature importance is calculated by averaging the Gini impurity decrease across all trees.
+                    </p>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/60 p-4 rounded-lg border border-slate-700 text-xs text-slate-300 space-y-2">
+                <h4 class="font-bold text-indigo-300 text-sm"><i class="fa-solid fa-circle-info text-amber-300"></i> Why Random Forest Outperforms Single Decision Trees</h4>
+                <p class="text-slate-400 leading-relaxed">
+                    Single decision trees have high variance and easily overfit noisy data. Random Forests reduce variance by averaging independent trees ($\text{Var}(\bar{X}) = \frac{\sigma^2}{B} + \frac{1-B}{B}\rho \sigma^2$). The combination of bootstrap data sampling and feature subsampling minimizes inter-tree correlation ($\rho$), resulting in lower generalization error.
+                </p>
+            </div>
+        </div>
+
+        <!-- TAB 2: PROCEDURE -->
+        <div id="content-procedure" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Simulator Procedure</h2>
+            <ol class="list-decimal list-inside space-y-3 text-sm text-slate-300 leading-relaxed">
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Select a <strong>Classification Dataset</strong> (Credit Loan Default Risk, Heart Disease Prediction, or Wine Quality) or click a Quick Preset.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Configure <strong>Number of Trees (`n_estimators`)</strong> ($3, 5, 10$), <strong>Max Features (`max_features`)</strong> (`sqrt` vs `log2`), and <strong>Max Depth</strong>.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Start Simulation"</strong> to generate bootstrap datasets and initialize individual tree base estimators.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Step Epoch"</strong> to trace Scikit-Learn Python code execution line-by-line (`fit()`, `feature_importances_`, `predict()`).</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Inspect the <strong>Ensemble Decision Tree Cards & Majority Voting Inspector</strong> to see individual tree predictions and feature importance scores update live.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Run / Execute All"</strong> to complete full ensemble training instantly.</li>
+            </ol>
+        </div>
+
+        <!-- TAB 3: PRE-TEST -->
+        <div id="content-pretest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Pre-Lab Assessment Quiz</h2>
+                <span id="pretest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="preq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. What techniques are combined in Random Forest to decorrelate individual base trees?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Gradient Descent and Learning Rates</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> Bootstrap Data Aggregating (Bagging) and Random Feature Subsampling</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> L1 and L2 Regularization</label>
+                    </div>
+                    <p id="preq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="preq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. In a classification Random Forest with $M$ total features, what is the default number of features considered for splitting each node?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> $\sqrt{M}$ (Square root of total features)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> All $M$ features</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> Always 1 feature</label>
+                    </div>
+                    <p id="preq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPretest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Pre-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 4: SIMULATION WORKSPACE -->
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Select Dataset</label>
+                            <select id="rfDataset" onchange="updateDatasetDisplay()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="loan">1. Credit Loan Default Risk (Income, Debt, Score, Age)</option>
+                                <option value="heart">2. Heart Disease Prediction (BP, Cholesterol, HR, Age)</option>
+                                <option value="wine">3. Wine Quality Classification (Alcohol, Acid, Sugar, pH)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Trees (`n_estimators`)</label>
+                            <select id="nEstimatorsSelect" onchange="onParamChange()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="3">3 Trees</option>
+                                <option value="5" selected>5 Trees</option>
+                                <option value="7">7 Trees</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Max Features</label>
+                            <select id="maxFeaturesSelect" onchange="onParamChange()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="sqrt" selected>max_features='sqrt'</option>
+                                <option value="log2">max_features='log2'</option>
+                            </select>
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="startSimulation()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95">
+                            <i class="fa-solid fa-play"></i> Start Simulation
+                        </button>
+                        <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 cursor-not-allowed">
+                            <i class="fa-solid fa-forward-step"></i> Step Epoch
+                        </button>
+                        <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95">
+                            <i class="fa-solid fa-bolt"></i> Run / Execute All
+                        </button>
+                        <button onclick="resetSimulation()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium px-3 py-2 rounded-lg text-sm transition flex items-center gap-1 active:scale-95">
+                            <i class="fa-solid fa-rotate-left"></i> Reset
+                        </button>
+                    </div>
+                </div>
+
+                <div class="flex flex-wrap items-center gap-3 pt-2 border-t border-slate-700/60 text-xs">
+                    <span class="text-slate-400 font-medium"><i class="fa-solid fa-bolt text-amber-400"></i> Presets:</span>
+                    <button onclick="loadPreset('loan_default')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Loan Default Ensemble</button>
+                    <button onclick="loadPreset('heart_disease')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Heart Disease Classifier</button>
+                    <button onclick="loadPreset('wine_quality')" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Wine Quality Forest</button>
+                </div>
+            </div>
+
+            <!-- Execution Workspace Split View -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left Column: Source Code Panel -->
+                <div class="lg:col-span-5 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md">
+                    <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <i class="fa-solid fa-code text-indigo-400"></i> Scikit-Learn Code Trace
+                        </span>
+                        <span id="currentStepBadge" class="text-xs bg-slate-700 text-slate-300 px-2.5 py-0.5 rounded-full font-mono">Epoch: Ready</span>
+                    </div>
+                    <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 flex-1 space-y-1 overflow-x-auto min-h-[260px]">
+                    </div>
+                    <div class="p-4 border-t border-slate-700/80 bg-slate-800/50">
+                        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Model Parameter State</h4>
+                        <p id="explanationText" class="text-xs text-slate-300 leading-relaxed min-h-[36px]">
+                            Select dataset and click 'Start Simulation' or 'Run / Execute All' to execute.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Right Column: Interactive Random Forest Ensemble & Feature Importance -->
+                <div class="lg:col-span-7 flex flex-col gap-6">
+                    
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md space-y-4">
+                        <div class="flex justify-between items-center text-xs">
+                            <span class="font-semibold text-slate-300 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-network-wired text-indigo-400"></i> Decision Tree Ensemble & Majority Vote Inspector
+                            </span>
+                            <span id="metricsBadge" class="font-mono text-emerald-400 bg-slate-900 px-2 py-0.5 rounded border border-slate-700 text-[11px]">
+                                Trees: -- | OOB Score: --
+                            </span>
+                        </div>
+
+                        <!-- Ensemble Individual Trees Cards Container -->
+                        <div id="ensembleTreesContainer" class="grid grid-cols-1 sm:grid-cols-3 md:grid-cols-5 gap-2.5 font-mono text-xs">
+                            <div class="col-span-full p-4 text-center text-slate-500 italic bg-slate-950 rounded-lg border border-slate-700">
+                                Click 'Start Simulation' or 'Run / Execute All' to train ensemble trees.
+                            </div>
+                        </div>
+
+                        <!-- Feature Importance Progress Bars -->
+                        <div class="space-y-2">
+                            <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider flex items-center gap-2">
+                                <i class="fa-solid fa-chart-bar text-amber-400"></i> Gini Feature Importance Ranking (`feature_importances_`)
+                            </h4>
+                            <div id="featureImportanceBox" class="bg-slate-950 p-3 rounded-lg border border-slate-700 space-y-2.5 font-mono text-xs">
+                                <p class="text-slate-500 italic text-center">Start simulation to compute feature importances.</p>
+                            </div>
+                        </div>
+
+                        <!-- Live Metrics Cards -->
+                        <div class="grid grid-cols-3 gap-2 font-mono text-xs">
+                            <div class="stat-card bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center">
+                                <span class="text-slate-400 block text-[10px]">Majority Vote Output</span>
+                                <span id="valMajorityVote" class="text-sm font-bold text-emerald-400">--</span>
+                            </div>
+                            <div class="stat-card bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center">
+                                <span class="text-slate-400 block text-[10px]">OOB Accuracy Score</span>
+                                <span id="valOobScore" class="text-sm font-bold text-amber-400">0.0%</span>
+                            </div>
+                            <div class="stat-card bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center">
+                                <span class="text-slate-400 block text-[10px]">Top Impurity Feature</span>
+                                <span id="valTopFeature" class="text-sm font-bold text-indigo-400">--</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Output Terminal -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md flex-1">
+                        <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-2.5 flex justify-between items-center">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                                <i class="fa-solid fa-terminal text-emerald-400"></i> Output Terminal
+                            </span>
+                            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition">
+                                <i class="fa-solid fa-trash-can"></i> Clear
+                            </button>
+                        </div>
+                        <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-300 min-h-[90px] max-h-[120px] overflow-y-auto space-y-1">
+                            <p class="text-slate-500 italic">>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+                        </div>
+                    </div>
+
+                    <!-- Pop-out Result Banner -->
+                    <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-950 to-indigo-950 border-2 border-emerald-500/50 p-4 rounded-xl shadow-xl flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
+                                <i class="fa-solid fa-square-check"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs uppercase font-semibold text-emerald-400 tracking-wider">Final Execution Output</h4>
+                                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-300">Random Forest Ensemble Trained Successfully</p>
+                            </div>
+                        </div>
+                        <span id="bannerStatus" class="text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1 rounded-md border border-slate-700">
+                            Completed
+                        </span>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: POST-TEST -->
+        <div id="content-posttest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Post-Lab Evaluation Quiz</h2>
+                <span id="posttest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="postq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. In Scikit-Learn `RandomForestClassifier`, what attribute returns the calculated Gini importance of each input feature?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="a"> `model.feature_importances_`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="b"> `model.gini_weights`</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="c"> `model.tree_scores_`</label>
+                    </div>
+                    <p id="postq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="postq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What is the role of Out-Of-Bag (OOB) samples in Random Forests?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="a"> They provide an internal validation set to evaluate generalization accuracy without needing a separate test set</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="b"> They are discarded outliers that cause error</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="c"> They increase model training execution time</label>
+                    </div>
+                    <p id="postq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPosttest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Post-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 6: AI SOCRATIC ASSISTANT -->
+        <div id="content-ai" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md flex flex-col h-[520px]">
+            <h2 class="text-lg font-bold text-indigo-400 border-b border-slate-700 pb-2 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+            </h2>
+
+            <div id="aiChatBox" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-4 overflow-y-auto space-y-3 text-xs">
+                <div class="flex items-start gap-3">
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        Hello! I am your AI Socratic Assistant. Ask me any question about Random Forests, Bagging, Out-Of-Bag (OOB) scores, Feature Importance, or Majority Voting!
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 mt-4">
+                <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., How does feature subsampling decorrelate trees in a forest?)...." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                <button onclick="sendAiQuery()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-xs font-semibold transition active:scale-95">
+                    Send
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        let scenario = 'loan';
+        let stepList = [];
+        let currentStepIdx = 0;
+
+        const datasets = {
+            loan: {
+                title: "Credit Loan Default Risk",
+                classLabels: { 0: "Approved (0)", 1: "Default Risk (1)" },
+                sampleQuery: "Income=$65k, CreditScore=620, DebtRatio=0.42",
+                features: ["Credit Score", "Income", "Debt Ratio", "Age"],
+                featureImportances: [0.42, 0.31, 0.18, 0.09],
+                oobScore: 94.2,
+                trees: [
+                    { id: 1, sampleRatio: "63.2%", featuresUsed: ["Credit Score", "Income"], vote: 1, voteLabel: "Default Risk" },
+                    { id: 2, sampleRatio: "63.2%", featuresUsed: ["Debt Ratio", "Credit Score"], vote: 1, voteLabel: "Default Risk" },
+                    { id: 3, sampleRatio: "63.2%", featuresUsed: ["Income", "Age"], vote: 0, voteLabel: "Approved" },
+                    { id: 4, sampleRatio: "63.2%", featuresUsed: ["Credit Score", "Debt Ratio"], vote: 1, voteLabel: "Default Risk" },
+                    { id: 5, sampleRatio: "63.2%", featuresUsed: ["Income", "Credit Score"], vote: 1, voteLabel: "Default Risk" },
+                    { id: 6, sampleRatio: "63.2%", featuresUsed: ["Age", "Debt Ratio"], vote: 0, voteLabel: "Approved" },
+                    { id: 7, sampleRatio: "63.2%", featuresUsed: ["Credit Score", "Income"], vote: 1, voteLabel: "Default Risk" }
+                ]
+            },
+            heart: {
+                title: "Heart Disease Prediction",
+                classLabels: { 0: "Healthy (0)", 1: "Disease Risk (1)" },
+                sampleQuery: "BP=140, Chol=245, MaxHR=130, Age=58",
+                features: ["Max Heart Rate", "Cholesterol", "Blood Pressure", "Age"],
+                featureImportances: [0.38, 0.29, 0.21, 0.12],
+                oobScore: 91.8,
+                trees: [
+                    { id: 1, sampleRatio: "63.2%", featuresUsed: ["Max HR", "Cholesterol"], vote: 1, voteLabel: "Disease Risk" },
+                    { id: 2, sampleRatio: "63.2%", featuresUsed: ["Blood Pressure", "Max HR"], vote: 1, voteLabel: "Disease Risk" },
+                    { id: 3, sampleRatio: "63.2%", featuresUsed: ["Age", "Cholesterol"], vote: 0, voteLabel: "Healthy" },
+                    { id: 4, sampleRatio: "63.2%", featuresUsed: ["Max HR", "Age"], vote: 1, voteLabel: "Disease Risk" },
+                    { id: 5, sampleRatio: "63.2%", featuresUsed: ["Cholesterol", "Max HR"], vote: 1, voteLabel: "Disease Risk" },
+                    { id: 6, sampleRatio: "63.2%", featuresUsed: ["Blood Pressure", "Age"], vote: 0, voteLabel: "Healthy" },
+                    { id: 7, sampleRatio: "63.2%", featuresUsed: ["Max HR", "Cholesterol"], vote: 1, voteLabel: "Disease Risk" }
+                ]
+            },
+            wine: {
+                title: "Wine Quality Classification",
+                classLabels: { 0: "Regular Quality (0)", 1: "Premium Quality (1)" },
+                sampleQuery: "Alcohol=13.5%, VolatileAcid=0.28, pH=3.2",
+                features: ["Alcohol Content", "Volatile Acidity", "Residual Sugar", "pH Level"],
+                featureImportances: [0.45, 0.28, 0.17, 0.10],
+                oobScore: 95.6,
+                trees: [
+                    { id: 1, sampleRatio: "63.2%", featuresUsed: ["Alcohol", "Acidity"], vote: 1, voteLabel: "Premium" },
+                    { id: 2, sampleRatio: "63.2%", featuresUsed: ["Sugar", "Alcohol"], vote: 1, voteLabel: "Premium" },
+                    { id: 3, sampleRatio: "63.2%", featuresUsed: ["Acidity", "pH Level"], vote: 0, voteLabel: "Regular" },
+                    { id: 4, sampleRatio: "63.2%", featuresUsed: ["Alcohol", "Sugar"], vote: 1, voteLabel: "Premium" },
+                    { id: 5, sampleRatio: "63.2%", featuresUsed: ["Alcohol", "pH Level"], vote: 1, voteLabel: "Premium" },
+                    { id: 6, sampleRatio: "63.2%", featuresUsed: ["Acidity", "Sugar"], vote: 1, voteLabel: "Premium" },
+                    { id: 7, sampleRatio: "63.2%", featuresUsed: ["Alcohol", "Acidity"], vote: 1, voteLabel: "Premium" }
+                ]
+            }
+        };
+
+        document.addEventListener("DOMContentLoaded", () => {
+            updateDatasetDisplay();
+        });
+
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+                el.classList.add('text-slate-400');
+            });
+
+            const targetContent = document.getElementById(`content-${tabName}`);
+            if (targetContent) targetContent.classList.remove('hidden');
+
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            if (activeBtn) {
+                activeBtn.classList.remove('text-slate-400');
+                activeBtn.classList.add('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+            }
+        }
+
+        function loadPreset(presetKey) {
+            if (presetKey === 'loan_default') {
+                document.getElementById('rfDataset').value = 'loan';
+                document.getElementById('nEstimatorsSelect').value = '5';
+                document.getElementById('maxFeaturesSelect').value = 'sqrt';
+            } else if (presetKey === 'heart_disease') {
+                document.getElementById('rfDataset').value = 'heart';
+                document.getElementById('nEstimatorsSelect').value = '5';
+                document.getElementById('maxFeaturesSelect').value = 'sqrt';
+            } else if (presetKey === 'wine_quality') {
+                document.getElementById('rfDataset').value = 'wine';
+                document.getElementById('nEstimatorsSelect').value = '5';
+                document.getElementById('maxFeaturesSelect').value = 'log2';
+            }
+            updateDatasetDisplay();
+            runAll();
+        }
+
+        function onParamChange() {
+            if (stepList.length > 0) {
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function updateDatasetDisplay() {
+            scenario = document.getElementById('rfDataset').value;
+            const codeContainer = document.getElementById('codeContainer');
+            const nTrees = document.getElementById('nEstimatorsSelect').value;
+            const maxFeat = document.getElementById('maxFeaturesSelect').value;
+
+            codeContainer.innerHTML = `
+                <div id="line1" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>from sklearn.ensemble import RandomForestClassifier</span></div>
+                <div id="line2" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>rf = RandomForestClassifier(n_estimators=<span class="text-amber-400 font-bold">${nTrees}</span>, max_features=<span class="text-amber-400 font-bold">'${maxFeat}'</span>, oob_score=True)</span></div>
+                <div id="line3" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>rf.fit(X_train, y_train)</span></div>
+                <div id="line4" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>importances = rf.feature_importances_</span></div>
+                <div id="line5" class="code-line px-3 py-1 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">5</span><span>y_pred = rf.predict(X_query)</span></div>
+            `;
+
+            renderEnsembleUI(0);
+        }
+
+        function renderEnsembleUI(activeLevel = 0) {
+            const data = datasets[scenario];
+            const nTrees = parseInt(document.getElementById('nEstimatorsSelect').value) || 5;
+            const treesContainer = document.getElementById('ensembleTreesContainer');
+            const featContainer = document.getElementById('featureImportanceBox');
+
+            document.getElementById('metricsBadge').innerText = `Trees: ${nTrees} | OOB Score: ${data.oobScore}%`;
+            document.getElementById('valOobScore').innerText = activeLevel >= 3 ? `${data.oobScore}%` : "0.0%";
+            document.getElementById('valTopFeature').innerText = activeLevel >= 3 ? data.features[0] : "--";
+
+            if (activeLevel === 0) {
+                treesContainer.innerHTML = `<div class="col-span-full p-4 text-center text-slate-500 italic bg-slate-950 rounded-lg border border-slate-700">Click 'Start Simulation' or 'Run / Execute All' to train ensemble trees.</div>`;
+                featContainer.innerHTML = `<p class="text-slate-500 italic text-center">Start simulation to compute feature importances.</p>`;
+                document.getElementById('valMajorityVote').innerText = "--";
+                return;
+            }
+
+            // Render Individual Decision Trees Cards
+            const selectedTrees = data.trees.slice(0, nTrees);
+            let votesCount = { 0: 0, 1: 0 };
+
+            let treesHtml = selectedTrees.map((t, idx) => {
+                const isVoted = activeLevel >= 2;
+                if (isVoted) votesCount[t.vote] += 1;
+
+                return `
+                    <div class="tree-card ${isVoted ? 'voted' : ''} bg-slate-900 border border-slate-700 p-2.5 rounded-lg text-center space-y-1">
+                        <span class="text-amber-400 font-bold block text-[11px]"><i class="fa-solid fa-tree"></i> Tree #${idx + 1}</span>
+                        <div class="text-[10px] text-slate-400 border-t border-slate-800 pt-1 flex justify-between">
+                            <span>Boot: ${t.sampleRatio}</span>
+                        </div>
+                        <div class="text-[9px] text-indigo-300 truncate" title="${t.featuresUsed.join(', ')}">${t.featuresUsed.join(', ')}</div>
+                        <div class="text-[10px] font-bold ${t.vote === 1 ? 'text-emerald-400' : 'text-blue-400'} pt-1">
+                            ${isVoted ? `Vote: ${t.vote}` : 'Training...'}
+                        </div>
+                    </div>
+                `;
+            }).join('');
+
+            treesContainer.innerHTML = treesHtml;
+
+            // Render Majority Vote Output
+            const majorityVote = votesCount[1] >= votesCount[0] ? 1 : 0;
+            const majorityLabel = data.classLabels[majorityVote];
+            document.getElementById('valMajorityVote').innerText = activeLevel >= 3 ? `${majorityLabel}` : "Calculating...";
+
+            // Render Feature Importance Bars
+            if (activeLevel >= 3) {
+                let featHtml = data.features.map((fName, idx) => {
+                    const score = data.featureImportances[idx];
+                    const pct = (score * 100).toFixed(1);
+                    return `
+                        <div>
+                            <div class="flex justify-between text-[11px] mb-1">
+                                <span class="text-slate-300 font-bold">${fName}</span>
+                                <span class="text-amber-400 font-bold">${pct}%</span>
+                            </div>
+                            <div class="w-full bg-slate-900 h-2.5 rounded-full overflow-hidden border border-slate-800">
+                                <div class="feature-bar bg-indigo-500 h-full rounded-full" style="width: ${pct}%"></div>
+                            </div>
+                        </div>
+                    `;
+                }).join('');
+                featContainer.innerHTML = featHtml;
+            } else {
+                featContainer.innerHTML = `<p class="text-slate-500 italic text-center">Fitting ensemble decision trees...</p>`;
+            }
+        }
+
+        function buildExecutionSteps() {
+            const data = datasets[scenario];
+            const nTrees = document.getElementById('nEstimatorsSelect').value;
+            const maxFeat = document.getElementById('maxFeaturesSelect').value;
+
+            stepList = [
+                {
+                    line: 1,
+                    activeLevel: 0,
+                    consoleMsg: `> Loaded dataset: ${data.title} [Sample Query: ${data.sampleQuery}]`,
+                    explanation: `Line 1: Imported RandomForestClassifier ensemble estimator.`
+                },
+                {
+                    line: 2,
+                    activeLevel: 0,
+                    consoleMsg: `> Configured RandomForestClassifier(n_estimators=${nTrees}, max_features='${maxFeat}', oob_score=True)`,
+                    explanation: `Line 2: Configured ensemble parameters: ${nTrees} trees with ${maxFeat} feature selection.`
+                },
+                {
+                    line: 3,
+                    activeLevel: 1,
+                    consoleMsg: `> Executing fit(): Sampled bootstrap datasets & trained ${nTrees} independent decision trees...`,
+                    explanation: `Line 3: Model generated bootstrap samples and split nodes on random feature subsets.`
+                },
+                {
+                    line: 4,
+                    activeLevel: 2,
+                    consoleMsg: `> Evaluated feature_importances_: Top feature '${data.features[0]}' (${(data.featureImportances[0]*100).toFixed(1)}% Gini reduction)`,
+                    explanation: `Line 4: Aggregated impurity reduction across all trees to compute global feature importances.`
+                },
+                {
+                    line: 5,
+                    activeLevel: 3,
+                    consoleMsg: `<span class='text-emerald-300 font-bold'>Majority Vote Converged! Sample Classified as ${data.classLabels[1]} (OOB Score: ${data.oobScore}%)</span>`,
+                    explanation: `Line 5: Aggregated predictions across all ${nTrees} trees via Majority Vote.`
+                }
+            ];
+        }
+
+        function startSimulation() {
+            updateDatasetDisplay();
+            buildExecutionSteps();
+            currentStepIdx = 0;
+
+            hideResultBanner();
+            clearConsole();
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = false;
+            btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95 shadow-lg shadow-emerald-600/20";
+
+            appendConsole(`>>> Executing: ml_random_forest.py [Dataset: ${scenario}]`);
+            executeStepAtIndex(0);
+        }
+
+        function executeStepAtIndex(idx) {
+            const step = stepList[idx];
+            highlightLine(step.line);
+
+            renderEnsembleUI(step.activeLevel);
+
+            appendConsole(step.consoleMsg);
+            document.getElementById('explanationText').innerText = step.explanation;
+            document.getElementById('currentStepBadge').innerText = `Epoch ${idx + 1}/${stepList.length}`;
+
+            if (idx === stepList.length - 1) {
+                const data = datasets[scenario];
+                showResultBanner(`Sample Classified as ${data.classLabels[1]} (Majority Vote)`, false);
+                const btnStep = document.getElementById('btnStep');
+                btnStep.disabled = true;
+                btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+                document.getElementById('currentStepBadge').innerText = "Converged";
+            }
+        }
+
+        function stepExecute() {
+            if (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function runAll() {
+            startSimulation();
+            while (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function resetSimulation() {
+            currentStepIdx = 0;
+            highlightLine(0);
+            clearConsole();
+            hideResultBanner();
+
+            document.getElementById('metricsBadge').innerText = "Trees: -- | OOB Score: --";
+            renderEnsembleUI(0);
+
+            appendConsole("<p class='text-slate-500 italic'>>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>");
+            document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+            document.getElementById('currentStepBadge').innerText = "Epoch: Ready";
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = true;
+            btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+        }
+
+        function highlightLine(lineNum) {
+            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+            if (lineNum > 0) {
+                const target = document.getElementById(`line${lineNum}`);
+                if (target) target.classList.add('active');
+            }
+        }
+
+        function clearConsole() {
+            document.getElementById('terminal').innerHTML = '';
+        }
+
+        function appendConsole(htmlContent) {
+            const term = document.getElementById('terminal');
+            const p = document.createElement('p');
+            p.innerHTML = htmlContent;
+            term.appendChild(p);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function showResultBanner(text, isError) {
+            const banner = document.getElementById('resultBanner');
+            const bannerText = document.getElementById('resultBannerText');
+            bannerText.innerText = text;
+            banner.classList.remove('hidden');
+        }
+
+        function hideResultBanner() {
+            document.getElementById('resultBanner').classList.add('hidden');
+        }
+
+        function checkPretest() {
+            const q1 = document.querySelector('input[name="pq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="pq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('preq1-box');
+            const q1fb = document.getElementById('preq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! Random Forest combines Bagging (data sampling) and Random Subspace (feature sampling).";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. Random Forests use Bagging and Random Feature Subsampling.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('preq2-box');
+            const q2fb = document.getElementById('preq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'a') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! Classification Random Forests select max_features = sqrt(M) at each split.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. Default feature subset size for classification is sqrt(M).";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('pretest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function checkPosttest() {
+            const q1 = document.querySelector('input[name="postq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="postq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('postq1-box');
+            const q1fb = document.getElementById('postq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'a') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! feature_importances_ calculates Gini impurity reduction per feature.";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. Use feature_importances_ in Scikit-Learn.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('postq2-box');
+            const q2fb = document.getElementById('postq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'a') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! OOB samples act as a built-in cross-validation set.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. Out-Of-Bag (OOB) samples serve as an internal validation score.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('posttest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function sendAiQuery() {
+            const input = document.getElementById('aiQueryInput');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const chatBox = document.getElementById('aiChatBox');
+
+            const userDiv = document.createElement('div');
+            userDiv.className = 'flex items-start gap-3 justify-end';
+            userDiv.innerHTML = `
+                <div class="bg-indigo-600/30 border border-indigo-500/40 p-3 rounded-lg text-slate-200">
+                    ${query}
+                </div>
+                <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 text-xs shrink-0">You</div>
+            `;
+            chatBox.appendChild(userDiv);
+            input.value = '';
+
+            let response = "Try testing different values of n_estimators or max_features in the simulator to see how individual tree predictions and feature importances update!";
+            const qLower = query.toLowerCase();
+            if (qLower.includes('bagging') || qLower.includes('bootstrap')) {
+                response = "Bagging (Bootstrap Aggregating) trains each tree on a random sample drawn with replacement. The unselected ~36.8% samples form the Out-Of-Bag (OOB) set for validation!";
+            } else if (qLower.includes('feature') || qLower.includes('importance') || qLower.includes('gini')) {
+                response = "Feature Importance (`feature_importances_`) measures the total mean decrease in Gini impurity brought by splits on that feature across all trees in the forest!";
+            } else if (qLower.includes('vote') || qLower.includes('majority') || qLower.includes('predict')) {
+                response = "In classification, each tree outputs a class prediction vote. The Random Forest combines these votes and outputs the majority class as the final ensemble prediction!";
+            }
+
+            setTimeout(() => {
+                const aiDiv = document.createElement('div');
+                aiDiv.className = 'flex items-start gap-3';
+                aiDiv.innerHTML = `
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        ${response}
+                    </div>
+                `;
+                chatBox.appendChild(aiDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 500);
+        }
+    </script>
+</body>
+</html>

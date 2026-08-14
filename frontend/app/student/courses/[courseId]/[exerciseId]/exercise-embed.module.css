@@ -1,0 +1,9 @@
+/* Embed the exercise viewer inside the student portal content area */
+.embedWrap {
+  height: calc(100vh - 64px - 140px); /* viewport − portal header − content padding/title */
+  min-height: 460px;
+}
+
+@media (max-width: 768px) {
+  .embedWrap { height: calc(100vh - 64px - 160px); min-height: 420px; }
+}

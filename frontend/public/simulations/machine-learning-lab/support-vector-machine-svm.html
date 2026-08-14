@@ -1,0 +1,761 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Support Vector Machine (SVM) Classifier — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .code-line{transition:background-color .25s ease,border-color .25s ease;border-left:4px solid transparent;}
+  .code-line.active{background:rgba(124,58,237,.09);border-left-color:#7c3aed;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+  #svmCanvas{background:#0f172a;border-radius:.75rem;}
+  .sv-badge{transition:all .2s ease;}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-bullseye"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Machine Learning Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment: Support Vector Machine (SVM) Classifier</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <!-- Tab Nav -->
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> Theory
+      </button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-list-check"></i> Procedure
+      </button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+      </button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-flask"></i> Simulation
+      </button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-graduation-cap"></i> Post-Test
+      </button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Support Vector Machines</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">A Support Vector Machine finds the hyperplane <code class="bg-slate-100 text-purple-600 px-1.5 py-0.5 rounded font-mono">w·x + b = 0</code> that separates two classes while maximizing the <strong>margin</strong> — the gap between the hyperplane and the nearest points of each class. Points that sit exactly on that margin boundary are called <strong>support vectors</strong>, because they alone determine the hyperplane's position; every other point could move without changing the solution.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono">Decision function</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">A new point <code class="font-mono">x</code> is classified by the sign of <code class="font-mono">f(x) = w·x + b</code>. If <code class="font-mono">f(x) ≥ 0</code> → class +1, else class −1. The magnitude <code class="font-mono">|f(x)|</code> reflects confidence / distance from the boundary.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono">Margin width = 2 / ‖w‖</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">The two margin hyperplanes <code class="font-mono">w·x+b = +1</code> and <code class="font-mono">w·x+b = −1</code> are parallel to the boundary, each offset by <code class="font-mono">1/‖w‖</code>. A <strong>smaller</strong> ‖w‖ means a <strong>wider</strong> margin.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono">Hinge loss</h3>
+          <p class="text-slate-500 text-xs leading-relaxed"><code class="font-mono">L(x,y) = max(0, 1 − y(w·x+b))</code>. Zero when a point is correctly classified beyond the margin; grows linearly the further a point violates the margin. It is <strong>not differentiable</strong> at the kink, so training uses a <strong>subgradient</strong>.</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono">Regularization constant C</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">The full objective is <code class="font-mono">min (1/2)‖w‖² + C·Σ hinge</code>. Small C prioritizes a wide margin (tolerates some violations = "soft margin"). Large C penalizes violations heavily, forcing a narrower, stricter margin ("hard margin").</p>
+        </div>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Training by Subgradient Descent</h3>
+      <p class="text-xs text-slate-500 leading-relaxed">On every epoch this lab computes the true subgradient of the objective over the whole training set and updates the weights:</p>
+      <div class="bg-slate-950 text-emerald-300 font-mono text-xs p-4 rounded-xl leading-relaxed overflow-x-auto">
+∇w = w − C · Σ<sub>i: yᵢ(w·xᵢ+b)&lt;1</sub> yᵢxᵢ   (only margin-violating points contribute)<br>
+∇b = − C · Σ<sub>i: yᵢ(w·xᵢ+b)&lt;1</sub> yᵢ<br>
+w ← w − η·∇w  ,  b ← b − η·∇b   (η = learning rate)
+      </div>
+      <p class="text-xs text-slate-500 leading-relaxed">A point is treated as a <strong>support vector</strong> once training converges if its functional margin <code class="font-mono">yᵢ(w·xᵢ+b)</code> is close to exactly 1 (within a small tolerance) — i.e. it lies right on the margin boundary. This lab computes that condition from the actual trained <code class="font-mono">w, b</code> every time — it never hardcodes which points are support vectors.</p>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Linear kernel</th><th class="p-2 text-left">Polynomial (degree‑2) kernel</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2">Decision boundary is the straight line <code class="font-mono">w·x+b=0</code> directly in the input space.</td><td class="p-2">Inputs are expanded to <code class="font-mono">φ(x) = [x₁, x₂, x₁², x₂², x₁x₂]</code> and a linear SVM is trained in that 5‑D feature space — the boundary, mapped back to 2‑D, can curve.</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2">Margin lines can be drawn exactly as two straight lines offset by 1/‖w‖.</td><td class="p-2">The decision surface is visualized as shaded regions (every canvas cell is genuinely re-evaluated through <code class="font-mono">f(φ(x))</code>).</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab. The fixed 10-point training set (5 points of class −1 near (2,2), 5 points of class +1 near (6,6)) is plotted immediately.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Choose a <strong>Regularization C</strong> value, a <strong>Learning Rate</strong>, and a <strong>Kernel</strong> (Linear or Polynomial deg-2), or click a <strong>Quick Preset</strong>.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Training</strong> to reset w = 0, b = 0 and enable stepping.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Step Epoch</strong> to run one real subgradient-descent update and watch the boundary/margins move on the canvas, or click <strong>Run All</strong> to animate all epochs automatically.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Watch the <strong>Model State</strong> panel — ‖w‖, margin width, and accuracy are recomputed every epoch, not fixed.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">After training, inspect the <strong>Support Vectors</strong> list — it is derived from the final w,b by checking which points have functional margin ≈ 1.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Change C and retrain to see the margin width and boundary genuinely shift. Click <strong>Reset</strong> to clear and start over.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">1. What is the goal of an SVM classifier?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> Find the hyperplane that maximizes the margin between classes</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> Minimize the distance of the hyperplane to all points</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Cluster the points into k groups</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. What is a support vector?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> Any point in the dataset</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> A point lying on/near the margin boundary that determines the hyperplane</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> The mean of all data points</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. In hinge loss <code class="font-mono">max(0, 1 − y(w·x+b))</code>, if a point is correctly classified well outside the margin, the loss is:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> 0</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> Negative</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> Always exactly 1</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. What does the hyperplane equation <code class="font-mono">w·x + b = 0</code> represent?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> The decision boundary separating the two classes</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> The centroid of the dataset</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> The sum of all support vectors</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Regularization C</label>
+              <select id="selC" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+                <option value="0.1">0.1 (soft margin)</option>
+                <option value="0.5">0.5</option>
+                <option value="1" selected>1 (default)</option>
+                <option value="2">2</option>
+                <option value="5">5</option>
+                <option value="10">10 (hard margin)</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Learning Rate η</label>
+              <select id="selLr" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+                <option value="0.005">0.005</option>
+                <option value="0.01">0.01</option>
+                <option value="0.02" selected>0.02</option>
+                <option value="0.04">0.04</option>
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Kernel</label>
+              <select id="selKernel" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+                <option value="linear" selected>Linear</option>
+                <option value="poly">Polynomial (deg 2)</option>
+              </select>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startTraining()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Start Training
+            </button>
+            <button id="btnStep" onclick="stepEpoch()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-forward-step"></i> Step Epoch
+            </button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-bolt"></i> Run All
+            </button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset(0.1,0.02,'linear')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Soft Margin (C=0.1)</button>
+          <button onclick="loadPreset(1,0.02,'linear')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Balanced (C=1)</button>
+          <button onclick="loadPreset(10,0.02,'linear')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Hard Margin (C=10)</button>
+          <button onclick="loadPreset(1,0.02,'poly')" class="bg-white hover:bg-rose-50 text-rose-500 px-2.5 py-1 rounded-full border border-rose-200 font-mono">Polynomial Kernel</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Epoch: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-chart-scatter text-purple-600"></i> Decision Boundary &amp; Margin
+            </span>
+            <span class="text-[10px] text-slate-400 font-mono">class −1 = rose · class +1 = purple</span>
+          </div>
+          <div class="p-3">
+            <canvas id="svmCanvas" width="560" height="400" class="w-full h-auto"></canvas>
+          </div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Training Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Choose C, learning rate and kernel, then click 'Start Training'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-5 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-microchip text-purple-600"></i> Model State (recomputed every epoch)
+            </h3>
+            <div class="grid grid-cols-3 gap-3">
+              <div id="mem1" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">Epoch</span>
+                <span id="val1" class="text-xl font-bold font-mono text-purple-600 block my-1">--</span>
+              </div>
+              <div id="mem2" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">‖w‖ (margin=2/‖w‖)</span>
+                <span id="val2" class="text-xl font-bold font-mono text-purple-600 block my-1">--</span>
+              </div>
+              <div id="mem3" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span class="text-xs text-slate-500 block font-mono">Accuracy</span>
+                <span id="val3" class="text-xl font-bold font-mono text-emerald-600 block my-1">--</span>
+              </div>
+            </div>
+            <div class="mt-3 bg-slate-950 text-emerald-300 font-mono text-xs p-3 rounded-lg" id="eqLine">f(x) = 0.000·x₁ + 0.000·x₂ + 0.000</div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-star text-amber-500"></i> Support Vectors (computed from final w,b)
+            </h3>
+            <div id="svList" class="flex flex-wrap gap-1.5 text-xs font-mono text-slate-500">Train the model to identify support vectors.</div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-600"></i> Training Log
+              </span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[120px] max-h-[180px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Start Training' then 'Step Epoch' or 'Run All'.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-square-check"></i>
+              </div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Training Complete</h4>
+                <p id="resultBannerText" class="text-sm font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">1. If you significantly increase C and retrain, the margin typically:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> Narrows, because margin violations are penalized more heavily</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> Widens, because C increases regularization</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> Is unaffected by C</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. Given trained weights w, the margin width (distance between the two margin hyperplanes) equals:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> 2 / ‖w‖</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> ‖w‖ / 2</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> 1 / (w₁ + w₂)</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">3. A point with functional margin <code class="font-mono">yᵢ(w·xᵢ+b) = 1.8</code> after training is:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> Correctly classified, well outside the margin — not a support vector</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> A support vector</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> Misclassified</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. Why does SVM training use a subgradient instead of an ordinary gradient?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> Hinge loss max(0, ...) is non-differentiable at its kink point</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> Subgradients always converge faster</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> Hinge loss has no gradient anywhere</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+      </h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me anything about margins, support vectors, hinge loss, the C parameter, or kernels.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., what does C control?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ================= REAL SVM MATH ENGINE (pure, testable) ================= */
+const SVM_DATA = [
+  {x:[1,2], y:-1},{x:[2,1], y:-1},{x:[2,3], y:-1},{x:[1,1], y:-1},{x:[3,2], y:-1},
+  {x:[6,6], y:1},{x:[7,6], y:1},{x:[6,7], y:1},{x:[7,7], y:1},{x:[5,6], y:1}
+];
+
+function dot(w,phi){ let s=0; for(let i=0;i<w.length;i++) s+=w[i]*phi[i]; return s; }
+
+// Feature map: linear = identity; poly = explicit degree-2 expansion (scaled so gradients stay well-conditioned)
+function featureMap(x, kernel){
+  if(kernel === 'poly') return [x[0], x[1], (x[0]*x[0])/8, (x[1]*x[1])/8, (x[0]*x[1])/8];
+  return [x[0], x[1]];
+}
+function featureDim(kernel){ return kernel === 'poly' ? 5 : 2; }
+
+// One full-batch subgradient-descent epoch on hinge-loss SVM objective.
+// L(w,b) = (1/2)||w||^2 + C * sum_i max(0, 1 - y_i(w.phi(x_i)+b))
+// epochIndex drives a mild 1/(1+k*t) learning-rate decay (standard for subgradient-method
+// SVM training, e.g. Pegasos) so the weights genuinely settle near the max-margin solution
+// instead of oscillating forever around it with a constant step size.
+function trainEpoch(w, b, C, lr, kernel, epochIndex){
+  const dim = w.length;
+  const lrEff = lr / (1 + 0.03*(epochIndex||0));
+  let gw = w.slice();     // gradient of (1/2)||w||^2 term is w
+  let gb = 0;
+  let violations = 0;
+  for(const p of SVM_DATA){
+    const phi = featureMap(p.x, kernel);
+    const margin = p.y*(dot(w,phi)+b);
+    if(margin < 1){
+      violations++;
+      for(let i=0;i<dim;i++) gw[i] -= C*p.y*phi[i];
+      gb -= C*p.y;
+    }
+  }
+  const newW = w.map((wi,i)=> wi - lrEff*gw[i]);
+  const newB = b - lrEff*gb;
+  return {w:newW, b:newB, violations};
+}
+
+function decisionValue(w, b, x, kernel){ return dot(w, featureMap(x, kernel)) + b; }
+function classify(w, b, x, kernel){ return decisionValue(w,b,x,kernel) >= 0 ? 1 : -1; }
+function computeAccuracy(w, b, kernel){
+  let correct = 0;
+  SVM_DATA.forEach(p=>{ if(classify(w,b,p.x,kernel) === p.y) correct++; });
+  return correct / SVM_DATA.length;
+}
+function computeSupportVectors(w, b, kernel, tol){
+  return SVM_DATA.map(p=>{
+    const raw = decisionValue(w,b,p.x,kernel);
+    const margin = p.y*raw;
+    return {point:p, margin, isSV: Math.abs(margin-1) <= tol, misclassified: margin < 0};
+  });
+}
+function wNormLinear2D(w){ return Math.hypot(w[0], w[1]); }
+
+/* ================= Canvas rendering ================= */
+const CANVAS_W = 560, CANVAS_H = 400, PAD = 40, DMIN = 0, DMAX = 8;
+function toCX(x){ return PAD + (x-DMIN)/(DMAX-DMIN)*(CANVAS_W-2*PAD); }
+function toCY(y){ return CANVAS_H-PAD - (y-DMIN)/(DMAX-DMIN)*(CANVAS_H-2*PAD); }
+function fromCX(px){ return DMIN + (px-PAD)/(CANVAS_W-2*PAD)*(DMAX-DMIN); }
+function fromCY(py){ return DMIN + (CANVAS_H-PAD-py)/(CANVAS_H-2*PAD)*(DMAX-DMIN); }
+
+function drawGrid(ctx){
+  ctx.clearRect(0,0,CANVAS_W,CANVAS_H);
+  ctx.fillStyle = '#0f172a';
+  ctx.fillRect(0,0,CANVAS_W,CANVAS_H);
+  ctx.strokeStyle = 'rgba(148,163,184,0.15)';
+  ctx.lineWidth = 1;
+  for(let g=DMIN; g<=DMAX; g++){
+    ctx.beginPath(); ctx.moveTo(toCX(g), toCY(DMIN)); ctx.lineTo(toCX(g), toCY(DMAX)); ctx.stroke();
+    ctx.beginPath(); ctx.moveTo(toCX(DMIN), toCY(g)); ctx.lineTo(toCX(DMAX), toCY(g)); ctx.stroke();
+  }
+  ctx.fillStyle = 'rgba(148,163,184,0.6)';
+  ctx.font = '10px monospace';
+  for(let g=0; g<=DMAX; g+=2){
+    ctx.fillText(g, toCX(g)-3, CANVAS_H-PAD+14);
+    ctx.fillText(g, PAD-18, toCY(g)+3);
+  }
+}
+
+function drawPolyRegions(ctx, w, b, kernel){
+  const step = 6;
+  for(let px=PAD; px<CANVAS_W-PAD; px+=step){
+    for(let py=PAD; py<CANVAS_H-PAD; py+=step){
+      const dx = fromCX(px), dy = fromCY(py);
+      const v = decisionValue(w, b, [dx,dy], kernel);
+      const t = Math.max(-1, Math.min(1, v/2));
+      if(t >= 0) ctx.fillStyle = `rgba(124,58,237,${0.10+0.18*t})`;
+      else ctx.fillStyle = `rgba(244,63,94,${0.10+0.18*(-t)})`;
+      ctx.fillRect(px, py, step, step);
+    }
+  }
+}
+
+function drawLinearBoundary(ctx, w, b){
+  // clip to plot region
+  ctx.save();
+  ctx.beginPath();
+  ctx.rect(PAD, PAD, CANVAS_W-2*PAD, CANVAS_H-2*PAD);
+  ctx.clip();
+  const lines = [
+    {k:0, color:'#e2e8f0', width:2.5, dash:[]},
+    {k:1, color:'rgba(124,58,237,0.55)', width:1.5, dash:[6,4]},
+    {k:-1, color:'rgba(244,63,94,0.55)', width:1.5, dash:[6,4]}
+  ];
+  lines.forEach(ln=>{
+    ctx.strokeStyle = ln.color; ctx.lineWidth = ln.width; ctx.setLineDash(ln.dash);
+    ctx.beginPath();
+    if(Math.abs(w[1]) > 1e-6){
+      const x1 = DMIN-1, x2 = DMAX+1;
+      const y1 = (ln.k - b - w[0]*x1)/w[1];
+      const y2 = (ln.k - b - w[0]*x2)/w[1];
+      ctx.moveTo(toCX(x1), toCY(y1));
+      ctx.lineTo(toCX(x2), toCY(y2));
+    } else if(Math.abs(w[0]) > 1e-6){
+      const x = (ln.k - b)/w[0];
+      ctx.moveTo(toCX(x), toCY(DMIN-1));
+      ctx.lineTo(toCX(x), toCY(DMAX+1));
+    }
+    ctx.stroke();
+  });
+  ctx.setLineDash([]);
+  ctx.restore();
+}
+
+function drawPoints(ctx, w, b, kernel, tol){
+  const svInfo = computeSupportVectors(w, b, kernel, tol);
+  svInfo.forEach(info=>{
+    const p = info.point;
+    const px = toCX(p.x[0]), py = toCY(p.x[1]);
+    if(info.isSV){
+      ctx.beginPath(); ctx.arc(px,py,10,0,7); ctx.strokeStyle = '#f59e0b'; ctx.lineWidth = 2.5; ctx.stroke();
+    }
+    ctx.beginPath(); ctx.arc(px,py,6,0,7);
+    ctx.fillStyle = p.y === 1 ? '#7c3aed' : '#f43f5e';
+    ctx.fill();
+    ctx.strokeStyle = '#f8fafc'; ctx.lineWidth = 1.5; ctx.stroke();
+    if(info.misclassified){
+      ctx.strokeStyle = '#ffffff'; ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.moveTo(px-8,py-8); ctx.lineTo(px+8,py+8);
+      ctx.moveTo(px+8,py-8); ctx.lineTo(px-8,py+8); ctx.stroke();
+    }
+  });
+}
+
+function render(){
+  const canvas = document.getElementById('svmCanvas');
+  const ctx = canvas.getContext('2d');
+  drawGrid(ctx);
+  const s = svmState;
+  if(s.epoch > 0 || s.forceDrawBoundary){
+    if(s.kernel === 'poly') drawPolyRegions(ctx, s.w, s.b, s.kernel);
+    else if(Math.abs(s.w[0])>1e-9 || Math.abs(s.w[1])>1e-9) drawLinearBoundary(ctx, s.w, s.b);
+  }
+  drawPoints(ctx, s.w, s.b, s.kernel, 0.18);
+}
+
+/* ================= Simulation controller ================= */
+let svmState = { C:1, lr:0.02, kernel:'linear', w:[0,0], b:0, epoch:0, maxEpochs:300, timer:null };
+
+function loadPreset(C, lr, kernel){
+  document.getElementById('selC').value = C;
+  document.getElementById('selLr').value = lr;
+  document.getElementById('selKernel').value = kernel;
+  startTraining();
+}
+
+function startTraining(){
+  clearInterval(svmState.timer);
+  const C = parseFloat(document.getElementById('selC').value);
+  const lr = parseFloat(document.getElementById('selLr').value);
+  const kernel = document.getElementById('selKernel').value;
+  const dim = featureDim(kernel);
+  svmState = { C, lr, kernel, w: new Array(dim).fill(0), b:0, epoch:0, maxEpochs:300, timer:null, forceDrawBoundary:false };
+  render();
+  updatePanels();
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('svList').innerHTML = 'Train the model to identify support vectors.';
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('currentStepBadge').innerText = 'Epoch: Ready';
+  document.getElementById('explanationText').innerText = "Model reset to w=0, b=0. Click 'Step Epoch' or 'Run All' to train with real subgradient descent.";
+  appendConsole(`&gt;&gt;&gt; Training initialized — C=${C}, lr=${lr}, kernel=${kernel}`);
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95';
+}
+
+function updatePanels(){
+  const s = svmState;
+  document.getElementById('val1').innerText = s.epoch;
+  const norm = s.kernel === 'linear' ? wNormLinear2D(s.w) : Math.hypot(...s.w);
+  document.getElementById('val2').innerText = norm.toFixed(3);
+  const acc = computeAccuracy(s.w, s.b, s.kernel);
+  document.getElementById('val3').innerText = (acc*100).toFixed(0)+'%';
+  if(s.kernel === 'linear'){
+    document.getElementById('eqLine').innerText = `f(x) = ${s.w[0].toFixed(3)}·x₁ + ${s.w[1].toFixed(3)}·x₂ + ${s.b.toFixed(3)}   |  margin width = 2/‖w‖ = ${(norm>1e-9?(2/norm).toFixed(3):'∞')}`;
+  } else {
+    document.getElementById('eqLine').innerText = `f(φ(x)) = Σ wᵢφᵢ(x) + b   (5-D polynomial feature space)  |  ‖w‖ = ${norm.toFixed(3)}`;
+  }
+  document.getElementById('progressFill').style.width = `${Math.min(100,(s.epoch/s.maxEpochs)*100)}%`;
+  document.getElementById('currentStepBadge').innerText = `Epoch ${s.epoch}/${s.maxEpochs}`;
+  ['mem1','mem2','mem3'].forEach(id=>{
+    const el = document.getElementById(id);
+    el.classList.add('updated');
+    setTimeout(()=>el.classList.remove('updated'), 500);
+  });
+}
+
+function updateSVList(){
+  const s = svmState;
+  const info = computeSupportVectors(s.w, s.b, s.kernel, 0.18);
+  const svs = info.filter(i=>i.isSV);
+  const container = document.getElementById('svList');
+  if(svs.length === 0){ container.innerHTML = '<span class="text-slate-400 italic">No points currently within tolerance of the margin (|y(w·x+b)−1| ≤ 0.18).</span>'; return; }
+  container.innerHTML = svs.map(i=>`<span class="sv-badge px-2 py-1 rounded-full border ${i.point.y===1?'border-purple-300 bg-purple-50 text-purple-700':'border-rose-300 bg-rose-50 text-rose-700'}">[${i.point.x[0]},${i.point.x[1]}] y=${i.point.y} margin=${i.margin.toFixed(2)}</span>`).join('');
+}
+
+function stepEpoch(){
+  const s = svmState;
+  if(s.epoch >= s.maxEpochs) return;
+  const {w, b, violations} = trainEpoch(s.w, s.b, s.C, s.lr, s.kernel, s.epoch);
+  s.w = w; s.b = b; s.epoch++;
+  s.forceDrawBoundary = true;
+  render();
+  updatePanels();
+  updateSVList();
+  const acc = computeAccuracy(s.w, s.b, s.kernel);
+  appendConsole(`Epoch ${s.epoch}: violations=${violations}/10, ‖w‖=${(s.kernel==='linear'?wNormLinear2D(s.w):Math.hypot(...s.w)).toFixed(3)}, b=${s.b.toFixed(3)}, acc=${(acc*100).toFixed(0)}%`);
+  document.getElementById('explanationText').innerText = `Epoch ${s.epoch}: ${violations} point(s) violated the margin and contributed to the subgradient this step.`;
+  if(s.epoch >= s.maxEpochs){
+    finishTraining();
+  }
+}
+
+function runAll(){
+  startTraining();
+  clearInterval(svmState.timer);
+  svmState.timer = setInterval(()=>{
+    if(svmState.epoch >= svmState.maxEpochs){ clearInterval(svmState.timer); return; }
+    stepEpoch();
+  }, 45);
+}
+
+function finishTraining(){
+  const s = svmState;
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = 'bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+  const acc = computeAccuracy(s.w, s.b, s.kernel);
+  const svCount = computeSupportVectors(s.w, s.b, s.kernel, 0.18).filter(i=>i.isSV).length;
+  const norm = s.kernel==='linear'?wNormLinear2D(s.w):Math.hypot(...s.w);
+  const marginTxt = s.kernel==='linear' ? `margin width = ${(2/norm).toFixed(3)}` : `‖w‖=${norm.toFixed(3)}`;
+  document.getElementById('resultBannerText').innerText = `Accuracy: ${(acc*100).toFixed(0)}% · Support vectors: ${svCount} · ${marginTxt}`;
+  document.getElementById('resultBanner').classList.remove('hidden');
+  appendConsole(`&gt;&gt;&gt; Training complete. Final accuracy = ${(acc*100).toFixed(0)}%, support vectors = ${svCount}.`);
+}
+
+function resetSimulation(){
+  clearInterval(svmState.timer);
+  const kernel = document.getElementById('selKernel').value;
+  svmState.w = new Array(featureDim(kernel)).fill(0);
+  svmState.b = 0; svmState.epoch = 0; svmState.forceDrawBoundary = false;
+  render();
+  updatePanels();
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('svList').innerHTML = 'Train the model to identify support vectors.';
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Start Training' then 'Step Epoch' or 'Run All'.</span>");
+  document.getElementById('explanationText').innerText = "Choose C, learning rate and kernel, then click 'Start Training'.";
+  document.getElementById('currentStepBadge').innerText = 'Epoch: Ready';
+  document.getElementById('progressFill').style.width = '0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = 'bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading (generic, copied verbatim pattern) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try training the model in the Simulation tab and watch the Model State panel update every epoch!";
+  if (q.includes('support vector')) response = "A support vector is a training point whose functional margin y(w·x+b) is (approximately) exactly 1 — it sits right on the margin boundary. This lab finds them by checking that condition against the actual trained w,b after each epoch, not a fixed list.";
+  else if (q.includes('margin') && q.includes('width')) response = "Margin width = 2/‖w‖. As training reduces ‖w‖ (for a given C), the margin widens. Watch the ‖w‖ card in Model State — it's recomputed from the real weight vector every epoch.";
+  else if (q.includes('margin')) response = "The margin is the empty strip between the two dashed lines w·x+b=+1 and w·x+b=−1. SVM training tries to make this strip as wide as possible while still separating the classes.";
+  else if (q.includes('hinge')) response = "Hinge loss = max(0, 1 − y(w·x+b)). It's zero once a point is correctly classified beyond the margin, and grows linearly for violations. Its non-smooth kink at margin=1 is exactly why we use a subgradient, not a plain gradient.";
+  else if (q.includes('subgradient') || q.includes('gradient')) response = "Because hinge loss isn't differentiable at its kink, we use a subgradient: only points that currently violate the margin (y(w·x+b) < 1) contribute −C·y·x to ∇w. Correctly-classified points beyond the margin contribute nothing except the regularization term w itself.";
+  else if (q.includes(' c ') || q.startsWith('c ') || q === 'c' || q.includes('regulariz')) response = "C trades off margin width against tolerance for violations. Small C (soft margin) allows more violations for a wider margin; large C (hard margin) punishes violations heavily, producing a narrower margin that hugs the data more tightly. Try the Soft Margin vs Hard Margin presets and compare ‖w‖.";
+  else if (q.includes('kernel')) response = "The Linear kernel classifies directly in the original 2 features. The Polynomial kernel expands each point to φ(x)=[x1,x2,x1²,x2²,x1x2] and trains a linear SVM in that 5-D space — this lets the boundary (shown as shaded regions) curve, even though the underlying model is still linear in the expanded features.";
+  else if (q.includes('overfit')) response = "A very high C can overfit — it forces the boundary to classify every training point correctly (even noisy ones), which can hurt generalization to new data. A moderate C usually balances margin width and training accuracy better.";
+  else if (q.includes('accuracy')) response = "Accuracy here is computed for real: every training point is classified with sign(w·x+b) and compared to its true label after every single epoch — it's never a fixed number.";
+  else if (q.includes('converge') || q.includes('epoch')) response = "Each 'epoch' here is one full-batch subgradient step over all 10 points. Run All animates up to 300 epochs — watch the boundary and margins visibly move and settle as w,b converge.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  render();
+});
+</script>
+</body>
+</html>

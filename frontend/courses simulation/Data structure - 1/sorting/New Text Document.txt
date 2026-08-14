@@ -1,0 +1,235 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DSA Lab: Sorting Algorithms - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; }
+        .tab-btn.active { background-color: #334155; color: #818cf8; border: 1px solid #475569; }
+        .bar { transition: height 0.05s ease; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <header class="bg-[#1e293b] border-b border-[#334155] px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-code-branch"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Data Structures & Algorithms</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 1: Comprehensive Sorting Analysis (Bubble, Merge, Heap, Quick)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <nav class="bg-[#1e293b] border-b border-[#334155] px-6 py-2">
+        <div class="flex gap-4 text-sm font-medium">
+            <button onclick="switchTab('theory')" class="tab-btn active px-4 py-2 rounded-lg flex items-center gap-2"><i class="fa-solid fa-book"></i> Theory</button>
+            <button onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+            <button onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+            <button onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+            <button onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+            <button onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Socratic Assistant</button>
+        </div>
+    </nav>
+
+    <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
+        <div id="content-theory" class="tab-content bg-[#1e293b] p-6 rounded-xl border border-[#334155] shadow-xl space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Theory: Sorting Algorithms Analysis</h2>
+            <p class="text-sm text-slate-300 leading-relaxed">Sorting algorithms transform unorganized data into structured sequences. Analysis involves evaluating time complexity $O(f(n))$, auxiliary space, and algorithm stability.</p>
+            <div class="grid grid-cols-2 gap-4 text-xs font-mono text-slate-400 mt-4">
+                <div class="p-3 bg-[#0f172a] rounded border border-[#334155]">Bubble: $O(n^2)$ - Stable, In-place</div>
+                <div class="p-3 bg-[#0f172a] rounded border border-[#334155]">Merge: $O(n \log n)$ - Stable, Out-of-place</div>
+                <div class="p-3 bg-[#0f172a] rounded border border-[#334155]">Heap: $O(n \log n)$ - Unstable, In-place</div>
+                <div class="p-3 bg-[#0f172a] rounded border border-[#334155]">Quick: $O(n \log n)$ - Unstable, Partitioning</div>
+            </div>
+        </div>
+
+        <div id="content-procedure" class="tab-content hidden bg-[#1e293b] p-6 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Procedure</h2>
+            <ol class="list-decimal list-inside text-sm text-slate-300 space-y-3">
+                <li>Initialize dataset with random values.</li>
+                <li>Choose your sorting algorithm and adjust simulation speed.</li>
+                <li>Watch the array elements shift and reorder in real-time.</li>
+                <li>Observe swap operations and compare how partitioning or merging strategies affect convergence speed.</li>
+            </ol>
+        </div>
+
+        <div id="content-pretest" class="tab-content hidden bg-[#1e293b] p-6 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Pre-Test Assessment</h2>
+            <div class="space-y-6">
+                <div>
+                    <p class="text-sm text-slate-300">1. Which sorting algorithm's performance degrades to $O(n^2)$ if the pivot is poorly chosen?</p>
+                    <div class="text-xs text-slate-400 mt-2 space-y-1">
+                        <label class="block"><input type="radio" name="q1"> Heap Sort</label>
+                        <label class="block"><input type="radio" name="q1"> Quick Sort</label>
+                        <label class="block"><input type="radio" name="q1"> Merge Sort</label>
+                    </div>
+                </div>
+                <div>
+                    <p class="text-sm text-slate-300">2. A stable sorting algorithm is one that:</p>
+                    <div class="text-xs text-slate-400 mt-2 space-y-1">
+                        <label class="block"><input type="radio" name="q2"> Uses constant extra space $O(1)$</label>
+                        <label class="block"><input type="radio" name="q2"> Preserves relative order of equal keys</label>
+                        <label class="block"><input type="radio" name="q2"> Runs in linear time $O(n)$</label>
+                    </div>
+                </div>
+                <button onclick="alert('Submitted successfully!')" class="bg-indigo-600 px-6 py-2 rounded text-sm text-white font-bold hover:bg-indigo-500">Submit Quiz</button>
+            </div>
+        </div>
+
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <div class="bg-[#1e293b] p-4 rounded-xl border border-[#334155] flex flex-wrap gap-4 items-center">
+                <select id="algoSelect" class="bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white">
+                    <option value="bubble">Bubble Sort</option>
+                    <option value="merge">Merge Sort</option>
+                    <option value="heap">Heap Sort</option>
+                    <option value="quick">Quick Sort</option>
+                </select>
+                <button onclick="runSort()" class="bg-indigo-600 px-4 py-2 rounded text-white font-bold text-sm">Start Sort</button>
+                <button onclick="resetData()" class="bg-slate-700 px-4 py-2 rounded text-white text-sm">Randomize</button>
+                <div class="flex items-center gap-2">
+                    <span class="text-xs">Speed:</span>
+                    <input type="range" id="speed" min="5" max="100" value="30" class="cursor-pointer">
+                </div>
+            </div>
+            <div id="viz" class="h-64 flex items-end justify-center gap-1 bg-[#1e293b] p-6 rounded-xl border border-[#334155]"></div>
+        </div>
+
+        <div id="content-posttest" class="tab-content hidden bg-[#1e293b] p-6 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Post-Test Assessment</h2>
+            <div class="space-y-4">
+                <p class="text-sm text-slate-300">1. Compare Merge Sort and Quick Sort in terms of memory usage during recursion.</p>
+                <textarea class="w-full h-20 bg-slate-900 rounded p-2 border border-slate-700 text-xs" placeholder="Answer here..."></textarea>
+                <p class="text-sm text-slate-300">2. Why might you prefer Heap Sort over Merge Sort for embedded systems with limited RAM?</p>
+                <textarea class="w-full h-20 bg-slate-900 rounded p-2 border border-slate-700 text-xs" placeholder="Answer here..."></textarea>
+                <button onclick="alert('Reflection submitted!')" class="bg-indigo-600 px-6 py-2 rounded text-sm text-white font-bold hover:bg-indigo-500">Submit Reflection</button>
+            </div>
+        </div>
+
+        <div id="content-ai" class="tab-content hidden bg-[#1e293b] p-6 rounded-xl border border-[#334155]">
+            <h2 class="text-lg font-bold text-indigo-400 mb-4">AI Socratic Assistant</h2>
+            <div id="chatBox" class="h-48 bg-slate-950 p-4 rounded mb-4 overflow-y-auto text-xs font-mono text-slate-300 border border-slate-700"></div>
+            <div class="flex gap-2">
+                <input type="text" id="aiInput" class="flex-1 bg-slate-900 border border-slate-700 p-2 rounded text-sm text-white" placeholder="Ask about algorithm time complexity...">
+                <button onclick="askAI()" class="bg-indigo-600 px-4 py-2 rounded text-white text-sm">Ask</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        let data = Array.from({length: 30}, () => Math.floor(Math.random() * 90) + 10);
+        function switchTab(t) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('content-' + t).classList.remove('hidden');
+            const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.innerText.toLowerCase().includes(t));
+            if (activeBtn) activeBtn.classList.add('active');
+        }
+        function renderViz() {
+            const viz = document.getElementById('viz');
+            viz.innerHTML = data.map(val => `<div class="bar bg-indigo-500 w-4" style="height:${val}%"></div>`).join('');
+        }
+        async function runSort() {
+            const algo = document.getElementById('algoSelect').value;
+            const speed = 105 - document.getElementById('speed').value;
+            
+            if (algo === 'bubble') {
+                for(let i=0; i<data.length; i++) {
+                    for(let j=0; j<data.length - i - 1; j++) {
+                        if(data[j] > data[j+1]) {
+                            [data[j], data[j+1]] = [data[j+1], data[j]];
+                            renderViz();
+                            await new Promise(r => setTimeout(r, speed));
+                        }
+                    }
+                }
+            } else if (algo === 'merge') {
+                async function mergeSort(arr) {
+                    if (arr.length <= 1) return arr;
+                    let mid = Math.floor(arr.length / 2);
+                    let left = await mergeSort(arr.slice(0, mid));
+                    let right = await mergeSort(arr.slice(mid));
+                    return merge(left, right);
+                }
+                async function merge(left, right) {
+                    let sorted = [];
+                    while(left.length && right.length) {
+                        sorted.push(left[0] < right[0] ? left.shift() : right.shift());
+                    }
+                    data = [...sorted, ...left, ...right];
+                    renderViz();
+                    await new Promise(r => setTimeout(r, speed));
+                    return [...sorted, ...left, ...right];
+                }
+                data = await mergeSort(data);
+            } else if (algo === 'heap') {
+                async function heapSort(arr) {
+                    let n = arr.length;
+                    for (let i = Math.floor(n/2)-1; i >= 0; i--) await heapify(arr, n, i);
+                    for (let i = n-1; i > 0; i--) {
+                        [arr[0], arr[i]] = [arr[i], arr[0]];
+                        renderViz();
+                        await new Promise(r => setTimeout(r, speed));
+                        await heapify(arr, i, 0);
+                    }
+                }
+                async function heapify(arr, n, i) {
+                    let largest = i;
+                    let l = 2*i + 1, r = 2*i + 2;
+                    if (l < n && arr[l] > arr[largest]) largest = l;
+                    if (r < n && arr[r] > arr[largest]) largest = r;
+                    if (largest !== i) {
+                        [arr[i], arr[largest]] = [arr[largest], arr[i]];
+                        renderViz();
+                        await new Promise(r => setTimeout(r, speed));
+                        await heapify(arr, n, largest);
+                    }
+                }
+                await heapSort(data);
+            } else if (algo === 'quick') {
+                async function quickSort(arr, left=0, right=arr.length-1) {
+                    if(left < right) {
+                        let pivot = await partition(arr, left, right);
+                        await quickSort(arr, left, pivot-1);
+                        await quickSort(arr, pivot+1, right);
+                    }
+                }
+                async function partition(arr, left, right) {
+                    let pivot = arr[right];
+                    let i = left;
+                    for(let j=left; j<right; j++) {
+                        if(arr[j] < pivot) {
+                            [arr[i], arr[j]] = [arr[j], arr[i]];
+                            i++;
+                            renderViz();
+                            await new Promise(r => setTimeout(r, speed));
+                        }
+                    }
+                    [arr[i], arr[right]] = [arr[right], arr[i]];
+                    return i;
+                }
+                await quickSort(data);
+            }
+        }
+        function resetData() { data = Array.from({length: 30}, () => Math.floor(Math.random() * 90) + 10); renderViz(); }
+        function askAI() {
+            const q = document.getElementById('aiInput').value;
+            document.getElementById('chatBox').innerHTML += `<p class="mb-2"><span class="text-indigo-400">You:</span> ${q}</p><p class="mb-2"><span class="text-emerald-400">AI:</span> Bubble sort is $O(n^2)$, Merge and Quick sort are $O(n \log n)$, and Heap sort is $O(n \log n)$ while being in-place!</p>`;
+            document.getElementById('aiInput').value = '';
+        }
+        renderViz();
+    </script>
+</body>
+</html>
+```eof

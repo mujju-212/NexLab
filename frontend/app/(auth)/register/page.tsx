@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { authService, type RegisterDto } from '@/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
@@ -77,7 +77,18 @@ function renderTokens(tokens: Token[]) {
   ));
 }
 
+// useSearchParams() requires a Suspense boundary for Next.js to statically
+// prerender this route at build time — without it, the build fails and the
+// route falls back to full client-side rendering (slower first load for users).
 export default function RegisterPage() {
+  return (
+    <Suspense fallback={null}>
+      <RegisterPageInner />
+    </Suspense>
+  );
+}
+
+function RegisterPageInner() {
   const router = useRouter();
   const { setUser } = useAuthStore();
   const searchParams = useSearchParams();
@@ -96,6 +107,54 @@ export default function RegisterPage() {
 
   // Institution-specific
   const [institutionName, setInstitutionName] = useState('');
+
+  // ── Email OTP verification (required before submit) ─────────────────────
+  const otpPurpose = accountType === 'institution' ? 'institution_register' : 'individual_register';
+  const [otpSent,      setOtpSent]      = useState(false);
+  const [otpValue,     setOtpValue]     = useState('');
+  const [otpVerified,  setOtpVerified]  = useState(false);
+  const [otpSending,   setOtpSending]   = useState(false);
+  const [otpVerifying, setOtpVerifying] = useState(false);
+  const [otpMessage,   setOtpMessage]   = useState<string | null>(null);
+  const [otpError,     setOtpError]     = useState<string | null>(null);
+
+  // Re-lock verification if the user changes the email after verifying/sending
+  const handleEmail = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setForm(f => ({ ...f, email: e.target.value }));
+    setOtpSent(false); setOtpVerified(false); setOtpValue(''); setOtpError(null); setOtpMessage(null);
+  };
+
+  const sendOtp = async () => {
+    if (!form.email || !form.email.includes('@')) { setOtpError('Enter a valid email first.'); return; }
+    setOtpSending(true); setOtpError(null); setOtpMessage(null);
+    try {
+      const res = await authService.sendOtp(form.email, otpPurpose);
+      setOtpSent(true);
+      setOtpMessage(res.message);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? 'Failed to send verification code.';
+      setOtpError(msg);
+    } finally {
+      setOtpSending(false);
+    }
+  };
+
+  const verifyOtp = async () => {
+    if (otpValue.length !== 6) { setOtpError('Enter the 6-digit code.'); return; }
+    setOtpVerifying(true); setOtpError(null);
+    try {
+      const res = await authService.verifyOtp(form.email, otpValue, otpPurpose);
+      setOtpVerified(res.verified);
+      setOtpMessage(res.message);
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
+        ?? 'Invalid or expired code.';
+      setOtpError(msg);
+    } finally {
+      setOtpVerifying(false);
+    }
+  };
 
   const handle = (k: keyof RegisterDto) => (e: React.ChangeEvent<HTMLInputElement>) =>
     setForm(f => ({ ...f, [k]: e.target.value }));
@@ -167,6 +226,7 @@ export default function RegisterPage() {
     if (accountType === 'institution' && !institutionName.trim()) {
       setError('Please enter your institution name.'); return;
     }
+    if (!otpVerified) { setError('Please verify your email with the code sent to it first.'); return; }
     setLoading(true);
     try {
       const res = await authService.register({
@@ -346,10 +406,44 @@ export default function RegisterPage() {
 
             <div className={styles.field}>
               <label className={styles.fieldLabel}>Email</label>
-              <input className={styles.textInput} type="email"
-                placeholder={accountType === 'institution' ? 'admin@institution.edu' : 'you@example.com'}
-                value={form.email} onChange={handle('email')} required />
+              <div style={{ display: 'flex', gap: 8 }}>
+                <input className={styles.textInput} type="email"
+                  placeholder={accountType === 'institution' ? 'admin@institution.edu' : 'you@example.com'}
+                  value={form.email} onChange={handleEmail} disabled={otpVerified} required
+                  style={{ flex: 1 }} />
+                <button type="button" className={styles.togglePw}
+                  style={{ position: 'static', whiteSpace: 'nowrap', padding: '0 14px', border: '1.5px solid #e5e7eb', borderRadius: 10, fontWeight: 600, fontSize: 13, color: otpVerified ? '#10b981' : '#7c3aed' }}
+                  disabled={otpSending || otpVerified || !form.email}
+                  onClick={sendOtp}>
+                  {otpVerified ? 'Verified ✓' : otpSending ? 'Sending…' : otpSent ? 'Resend code' : 'Send code'}
+                </button>
+              </div>
             </div>
+
+            {otpSent && !otpVerified && (
+              <div className={styles.field}>
+                <label className={styles.fieldLabel}>Verification Code</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <input className={styles.textInput} inputMode="numeric" maxLength={6}
+                    placeholder="6-digit code" value={otpValue}
+                    onChange={e => setOtpValue(e.target.value.replace(/\D/g, '').slice(0, 6))}
+                    style={{ flex: 1, letterSpacing: 4 }} />
+                  <button type="button" className={styles.togglePw}
+                    style={{ position: 'static', whiteSpace: 'nowrap', padding: '0 14px', border: '1.5px solid #e5e7eb', borderRadius: 10, fontWeight: 600, fontSize: 13, color: '#7c3aed' }}
+                    disabled={otpVerifying || otpValue.length !== 6}
+                    onClick={verifyOtp}>
+                    {otpVerifying ? 'Verifying…' : 'Verify'}
+                  </button>
+                </div>
+              </div>
+            )}
+
+            {otpMessage && !otpError && (
+              <p style={{ fontSize: 12.5, color: otpVerified ? '#10b981' : '#6b7280', margin: '-8px 0 4px' }}>{otpMessage}</p>
+            )}
+            {otpError && (
+              <p style={{ fontSize: 12.5, color: '#ef4444', margin: '-8px 0 4px' }}>{otpError}</p>
+            )}
 
             <div className={styles.fieldRow}>
               <div className={styles.field}>
@@ -400,7 +494,7 @@ export default function RegisterPage() {
 
             <div className={styles.formActions}>
               <button type="submit" className={styles.btnPrimary}
-                disabled={loading || !form.full_name || !form.email || !form.password}>
+                disabled={loading || !form.full_name || !form.email || !form.password || !otpVerified}>
                 <span className={styles.btnLabel}>
                   {loading
                     ? (accountType === 'institution' ? 'Setting up…' : 'Creating account…')

@@ -1,0 +1,689 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>String Algorithms — Trie &amp; KMP Pattern Matching — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{0%{transform:scale(1);border-color:#e2e8f0;}50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}100%{transform:scale(1);border-color:#e2e8f0;}}
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+  .mode-btn{transition:all .18s ease;}
+  .node-badge{transition:all .25s ease;display:inline-flex;align-items:center;gap:4px;}
+  .node-badge.onpath{background:#eef2ff!important;border-color:#6366f1!important;color:#4338ca!important;transform:scale(1.08);}
+  .node-badge.endword{background:#0f172a;border-color:#0f172a;color:#34d399;}
+  .char-box{width:34px;height:34px;display:flex;align-items:center;justify-content:center;border-radius:8px;border:2px solid #e2e8f0;background:#f8fafc;font-family:'Fira Code',monospace;font-weight:700;font-size:13px;color:#475569;transition:all .25s ease;}
+  .char-box.cmp{background:#eef2ff;border-color:#6366f1;color:#4338ca;}
+  .char-box.match{background:#ecfdf5;border-color:#10b981;color:#047857;}
+  .char-box.mismatch{background:#fef2f2;border-color:#ef4444;color:#b91c1c;}
+  .char-box.found{background:#0f172a;border-color:#0f172a;color:#34d399;}
+  .lps-box{width:30px;height:30px;display:flex;flex-direction:column;align-items:center;justify-content:center;border-radius:6px;border:1px solid #e2e8f0;background:#f8fafc;font-family:'Fira Code',monospace;font-size:11px;}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition"><i class="fa-solid fa-arrow-left"></i> Dashboard</a>
+      <div class="bg-slate-900 text-indigo-400 p-2.5 rounded-xl font-bold text-xl shadow-sm"><i class="fa-solid fa-font"></i></div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Data Structures Virtual Lab</h1>
+        <p class="text-xs text-indigo-600 font-medium">Experiment: String Algorithms — Trie (Prefix Tree) &amp; KMP Pattern Matching</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0"><span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active</span>
+  </header>
+
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2"><i class="fa-solid fa-book-open"></i> Theory</button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Assistant</button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Theory: String Algorithms</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">This lab covers two classic string data structures/algorithms: the <strong>Trie</strong> (a tree for fast prefix lookups) and <strong>KMP</strong> (Knuth-Morris-Pratt, a linear-time exact pattern-matching algorithm).</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">Trie (Prefix Tree)</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Each node holds a map of <code class="font-mono">children</code> (character → node) and an <code class="font-mono">isEndOfWord</code> flag. Inserting a word walks/creates one node per character from the root; searching a prefix walks the same path — if it exists, the prefix is present (whether or not it's a complete word).</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-indigo-600 mb-1 font-mono">KMP Pattern Matching</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Naive string matching restarts from scratch after every mismatch — wasteful. KMP precomputes an <strong>LPS array</strong> (Longest proper Prefix which is also a Suffix, per pattern position) so that on a mismatch, it can jump the pattern pointer directly to the next viable alignment instead of re-comparing characters it already knows match.</p>
+        </div>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Understanding the LPS Array</h3>
+      <p class="text-xs text-slate-500 leading-relaxed">For pattern <code class="font-mono">"ABABCABAB"</code>, the LPS array is <code class="font-mono">[0,0,1,2,0,1,2,3,4]</code>. <code class="font-mono">lps[i]</code> is the length of the longest prefix of the pattern that is also a suffix of <code class="font-mono">pattern[0..i]</code>. When a mismatch happens at pattern index <code class="font-mono">j</code>, KMP doesn't restart — it sets <code class="font-mono">j = lps[j-1]</code>, reusing the already-matched suffix as the new prefix to compare from. Crucially, the text pointer <code class="font-mono">i</code> never moves backward.</p>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white"><tr><th class="p-2 text-left">Algorithm</th><th class="p-2 text-left">Time Complexity</th><th class="p-2 text-left">Space</th></tr></thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">Trie Insert / Search (word length m)</td><td class="p-2 font-mono">O(m)</td><td class="p-2 font-mono">O(ALPHABET_SIZE × N × M) worst case</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">LPS Array Construction (pattern length m)</td><td class="p-2 font-mono">O(m)</td><td class="p-2 font-mono">O(m)</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">KMP Search (text length n, pattern length m)</td><td class="p-2 font-mono">O(n + m)</td><td class="p-2 font-mono">O(m)</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">Naive Pattern Matching</td><td class="p-2 font-mono">O(n·m) worst case</td><td class="p-2 font-mono">O(1)</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-indigo-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab and choose a mode: <strong>Trie (Prefix Tree)</strong> or <strong>KMP Pattern Matching</strong>.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200"><strong>Trie mode:</strong> type comma-separated words (or use a preset), click <strong>Start Simulation</strong>, then <strong>Step</strong> or <strong>Run All</strong> to insert them one at a time and watch the tree grow. Use the <strong>Search Prefix</strong> box to highlight a path and see how many stored words share it.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200"><strong>KMP mode:</strong> enter a Text and a Pattern, click <strong>Start Simulation</strong>, then <strong>Step</strong> through each comparison or <strong>Run All</strong> to animate the full search. The LPS table is shown above the comparison row.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Watch the pattern slide beneath the text as its alignment (offset <code class="font-mono">i - j</code>) changes — on a mismatch it jumps using the LPS table instead of restarting from the next text character.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">All match positions are listed in the result banner once the run finishes.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> at any time to clear the current mode's state.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What does each Trie node store?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> A left and right child pointer only</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> A map of children (character → node) and an isEndOfWord flag</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> The full word as a string</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. What does the LPS array in KMP represent?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> Length of the longest proper prefix that is also a suffix, at each pattern position</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> The positions where the pattern matches the text</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> The alphabetical rank of each character</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. What is the main advantage of KMP over naive string matching?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> It uses less memory than any other algorithm</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> It can find approximate (fuzzy) matches</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> It never re-examines text characters, avoiding the naive approach's restart-from-scratch behavior</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. In a Trie, searching for a prefix that was never inserted will:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> Fail as soon as a required character node is missing</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> Always succeed since Tries store all possible strings</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> Throw an error and crash the program</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-center gap-2">
+          <span class="text-xs text-slate-500 font-medium mr-1">Mode:</span>
+          <button id="modeTrieBtn" onclick="setMode('trie')" class="mode-btn px-4 py-2 rounded-full text-sm font-medium bg-slate-900 text-white flex items-center gap-2"><i class="fa-solid fa-sitemap"></i> Trie (Prefix Tree)</button>
+          <button id="modeKmpBtn" onclick="setMode('kmp')" class="mode-btn px-4 py-2 rounded-full text-sm font-medium text-slate-500 hover:bg-slate-100 flex items-center gap-2"><i class="fa-solid fa-magnifying-glass"></i> KMP Pattern Matching</button>
+        </div>
+
+        <!-- TRIE controls -->
+        <div id="trieControls" class="flex flex-col gap-3">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Words to Insert (comma-separated)</label>
+              <input type="text" id="trieWordsInput" value="cat,car,card,care,dog,do,dot" class="w-80 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-indigo-500">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Search Prefix</label>
+              <div class="flex gap-2">
+                <input type="text" id="prefixInput" value="ca" class="w-32 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                <button onclick="searchPrefix()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-full text-xs transition active:scale-95">Search</button>
+              </div>
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 text-xs">
+            <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+            <button onclick="loadTriePreset('cat,car,card,care,dog,do,dot')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Animals/Pets Set</button>
+            <button onclick="loadTriePreset('to,tea,ted,ten,inn,in')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Classic Trie Example</button>
+            <button onclick="loadTriePreset('code,coder,coding,code,coffee,cool')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Prefix-heavy Set</button>
+          </div>
+        </div>
+
+        <!-- KMP controls -->
+        <div id="kmpControls" class="hidden flex-col gap-3">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Text</label>
+              <input type="text" id="kmpTextInput" value="ABABDABACDABABCABAB" class="w-96 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-indigo-500">
+            </div>
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Pattern</label>
+              <input type="text" id="kmpPatternInput" value="ABABCABAB" class="w-48 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-indigo-500">
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2 text-xs">
+            <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+            <button onclick="loadKmpPreset('ABABDABACDABABCABAB','ABABCABAB')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Classic LPS Example</button>
+            <button onclick="loadKmpPreset('AAAAAAAAAA','AAA')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Overlapping Matches</button>
+            <button onclick="loadKmpPreset('mississippi','issi')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Mississippi</button>
+            <button onclick="loadKmpPreset('this is a test string for testing test cases','test')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Multi-word Text</button>
+          </div>
+        </div>
+
+        <div class="flex flex-wrap items-center justify-between gap-3 pt-2 border-t border-slate-100">
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-play"></i> Start Simulation</button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed"><i class="fa-solid fa-forward-step"></i> Step</button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95"><i class="fa-solid fa-bolt"></i> Run All</button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95"><i class="fa-solid fa-rotate-left"></i> Reset</button>
+          </div>
+          <div class="flex items-center gap-3 flex-1 min-w-[200px]">
+            <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden"><div id="progressFill" class="progress-fill h-full bg-indigo-600 rounded-full" style="width:0%"></div></div>
+            <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-8 flex flex-col gap-6">
+          <!-- TRIE viz -->
+          <div id="trieVizPanel" class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm overflow-x-auto">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-sitemap text-indigo-600"></i> Trie Structure</h3>
+            <div id="trieTree" class="text-xs min-h-[200px]"></div>
+          </div>
+
+          <!-- KMP viz -->
+          <div id="kmpVizPanel" class="hidden bg-white border border-slate-200 rounded-2xl p-4 shadow-sm overflow-x-auto">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-table-cells text-indigo-600"></i> LPS (Failure Function) Table</h3>
+            <div id="lpsTable" class="flex gap-1 mb-6"></div>
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-align-left text-indigo-600"></i> Text / Pattern Alignment</h3>
+            <div id="textRow" class="flex gap-1 mb-2"></div>
+            <div id="patternRow" class="flex gap-1" style="margin-left:0px;"></div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2"><i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal</span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition"><i class="fa-solid fa-trash-can"></i> Clear</button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[100px] max-h-[200px] overflow-y-auto space-y-1"><p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Start Simulation' or 'Run All' to execute.</p></div>
+          </div>
+        </div>
+
+        <div class="lg:col-span-4 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2"><i class="fa-solid fa-microchip text-indigo-600"></i> State</h3>
+            <div class="grid grid-cols-2 gap-3" id="memCardsContainer">
+              <div id="mem1" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center"><span id="label1" class="text-xs text-slate-500 block font-mono">i</span><span id="val1" class="text-xl font-bold font-mono text-indigo-600 block my-1">--</span></div>
+              <div id="mem2" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center"><span id="label2" class="text-xs text-slate-500 block font-mono">j</span><span id="val2" class="text-xl font-bold font-mono text-indigo-600 block my-1">--</span></div>
+              <div id="mem3" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center col-span-2"><span id="label3" class="text-xs text-slate-500 block font-mono">status</span><span id="val3" class="text-lg font-bold font-mono text-emerald-600 block my-1">--</span></div>
+            </div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[70px]">Choose a mode, then click 'Start Simulation'.</p>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-indigo-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm">
+            <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider mb-1">Result</h4>
+            <p id="resultBannerText" class="text-sm font-mono font-bold text-emerald-700 break-words">--</p>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-indigo-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">1. What is the LPS array of the pattern "AAAA"?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> [0, 0, 0, 0]</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> [0, 1, 2, 3]</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> [1, 2, 3, 4]</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. On a mismatch at pattern index j &gt; 0, KMP sets j to:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> lps[j-1]</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> 0, always restarting the pattern</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> j+1</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. If you insert "car" and "card" into an empty Trie, then search for the exact word "car", the result is:</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> Not found — "car" is only a prefix of "card"</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> Found, but only because "card" exists</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> Found — the node for 'r' (end of "car") has isEndOfWord = true independently of "card"</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. Why can the text pointer <code class="font-mono">i</code> in KMP never move backward?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> Because the LPS-based jump on the pattern pointer already accounts for all useful information from prior matched characters — re-reading text would be redundant</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> Because arrays in JavaScript cannot be indexed backward</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> It can move backward; that's what makes KMP fast</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-indigo-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2"><i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant</h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3"><div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about Tries, prefixes, the LPS array, or how KMP avoids re-scanning text.</div></div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., what is LPS?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-indigo-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{ el.classList.remove('bg-slate-900','text-white'); el.classList.add('text-slate-500'); });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500'); btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ---------- Verified Trie core ---------- */
+class TrieNode { constructor(){ this.children={}; this.isEndOfWord=false; } }
+class Trie {
+  constructor(){ this.root = new TrieNode(); }
+  insert(word){
+    let node = this.root;
+    for(const ch of word){
+      if(!node.children[ch]) node.children[ch] = new TrieNode();
+      node = node.children[ch];
+    }
+    node.isEndOfWord = true;
+  }
+  walkPrefix(prefix){
+    let node = this.root; const path=[node];
+    for(const ch of prefix){
+      if(!node.children[ch]) return { found:false, path };
+      node = node.children[ch]; path.push(node);
+    }
+    return { found:true, path, node };
+  }
+  countWordsUnder(node){
+    let count = node.isEndOfWord ? 1 : 0;
+    for(const k in node.children) count += this.countWordsUnder(node.children[k]);
+    return count;
+  }
+}
+
+/* ---------- Verified KMP core ---------- */
+function computeLPS(pattern){
+  const lps = new Array(pattern.length).fill(0);
+  let len=0, i=1;
+  while(i<pattern.length){
+    if(pattern[i]===pattern[len]){ len++; lps[i]=len; i++; }
+    else if(len!==0){ len=lps[len-1]; }
+    else { lps[i]=0; i++; }
+  }
+  return lps;
+}
+
+function buildKmpSteps(text, pattern){
+  const lps = computeLPS(pattern);
+  const steps = [];
+  steps.push({type:'lps', lps:[...lps], note:'Computed the LPS (failure function) array for the pattern.'});
+  let i=0,j=0; const matches=[];
+  while(i<text.length){
+    steps.push({type:'compare', i, j, note:`Compare text[${i}]='${text[i]}' with pattern[${j}]='${pattern[j]}'.`});
+    if(text[i]===pattern[j]){
+      i++; j++;
+      steps.push({type:'match-char', i:i-1, j:j-1, note:'Match — advance both pointers.'});
+      if(j===pattern.length){
+        matches.push(i-j);
+        steps.push({type:'match-found', pos:i-j, note:`Full pattern match found at index ${i-j}!`});
+        j = lps[j-1];
+        steps.push({type:'shift-after-match', newJ:j, note:`Continue searching: j = lps[${pattern.length-1}] = ${j}.`});
+      }
+    } else if(j!==0){
+      const oldJ=j; j = lps[j-1];
+      steps.push({type:'mismatch-shift', i, oldJ, newJ:j, note:`Mismatch. Instead of restarting, jump using LPS: j = lps[${oldJ-1}] = ${j}. Note: i stays at ${i} — no backtracking on the text!`});
+    } else {
+      steps.push({type:'mismatch-advance', i, note:`Mismatch with j=0 — no smaller prefix to fall back on; advance i to ${i+1}.`});
+      i++;
+    }
+  }
+  steps.push({type:'done', matches:[...matches], note: matches.length? `Search complete. Matches found at index: [${matches.join(', ')}]` : 'Search complete. No matches found.'});
+  return steps;
+}
+
+/* ---------- Mode & shared controller ---------- */
+let mode = 'trie';
+let trieState = { trie:null, words:[], idx:0, timer:null };
+let kmpState = { text:'', pattern:'', steps:[], idx:0, timer:null };
+
+function setMode(m){
+  mode = m;
+  document.getElementById('modeTrieBtn').className = 'mode-btn px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 ' + (m==='trie' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100');
+  document.getElementById('modeKmpBtn').className = 'mode-btn px-4 py-2 rounded-full text-sm font-medium flex items-center gap-2 ' + (m==='kmp' ? 'bg-slate-900 text-white' : 'text-slate-500 hover:bg-slate-100');
+  document.getElementById('trieControls').classList.toggle('hidden', m!=='trie');
+  document.getElementById('trieControls').classList.toggle('flex', m==='trie');
+  document.getElementById('kmpControls').classList.toggle('hidden', m!=='kmp');
+  document.getElementById('kmpControls').classList.toggle('flex', m==='kmp');
+  document.getElementById('trieVizPanel').classList.toggle('hidden', m!=='trie');
+  document.getElementById('kmpVizPanel').classList.toggle('hidden', m!=='kmp');
+  resetSimulation();
+}
+
+function loadTriePreset(csv){ document.getElementById('trieWordsInput').value = csv; startSimulation(); }
+function loadKmpPreset(text, pattern){ document.getElementById('kmpTextInput').value = text; document.getElementById('kmpPatternInput').value = pattern; startSimulation(); }
+
+/* ---------- Trie rendering ---------- */
+function renderTrie(trie, highlightPath){
+  const container = document.getElementById('trieTree');
+  const hl = highlightPath || [];
+  function render(node, char, pathStr, isRoot){
+    const keys = Object.keys(node.children).sort();
+    const childHtml = keys.map(k=>render(node.children[k], k, pathStr+k, false)).join('');
+    const onPath = hl.includes(pathStr);
+    const badgeClasses = 'node-badge px-2.5 py-1 rounded-full border text-[11px] font-mono ' +
+      (node.isEndOfWord ? 'endword ' : 'bg-white border-slate-200 text-slate-600 ') + (onPath ? 'onpath' : '');
+    const label = isRoot ? 'root' : char;
+    return `<div class="mb-1">
+      <span class="${badgeClasses}">${label}${node.isEndOfWord?' <i class=\"fa-solid fa-check\"></i>':''}</span>
+      ${keys.length? `<div class="ml-4 pl-3 border-l-2 border-slate-200 mt-1 space-y-1">${childHtml}</div>` : ''}
+    </div>`;
+  }
+  container.innerHTML = render(trie.root, '', '', true);
+}
+
+/* ---------- KMP rendering ---------- */
+function renderLpsTable(pattern, lps){
+  const el = document.getElementById('lpsTable');
+  el.innerHTML = pattern.split('').map((ch,idx)=>`
+    <div class="lps-box"><span class="text-slate-400">${idx}</span><span class="font-bold text-indigo-600">${ch}</span><span class="text-emerald-600">${lps[idx]}</span></div>
+  `).join('');
+}
+function renderKmpRows(text, pattern, i, j, highlightClass){
+  const textRow = document.getElementById('textRow');
+  textRow.innerHTML = text.split('').map((ch,idx)=>{
+    let cls='char-box';
+    if(idx===i) cls += ' '+(highlightClass||'cmp');
+    return `<div class="${cls}" id="tchar-${idx}">${ch}</div>`;
+  }).join('');
+  const patternRow = document.getElementById('patternRow');
+  const offset = i - j;
+  patternRow.style.marginLeft = (offset*38)+'px';
+  patternRow.innerHTML = pattern.split('').map((ch,idx)=>{
+    let cls='char-box';
+    if(idx===j) cls += ' '+(highlightClass||'cmp');
+    return `<div class="${cls}">${ch}</div>`;
+  }).join('');
+}
+function markMatch(pos, len){
+  for(let k=0;k<len;k++){ const el=document.getElementById(`tchar-${pos+k}`); if(el) el.className='char-box found'; }
+}
+
+/* ---------- Shared control functions ---------- */
+function startSimulation(){
+  if(mode==='trie') startTrie(); else startKmp();
+}
+function stepExecute(){
+  if(mode==='trie') stepTrie(); else stepKmp();
+}
+function runAll(){
+  if(mode==='trie') runAllTrie(); else runAllKmp();
+}
+function resetSimulation(){
+  if(mode==='trie') resetTrie(); else resetKmp();
+}
+
+/* ---------- Trie simulation flow ---------- */
+function startTrie(){
+  clearInterval(trieState.timer);
+  const words = document.getElementById('trieWordsInput').value.split(',').map(w=>w.trim().toLowerCase()).filter(Boolean);
+  trieState = { trie: new Trie(), words, idx:0, timer:null };
+  renderTrie(trieState.trie);
+  clearConsole(); hideResultBanner();
+  document.getElementById('progressFill').style.width='0%';
+  document.getElementById('currentStepBadge').innerText='Step: Ready';
+  document.getElementById('explanationText').innerText = "Trie ready. Click 'Step' or 'Run All' to insert words.";
+  appendConsole(`&gt;&gt;&gt; Word queue: [${words.join(', ')}]`);
+  document.getElementById('label1').innerText='inserting'; document.getElementById('label2').innerText='path length'; document.getElementById('label3').innerText='words stored';
+  document.getElementById('val1').innerText='--'; document.getElementById('val2').innerText='--'; document.getElementById('val3').innerText='0';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled=false; btnStep.className='bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95';
+}
+function stepTrie(){
+  if(trieState.idx >= trieState.words.length) return;
+  const word = trieState.words[trieState.idx]; trieState.idx++;
+  trieState.trie.insert(word);
+  const pathStrs = []; for(let k=1;k<=word.length;k++) pathStrs.push(word.slice(0,k));
+  renderTrie(trieState.trie, pathStrs);
+  appendConsole(`&gt;&gt;&gt; Insert "${word}": walk/create nodes for each character, mark isEndOfWord=true at the final node.`);
+  document.getElementById('explanationText').innerText = `Inserted "${word}" — walked ${word.length} character(s) from the root, creating any missing nodes along the way.`;
+  document.getElementById('val1').innerText = word;
+  document.getElementById('val2').innerText = word.length;
+  document.getElementById('val3').innerText = trieState.trie.countWordsUnder(trieState.trie.root);
+  ['mem1','mem2','mem3'].forEach(id=>{ const c=document.getElementById(id); c.classList.add('updated'); setTimeout(()=>c.classList.remove('updated'),450); });
+  const total = trieState.words.length, done = trieState.idx;
+  document.getElementById('progressFill').style.width = `${Math.min(100,(done/total)*100)}%`;
+  document.getElementById('currentStepBadge').innerText = done>=total ? 'Finished' : `Step ${done}/${total}`;
+  if(done>=total){
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled=true; btnStep.className='bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+    document.getElementById('resultBannerText').innerText = `Trie built with ${trieState.words.length} word(s) — ${trieState.trie.countWordsUnder(trieState.trie.root)} complete words stored.`;
+    document.getElementById('resultBanner').classList.remove('hidden');
+  }
+}
+function runAllTrie(){
+  startTrie(); clearInterval(trieState.timer);
+  trieState.timer = setInterval(()=>{ if(trieState.idx>=trieState.words.length){ clearInterval(trieState.timer); return; } stepTrie(); }, 600);
+}
+function resetTrie(){
+  clearInterval(trieState.timer);
+  trieState = { trie: new Trie(), words:[], idx:0, timer:null };
+  renderTrie(trieState.trie);
+  clearConsole(); hideResultBanner();
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Start Simulation' or 'Run All' to insert the word queue.</span>");
+  document.getElementById('explanationText').innerText = "Choose a mode, then click 'Start Simulation'.";
+  document.getElementById('currentStepBadge').innerText='Step: Ready';
+  document.getElementById('progressFill').style.width='0%';
+  document.getElementById('val1').innerText='--'; document.getElementById('val2').innerText='--'; document.getElementById('val3').innerText='--';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled=true; btnStep.className='bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+}
+function searchPrefix(){
+  if(!trieState.trie){ return; }
+  const prefix = document.getElementById('prefixInput').value.trim().toLowerCase();
+  if(!prefix) return;
+  const result = trieState.trie.walkPrefix(prefix);
+  const pathStrs = []; for(let k=1;k<=prefix.length;k++) pathStrs.push(prefix.slice(0,k));
+  if(result.found){
+    renderTrie(trieState.trie, pathStrs);
+    const count = trieState.trie.countWordsUnder(result.node);
+    appendConsole(`&gt;&gt;&gt; Search prefix "${prefix}": path exists! ${count} stored word(s) share this prefix.`);
+    document.getElementById('explanationText').innerText = `Prefix "${prefix}" found — ${count} word(s) in the trie start with it.`;
+  } else {
+    renderTrie(trieState.trie, pathStrs.slice(0, result.path.length-1));
+    appendConsole(`&gt;&gt;&gt; Search prefix "${prefix}": NOT found — a required character node is missing.`);
+    document.getElementById('explanationText').innerText = `Prefix "${prefix}" not found — the walk hit a missing child node.`;
+  }
+}
+
+/* ---------- KMP simulation flow ---------- */
+function startKmp(){
+  clearInterval(kmpState.timer);
+  const text = document.getElementById('kmpTextInput').value;
+  const pattern = document.getElementById('kmpPatternInput').value;
+  const steps = pattern.length ? buildKmpSteps(text, pattern) : [];
+  kmpState = { text, pattern, steps, idx:0, timer:null };
+  const lpsStep = steps[0];
+  if(lpsStep) renderLpsTable(pattern, lpsStep.lps);
+  renderKmpRows(text, pattern, 0, 0, '');
+  clearConsole(); hideResultBanner();
+  document.getElementById('progressFill').style.width='0%';
+  document.getElementById('currentStepBadge').innerText='Step: Ready';
+  document.getElementById('explanationText').innerText = "KMP ready. Click 'Step' or 'Run All' to begin matching.";
+  appendConsole(`&gt;&gt;&gt; Text: "${text}"  |  Pattern: "${pattern}"`);
+  document.getElementById('label1').innerText='i (text)'; document.getElementById('label2').innerText='j (pattern)'; document.getElementById('label3').innerText='status';
+  document.getElementById('val1').innerText='0'; document.getElementById('val2').innerText='0'; document.getElementById('val3').innerText='ready';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled=false; btnStep.className='bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95';
+}
+function stepKmp(){
+  if(kmpState.idx >= kmpState.steps.length) return;
+  const step = kmpState.steps[kmpState.idx]; kmpState.idx++;
+  if(step.type==='lps'){ /* already rendered at start */ }
+  else if(step.type==='compare'){ renderKmpRows(kmpState.text, kmpState.pattern, step.i, step.j, 'cmp'); document.getElementById('val1').innerText=step.i; document.getElementById('val2').innerText=step.j; document.getElementById('val3').innerText='comparing'; }
+  else if(step.type==='match-char'){ renderKmpRows(kmpState.text, kmpState.pattern, step.i, step.j, 'match'); document.getElementById('val3').innerText='match'; }
+  else if(step.type==='match-found'){ markMatch(step.pos, kmpState.pattern.length); document.getElementById('val3').innerText='FOUND @'+step.pos; }
+  else if(step.type==='shift-after-match'){ document.getElementById('val2').innerText = step.newJ; document.getElementById('val3').innerText='continuing'; }
+  else if(step.type==='mismatch-shift'){ renderKmpRows(kmpState.text, kmpState.pattern, step.i, step.oldJ, 'mismatch'); document.getElementById('val2').innerText = step.newJ; document.getElementById('val3').innerText='LPS jump'; }
+  else if(step.type==='mismatch-advance'){ renderKmpRows(kmpState.text, kmpState.pattern, step.i, 0, 'mismatch'); document.getElementById('val1').innerText = step.i+1; document.getElementById('val3').innerText='advance i'; }
+  else if(step.type==='done'){
+    document.getElementById('val3').innerText='done';
+    document.getElementById('resultBannerText').innerText = step.matches.length ? `Matches found at index: [${step.matches.join(', ')}]` : 'No matches found.';
+    document.getElementById('resultBanner').classList.remove('hidden');
+  }
+
+  if(step.note) appendConsole(step.note);
+  document.getElementById('explanationText').innerText = step.note || '';
+  ['mem1','mem2','mem3'].forEach(id=>{ const c=document.getElementById(id); c.classList.add('updated'); setTimeout(()=>c.classList.remove('updated'),350); });
+
+  const total = kmpState.steps.length, done = kmpState.idx;
+  document.getElementById('progressFill').style.width = `${Math.min(100,(done/total)*100)}%`;
+  document.getElementById('currentStepBadge').innerText = done>=total ? 'Finished' : `Step ${done}/${total}`;
+  if(done>=total){
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled=true; btnStep.className='bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+  }
+}
+function runAllKmp(){
+  startKmp(); clearInterval(kmpState.timer);
+  kmpState.timer = setInterval(()=>{ if(kmpState.idx>=kmpState.steps.length){ clearInterval(kmpState.timer); return; } stepKmp(); }, 260);
+}
+function resetKmp(){
+  clearInterval(kmpState.timer);
+  kmpState = { text:'', pattern:'', steps:[], idx:0, timer:null };
+  document.getElementById('lpsTable').innerHTML='';
+  document.getElementById('textRow').innerHTML='';
+  document.getElementById('patternRow').innerHTML='';
+  clearConsole(); hideResultBanner();
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Start Simulation' or 'Run All' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Choose a mode, then click 'Start Simulation'.";
+  document.getElementById('currentStepBadge').innerText='Step: Ready';
+  document.getElementById('progressFill').style.width='0%';
+  document.getElementById('val1').innerText='--'; document.getElementById('val2').innerText='--'; document.getElementById('val3').innerText='--';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled=true; btnStep.className='bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){ const term=document.getElementById('terminal'); const p=document.createElement('p'); p.innerHTML=html; term.appendChild(p); term.scrollTop=term.scrollHeight; }
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q; const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback'); fb.classList.remove('hidden');
+    if(picked === correct){ score++; q.className='bg-white p-4 rounded-xl border border-emerald-300'; fb.innerText='✓ Correct!'; fb.className='feedback text-xs mt-2 font-medium text-emerald-600'; }
+    else { q.className='bg-white p-4 rounded-xl border border-rose-300'; fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.'; fb.className='feedback text-xs mt-2 font-medium text-rose-500'; }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if(!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className='flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-indigo-50 border border-indigo-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv); input.value='';
+
+  const q = query.toLowerCase();
+  let response = "Try switching between Trie and KMP modes in the simulator and step through the highlighted path or comparisons!";
+  if(q.includes('lps')) response = "LPS = Longest proper Prefix of pattern[0..i] which is also a Suffix of pattern[0..i]. It's precomputed once before matching starts, and it's what lets KMP skip already-known-matching comparisons after a mismatch.";
+  else if(q.includes('trie') && q.includes('prefix')) response = "A Trie stores strings character-by-character along root-to-node paths. Searching for a prefix just walks that same path — if every character node exists, the prefix is present in the trie, regardless of whether it's a complete inserted word.";
+  else if(q.includes('isendofword') || q.includes('end of word')) response = "isEndOfWord marks that a complete inserted word ends at this exact node — not just any node you can reach. That's how a Trie distinguishes 'car' (a stored word) from 'ca' (just a prefix on the way to 'car'/'card'/'care').";
+  else if(q.includes('naive') || q.includes('brute force')) response = "Naive string matching slides the pattern one position at a time and restarts comparison from scratch on every mismatch — worst case O(n·m). KMP instead uses the LPS array to skip directly to the next viable alignment, achieving O(n+m).";
+  else if(q.includes('backtrack') || q.includes('backward')) response = "KMP's text pointer i NEVER moves backward. Only the pattern pointer j jumps (via lps[j-1]) on a mismatch — because the characters already matched tell us exactly how much of the pattern could still line up, without re-reading the text.";
+  else if(q.includes('complex') || q.includes('big o') || q.includes('time')) response = "Trie insert/search is O(m) for a word of length m. KMP's LPS construction is O(m) and the search itself is O(n) — giving O(n+m) total, versus O(n·m) worst case for naive matching.";
+  else if(q.includes('children')) response = "Each Trie node's 'children' is a map from a single character to the next TrieNode. Following children[ch] one character at a time is how both insert() and search() traverse the tree.";
+  else if(q.includes('overlap')) response = "KMP correctly finds overlapping matches — e.g. pattern 'AAA' in text 'AAAAAAAAAA' matches at positions 0,1,2,3...7, because after a full match it continues from j = lps[m-1] instead of skipping past the whole pattern.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className='flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv); chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  trieState.trie = new Trie();
+  renderTrie(trieState.trie);
+});
+</script>
+</body>
+</html>

@@ -1,0 +1,781 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Python Loops - Virtual Lab Simulation</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .font-mono { font-family: 'Fira Code', monospace; }
+        .code-line { transition: background-color 0.2s ease, border-color 0.2s ease; }
+        .code-line.active { background-color: rgba(99, 102, 241, 0.25); border-left: 4px solid #6366f1; }
+        @keyframes popIn {
+            0% { transform: scale(0.9); opacity: 0; }
+            100% { transform: scale(1); opacity: 1; }
+        }
+        .animate-pop { animation: popIn 0.35s cubic-bezier(0.175, 0.885, 0.32, 1.275) forwards; }
+        @keyframes pulseMem {
+            0% { transform: scale(1); border-color: #6366f1; }
+            50% { transform: scale(1.05); border-color: #10b981; box-shadow: 0 0 15px rgba(16, 185, 129, 0.4); }
+            100% { transform: scale(1); border-color: #374151; }
+        }
+        .mem-card.updated { animation: pulseMem 0.5s ease-in-out; }
+    </style>
+</head>
+<body class="bg-slate-900 text-slate-100 min-h-screen flex flex-col">
+
+    <!-- Header Navigation -->
+    <header class="bg-slate-800 border-b border-slate-700 px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-brands fa-python"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Computer Science & Engineering</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 2: Python Iteration Control Structures (For & While Loops)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <!-- Main Tab Navigation -->
+    <nav class="bg-slate-800/80 border-b border-slate-700 px-6 py-2">
+        <div class="flex flex-wrap gap-2 text-sm font-medium">
+            <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-lg text-indigo-400 bg-slate-700/60 border border-slate-600 flex items-center gap-2 transition">
+                <i class="fa-solid fa-book-open"></i> Theory
+            </button>
+            <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-list-check"></i> Procedure
+            </button>
+            <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+            </button>
+            <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-flask"></i> Simulation
+            </button>
+            <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-graduation-cap"></i> Post-Test
+            </button>
+            <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2 transition">
+                <i class="fa-solid fa-robot"></i> AI Socratic Assistant
+            </button>
+        </div>
+    </nav>
+
+    <!-- Main Content Container -->
+    <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+        <!-- TAB 1: THEORY -->
+        <div id="content-theory" class="tab-content bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Theory: Iteration Structures in Python</h2>
+            <p class="text-sm text-slate-300 leading-relaxed">
+                In programming, <strong>looping</strong> or iteration allows a block of statements to be executed repeatedly until a specified condition is met. Python provides two primary loop constructs: <code class="bg-slate-900 text-indigo-300 px-1.5 py-0.5 rounded font-mono">for</code> loops (definite iteration) and <code class="bg-slate-900 text-indigo-300 px-1.5 py-0.5 rounded font-mono">while</code> loops (indefinite iteration).
+            </p>
+
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono"><i class="fa-solid fa-rotate-right text-emerald-400"></i> For Loop & range()</h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        The <code class="text-indigo-300">for</code> loop iterates over a sequence generated by <code class="text-amber-300">range(start, stop, step)</code>.
+                    </p>
+                    <div class="bg-slate-950 p-2.5 rounded font-mono text-xs text-slate-300 border border-slate-800">
+                        total = 0<br>
+                        for i in range(1, 6):<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;total += i
+                    </div>
+                    <p class="text-[11px] text-slate-400 italic">Executes exactly 5 times ($i = 1, 2, 3, 4, 5$). Note that <code class="text-slate-200">stop</code> (6) is exclusive!</p>
+                </div>
+
+                <div class="bg-slate-900 p-4 rounded-lg border border-slate-700 space-y-2">
+                    <h3 class="font-bold text-indigo-300 font-mono"><i class="fa-solid fa-arrows-spin text-amber-400"></i> While Loop</h3>
+                    <p class="text-slate-400 text-xs leading-relaxed">
+                        The <code class="text-indigo-300">while</code> loop continues executing as long as its Boolean condition remains <code class="text-emerald-400">True</code>.
+                    </p>
+                    <div class="bg-slate-950 p-2.5 rounded font-mono text-xs text-slate-300 border border-slate-800">
+                        count = 1<br>
+                        while count &lt;= 4:<br>
+                        &nbsp;&nbsp;&nbsp;&nbsp;count += 1
+                    </div>
+                    <p class="text-[11px] text-slate-400 italic">Care must be taken to update the loop counter variable to avoid infinite loops.</p>
+                </div>
+            </div>
+
+            <div class="bg-slate-900/60 p-4 rounded-lg border border-slate-700 text-xs text-slate-300 space-y-2">
+                <h4 class="font-bold text-indigo-300 text-sm"><i class="fa-solid fa-lightbulb text-amber-300"></i> Key Architectural Concepts</h4>
+                <ul class="list-disc list-inside space-y-1 text-slate-400">
+                    <li><strong class="text-slate-200">Loop Variable:</strong> Keeps track of current iteration state ($i$, $count$).</li>
+                    <li><strong class="text-slate-200">Accumulator:</strong> Variable used to collect or sum running values across iterations ($total$).</li>
+                    <li><strong class="text-slate-200">Loop Termination:</strong> Occurs when sequence completes or boolean evaluation returns <code class="text-rose-400">False</code>.</li>
+                </ul>
+            </div>
+        </div>
+
+        <!-- TAB 2: PROCEDURE -->
+        <div id="content-procedure" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-4">
+            <h2 class="text-xl font-bold text-indigo-400 border-b border-slate-700 pb-2">Simulator Procedure</h2>
+            <ol class="list-decimal list-inside space-y-3 text-sm text-slate-300 leading-relaxed">
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Select the desired <strong>Loop Scenario</strong> (e.g. Sum 1 to N, Factorial, or While Counter) from the dropdown or click a Quick Preset.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Adjust the <strong>Iteration Limit (N)</strong> using the numeric input field.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Start Simulation"</strong> to initialize the loop counter and accumulator variables in RAM memory.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Click <strong>"Step Execution"</strong> repeatedly to observe the code trace highlight line-by-line through each iteration.</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Watch the <strong>Variable RAM Memory State</strong> update live with every pass of the loop body!</li>
+                <li class="p-2.5 bg-slate-900 rounded border border-slate-700">Alternatively, click <strong>"Run / Execute All"</strong> to complete all iterations instantly and view the output banner.</li>
+            </ol>
+        </div>
+
+        <!-- TAB 3: PRE-TEST -->
+        <div id="content-pretest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Pre-Lab Assessment Quiz</h2>
+                <span id="pretest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="preq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. How many iterations will `for i in range(1, 5):` perform?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> 5 iterations (i = 1 to 5)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> 4 iterations (i = 1 to 4)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> 6 iterations</label>
+                    </div>
+                    <p id="preq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="preq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What happens if you forget to increment the counter variable inside a `while` loop?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> SyntaxError is raised</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> The loop terminates immediately</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> The loop runs infinitely</label>
+                    </div>
+                    <p id="preq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPretest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Pre-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 4: SIMULATION -->
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-6">
+            <!-- Controls Bar -->
+            <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md flex flex-col gap-4">
+                <div class="flex flex-wrap items-center justify-between gap-4">
+                    <div class="flex flex-wrap items-center gap-4">
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Select Loop Scenario</label>
+                            <select id="loopScenario" onchange="updateScenarioDisplay()" class="bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                                <option value="sum">Sum of numbers 1 to N (For Loop)</option>
+                                <option value="factorial">Factorial N! (For Loop)</option>
+                                <option value="while_count">Count Up to N (While Loop)</option>
+                                <option value="even_sum">Sum Even Numbers 2 to N (Step = 2)</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label class="block text-xs font-medium text-slate-400 mb-1">Limit (N)</label>
+                            <input type="number" id="inputN" value="5" min="1" max="10" oninput="updateScenarioDisplay()" class="w-24 bg-slate-900 border border-slate-700 rounded-lg px-3 py-1.5 text-slate-100 font-mono text-sm focus:outline-none focus:border-indigo-500">
+                        </div>
+                    </div>
+
+                    <div class="flex flex-wrap items-center gap-2">
+                        <button onclick="startSimulation()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-indigo-600/20 active:scale-95">
+                            <i class="fa-solid fa-play"></i> Start Simulation
+                        </button>
+                        <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 cursor-not-allowed">
+                            <i class="fa-solid fa-forward-step"></i> Step Execution
+                        </button>
+                        <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition flex items-center gap-2 shadow-lg shadow-emerald-600/20 active:scale-95">
+                            <i class="fa-solid fa-bolt"></i> Run / Execute All
+                        </button>
+                        <button onclick="resetSimulation()" class="bg-slate-700 hover:bg-slate-600 text-slate-200 font-medium px-3 py-2 rounded-lg text-sm transition flex items-center gap-1 active:scale-95">
+                            <i class="fa-solid fa-rotate-left"></i> Reset
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Quick Preset Shortcuts -->
+                <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-700/60 text-xs">
+                    <span class="text-slate-400 font-medium"><i class="fa-solid fa-bolt text-amber-400"></i> Quick Presets:</span>
+                    <button onclick="loadPreset('sum', 5)" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Sum 1 to 5</button>
+                    <button onclick="loadPreset('factorial', 4)" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Factorial 4!</button>
+                    <button onclick="loadPreset('while_count', 3)" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">While Count to 3</button>
+                    <button onclick="loadPreset('even_sum', 8)" class="bg-slate-900 hover:bg-slate-700 text-slate-300 px-2.5 py-1 rounded border border-slate-700 font-mono">Sum Evens to 8</button>
+                </div>
+            </div>
+
+            <!-- Execution Workspace Split View -->
+            <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+                
+                <!-- Left Column: Source Code Panel -->
+                <div class="lg:col-span-5 bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md">
+                    <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-3 flex justify-between items-center">
+                        <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                            <i class="fa-solid fa-code text-indigo-400"></i> Code Trace Window
+                        </span>
+                        <span id="currentStepBadge" class="text-xs bg-slate-700 text-slate-300 px-2.5 py-0.5 rounded-full font-mono">Step: Ready</span>
+                    </div>
+                    <div id="codeContainer" class="p-4 font-mono text-sm bg-slate-950 flex-1 space-y-1 overflow-x-auto min-h-[220px]">
+                        <!-- Dynamic lines rendered by JS -->
+                    </div>
+                    <div class="p-4 border-t border-slate-700/80 bg-slate-800/50">
+                        <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-1">Execution Status</h4>
+                        <p id="explanationText" class="text-xs text-slate-300 leading-relaxed min-h-[36px]">
+                            Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Right Column: Variable Memory & Console Output -->
+                <div class="lg:col-span-7 flex flex-col gap-6">
+                    
+                    <!-- Memory Inspector -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl p-4 shadow-md">
+                        <h3 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-3 flex items-center gap-2">
+                            <i class="fa-solid fa-microchip text-indigo-400"></i> Variable RAM Memory State
+                        </h3>
+                        <div class="grid grid-cols-3 gap-3">
+                            <div id="memI" class="mem-card bg-slate-900 border border-slate-700 p-3 rounded-lg text-center transition">
+                                <span class="text-xs text-slate-400 block font-mono">i (loop counter)</span>
+                                <span id="valI" class="text-xl font-bold font-mono text-amber-400 block my-1">--</span>
+                                <span class="text-[10px] bg-amber-500/10 text-amber-300 px-2 py-0.5 rounded font-mono">int</span>
+                            </div>
+                            <div id="memN" class="mem-card bg-slate-900 border border-slate-700 p-3 rounded-lg text-center transition">
+                                <span class="text-xs text-slate-400 block font-mono">n (limit)</span>
+                                <span id="valN" class="text-xl font-bold font-mono text-indigo-400 block my-1">--</span>
+                                <span class="text-[10px] bg-indigo-500/10 text-indigo-300 px-2 py-0.5 rounded font-mono">int</span>
+                            </div>
+                            <div id="memAcc" class="mem-card bg-slate-900 border border-slate-700 p-3 rounded-lg text-center transition">
+                                <span class="text-xs text-slate-400 block font-mono">result (accumulator)</span>
+                                <span id="valAcc" class="text-xl font-bold font-mono text-emerald-400 block my-1">--</span>
+                                <span class="text-[10px] bg-emerald-500/10 text-emerald-300 px-2 py-0.5 rounded font-mono">int</span>
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- Terminal Output -->
+                    <div class="bg-slate-800 border border-slate-700 rounded-xl overflow-hidden flex flex-col shadow-md flex-1">
+                        <div class="bg-slate-800/90 border-b border-slate-700 px-4 py-2.5 flex justify-between items-center">
+                            <span class="text-xs font-semibold uppercase tracking-wider text-slate-400 flex items-center gap-2">
+                                <i class="fa-solid fa-terminal text-emerald-400"></i> Output Terminal
+                            </span>
+                            <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-200 flex items-center gap-1 transition">
+                                <i class="fa-solid fa-trash-can"></i> Clear
+                            </button>
+                        </div>
+                        <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-300 min-h-[140px] max-h-[180px] overflow-y-auto space-y-1">
+                            <p class="text-slate-500 italic">>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>
+                        </div>
+                    </div>
+
+                    <!-- Pop-out Result Banner -->
+                    <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-950 to-indigo-950 border-2 border-emerald-500/50 p-4 rounded-xl shadow-xl flex items-center justify-between">
+                        <div class="flex items-center gap-3">
+                            <div id="bannerIcon" class="w-10 h-10 rounded-full bg-emerald-500/20 text-emerald-400 flex items-center justify-center text-lg font-bold">
+                                <i class="fa-solid fa-square-check"></i>
+                            </div>
+                            <div>
+                                <h4 class="text-xs uppercase font-semibold text-emerald-400 tracking-wider">Final Loop Execution Output</h4>
+                                <p id="resultBannerText" class="text-xl font-mono font-bold text-emerald-300">Final Result = 15</p>
+                            </div>
+                        </div>
+                        <span id="bannerStatus" class="text-xs font-mono text-slate-400 bg-slate-900/80 px-3 py-1 rounded-md border border-slate-700">
+                            Completed
+                        </span>
+                    </div>
+
+                </div>
+            </div>
+        </div>
+
+        <!-- TAB 5: POST-TEST -->
+        <div id="content-posttest" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md space-y-6">
+            <div class="flex justify-between items-center border-b border-slate-700 pb-2">
+                <h2 class="text-xl font-bold text-indigo-400">Post-Lab Evaluation Quiz</h2>
+                <span id="posttest-score" class="hidden text-xs bg-emerald-500/20 text-emerald-300 px-3 py-1 rounded-full font-bold"></span>
+            </div>
+
+            <div class="space-y-4 text-sm">
+                <div id="postq1-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">1. What is the sum of integers produced by `for i in range(1, 4): sum += i`?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="a"> 10</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="b"> 6 (1 + 2 + 3)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq1" value="c"> 4</label>
+                    </div>
+                    <p id="postq1-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <div id="postq2-box" class="bg-slate-900 p-4 rounded-lg border border-slate-700 transition">
+                    <p class="font-semibold text-slate-200 mb-2">2. What value does `range(2, 10, 2)` start and step with?</p>
+                    <div class="space-y-1.5 text-xs text-slate-300">
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="a"> Starts at 2, steps by 2 (2, 4, 6, 8)</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="b"> Starts at 10, steps down by 2</label>
+                        <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="postq2" value="c"> Starts at 2, stops at 10 inclusive</label>
+                    </div>
+                    <p id="postq2-feedback" class="hidden text-xs mt-2 font-medium"></p>
+                </div>
+
+                <button onclick="checkPosttest()" class="bg-indigo-600 hover:bg-indigo-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95">
+                    Submit Post-Test
+                </button>
+            </div>
+        </div>
+
+        <!-- TAB 6: AI ASSISTANT -->
+        <div id="content-ai" class="tab-content hidden bg-slate-800 border border-slate-700 rounded-xl p-6 shadow-md flex flex-col h-[520px]">
+            <h2 class="text-lg font-bold text-indigo-400 border-b border-slate-700 pb-2 mb-4 flex items-center gap-2">
+                <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+            </h2>
+
+            <div id="aiChatBox" class="flex-1 bg-slate-950 border border-slate-700 rounded-lg p-4 overflow-y-auto space-y-3 text-xs">
+                <div class="flex items-start gap-3">
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        Hello! I am your AI Socratic Assistant. Ask me any question about `for` loops, `while` loops, accumulators, or the `range()` function!
+                    </div>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2 mt-4">
+                <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., Why is range(1, 5) stopping at 4?)..." class="flex-1 bg-slate-900 border border-slate-700 rounded-lg px-3 py-2 text-xs text-slate-100 focus:outline-none focus:border-indigo-500">
+                <button onclick="sendAiQuery()" class="bg-indigo-600 hover:bg-indigo-500 text-white px-4 py-2 rounded-lg text-xs font-semibold transition active:scale-95">
+                    Send
+                </button>
+            </div>
+        </div>
+
+    </main>
+
+    <script>
+        // Execution State Variables
+        let scenario = 'sum';
+        let limitN = 5;
+        let stepList = [];
+        let currentStepIdx = 0;
+
+        document.addEventListener("DOMContentLoaded", () => {
+            document.getElementById('inputN').addEventListener('keydown', (e) => {
+                if (e.key === 'Enter') runAll();
+            });
+            updateScenarioDisplay();
+        });
+
+        // UI Tab Switcher
+        function switchTab(tabName) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(el => {
+                el.classList.remove('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+                el.classList.add('text-slate-400');
+            });
+
+            document.getElementById(`content-${tabName}`).classList.remove('hidden');
+            const activeBtn = document.getElementById(`tab-${tabName}`);
+            activeBtn.classList.remove('text-slate-400');
+            activeBtn.classList.add('text-indigo-400', 'bg-slate-700/60', 'border', 'border-slate-600');
+        }
+
+        function loadPreset(presetScenario, nVal) {
+            document.getElementById('loopScenario').value = presetScenario;
+            document.getElementById('inputN').value = nVal;
+            updateScenarioDisplay();
+            runAll();
+        }
+
+        function updateScenarioDisplay() {
+            scenario = document.getElementById('loopScenario').value;
+            limitN = parseInt(document.getElementById('inputN').value) || 5;
+            if (limitN < 1) limitN = 1;
+            if (limitN > 10) limitN = 10;
+
+            const codeContainer = document.getElementById('codeContainer');
+            if (scenario === 'sum') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>total = 0</span></div>
+                    <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>for i in range(1, ${limitN + 1}):</span></div>
+                    <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>&nbsp;&nbsp;&nbsp;&nbsp;total = total + i</span></div>
+                    <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Final Total = {total}"</span>)</span></div>
+                `;
+            } else if (scenario === 'factorial') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>fact = 1</span></div>
+                    <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>for i in range(1, ${limitN + 1}):</span></div>
+                    <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>&nbsp;&nbsp;&nbsp;&nbsp;fact = fact * i</span></div>
+                    <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"{${limitN}}! = {fact}"</span>)</span></div>
+                `;
+            } else if (scenario === 'while_count') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>count = 1</span></div>
+                    <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>while count &lt;= ${limitN}:</span></div>
+                    <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>&nbsp;&nbsp;&nbsp;&nbsp;count += 1</span></div>
+                    <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Reached limit {count - 1}"</span>)</span></div>
+                `;
+            } else if (scenario === 'even_sum') {
+                codeContainer.innerHTML = `
+                    <div id="line1" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">1</span><span>even_sum = 0</span></div>
+                    <div id="line2" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">2</span><span>for i in range(2, ${limitN + 1}, 2):</span></div>
+                    <div id="line3" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">3</span><span>&nbsp;&nbsp;&nbsp;&nbsp;even_sum += i</span></div>
+                    <div id="line4" class="code-line px-3 py-1.5 rounded flex items-center gap-4 text-slate-300"><span class="text-slate-600 text-xs w-4">4</span><span>print(<span class="text-emerald-300">f"Sum Evens = {even_sum}"</span>)</span></div>
+                `;
+            }
+        }
+
+        // Generate Step-by-Step Execution Sequence
+        function buildExecutionSteps() {
+            stepList = [];
+            
+            // Step 0: Line 1 Initialization
+            let accVal = (scenario === 'factorial') ? 1 : ((scenario === 'while_count') ? 1 : 0);
+            stepList.push({
+                line: 1,
+                iVal: '--',
+                nVal: limitN,
+                accVal: accVal,
+                consoleMsg: `> Initialized variables [Limit N = ${limitN}]`,
+                explanation: `Line 1 executing: Storing initial accumulator state (${accVal}).`
+            });
+
+            if (scenario === 'sum') {
+                for (let i = 1; i <= limitN; i++) {
+                    stepList.push({
+                        line: 2,
+                        iVal: i,
+                        nVal: limitN,
+                        accVal: accVal,
+                        consoleMsg: `> Loop Iteration i = ${i} (Condition ${i} <= ${limitN} True)`,
+                        explanation: `Line 2: Loop condition holds True for i = ${i}.`
+                    });
+                    accVal += i;
+                    stepList.push({
+                        line: 3,
+                        iVal: i,
+                        nVal: limitN,
+                        accVal: accVal,
+                        consoleMsg: `  └─ total = total + ${i} --> total = ${accVal}`,
+                        explanation: `Line 3: Adding ${i} to total. Accumulator updated to ${accVal}.`
+                    });
+                }
+            } else if (scenario === 'factorial') {
+                for (let i = 1; i <= limitN; i++) {
+                    stepList.push({
+                        line: 2,
+                        iVal: i,
+                        nVal: limitN,
+                        accVal: accVal,
+                        consoleMsg: `> Factorial Iteration i = ${i}`,
+                        explanation: `Line 2: Evaluating loop header for i = ${i}.`
+                    });
+                    accVal *= i;
+                    stepList.push({
+                        line: 3,
+                        iVal: i,
+                        nVal: limitN,
+                        accVal: accVal,
+                        consoleMsg: `  └─ fact = fact * ${i} --> fact = ${accVal}`,
+                        explanation: `Line 3: Multiplying fact by ${i}. Accumulator updated to ${accVal}.`
+                    });
+                }
+            } else if (scenario === 'while_count') {
+                let count = 1;
+                while (count <= limitN) {
+                    stepList.push({
+                        line: 2,
+                        iVal: count,
+                        nVal: limitN,
+                        accVal: count,
+                        consoleMsg: `> While Condition (count ${count} <= ${limitN}) True`,
+                        explanation: `Line 2: Checking while condition (${count} <= ${limitN}).`
+                    });
+                    count++;
+                    stepList.push({
+                        line: 3,
+                        iVal: count - 1,
+                        nVal: limitN,
+                        accVal: count,
+                        consoleMsg: `  └─ count += 1 --> count = ${count}`,
+                        explanation: `Line 3: Incremented counter variable to ${count}.`
+                    });
+                }
+                accVal = count - 1;
+            } else if (scenario === 'even_sum') {
+                for (let i = 2; i <= limitN; i += 2) {
+                    stepList.push({
+                        line: 2,
+                        iVal: i,
+                        nVal: limitN,
+                        accVal: accVal,
+                        consoleMsg: `> Even Step Iteration i = ${i}`,
+                        explanation: `Line 2: Loop header step = 2, i = ${i}.`
+                    });
+                    accVal += i;
+                    stepList.push({
+                        line: 3,
+                        iVal: i,
+                        nVal: limitN,
+                        accVal: accVal,
+                        consoleMsg: `  └─ even_sum += ${i} --> even_sum = ${accVal}`,
+                        explanation: `Line 3: Added even integer ${i}. Accumulator = ${accVal}.`
+                    });
+                }
+            }
+
+            // Final Step: Line 4 Print & Completion
+            stepList.push({
+                line: 4,
+                iVal: 'Done',
+                nVal: limitN,
+                accVal: accVal,
+                consoleMsg: `<span class='text-emerald-300 font-bold'>Final Loop Output = ${accVal}</span>`,
+                explanation: `Loop execution finished! Final accumulated output: ${accVal}.`
+            });
+        }
+
+        function startSimulation() {
+            updateScenarioDisplay();
+            buildExecutionSteps();
+            currentStepIdx = 0;
+
+            hideResultBanner();
+            clearMemory();
+            clearConsole();
+            
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = false;
+            btnStep.className = "bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2 rounded-lg text-sm transition active:scale-95 shadow-lg shadow-emerald-600/20";
+
+            appendConsole(`>>> Executing: loop_script.py [Scenario: ${scenario}, Limit: ${limitN}]`);
+            executeStepAtIndex(0);
+        }
+
+        function executeStepAtIndex(idx) {
+            const step = stepList[idx];
+            highlightLine(step.line);
+
+            document.getElementById('valI').innerText = step.iVal;
+            document.getElementById('valN').innerText = step.nVal;
+            document.getElementById('valAcc').innerText = step.accVal;
+
+            if (step.line === 3) {
+                triggerMemUpdate('memAcc');
+            } else if (step.line === 2) {
+                triggerMemUpdate('memI');
+            }
+
+            appendConsole(step.consoleMsg);
+            document.getElementById('explanationText').innerText = step.explanation;
+            document.getElementById('currentStepBadge').innerText = `Step ${idx + 1}/${stepList.length}`;
+
+            if (step.line === 4) {
+                showResultBanner(`Final Output = ${step.accVal}`, false);
+                const btnStep = document.getElementById('btnStep');
+                btnStep.disabled = true;
+                btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+                document.getElementById('currentStepBadge').innerText = "Finished";
+            }
+        }
+
+        function stepExecute() {
+            if (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function runAll() {
+            startSimulation();
+            while (currentStepIdx < stepList.length - 1) {
+                currentStepIdx++;
+                executeStepAtIndex(currentStepIdx);
+            }
+        }
+
+        function resetSimulation() {
+            currentStepIdx = 0;
+            highlightLine(0);
+            clearMemory();
+            clearConsole();
+            hideResultBanner();
+            appendConsole("<p class='text-slate-500 italic'>>>> Click 'Run / Execute All' or 'Start Simulation' to execute.</p>");
+            document.getElementById('explanationText').innerText = "Select parameters and click 'Start Simulation' or 'Run / Execute All' to execute.";
+            document.getElementById('currentStepBadge').innerText = "Step: Ready";
+
+            const btnStep = document.getElementById('btnStep');
+            btnStep.disabled = true;
+            btnStep.className = "bg-slate-700 text-slate-400 font-medium px-4 py-2 rounded-lg text-sm transition cursor-not-allowed";
+        }
+
+        function highlightLine(lineNum) {
+            document.querySelectorAll('.code-line').forEach(el => el.classList.remove('active'));
+            if (lineNum > 0) {
+                const target = document.getElementById(`line${lineNum}`);
+                if (target) target.classList.add('active');
+            }
+        }
+
+        function clearMemory() {
+            document.getElementById('valI').innerText = '--';
+            document.getElementById('valN').innerText = '--';
+            document.getElementById('valAcc').innerText = '--';
+            ['memI', 'memN', 'memAcc'].forEach(id => {
+                const el = document.getElementById(id);
+                if (el) el.classList.remove('updated');
+            });
+        }
+
+        function clearConsole() {
+            document.getElementById('terminal').innerHTML = '';
+        }
+
+        function appendConsole(htmlContent) {
+            const term = document.getElementById('terminal');
+            const p = document.createElement('p');
+            p.innerHTML = htmlContent;
+            term.appendChild(p);
+            term.scrollTop = term.scrollHeight;
+        }
+
+        function triggerMemUpdate(memId) {
+            const el = document.getElementById(memId);
+            if (!el) return;
+            el.classList.add('updated');
+            setTimeout(() => { el.classList.remove('updated'); }, 500);
+        }
+
+        function showResultBanner(text, isError) {
+            const banner = document.getElementById('resultBanner');
+            const bannerText = document.getElementById('resultBannerText');
+            bannerText.innerText = text;
+            banner.classList.remove('hidden');
+        }
+
+        function hideResultBanner() {
+            document.getElementById('resultBanner').classList.add('hidden');
+        }
+
+        function checkPretest() {
+            const q1 = document.querySelector('input[name="pq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="pq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('preq1-box');
+            const q1fb = document.getElementById('preq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! range(1, 5) generates sequence 1, 2, 3, 4 (stop parameter 5 is exclusive).";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. The upper stop limit in range() is exclusive.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('preq2-box');
+            const q2fb = document.getElementById('preq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'c') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! Forgetting to update the loop counter causes an infinite loop.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. The loop condition never turns False, causing an infinite loop.";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('pretest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function checkPosttest() {
+            const q1 = document.querySelector('input[name="postq1"]:checked')?.value;
+            const q2 = document.querySelector('input[name="postq2"]:checked')?.value;
+            let score = 0;
+
+            const q1Box = document.getElementById('postq1-box');
+            const q1fb = document.getElementById('postq1-feedback');
+            q1fb.classList.remove('hidden');
+            if (q1 === 'b') {
+                score++;
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q1fb.innerText = "✓ Correct! range(1, 4) produces 1, 2, 3 -> Sum = 6.";
+                q1fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q1Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q1fb.innerText = "✗ Incorrect. Remember that 4 is excluded, so numbers are 1, 2, 3.";
+                q1fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const q2Box = document.getElementById('postq2-box');
+            const q2fb = document.getElementById('postq2-feedback');
+            q2fb.classList.remove('hidden');
+            if (q2 === 'a') {
+                score++;
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-emerald-500/50";
+                q2fb.innerText = "✓ Correct! range(2, 10, 2) starts at 2 and steps up by 2 up to 8.";
+                q2fb.className = "text-xs mt-2 font-medium text-emerald-400";
+            } else {
+                q2Box.className = "bg-slate-900 p-4 rounded-lg border border-rose-500/50";
+                q2fb.innerText = "✗ Incorrect. The parameters are range(start, stop, step).";
+                q2fb.className = "text-xs mt-2 font-medium text-rose-400";
+            }
+
+            const badge = document.getElementById('posttest-score');
+            badge.innerText = `Score: ${score} / 2`;
+            badge.classList.remove('hidden');
+        }
+
+        function sendAiQuery() {
+            const input = document.getElementById('aiQueryInput');
+            const query = input.value.trim();
+            if (!query) return;
+
+            const chatBox = document.getElementById('aiChatBox');
+
+            const userDiv = document.createElement('div');
+            userDiv.className = 'flex items-start gap-3 justify-end';
+            userDiv.innerHTML = `
+                <div class="bg-indigo-600/30 border border-indigo-500/40 p-3 rounded-lg text-slate-200">
+                    ${query}
+                </div>
+                <div class="w-7 h-7 rounded-full bg-slate-700 flex items-center justify-center text-slate-300 text-xs shrink-0">You</div>
+            `;
+            chatBox.appendChild(userDiv);
+            input.value = '';
+
+            let response = "Try testing that loop scenario in the simulator and watch how the RAM memory counter updates on every pass!";
+            const qLower = query.toLowerCase();
+            if (qLower.includes('range') || qLower.includes('exclusive')) {
+                response = "The `range(start, stop)` function generates numbers up to but NOT including `stop`. If you want to include 5, what should your stop parameter be?";
+            } else if (qLower.includes('while') || qLower.includes('infinite')) {
+                response = "A `while` loop checks a boolean condition before every pass. What happens to the loop condition if you forget to increment your counter inside the loop body?";
+            } else if (qLower.includes('for') || qLower.includes('loop')) {
+                response = "`for` loops in Python iterate over sequences automatically. Notice in our memory inspector how `i` changes state automatically with every pass!";
+            }
+
+            setTimeout(() => {
+                const aiDiv = document.createElement('div');
+                aiDiv.className = 'flex items-start gap-3';
+                aiDiv.innerHTML = `
+                    <div class="w-7 h-7 rounded-full bg-indigo-600 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+                    <div class="bg-slate-800 p-3 rounded-lg border border-slate-700 text-slate-200">
+                        ${response}
+                    </div>
+                `;
+                chatBox.appendChild(aiDiv);
+                chatBox.scrollTop = chatBox.scrollHeight;
+            }, 500);
+        }
+    </script>
+</body>
+</html>

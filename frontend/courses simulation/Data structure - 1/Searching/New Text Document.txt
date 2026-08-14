@@ -1,0 +1,125 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>DSA Lab: Searching Algorithms - Virtual Lab</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; background-color: #0f172a; color: #e2e8f0; }
+        .tab-btn.active { background-color: #334155; color: #818cf8; border: 1px solid #475569; }
+        .sub-tab-btn.active { border-bottom: 2px solid #818cf8; color: #818cf8; }
+        .node-cell { transition: all 0.3s ease; }
+    </style>
+</head>
+<body class="min-h-screen flex flex-col">
+
+    <header class="bg-[#1e293b] border-b border-[#334155] px-6 py-4 flex flex-wrap justify-between items-center shadow-lg">
+        <div class="flex items-center gap-3">
+            <div class="bg-indigo-600 text-white p-2.5 rounded-lg font-bold text-xl shadow-md">
+                <i class="fa-solid fa-magnifying-glass"></i>
+            </div>
+            <div>
+                <h1 class="text-lg font-bold text-white leading-tight">Virtual Labs — Data Structures & Algorithms</h1>
+                <p class="text-xs text-indigo-400 font-medium">Experiment 2: Searching Algorithms (Linear, Binary, Hash Tables)</p>
+            </div>
+        </div>
+        <div class="flex items-center gap-2 mt-2 sm:mt-0">
+            <span class="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">
+                <span class="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span> Virtual Lab Active
+            </span>
+        </div>
+    </header>
+
+    <nav class="bg-[#1e293b] border-b border-[#334155] px-6 py-2">
+        <div class="flex gap-4 text-sm font-medium">
+            <button onclick="switchTab('theory')" class="tab-btn active px-4 py-2 rounded-lg flex items-center gap-2"><i class="fa-solid fa-book"></i> Theory</button>
+            <button onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-list-check"></i> Procedure</button>
+            <button onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-clipboard-question"></i> Pre-Test</button>
+            <button onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-flask"></i> Simulation</button>
+            <button onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-graduation-cap"></i> Post-Test</button>
+            <button onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-lg text-slate-400 hover:text-slate-200 flex items-center gap-2"><i class="fa-solid fa-robot"></i> AI Socratic Assistant</button>
+        </div>
+    </nav>
+
+    <main class="flex-1 p-6 max-w-7xl mx-auto w-full">
+        <div id="content-theory" class="tab-content bg-[#1e293b] p-6 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Theory: Searching Algorithms</h2>
+            <p class="text-sm text-slate-300">Searching retrieves information from a structure. Linear search is exhaustive ($O(n)$), Binary search requires sorted data ($O(\log n)$), and Hash tables offer near $O(1)$ lookup.</p>
+        </div>
+
+        <div id="content-procedure" class="tab-content hidden bg-[#1e293b] p-6 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Procedure</h2>
+            <p class="text-sm text-slate-300">Use the simulation tabs to trace search paths or populate hash tables.</p>
+        </div>
+
+        <div id="content-pretest" class="tab-content hidden bg-[#1e293b] p-6 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Pre-Test</h2>
+            <p class="text-sm text-slate-300">1. What condition is required for Binary Search to work?</p>
+        </div>
+
+        <!-- Simulation -->
+        <div id="content-simulation" class="tab-content hidden flex flex-col gap-4">
+            <div class="flex gap-4 border-b border-[#334155] mb-4">
+                <button onclick="switchSubTab('arraysearch')" id="subtab-arraysearch" class="sub-tab-btn active pb-2 text-sm font-bold text-indigo-400">Array Searching</button>
+                <button onclick="switchSubTab('hashtable')" id="subtab-hashtable" class="sub-tab-btn pb-2 text-sm text-slate-400">Hash Tables</button>
+            </div>
+
+            <div id="sub-arraysearch" class="sub-tab-content bg-[#1e293b] p-6 rounded-xl border border-[#334155]">
+                <h3 class="text-lg font-bold text-white mb-4">Linear/Binary Search</h3>
+                <div id="searchViz" class="flex gap-2 items-center min-h-[100px]"></div>
+                <div class="mt-4 flex gap-2">
+                    <button onclick="performSearch()" class="bg-indigo-600 px-4 py-2 rounded text-white text-sm font-bold">Start Search</button>
+                </div>
+            </div>
+
+            <div id="sub-hashtable" class="sub-tab-content hidden bg-[#1e293b] p-6 rounded-xl border border-[#334155]">
+                <h3 class="text-lg font-bold text-white mb-4">Hash Table Lookup</h3>
+                <input id="hashInput" type="number" class="bg-slate-900 border border-slate-700 rounded p-2 text-sm text-white w-full" placeholder="Enter key to hash...">
+                <button onclick="addHash()" class="bg-emerald-600 px-4 py-2 rounded text-white font-bold text-sm mt-2">Insert/Search Hash</button>
+            </div>
+        </div>
+
+        <div id="content-posttest" class="tab-content hidden bg-[#1e293b] p-6 rounded-xl border border-[#334155] shadow-xl">
+            <h2 class="text-xl font-bold text-indigo-400 mb-4">Post-Test</h2>
+        </div>
+
+        <div id="content-ai" class="tab-content hidden bg-[#1e293b] p-6 rounded-xl border border-[#334155]">
+            <h2 class="text-lg font-bold text-indigo-400 mb-4">AI Socratic Assistant</h2>
+            <div id="chatBox" class="h-48 bg-slate-950 p-4 rounded mb-4 overflow-y-auto text-xs border border-slate-700"></div>
+            <div class="flex gap-2">
+                <input type="text" id="aiInput" class="flex-1 bg-slate-900 border border-slate-700 p-2 rounded text-sm text-white" placeholder="Ask...">
+                <button onclick="askAI()" class="bg-indigo-600 px-4 py-2 rounded text-white text-sm">Ask</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        function switchTab(t) {
+            document.querySelectorAll('.tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('content-' + t).classList.remove('hidden');
+            const activeBtn = Array.from(document.querySelectorAll('.tab-btn')).find(b => b.innerText.toLowerCase().includes(t));
+            if (activeBtn) activeBtn.classList.add('active');
+        }
+
+        function switchSubTab(t) {
+            document.querySelectorAll('.sub-tab-content').forEach(el => el.classList.add('hidden'));
+            document.querySelectorAll('.sub-tab-btn').forEach(btn => btn.classList.remove('active'));
+            document.getElementById('sub-' + t).classList.remove('hidden');
+            document.getElementById('subtab-' + t).classList.add('active');
+        }
+
+        function performSearch() { alert('Searching for element...'); }
+        function addHash() { alert('Hashing key: ' + document.getElementById('hashInput').value); }
+        function askAI() {
+            const q = document.getElementById('aiInput').value;
+            document.getElementById('chatBox').innerHTML += `<p class="text-slate-300">You: ${q}</p><p class="text-emerald-400">AI: Binary search requires sorted arrays to function with $O(\log n)$ efficiency.</p>`;
+            document.getElementById('aiInput').value = '';
+        }
+    </script>
+</body>
+</html>
+```eof

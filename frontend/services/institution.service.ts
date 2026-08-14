@@ -5,9 +5,15 @@ import { apiClient } from './api-client';
 export interface InstitutionUser {
   id: string;
   full_name: string;
+  first_name?: string | null;
+  last_name?: string | null;
   email: string;
   role: 'student' | 'instructor' | 'institution_admin';
   roll_number?: string;
+  staff_id?: string | null;
+  department_id?: string | null;
+  year_of_study?: number | null;
+  semester?: number | null;
   phone?: string;
   is_active: boolean;
   created_at: string;
@@ -19,7 +25,30 @@ export interface CreateUserDto {
   role: 'student' | 'instructor';
   password?: string;
   roll_number?: string;
+  staff_id?: string;
+  department_id?: string;
+  year_of_study?: number;
+  semester?: number;
   phone?: string;
+}
+
+export interface UpdateUserDto {
+  full_name?: string;
+  first_name?: string;
+  last_name?: string;
+  phone?: string;
+  roll_number?: string;
+  staff_id?: string;
+  department_id?: string | null;
+  year_of_study?: number;
+  semester?: number;
+}
+
+export interface Department {
+  id: string;
+  name: string;
+  code?: string | null;
+  created_at: string;
 }
 
 export interface AcademicYear {
@@ -39,6 +68,7 @@ export interface Section {
   id: string;
   name: string;
   batch_id: string;
+  class_teacher_id?: string | null;
 }
 
 export interface Subject {
@@ -135,10 +165,9 @@ export const institutionService = {
 
   // ── User Management ───────────────────────────────────────────────────────────
 
-  async listUsers(role?: string): Promise<InstitutionUser[]> {
-    const { data } = await apiClient.get<{ users: InstitutionUser[] }>('/institution/users', {
-      params: role ? { role } : {},
-    });
+  // params.q searches full_name, email, roll_number, and staff_id
+  async listUsers(params?: { role?: string; department_id?: string; q?: string }): Promise<InstitutionUser[]> {
+    const { data } = await apiClient.get<{ users: InstitutionUser[] }>('/institution/users', { params });
     return data.users;
   },
 
@@ -147,8 +176,57 @@ export const institutionService = {
     return data.user;
   },
 
+  async updateUser(userId: string, dto: UpdateUserDto): Promise<InstitutionUser> {
+    const { data } = await apiClient.patch<{ user: InstitutionUser }>(`/institution/users/${userId}`, dto);
+    return data.user;
+  },
+
+  async changeUserRole(userId: string, role: 'student' | 'instructor' | 'institution_admin'): Promise<InstitutionUser> {
+    const { data } = await apiClient.patch<{ user: InstitutionUser }>(`/institution/users/${userId}/role`, { role });
+    return data.user;
+  },
+
+  async deleteUser(userId: string): Promise<{ message: string }> {
+    const { data } = await apiClient.delete(`/institution/users/${userId}`);
+    return data;
+  },
+
   async toggleUserActive(userId: string): Promise<{ is_active: boolean }> {
     const { data } = await apiClient.patch(`/institution/users/${userId}/toggle-active`);
+    return data;
+  },
+
+  // ── Departments ────────────────────────────────────────────────────────────
+
+  async listDepartments(): Promise<Department[]> {
+    const { data } = await apiClient.get<{ departments: Department[] }>('/institution/departments');
+    return data.departments;
+  },
+
+  async createDepartment(dto: { name: string; code?: string }): Promise<Department> {
+    const { data } = await apiClient.post<{ department: Department }>('/institution/departments', dto);
+    return data.department;
+  },
+
+  async updateDepartment(deptId: string, dto: { name?: string; code?: string }): Promise<Department> {
+    const { data } = await apiClient.patch<{ department: Department }>(`/institution/departments/${deptId}`, dto);
+    return data.department;
+  },
+
+  async deleteDepartment(deptId: string): Promise<{ message: string }> {
+    const { data } = await apiClient.delete(`/institution/departments/${deptId}`);
+    return data;
+  },
+
+  // ── Section update/delete (create + list already exist below) ──────────────
+
+  async updateSection(sectionId: string, dto: { name?: string; class_teacher_id?: string | null }): Promise<Section> {
+    const { data } = await apiClient.patch<{ section: Section }>(`/institution/sections/${sectionId}`, dto);
+    return data.section;
+  },
+
+  async deleteSection(sectionId: string): Promise<{ message: string }> {
+    const { data } = await apiClient.delete(`/institution/sections/${sectionId}`);
     return data;
   },
 

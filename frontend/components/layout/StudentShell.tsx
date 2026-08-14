@@ -6,7 +6,7 @@ import {
   LayoutDashboard, BookOpen, FlaskConical, LogIn,
   Terminal, Upload, TrendingUp, Trophy, Clock, RotateCcw,
   ShieldCheck, Settings, LogOut, Bell, Search, MessageCircle,
-  ChevronRight, User, Menu
+  ChevronRight, User, Menu, GraduationCap
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './StudentShell.module.css';
@@ -16,6 +16,7 @@ import { useAuthStore } from '@/store/auth-store';
 const NAV_FAVORITES = [
   { id: 'Dashboard Home',     Icon: LayoutDashboard, route: '/student/dashboard'  },
   { id: 'My Subjects',        Icon: BookOpen,         route: '/student/subjects'   },
+  { id: 'Courses',            Icon: GraduationCap,    route: '/student/courses'    },
   { id: 'Pre-Lab',            Icon: FlaskConical,     route: '/student/pre-lab'    },
   { id: 'Join Lab',           Icon: LogIn,            route: '/student/live-lab'   },
 ];

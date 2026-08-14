@@ -1,0 +1,725 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Stacks, Queues &amp; Infix-to-Postfix — Virtual Lab</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+<link href="https://fonts.googleapis.com/css2?family=Fira+Code:wght@400;500;600&family=Inter:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+  body{font-family:'Inter',sans-serif;background:#f8fafc;}
+  .font-mono{font-family:'Fira Code',monospace;}
+  .code-line{transition:background-color .25s ease,border-color .25s ease;border-left:4px solid transparent;}
+  .code-line.active{background:rgba(124,58,237,.09);border-left-color:#7c3aed;}
+  .mem-card{transition:all .25s ease;}
+  .mem-card.updated{animation:pulseCard .55s ease;}
+  @keyframes pulseCard{
+    0%{transform:scale(1);border-color:#e2e8f0;}
+    50%{transform:scale(1.04);border-color:#10b981;box-shadow:0 0 14px rgba(16,185,129,.35);}
+    100%{transform:scale(1);border-color:#e2e8f0;}
+  }
+  @keyframes popIn{0%{transform:scale(.92);opacity:0;}100%{transform:scale(1);opacity:1;}}
+  .animate-pop{animation:popIn .35s cubic-bezier(.175,.885,.32,1.275) forwards;}
+  .tab-btn{transition:all .18s ease;}
+  .progress-fill{transition:width .35s ease;}
+  ::-webkit-scrollbar{width:8px;height:8px;}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px;}
+  .fade-in{animation:fadeIn .3s ease;}
+  @keyframes fadeIn{from{opacity:0;transform:translateY(4px);}to{opacity:1;transform:translateY(0);}}
+  .box{transition:all .25s ease;}
+  .char-highlight{transition:all .2s ease;}
+</style>
+</head>
+<body class="min-h-screen flex flex-col text-slate-800">
+
+  <!-- Header -->
+  <header class="bg-white border-b border-slate-200 px-6 py-4 flex flex-wrap justify-between items-center sticky top-0 z-20">
+    <div class="flex items-center gap-3">
+      <a href="javascript:history.back()" title="Back" class="hidden sm:flex items-center gap-1.5 text-xs font-medium text-slate-400 hover:text-slate-700 mr-2 transition">
+        <i class="fa-solid fa-arrow-left"></i> Dashboard
+      </a>
+      <div class="bg-slate-900 text-amber-400 p-2.5 rounded-xl font-bold text-xl shadow-sm">
+        <i class="fa-solid fa-layer-group"></i>
+      </div>
+      <div>
+        <h1 class="text-lg font-bold text-slate-900 leading-tight">Data Structures Virtual Lab</h1>
+        <p class="text-xs text-purple-600 font-medium">Experiment: Stacks, Queues &amp; Infix-to-Postfix Conversion</p>
+      </div>
+    </div>
+    <span class="inline-flex items-center gap-1.5 px-3 py-1.5 rounded-full text-xs font-semibold bg-emerald-50 text-emerald-600 border border-emerald-200 mt-2 sm:mt-0">
+      <span class="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span> Lab Active
+    </span>
+  </header>
+
+  <!-- Tab Nav -->
+  <nav class="bg-white border-b border-slate-200 px-6 py-3">
+    <div class="flex flex-wrap gap-2 text-sm font-medium max-w-7xl mx-auto">
+      <button id="tab-theory" onclick="switchTab('theory')" class="tab-btn px-4 py-2 rounded-full bg-slate-900 text-white flex items-center gap-2">
+        <i class="fa-solid fa-book-open"></i> Theory
+      </button>
+      <button id="tab-procedure" onclick="switchTab('procedure')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-list-check"></i> Procedure
+      </button>
+      <button id="tab-pretest" onclick="switchTab('pretest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-clipboard-question"></i> Pre-Test
+      </button>
+      <button id="tab-simulation" onclick="switchTab('simulation')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-flask"></i> Simulation
+      </button>
+      <button id="tab-posttest" onclick="switchTab('posttest')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-graduation-cap"></i> Post-Test
+      </button>
+      <button id="tab-ai" onclick="switchTab('ai')" class="tab-btn px-4 py-2 rounded-full text-slate-500 hover:bg-slate-100 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> AI Assistant
+      </button>
+    </div>
+  </nav>
+
+  <main class="flex-1 p-4 lg:p-6 max-w-7xl w-full mx-auto">
+
+    <!-- THEORY -->
+    <div id="content-theory" class="tab-content fade-in bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Theory: Stacks, Queues &amp; Expression Conversion</h2>
+      <p class="text-sm text-slate-600 leading-relaxed">Stacks and queues are linear structures that restrict <em>where</em> elements can be added/removed, which is exactly what makes them useful for controlling order of processing.</p>
+
+      <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono">Stack — LIFO</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">Last In, First Out. <code class="font-mono">push(x)</code> adds to the top, <code class="font-mono">pop()</code> removes from the top, <code class="font-mono">peek()</code> reads the top without removing. Backed by a plain array using its end as "top".</p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200">
+          <h3 class="font-bold text-purple-600 mb-1 font-mono">Queue — FIFO</h3>
+          <p class="text-slate-500 text-xs leading-relaxed">First In, First Out. <code class="font-mono">enqueue(x)</code> adds to the back, <code class="font-mono">dequeue()</code> removes from the front. Backed by a plain array: <code class="font-mono">push()</code> to enqueue, <code class="font-mono">shift()</code> to dequeue.</p>
+        </div>
+      </div>
+
+      <h3 class="text-sm font-bold text-slate-700 pt-2">Infix, Postfix &amp; Operator Precedence</h3>
+      <p class="text-sm text-slate-600 leading-relaxed"><strong>Infix</strong> notation (<code class="font-mono">A+B*C</code>) is how humans write expressions — operators sit between operands, and precedence/parentheses determine order. <strong>Postfix</strong> (Reverse Polish) notation (<code class="font-mono">ABC*+</code>) places operators <em>after</em> their operands, removing all ambiguity — no parentheses or precedence rules are needed to evaluate it, which is why compilers and calculators use it internally.</p>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Operator</th><th class="p-2 text-left">Precedence</th><th class="p-2 text-left">Associativity</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">^ (power)</td><td class="p-2">3 (highest)</td><td class="p-2">Right-to-left</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">*  /</td><td class="p-2">2</td><td class="p-2">Left-to-right</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">+  -</td><td class="p-2">1 (lowest)</td><td class="p-2">Left-to-right</td></tr>
+          </tbody>
+        </table>
+      </div>
+
+      <div class="bg-purple-50 border border-purple-200 p-4 rounded-xl text-xs text-purple-800 leading-relaxed">
+        <i class="fa-solid fa-circle-info mr-1"></i> <strong>Conversion algorithm (operator-precedence / "shunting-yard"):</strong> Scan the infix expression left to right using an explicit <strong>operator stack</strong>. Operands go straight to the output. An operator pops any stack-top operators of <em>higher or equal</em> precedence to the output first, then pushes itself. <code class="font-mono">(</code> is always pushed; <code class="font-mono">)</code> pops everything back to the matching <code class="font-mono">(</code>. At the end, pop all remaining operators to the output.
+      </div>
+
+      <div class="overflow-x-auto">
+        <table class="w-full text-xs border border-slate-200 rounded-xl overflow-hidden">
+          <thead class="bg-slate-900 text-white">
+            <tr><th class="p-2 text-left">Operation</th><th class="p-2 text-left">Time Complexity</th></tr>
+          </thead>
+          <tbody class="text-slate-600">
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">push / pop / peek (stack)</td><td class="p-2 font-mono">O(1)</td></tr>
+            <tr class="border-t border-slate-200 bg-slate-50"><td class="p-2 font-mono">enqueue / dequeue (queue)</td><td class="p-2 font-mono">O(1)</td></tr>
+            <tr class="border-t border-slate-200"><td class="p-2 font-mono">Infix → Postfix conversion</td><td class="p-2 font-mono">O(n) — each char processed once</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- PROCEDURE -->
+    <div id="content-procedure" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-4">
+      <h2 class="text-xl font-bold text-purple-600 border-b border-slate-100 pb-3">Simulator Procedure</h2>
+      <ol class="list-decimal list-inside space-y-3 text-sm text-slate-600 leading-relaxed">
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Open the <strong>Simulation</strong> tab and pick a <strong>Mode</strong>: Stack Operations, Queue Operations, or Infix → Postfix.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200"><strong>Stack/Queue mode:</strong> type a comma-separated operation sequence, e.g. <code class="font-mono">push 10, push 20, pop, push 30</code> or <code class="font-mono">enqueue A, enqueue B, dequeue</code>.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200"><strong>Infix → Postfix mode:</strong> type an expression like <code class="font-mono">(A+B)*C-D</code> using single-letter/digit operands and <code class="font-mono">+ - * / ^ ( )</code>.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Start Simulation</strong>, then <strong>Step</strong> through each operation/character, or click <strong>Run All</strong> to animate automatically.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Watch the structure panel (stack/queue boxes or operator-stack + output) update live, and read the explanation + terminal log for each step.</li>
+        <li class="p-3 bg-slate-50 rounded-lg border border-slate-200">Click <strong>Reset</strong> to clear and try a different sequence or expression.</li>
+      </ol>
+    </div>
+
+    <!-- PRE-TEST -->
+    <div id="content-pretest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Pre-Lab Assessment Quiz</h2>
+        <span id="pretest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="pretestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq1" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">1. A stack follows which ordering principle?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="a"> LIFO — Last In, First Out</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="b"> FIFO — First In, First Out</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq1" value="c"> Random order</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq2" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">2. Which array method removes an element from the FRONT of a queue?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="a"> pop()</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="b"> shift()</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq2" value="c"> push()</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq3" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">3. In infix-to-postfix conversion, what does an operator do when it has LOWER or EQUAL precedence than the stack's top operator?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="a"> It is discarded</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="b"> It is pushed immediately with no popping</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq3" value="c"> The stack top is popped to output first, then the new operator is pushed</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="pq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. What is the postfix form of <code class="font-mono">A+B</code>?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="a"> AB+</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="b"> +AB</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="pq4" value="c"> A+B (unchanged)</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('pretestQuestions','pretest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Pre-Test</button>
+      </div>
+    </div>
+
+    <!-- SIMULATION -->
+    <div id="content-simulation" class="tab-content fade-in hidden flex flex-col gap-6">
+      <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm flex flex-col gap-4">
+        <div class="flex flex-wrap items-end justify-between gap-4">
+          <div class="flex flex-wrap items-end gap-4">
+            <div>
+              <label class="block text-xs font-medium text-slate-500 mb-1">Mode</label>
+              <select id="modeSelect" onchange="onModeChange()" class="bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500 min-w-[190px]">
+                <option value="stack">Stack Operations</option>
+                <option value="queue">Queue Operations</option>
+                <option value="postfix">Infix → Postfix</option>
+              </select>
+            </div>
+            <div id="opsWrap">
+              <label class="block text-xs font-medium text-slate-500 mb-1" id="opsLabel">Operations (comma-separated)</label>
+              <input type="text" id="opsInput" value="push 10, push 20, push 5, pop, push 30" class="w-80 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+            </div>
+            <div id="exprWrap" class="hidden">
+              <label class="block text-xs font-medium text-slate-500 mb-1">Infix Expression</label>
+              <input type="text" id="exprInput" value="(A+B)*C-D" class="w-56 bg-white border border-slate-300 rounded-lg px-3 py-2 text-slate-800 font-mono text-sm focus:outline-none focus:border-purple-500">
+            </div>
+          </div>
+          <div class="flex flex-wrap items-center gap-2">
+            <button onclick="startSimulation()" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-play"></i> Start Simulation
+            </button>
+            <button id="btnStep" onclick="stepExecute()" disabled class="bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 cursor-not-allowed">
+              <i class="fa-solid fa-forward-step"></i> Step
+            </button>
+            <button onclick="runAll()" class="bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition flex items-center gap-2 active:scale-95">
+              <i class="fa-solid fa-bolt"></i> Run All
+            </button>
+            <button onclick="resetSimulation()" class="bg-white hover:bg-slate-50 text-slate-600 border border-slate-300 font-medium px-3 py-2.5 rounded-full text-sm transition flex items-center gap-1 active:scale-95">
+              <i class="fa-solid fa-rotate-left"></i> Reset
+            </button>
+          </div>
+        </div>
+        <div class="flex flex-wrap items-center gap-2 pt-2 border-t border-slate-100 text-xs">
+          <span class="text-slate-500 font-medium"><i class="fa-solid fa-bolt text-amber-500"></i> Quick Presets:</span>
+          <button onclick="loadPreset('stack','push 5, push 8, push 2, pop, push 9, pop, pop')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Stack Demo</button>
+          <button onclick="loadPreset('queue','enqueue A, enqueue B, enqueue C, dequeue, enqueue D, dequeue')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">Queue Demo</button>
+          <button onclick="loadPreset('postfix','(A+B)*C-D')" class="bg-white hover:bg-slate-100 text-slate-600 px-2.5 py-1 rounded-full border border-slate-300 font-mono">(A+B)*C-D</button>
+          <button onclick="loadPreset('postfix','A+B-C*D/E')" class="bg-white hover:bg-rose-50 text-rose-500 px-2.5 py-1 rounded-full border border-rose-200 font-mono">A+B-C*D/E</button>
+        </div>
+        <div class="flex items-center gap-3">
+          <div class="flex-1 h-1.5 bg-slate-100 rounded-full overflow-hidden">
+            <div id="progressFill" class="progress-fill h-full bg-purple-600 rounded-full" style="width:0%"></div>
+          </div>
+          <span id="currentStepBadge" class="text-xs bg-slate-100 text-slate-500 px-2.5 py-1 rounded-full font-mono whitespace-nowrap">Step: Ready</span>
+        </div>
+      </div>
+
+      <div class="grid grid-cols-1 lg:grid-cols-12 gap-6">
+        <div class="lg:col-span-7 bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm">
+          <div class="bg-slate-50 border-b border-slate-200 px-4 py-3 flex justify-between items-center">
+            <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+              <i class="fa-solid fa-cubes text-purple-600"></i> <span id="structTitle">Stack Visualization</span>
+            </span>
+          </div>
+          <div id="exprBar" class="hidden px-4 py-3 border-b border-slate-200 bg-slate-50 font-mono text-lg tracking-wider" id="exprBarInner"></div>
+          <div class="p-4 flex-1 flex items-center justify-center bg-white min-h-[240px]">
+            <div id="structViz" class="flex gap-2 flex-wrap items-end justify-center"></div>
+          </div>
+          <div class="p-4 border-t border-slate-200 bg-slate-50">
+            <h4 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-1">Execution Status</h4>
+            <p id="explanationText" class="text-xs text-slate-600 leading-relaxed min-h-[36px]">Choose a mode and click 'Start Simulation' or 'Run All'.</p>
+          </div>
+        </div>
+
+        <div class="lg:col-span-5 flex flex-col gap-6">
+          <div class="bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-microchip text-purple-600"></i> Live State
+            </h3>
+            <div class="grid grid-cols-2 gap-3" id="memCardsContainer">
+              <div id="mem1" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span id="label1" class="text-xs text-slate-500 block font-mono">operation</span>
+                <span id="val1" class="text-base font-bold font-mono text-purple-600 block my-1">--</span>
+              </div>
+              <div id="mem2" class="mem-card bg-slate-50 border border-slate-200 p-3 rounded-xl text-center">
+                <span id="label2" class="text-xs text-slate-500 block font-mono">result</span>
+                <span id="val2" class="text-base font-bold font-mono text-emerald-600 block my-1">--</span>
+              </div>
+            </div>
+          </div>
+
+          <div id="outputWrap" class="hidden bg-white border border-slate-200 rounded-2xl p-4 shadow-sm">
+            <h3 class="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-3 flex items-center gap-2">
+              <i class="fa-solid fa-arrow-right-long text-purple-600"></i> Postfix Output (building)
+            </h3>
+            <div id="outputPanel" class="font-mono text-lg text-emerald-700 font-bold min-h-[28px] tracking-widest">--</div>
+          </div>
+
+          <div class="bg-white border border-slate-200 rounded-2xl overflow-hidden flex flex-col shadow-sm flex-1">
+            <div class="bg-slate-50 border-b border-slate-200 px-4 py-2.5 flex justify-between items-center">
+              <span class="text-xs font-semibold uppercase tracking-wider text-slate-500 flex items-center gap-2">
+                <i class="fa-solid fa-terminal text-emerald-600"></i> Output Terminal
+              </span>
+              <button onclick="clearConsole()" class="text-xs text-slate-400 hover:text-slate-700 flex items-center gap-1 transition">
+                <i class="fa-solid fa-trash-can"></i> Clear
+              </button>
+            </div>
+            <div id="terminal" class="p-4 font-mono text-xs bg-slate-950 text-slate-200 min-h-[100px] max-h-[160px] overflow-y-auto space-y-1">
+              <p class="text-slate-500 italic">&gt;&gt;&gt; Click 'Run All' or 'Start Simulation' to execute.</p>
+            </div>
+          </div>
+
+          <div id="resultBanner" class="hidden animate-pop bg-gradient-to-r from-emerald-50 to-purple-50 border-2 border-emerald-300 p-4 rounded-2xl shadow-sm flex items-center justify-between">
+            <div class="flex items-center gap-3">
+              <div class="w-10 h-10 rounded-full bg-emerald-100 text-emerald-600 flex items-center justify-center text-lg font-bold">
+                <i class="fa-solid fa-square-check"></i>
+              </div>
+              <div>
+                <h4 class="text-xs uppercase font-semibold text-emerald-600 tracking-wider">Final Result</h4>
+                <p id="resultBannerText" class="text-lg font-mono font-bold text-emerald-700">--</p>
+              </div>
+            </div>
+            <span class="text-xs font-mono text-slate-500 bg-white px-3 py-1 rounded-full border border-slate-200">Status: OK</span>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- POST-TEST -->
+    <div id="content-posttest" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm space-y-6">
+      <div class="flex justify-between items-center border-b border-slate-100 pb-3">
+        <h2 class="text-xl font-bold text-purple-600">Post-Lab Evaluation Quiz</h2>
+        <span id="posttest-score" class="hidden text-xs bg-emerald-50 text-emerald-600 border border-emerald-200 px-3 py-1 rounded-full font-bold"></span>
+      </div>
+      <div class="space-y-4 text-sm" id="posttestQuestions">
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq1" data-correct="c">
+          <p class="font-semibold text-slate-700 mb-2">1. Convert <code class="font-mono">A+B*C</code> to postfix. What is the result?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="a"> AB+C*</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="b"> A+BC*</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq1" value="c"> ABC*+</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq2" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">2. When the algorithm reads a closing parenthesis <code class="font-mono">)</code>, what happens?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="a"> Pop operators to output until the matching '(' is found, then discard the '('</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="b"> Push ')' onto the output directly</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq2" value="c"> Nothing — parentheses are ignored entirely</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq3" data-correct="b">
+          <p class="font-semibold text-slate-700 mb-2">3. A stack has [10, 20, 30] (30 on top). After <code class="font-mono">pop()</code> then <code class="font-mono">push(40)</code>, what is the stack?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="a"> [10, 20, 30, 40]</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="b"> [10, 20, 40]</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq3" value="c"> [40, 20, 10]</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <div class="bg-slate-50 p-4 rounded-xl border border-slate-200" data-q="stq4" data-correct="a">
+          <p class="font-semibold text-slate-700 mb-2">4. Why is postfix notation useful for calculators/compilers?</p>
+          <div class="space-y-1.5 text-xs text-slate-600">
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="a"> It can be evaluated left-to-right with a single stack, no precedence rules or parentheses needed</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="b"> It is shorter to type than infix</label>
+            <label class="flex items-center gap-2 cursor-pointer"><input type="radio" name="stq4" value="c"> It only works for addition</label>
+          </div>
+          <p class="feedback hidden text-xs mt-2 font-medium"></p>
+        </div>
+        <button onclick="gradeQuiz('posttestQuestions','posttest-score')" class="bg-slate-900 hover:bg-slate-800 text-white font-medium px-5 py-2.5 rounded-full text-sm transition active:scale-95">Submit Post-Test</button>
+      </div>
+    </div>
+
+    <!-- AI ASSISTANT -->
+    <div id="content-ai" class="tab-content fade-in hidden bg-white border border-slate-200 rounded-2xl p-6 shadow-sm flex flex-col h-[520px]">
+      <h2 class="text-lg font-bold text-purple-600 border-b border-slate-100 pb-3 mb-4 flex items-center gap-2">
+        <i class="fa-solid fa-robot"></i> Socratic AI Teaching Assistant
+      </h2>
+      <div id="aiChatBox" class="flex-1 bg-slate-50 border border-slate-200 rounded-xl p-4 overflow-y-auto space-y-3 text-xs">
+        <div class="flex items-start gap-3">
+          <div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div>
+          <div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">Hello! Ask me about stacks, queues, or how infix-to-postfix conversion works.</div>
+        </div>
+      </div>
+      <div class="flex items-center gap-2 mt-4">
+        <input type="text" id="aiQueryInput" onkeydown="if(event.key === 'Enter') sendAiQuery()" placeholder="Ask a question (e.g., how does infix to postfix work?)..." class="flex-1 bg-white border border-slate-300 rounded-full px-4 py-2 text-xs text-slate-800 focus:outline-none focus:border-purple-500">
+        <button onclick="sendAiQuery()" class="bg-slate-900 hover:bg-slate-800 text-white px-4 py-2 rounded-full text-xs font-semibold transition active:scale-95">Send</button>
+      </div>
+    </div>
+
+  </main>
+
+<script>
+/* ---------- Tab switching ---------- */
+function switchTab(name){
+  document.querySelectorAll('.tab-content').forEach(el=>el.classList.add('hidden'));
+  document.querySelectorAll('.tab-btn').forEach(el=>{
+    el.classList.remove('bg-slate-900','text-white');
+    el.classList.add('text-slate-500');
+  });
+  document.getElementById(`content-${name}`).classList.remove('hidden');
+  const btn = document.getElementById(`tab-${name}`);
+  btn.classList.remove('text-slate-500');
+  btn.classList.add('bg-slate-900','text-white');
+}
+
+/* ---------- Pure algorithm functions (Node-verified) ---------- */
+function parseOps(text){
+  return text.split(',').map(s=>s.trim()).filter(Boolean).map(tok=>{
+    const parts = tok.split(/\s+/);
+    return { type: parts[0].toLowerCase(), value: parts[1] };
+  });
+}
+
+function stackOpsTrace(ops){
+  const stack = [];
+  const steps = [];
+  ops.forEach(op=>{
+    if (op.type === 'push'){
+      stack.push(op.value);
+      steps.push({ type:'push', value:op.value, arr:[...stack], note:`push(${op.value}) → added to the top of the stack.` });
+    } else if (op.type === 'pop'){
+      if (stack.length === 0){
+        steps.push({ type:'error', arr:[...stack], note:`pop() on empty stack → underflow, nothing to remove.` });
+      } else {
+        const popped = stack.pop();
+        steps.push({ type:'pop', value:popped, arr:[...stack], note:`pop() removes ${popped} from the top.` });
+      }
+    } else if (op.type === 'peek'){
+      const top = stack.length ? stack[stack.length-1] : null;
+      steps.push({ type:'peek', value:top, arr:[...stack], note:`peek() → top is ${top ?? 'empty'} (unchanged).` });
+    }
+  });
+  if (steps.length){ steps[steps.length-1].final = true; steps[steps.length-1].resultText = `Final stack: [${stack.join(', ')}]  (top → right)`; }
+  return steps;
+}
+
+function queueOpsTrace(ops){
+  const queue = [];
+  const steps = [];
+  ops.forEach(op=>{
+    if (op.type === 'enqueue'){
+      queue.push(op.value);
+      steps.push({ type:'enqueue', value:op.value, arr:[...queue], note:`enqueue(${op.value}) → added to the back of the queue.` });
+    } else if (op.type === 'dequeue'){
+      if (queue.length === 0){
+        steps.push({ type:'error', arr:[...queue], note:`dequeue() on empty queue → underflow, nothing to remove.` });
+      } else {
+        const removed = queue.shift();
+        steps.push({ type:'dequeue', value:removed, arr:[...queue], note:`dequeue() removes ${removed} from the front.` });
+      }
+    }
+  });
+  if (steps.length){ steps[steps.length-1].final = true; steps[steps.length-1].resultText = `Final queue: [${queue.join(', ')}]  (front → left)`; }
+  return steps;
+}
+
+function precedence(op){ if (op==='+'||op==='-') return 1; if (op==='*'||op==='/') return 2; if (op==='^') return 3; return 0; }
+function isOperator(c){ return ['+','-','*','/','^'].includes(c); }
+
+function infixToPostfixTrace(expr){
+  const steps = [];
+  const output = [];
+  const opStack = [];
+  const chars = expr.replace(/\s+/g,'').split('');
+  chars.forEach((ch, idx)=>{
+    if (/[A-Za-z0-9]/.test(ch)){
+      output.push(ch);
+      steps.push({ idx, char:ch, output:[...output], opStack:[...opStack], note:`Operand '${ch}' → append directly to output.` });
+    } else if (ch === '('){
+      opStack.push(ch);
+      steps.push({ idx, char:ch, output:[...output], opStack:[...opStack], note:`'(' → push onto the operator stack.` });
+    } else if (ch === ')'){
+      while (opStack.length && opStack[opStack.length-1] !== '('){
+        const op = opStack.pop();
+        output.push(op);
+        steps.push({ idx, char:ch, output:[...output], opStack:[...opStack], note:`')' → pop '${op}' from stack to output.` });
+      }
+      opStack.pop();
+      steps.push({ idx, char:ch, output:[...output], opStack:[...opStack], note:`Discard the matching '(' from the stack.` });
+    } else if (isOperator(ch)){
+      while (opStack.length && opStack[opStack.length-1] !== '(' &&
+             (precedence(opStack[opStack.length-1]) > precedence(ch) ||
+              (precedence(opStack[opStack.length-1]) === precedence(ch) && ch !== '^'))){
+        const op = opStack.pop();
+        output.push(op);
+        steps.push({ idx, char:ch, output:[...output], opStack:[...opStack], note:`'${ch}' precedence ≤ stack-top '${op}' → pop '${op}' to output first.` });
+      }
+      opStack.push(ch);
+      steps.push({ idx, char:ch, output:[...output], opStack:[...opStack], note:`Push operator '${ch}' onto the stack.` });
+    }
+  });
+  while (opStack.length){
+    const op = opStack.pop();
+    output.push(op);
+    steps.push({ idx:chars.length, char:'', output:[...output], opStack:[...opStack], note:`End of expression → pop remaining '${op}' to output.` });
+  }
+  if (steps.length){ steps[steps.length-1].final = true; steps[steps.length-1].resultText = `Postfix: ${output.join('')}`; }
+  return steps;
+}
+
+/* ---------- Rendering ---------- */
+function renderStructViz(mode, arr, highlightIdx){
+  const el = document.getElementById('structViz');
+  if (mode === 'stack'){
+    if (!arr.length){ el.innerHTML = '<span class="text-xs text-slate-400 italic">stack is empty</span>'; return; }
+    el.className = 'flex flex-col-reverse gap-1 items-center';
+    el.innerHTML = arr.map((v,i)=>`<div class="box w-24 h-11 rounded-lg border-2 ${i===arr.length-1?'border-purple-500 bg-purple-50':'border-slate-300 bg-slate-50'} flex items-center justify-center font-mono font-bold text-slate-700">${v}${i===arr.length-1?' <span class="text-[9px] text-purple-400 ml-1">TOP</span>':''}</div>`).join('');
+  } else if (mode === 'queue'){
+    if (!arr.length){ el.innerHTML = '<span class="text-xs text-slate-400 italic">queue is empty</span>'; return; }
+    el.className = 'flex gap-1 items-center';
+    el.innerHTML = arr.map((v,i)=>`<div class="box w-16 h-16 rounded-lg border-2 ${i===0?'border-emerald-500 bg-emerald-50':(i===arr.length-1?'border-purple-500 bg-purple-50':'border-slate-300 bg-slate-50')} flex flex-col items-center justify-center font-mono font-bold text-slate-700"><span>${v}</span>${i===0?'<span class="text-[8px] text-emerald-500">FRONT</span>':(i===arr.length-1?'<span class="text-[8px] text-purple-400">BACK</span>':'')}</div>`).join('');
+  } else if (mode === 'postfix'){
+    el.className = 'flex flex-col-reverse gap-1 items-center';
+    if (!arr.length){ el.innerHTML = '<span class="text-xs text-slate-400 italic">operator stack is empty</span>'; return; }
+    el.innerHTML = arr.map((v,i)=>`<div class="box w-16 h-10 rounded-lg border-2 ${i===arr.length-1?'border-purple-500 bg-purple-50':'border-slate-300 bg-slate-50'} flex items-center justify-center font-mono font-bold text-slate-700">${v}</div>`).join('');
+  }
+}
+
+function renderExprBar(expr, idx){
+  const bar = document.getElementById('exprBarInner') || document.getElementById('exprBar');
+  const wrap = document.getElementById('exprBar');
+  wrap.classList.remove('hidden');
+  wrap.innerHTML = expr.split('').map((c,i)=>`<span class="char-highlight ${i===idx?'bg-purple-600 text-white rounded px-1':'text-slate-400'}">${c}</span>`).join('');
+}
+
+/* ---------- Simulation controller ---------- */
+let state = { mode:'stack', steps:[], idx:0, timer:null };
+
+function onModeChange(){
+  const mode = document.getElementById('modeSelect').value;
+  document.getElementById('opsWrap').classList.toggle('hidden', mode==='postfix');
+  document.getElementById('exprWrap').classList.toggle('hidden', mode!=='postfix');
+  document.getElementById('exprBar').classList.toggle('hidden', mode!=='postfix');
+  document.getElementById('outputWrap').classList.toggle('hidden', mode!=='postfix');
+  document.getElementById('structTitle').innerText = mode==='stack' ? 'Stack Visualization' : mode==='queue' ? 'Queue Visualization' : 'Operator Stack';
+  document.getElementById('opsLabel').innerText = mode==='stack' ? 'Operations (comma-separated, e.g. push 10, pop)' : 'Operations (comma-separated, e.g. enqueue A, dequeue)';
+  document.getElementById('label1').innerText = mode==='postfix' ? 'reading char' : 'operation';
+  document.getElementById('label2').innerText = mode==='postfix' ? 'stack top' : 'result';
+}
+
+function loadPreset(mode, value){
+  document.getElementById('modeSelect').value = mode;
+  onModeChange();
+  if (mode === 'postfix') document.getElementById('exprInput').value = value;
+  else document.getElementById('opsInput').value = value;
+  startSimulation();
+}
+
+function startSimulation(){
+  clearInterval(state.timer);
+  const mode = document.getElementById('modeSelect').value;
+  let steps = [];
+  if (mode === 'stack'){
+    const ops = parseOps(document.getElementById('opsInput').value);
+    steps = stackOpsTrace(ops);
+  } else if (mode === 'queue'){
+    const ops = parseOps(document.getElementById('opsInput').value);
+    steps = queueOpsTrace(ops);
+  } else {
+    const expr = document.getElementById('exprInput').value.trim();
+    if (!expr){ alert('Enter an infix expression.'); return; }
+    steps = infixToPostfixTrace(expr);
+  }
+  if (!steps.length){ alert('Enter at least one valid operation.'); return; }
+
+  state = { mode, steps, idx:0, timer:null };
+
+  onModeChange();
+  renderStructViz(mode, []);
+  if (mode === 'postfix'){
+    renderExprBar(document.getElementById('exprInput').value.replace(/\s+/g,''), -1);
+    document.getElementById('outputPanel').innerText = '--';
+  } else {
+    document.getElementById('exprBar').classList.add('hidden');
+  }
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('progressFill').style.width = '0%';
+  document.getElementById('currentStepBadge').innerText = 'Step: Ready';
+  document.getElementById('explanationText').innerText = "Simulation loaded. Click 'Step' or 'Run All'.";
+  document.getElementById('val1').innerText = '--';
+  document.getElementById('val2').innerText = '--';
+  appendConsole(`&gt;&gt;&gt; Mode: ${mode}`);
+
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = false;
+  btnStep.className = 'bg-emerald-600 hover:bg-emerald-500 text-white font-medium px-4 py-2.5 rounded-full text-sm transition active:scale-95';
+}
+
+function applyStep(step){
+  if (state.mode === 'postfix'){
+    renderStructViz('postfix', step.opStack);
+    renderExprBar(document.getElementById('exprInput').value.replace(/\s+/g,''), step.idx);
+    document.getElementById('outputPanel').innerText = step.output.join('') || '--';
+    document.getElementById('val1').innerText = step.char || 'END';
+    document.getElementById('val2').innerText = step.opStack.length ? step.opStack[step.opStack.length-1] : '--';
+  } else {
+    renderStructViz(state.mode, step.arr);
+    document.getElementById('val1').innerText = step.type;
+    document.getElementById('val2').innerText = step.value !== undefined ? step.value : (step.arr.length ? step.arr[step.arr.length-1] : '--');
+  }
+  ['mem1','mem2'].forEach(id=>{
+    const card = document.getElementById(id);
+    card.classList.add('updated');
+    setTimeout(()=>card.classList.remove('updated'),500);
+  });
+  document.getElementById('explanationText').innerText = step.note || '';
+  appendConsole(step.note);
+  if (step.final) showResultBanner(step.resultText);
+  const total = state.steps.length;
+  const done = state.idx;
+  document.getElementById('progressFill').style.width = `${Math.min(100,(done/total)*100)}%`;
+  document.getElementById('currentStepBadge').innerText = step.final ? 'Finished' : `Step ${done}/${total}`;
+}
+
+function stepExecute(){
+  if (state.idx >= state.steps.length) return;
+  const step = state.steps[state.idx];
+  state.idx++;
+  applyStep(step);
+  if (state.idx >= state.steps.length){
+    const btnStep = document.getElementById('btnStep');
+    btnStep.disabled = true;
+    btnStep.className = 'bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+  }
+}
+
+function runAll(){
+  startSimulation();
+  clearInterval(state.timer);
+  state.timer = setInterval(()=>{
+    if (state.idx >= state.steps.length){ clearInterval(state.timer); return; }
+    stepExecute();
+  }, 420);
+}
+
+function resetSimulation(){
+  clearInterval(state.timer);
+  const mode = document.getElementById('modeSelect').value;
+  state = { mode, steps:[], idx:0, timer:null };
+  renderStructViz(mode, []);
+  document.getElementById('outputPanel').innerText = '--';
+  document.getElementById('exprBar').innerHTML = '';
+  clearConsole();
+  hideResultBanner();
+  document.getElementById('val1').innerText = '--';
+  document.getElementById('val2').innerText = '--';
+  appendConsole("<span class='text-slate-500 italic'>&gt;&gt;&gt; Click 'Run All' or 'Start Simulation' to execute.</span>");
+  document.getElementById('explanationText').innerText = "Choose a mode and click 'Start Simulation' or 'Run All'.";
+  document.getElementById('currentStepBadge').innerText = 'Step: Ready';
+  document.getElementById('progressFill').style.width = '0%';
+  const btnStep = document.getElementById('btnStep');
+  btnStep.disabled = true;
+  btnStep.className = 'bg-slate-100 text-slate-400 font-medium px-4 py-2.5 rounded-full text-sm transition cursor-not-allowed';
+}
+
+function clearConsole(){ document.getElementById('terminal').innerHTML=''; }
+function appendConsole(html){
+  const term = document.getElementById('terminal');
+  const p = document.createElement('p');
+  p.innerHTML = html;
+  term.appendChild(p);
+  term.scrollTop = term.scrollHeight;
+}
+function showResultBanner(text){
+  document.getElementById('resultBannerText').innerText = text;
+  document.getElementById('resultBanner').classList.remove('hidden');
+}
+function hideResultBanner(){ document.getElementById('resultBanner').classList.add('hidden'); }
+
+/* ---------- Quiz grading (generic) ---------- */
+function gradeQuiz(containerId, scoreId){
+  const container = document.getElementById(containerId);
+  const questions = container.querySelectorAll('[data-q]');
+  let score = 0;
+  questions.forEach(q=>{
+    const name = q.dataset.q;
+    const correct = q.dataset.correct;
+    const picked = q.querySelector(`input[name="${name}"]:checked`)?.value;
+    const fb = q.querySelector('.feedback');
+    fb.classList.remove('hidden');
+    if (picked === correct){
+      score++;
+      q.className = 'bg-white p-4 rounded-xl border border-emerald-300';
+      fb.innerText = '✓ Correct!';
+      fb.className = 'feedback text-xs mt-2 font-medium text-emerald-600';
+    } else {
+      q.className = 'bg-white p-4 rounded-xl border border-rose-300';
+      fb.innerText = picked ? '✗ Incorrect. Review the theory tab for this concept.' : '✗ No answer selected.';
+      fb.className = 'feedback text-xs mt-2 font-medium text-rose-500';
+    }
+  });
+  const badge = document.getElementById(scoreId);
+  badge.innerText = `Score: ${score} / ${questions.length}`;
+  badge.classList.remove('hidden');
+}
+
+/* ---------- AI assistant ---------- */
+function sendAiQuery(){
+  const input = document.getElementById('aiQueryInput');
+  const query = input.value.trim();
+  if (!query) return;
+  const chatBox = document.getElementById('aiChatBox');
+  const userDiv = document.createElement('div');
+  userDiv.className = 'flex items-start gap-3 justify-end';
+  userDiv.innerHTML = `<div class="bg-purple-50 border border-purple-200 p-3 rounded-lg text-slate-700">${query}</div><div class="w-7 h-7 rounded-full bg-slate-200 flex items-center justify-center text-slate-600 text-xs shrink-0">You</div>`;
+  chatBox.appendChild(userDiv);
+  input.value = '';
+
+  const q = query.toLowerCase();
+  let response = "Try the Infix → Postfix mode with (A+B)*C-D and step through it — watch the operator stack and output build together.";
+  if (q.includes('postfix') || q.includes('shunting')) response = "The conversion scans left to right: operands go straight to output; an operator pops any stack-top operators with higher-or-equal precedence to output first, then pushes itself; '(' is pushed; ')' pops back to the matching '('; at the end, pop everything remaining.";
+  else if (q.includes('precedence')) response = "* and / (precedence 2) bind tighter than + and - (precedence 1); ^ (precedence 3) binds tightest and is right-associative. This determines which operator gets popped to output first during conversion.";
+  else if (q.includes('stack')) response = "A stack is LIFO — push() adds to the top, pop() removes from the top. Both the 'Stack Operations' demo and the operator stack used during infix-to-postfix conversion work this way.";
+  else if (q.includes('queue')) response = "A queue is FIFO — enqueue() adds to the back (array push), dequeue() removes from the front (array shift). Try the Queue Demo preset to see FRONT and BACK move as elements are processed.";
+  else if (q.includes('paren')) response = "'(' is always pushed onto the operator stack immediately. ')' pops operators to the output until it finds the matching '(', then discards that '(' — parentheses never appear in the postfix output.";
+  else if (q.includes('associat')) response = "Left-associative operators (+,-,*,/) pop equal-precedence operators before pushing. Right-associative ^ does NOT pop equal-precedence operators, so a^b^c becomes abc^^ (evaluated right to left).";
+  else if (q.includes('complexity') || q.includes('big-o')) response = "push/pop/enqueue/dequeue are all O(1). Infix-to-postfix conversion is O(n) — each character is read once and pushed/popped from the operator stack at most once.";
+  else if (q.includes('underflow')) response = "Popping from an empty stack (or dequeuing from an empty queue) is called underflow — there's nothing to remove. Try 'pop' as your first operation in the Stack mode to see it happen.";
+
+  setTimeout(()=>{
+    const aiDiv = document.createElement('div');
+    aiDiv.className = 'flex items-start gap-3';
+    aiDiv.innerHTML = `<div class="w-7 h-7 rounded-full bg-slate-900 flex items-center justify-center text-white text-xs shrink-0">AI</div><div class="bg-white p-3 rounded-lg border border-slate-200 text-slate-700">${response}</div>`;
+    chatBox.appendChild(aiDiv);
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }, 450);
+}
+
+/* ---------- Init ---------- */
+document.addEventListener('DOMContentLoaded', ()=>{
+  onModeChange();
+  renderStructViz('stack', []);
+});
+</script>
+</body>
+</html>
