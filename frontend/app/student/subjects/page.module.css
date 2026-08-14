@@ -46,7 +46,7 @@
 
 .expStatus { font-size: 12.5px; font-weight: 700; padding: 4px 12px; border-radius: 999px; display: inline-block; }
 .statusReady    { background: rgba(209,250,223,.8); color: #15803d; }
-.statusUpcoming { background: rgba(237,233,254,.8); color: #6d28d9; }
+.statusUpcoming { background: rgba(243,232,255,.8); color: #6d28d9; }
 .statusDraft    { background: rgba(241,245,249,.8); color: #64748b; }
 
 .expBtn {

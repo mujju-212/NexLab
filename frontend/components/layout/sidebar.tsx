@@ -43,7 +43,7 @@ export function Sidebar({ role }: { role: Role }) {
   return (
     <aside className="w-64 h-full bg-white dark:bg-gray-900 border-r border-gray-200 dark:border-gray-800 flex flex-col">
       <div className="px-6 py-5 border-b border-gray-200 dark:border-gray-800">
-        <span className="text-lg font-bold text-blue-600">AI Virtual Lab</span>
+        <span className="text-lg font-bold text-purple-600">AI Virtual Lab</span>
       </div>
       <nav className="flex-1 px-3 py-4 space-y-1">
         {items.map((item) => (
@@ -52,7 +52,7 @@ export function Sidebar({ role }: { role: Role }) {
             href={item.href}
             className={`flex items-center px-3 py-2 rounded-lg text-sm font-medium transition-colors ${
               pathname.startsWith(item.href)
-                ? 'bg-blue-50 text-blue-700 dark:bg-blue-900/30 dark:text-blue-400'
+                ? 'bg-purple-50 text-purple-700 dark:bg-purple-900/30 dark:text-purple-400'
                 : 'text-gray-600 hover:bg-gray-100 dark:text-gray-400 dark:hover:bg-gray-800'
             }`}
           >

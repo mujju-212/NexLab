@@ -12,7 +12,7 @@ const COMPONENT_META: { key: keyof StudentRanking['components']; label: string; 
   { key: 'engagement',  label: 'Engagement',      weight: '20%', color: '#22c55e' },
   { key: 'effort',      label: 'Effort',          weight: '20%', color: '#f59e0b' },
   { key: 'efficiency',  label: 'Efficiency',      weight: '15%', color: '#ec4899' },
-  { key: 'consistency', label: 'Consistency',     weight: '15%', color: '#38bdf8' },
+  { key: 'consistency', label: 'Consistency',     weight: '15%', color: '#c084fc' },
 ];
 
 export default function RankingsPage() {

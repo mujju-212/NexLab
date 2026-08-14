@@ -103,8 +103,8 @@
 .lineContent { font-family:'JetBrains Mono',monospace; font-size:13px; white-space:pre; line-height:1.6; }
 
 /* Syntax tokens — tuned for glass-on-purple readability */
-.tok_keyword { color:#ede9fe; font-weight:600; }     /* pale purple — def, if, return */
-.tok_fn      { color:#a5f3fc; }                       /* light cyan — function names   */
+.tok_keyword { color:#f3e8ff; font-weight:600; }     /* pale purple — def, if, return */
+.tok_fn      { color:#e9d5ff; }                       /* light purple — function names */
 .tok_str     { color:#bbf7d0; }                       /* mint green — strings           */
 .tok_num     { color:#fed7aa; }                       /* warm peach — numbers           */
 .tok_comment { color:rgba(255,255,255,.30); font-style:italic; }

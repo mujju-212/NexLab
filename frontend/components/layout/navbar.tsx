@@ -8,7 +8,7 @@ export function Navbar() {
       </div>
       <div className="flex items-center gap-4">
         {/* NotificationPanel, user avatar, etc. */}
-        <div className="w-8 h-8 rounded-full bg-blue-500 flex items-center justify-center text-white text-sm font-medium">
+        <div className="w-8 h-8 rounded-full bg-purple-600 flex items-center justify-center text-white text-sm font-medium">
           U
         </div>
       </div>

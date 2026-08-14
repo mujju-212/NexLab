@@ -54,7 +54,7 @@ export default function AuditLogPage() {
         <div className={styles.emptyState}>Loading…</div>
       ) : logs.length === 0 ? (
         <div className={styles.emptyState}>
-          <ShieldCheck size={32} strokeWidth={1.4} style={{ color:'#c4b5fd', marginBottom:8 }} />
+          <ShieldCheck size={32} strokeWidth={1.4} style={{ color:'#d8b4fe', marginBottom:8 }} />
           <p>No audit events found for selected filters.</p>
         </div>
       ) : (

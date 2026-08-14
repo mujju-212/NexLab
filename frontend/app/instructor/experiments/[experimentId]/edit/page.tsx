@@ -507,8 +507,8 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
                   const Icon = MODULE_ICON[m.module_type] ?? FileText;
                   return (
                     <div key={m.id} className={styles.listRow}>
-                      <GripVertical size={14} color="#ddd6fe" />
-                      <div className={styles.rowIcon} style={{ background: '#f5f3ff' }}>
+                      <GripVertical size={14} color="#e9d5ff" />
+                      <div className={styles.rowIcon} style={{ background: '#faf5ff' }}>
                         <Icon size={15} color="#7c3aed" />
                       </div>
                       <div className={styles.rowBody}>
@@ -545,7 +545,7 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
                 <span className={`${styles.pill} ${styles.pillBlue}`}>{questions.length} questions</span>
               </div>
               {questions.map((q, i) => (
-                <div key={q.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderBottom: '1px solid #f5f3ff' }}>
+                <div key={q.id} style={{ display: 'flex', justifyContent: 'space-between', gap: 12, padding: '10px 0', borderBottom: '1px solid #faf5ff' }}>
                   <div>
                     <p style={{ margin: 0, fontSize: 13.5, fontWeight: 700, color: '#111827' }}>{i + 1}. {q.question_text}</p>
                     <p style={{ margin: '3px 0 0', fontSize: 12, color: '#6b7280' }}>

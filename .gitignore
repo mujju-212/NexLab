@@ -68,3 +68,6 @@ graphify-out/
 graphify_step_*.py
 .agents/
 .qoder/
+nul
+*_colors.py
+

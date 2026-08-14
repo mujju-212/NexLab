@@ -171,7 +171,7 @@ export default function UsersPage() {
       {/* Stats strip */}
       <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
         {[
-          { label: 'Total Users', count: roleCounts.all, color: '#9333ea', bg: '#f5f3ff' },
+          { label: 'Total Users', count: roleCounts.all, color: '#9333ea', bg: '#faf5ff' },
           { label: 'Students', count: roleCounts.student, color: '#10b981', bg: '#ecfdf5' },
           { label: 'Instructors', count: roleCounts.instructor, color: '#f59e0b', bg: '#fffbeb' },
         ].map(s => (

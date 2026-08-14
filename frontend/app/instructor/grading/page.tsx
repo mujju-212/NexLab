@@ -135,14 +135,14 @@ export default function GradingPage() {
       <div className={styles.sectionCard}>
         {!selectedExp ? (
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
-            <ClipboardCheck size={30} color="#c4b5fd" style={{ marginBottom: 8 }} />
+            <ClipboardCheck size={30} color="#d8b4fe" style={{ marginBottom: 8 }} />
             <p className={styles.sectionSub}>Create an experiment first to receive submissions.</p>
           </div>
         ) : loading ? (
           <p className={styles.sectionSub}>Loading submissions…</p>
         ) : submissions.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
-            <ClipboardCheck size={30} color="#c4b5fd" style={{ marginBottom: 8 }} />
+            <ClipboardCheck size={30} color="#d8b4fe" style={{ marginBottom: 8 }} />
             <p className={styles.sectionSub}>No final submissions for this experiment yet.</p>
           </div>
         ) : (

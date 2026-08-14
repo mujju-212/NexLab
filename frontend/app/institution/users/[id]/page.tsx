@@ -158,7 +158,7 @@ export default function UserDetailPage() {
           {user.role === 'student' && (
             <div style={{ background:'rgba(255,255,255,0.78)', borderRadius:18, border:'1px solid rgba(255,255,255,0.9)', padding:24, boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
               <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:18 }}>
-                <div style={{ width:34, height:34, borderRadius:10, background:'#f5f3ff', display:'flex', alignItems:'center', justifyContent:'center', color:'#9333ea' }}>
+                <div style={{ width:34, height:34, borderRadius:10, background:'#faf5ff', display:'flex', alignItems:'center', justifyContent:'center', color:'#9333ea' }}>
                   <GraduationCap size={17} strokeWidth={1.8} />
                 </div>
                 <p style={{ margin:0, fontFamily:'Space Grotesk,sans-serif', fontSize:15, fontWeight:700, color:'#201b2e' }}>Academic Enrollment</p>

@@ -3,9 +3,9 @@
   /* Brand */
   --primary:          #7c3aed;
   --primary-light:    #9333ea;
-  --primary-pale:     #f5f3ff;
+  --primary-pale:     #faf5ff;
   --primary-glow:     rgba(124,58,237,0.16);
-  --accent:           #06b6d4;
+  --accent:           #9333ea;
   --accent-lavender:  #9333ea;
 
   /* Semantic */
@@ -16,7 +16,7 @@
   --danger:           #ef4444;
   --danger-pale:      #fef2f2;
   --info:             #9333ea;
-  --info-pale:        #f5f3ff;
+  --info-pale:        #faf5ff;
 
   /* Text */
   --text-1:           #111827;

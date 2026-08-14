@@ -84,7 +84,7 @@ export default function AnalyticsPage() {
                       {String(ph.hour).padStart(2,'0')}:00 – {String(ph.hour+1).padStart(2,'0')}:00
                     </span>
                     <div style={{flex:1,height:8,background:'#e5e7eb',borderRadius:999,overflow:'hidden'}}>
-                      <div style={{height:'100%',background:'linear-gradient(90deg,#9333ea,#a78bfa)',borderRadius:999,width:`${Math.round((ph.session_count/overview.peak_hours[0].session_count)*100)}%`}}/>
+                      <div style={{height:'100%',background:'linear-gradient(90deg,#9333ea,#c084fc)',borderRadius:999,width:`${Math.round((ph.session_count/overview.peak_hours[0].session_count)*100)}%`}}/>
                     </div>
                     <span style={{fontSize:13,color:'#726a85',fontWeight:600}}>{ph.session_count} sessions</span>
                   </div>
@@ -150,7 +150,7 @@ export default function AnalyticsPage() {
                     <span style={{fontSize:14,fontWeight:700,color:'#9333ea'}}>{sec.avg_score} pts</span>
                   </div>
                   <div className={styles.progressBar}>
-                    <div className={styles.progressFill} style={{width:`${(sec.avg_score/maxScore)*100}%`,background:i===0?'linear-gradient(90deg,#9333ea,#a78bfa)':'linear-gradient(90deg,#c4b5fd,#ddd6fe)'}}/>
+                    <div className={styles.progressFill} style={{width:`${(sec.avg_score/maxScore)*100}%`,background:i===0?'linear-gradient(90deg,#9333ea,#c084fc)':'linear-gradient(90deg,#d8b4fe,#e9d5ff)'}}/>
                   </div>
                   <div style={{fontSize:12,color:'#9891a6',marginTop:4}}>{sec.enrolled} enrolled students</div>
                 </div>

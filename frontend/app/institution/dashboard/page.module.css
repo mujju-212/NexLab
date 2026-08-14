@@ -39,7 +39,7 @@
   font-family: 'Space Grotesk', sans-serif; font-size: 1.85rem; font-weight: 800;
   color: #201b2e; margin: 0; line-height: 1; letter-spacing: -.03em;
 }
-.statArrow { color: #ddd6fe; flex-shrink: 0; transition: color .2s, transform .2s; }
+.statArrow { color: #e9d5ff; flex-shrink: 0; transition: color .2s, transform .2s; }
 .statCard:hover .statArrow { color: #9333ea; transform: translateX(2px); }
 
 /* ── Section ─────────────────────────────────────────────────────────────── */
@@ -257,12 +257,12 @@
   transition:all .15s;
 }
 .sessionRow:hover { background:#fff; box-shadow:0 4px 14px rgba(124,58,237,.09); transform:translateX(1px); }
-.sessionIcon { width:36px; height:36px; border-radius:10px; background:#f5f3ff; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
+.sessionIcon { width:36px; height:36px; border-radius:10px; background:#faf5ff; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
 .sessionInfo { flex:1; }
 .sessionTitle { font-size:13.5px; font-weight:700; color:#201b2e; margin:0 0 2px; font-family:'Space Grotesk',sans-serif; }
 .sessionTime  { font-size:11.5px; color:#9891a6; margin:0; font-family:'JetBrains Mono',monospace; }
 .sessionBadge { font-size:10.5px; font-weight:700; padding:3px 10px; border-radius:20px; text-transform:capitalize; letter-spacing:.03em; }
-.badge_scheduled { background:#f5f3ff; color:#7c3aed; border:1px solid rgba(124,58,237,.12); }
+.badge_scheduled { background:#faf5ff; color:#7c3aed; border:1px solid rgba(124,58,237,.12); }
 .badge_active    { background:#f0fdf4; color:#15803d; border:1px solid rgba(34,197,94,.15); animation:pulseDot 2s infinite; }
 .badge_ended     { background:#f9fafb; color:#9891a6; border:1px solid rgba(203,213,225,.5); }
 @keyframes pulseDot { 0%,100%{box-shadow:0 0 0 0 rgba(34,197,94,.3)} 50%{box-shadow:0 0 0 4px rgba(34,197,94,0)} }
@@ -274,7 +274,7 @@
   border:1px solid rgba(255,255,255,.92); margin-bottom:7px; transition:all .15s;
 }
 .auditRow:hover { background:#fff; box-shadow:0 3px 12px rgba(124,58,237,.07); }
-.auditIcon { width:34px; height:34px; border-radius:9px; background:#f5f3ff; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#9333ea; }
+.auditIcon { width:34px; height:34px; border-radius:9px; background:#faf5ff; display:flex; align-items:center; justify-content:center; flex-shrink:0; color:#9333ea; }
 .auditAction { font-size:13.5px; font-weight:700; color:#201b2e; margin:0 0 2px; font-family:'Space Grotesk',sans-serif; text-transform:capitalize; }
 .auditDetail  { font-size:12px; color:#6b7280; margin:0; }
 .auditTime    { font-size:11px; color:#9891a6; white-space:nowrap; flex-shrink:0; font-family:'JetBrains Mono',monospace; }

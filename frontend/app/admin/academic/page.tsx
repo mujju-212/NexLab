@@ -107,7 +107,7 @@ export default function AcademicPage() {
           </div>
         </div>
         <div className={styles.overviewCard} style={{ cursor: 'default' }}>
-          <div className={styles.overviewIcon} style={{ background: 'linear-gradient(135deg,#06b6d4,#d946ef)' }}>
+          <div className={styles.overviewIcon} style={{ background: 'linear-gradient(135deg,#9333ea,#d946ef)' }}>
             <Layers size={18} strokeWidth={1.9} color="#fff" />
           </div>
           <div>

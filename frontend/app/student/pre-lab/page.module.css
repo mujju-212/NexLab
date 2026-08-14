@@ -19,7 +19,7 @@
 
 .statusBadge { font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; font-family: 'Space Grotesk', sans-serif; }
 .badgeGreen { background: rgba(209,250,223,.8); color: #15803d; }
-.badgeBlue  { background: rgba(237,233,254,.8); color: #6d28d9; }
+.badgeBlue  { background: rgba(243,232,255,.8); color: #6d28d9; }
 .badgeGray  { background: rgba(241,245,249,.8); color: #64748b; }
 
 .expTitle { margin: 0 0 5px; font-size: 14px; font-weight: 700; color: #201b2e; font-family: 'Space Grotesk', sans-serif; line-height: 1.35; }

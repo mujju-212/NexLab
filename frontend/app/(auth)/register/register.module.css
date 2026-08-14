@@ -101,8 +101,8 @@
 .lineContent { font-family:'JetBrains Mono',monospace; font-size:13px; white-space:pre; line-height:1.6; }
 
 /* Syntax tokens — tuned for glass-on-purple readability */
-.tok_keyword { color:#ede9fe; font-weight:600; }
-.tok_fn      { color:#a5f3fc; }
+.tok_keyword { color:#f3e8ff; font-weight:600; }
+.tok_fn      { color:#e9d5ff; }
 .tok_str     { color:#bbf7d0; }
 .tok_num     { color:#fed7aa; }
 .tok_comment { color:rgba(255,255,255,.30); font-style:italic; }

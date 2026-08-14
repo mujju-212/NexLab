@@ -189,7 +189,7 @@ export default function AcademicPage() {
           {loading ? <div className={styles.emptyState}>Loading…</div> :
            years.length===0 ? (
             <div className={styles.emptyState}>
-              <GraduationCap size={32} strokeWidth={1.4} style={{ color:'#c4b5fd', marginBottom:8 }}/>
+              <GraduationCap size={32} strokeWidth={1.4} style={{ color:'#d8b4fe', marginBottom:8 }}/>
               <p>No academic years yet. Start by adding an academic year.</p>
               <button className={styles.btnPrimary} onClick={()=>setShowYearModal(true)}><Plus size={14}/> Add First Year</button>
             </div>
@@ -212,7 +212,7 @@ export default function AcademicPage() {
                 <div key={batch.id} style={{ marginLeft:16, marginBottom:8 }}>
                   {/* Batch header */}
                   <div className={styles.treeItem} style={{ background:'rgba(245,243,255,0.35)', borderRadius:9 }}>
-                    <ChevronRight size={13} style={{ color:'#a78bfa' }}/>
+                    <ChevronRight size={13} style={{ color:'#c084fc' }}/>
                     <span className={styles.treeLabel}>{batch.name}</span>
                     {batch.program && <span style={{ fontSize:12, color:'#9891a6', fontStyle:'italic' }}>{batch.program}</span>}
                     <span className={styles.treeCount}>{sections.filter(s=>s.batch_id===batch.id).length} sections</span>
@@ -228,7 +228,7 @@ export default function AcademicPage() {
                   <div style={{ marginLeft:20, marginTop:4, display:'flex', flexDirection:'column', gap:4 }}>
                     {sections.filter(s=>s.batch_id===batch.id).map(sec=>(
                       <div key={sec.id} className={styles.treeItem} style={{ background:'rgba(255,255,255,0.6)', borderRadius:8 }}>
-                        <div style={{ width:6, height:6, borderRadius:'50%', background:'#c4b5fd', flexShrink:0 }}/>
+                        <div style={{ width:6, height:6, borderRadius:'50%', background:'#d8b4fe', flexShrink:0 }}/>
                         <span style={{ fontSize:13.5, fontWeight:600, color:'#463f57', flex:1 }}>{sec.name}</span>
                         <button onClick={()=>setEditSection(sec)} style={{ background:'none',border:'none',cursor:'pointer',color:'#9333ea',padding:4 }} title="Edit"><Edit3 size={12}/></button>
                         <button onClick={()=>deleteEntity('sections',sec.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#ef4444',padding:4 }} title="Delete"><Trash2 size={12}/></button>
@@ -304,7 +304,7 @@ export default function AcademicPage() {
                    return (
                     <tr key={d.id}>
                       <td style={{ fontWeight:700, color:'#201b2e' }}>{d.name}</td>
-                      <td><code style={{ background:'#f5f3ff', color:'#7c3aed', padding:'2px 8px', borderRadius:6, fontSize:12 }}>{d.code??'—'}</code></td>
+                      <td><code style={{ background:'#faf5ff', color:'#7c3aed', padding:'2px 8px', borderRadius:6, fontSize:12 }}>{d.code??'—'}</code></td>
                       <td style={{ color:'#726a85' }}>{userCount}</td>
                       <td style={{ textAlign:'right' }}>
                         <button onClick={()=>setEditDept(d)} className={styles.btnSecondary} style={{ padding:'4px 8px', fontSize:12, marginRight:4 }}><Edit3 size={12}/></button>
@@ -335,7 +335,7 @@ export default function AcademicPage() {
                  subjects.map(sub=>(
                   <tr key={sub.id}>
                     <td style={{ fontWeight:700, color:'#201b2e' }}>{sub.name}</td>
-                    <td><code style={{ background:'#f5f3ff', color:'#7c3aed', padding:'2px 8px', borderRadius:6, fontSize:12 }}>{sub.code??'—'}</code></td>
+                    <td><code style={{ background:'#faf5ff', color:'#7c3aed', padding:'2px 8px', borderRadius:6, fontSize:12 }}>{sub.code??'—'}</code></td>
                     <td style={{ color:'#726a85' }}>{sub.description??'—'}</td>
                     <td style={{ textAlign:'right' }}>
                       <button onClick={()=>setEditSubject(sub)} className={styles.btnSecondary} style={{ padding:'4px 8px', fontSize:12, marginRight:4 }}><Edit3 size={12}/></button>
@@ -370,7 +370,7 @@ export default function AcademicPage() {
               {/* Enroll Students */}
               <div style={{ background:'rgba(255,255,255,0.78)', borderRadius:18, border:'1px solid rgba(255,255,255,0.9)', padding:24, boxShadow:'0 2px 10px rgba(0,0,0,0.05)' }}>
                 <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
-                  <div style={{ width:34, height:34, borderRadius:10, background:'#f5f3ff', display:'flex', alignItems:'center', justifyContent:'center', color:'#9333ea' }}>
+                  <div style={{ width:34, height:34, borderRadius:10, background:'#faf5ff', display:'flex', alignItems:'center', justifyContent:'center', color:'#9333ea' }}>
                     <Users size={17} strokeWidth={1.8}/>
                   </div>
                   <div>
@@ -433,7 +433,7 @@ export default function AcademicPage() {
 
           {!selectedSection && (
             <div className={styles.emptyState}>
-              <UserCheck size={32} strokeWidth={1.4} style={{ color:'#c4b5fd', marginBottom:8 }}/>
+              <UserCheck size={32} strokeWidth={1.4} style={{ color:'#d8b4fe', marginBottom:8 }}/>
               <p>Select a section above to enroll students and assign subjects.</p>
             </div>
           )}

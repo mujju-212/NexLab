@@ -29,7 +29,7 @@
 .code { font-family:'JetBrains Mono',monospace; font-size:12px; background:rgba(255,255,255,.6); padding:2px 8px; border-radius:6px; color:#615a72; }
 .readyBadge { display:inline-flex; align-items:center; gap:5px; font-size:11.5px; font-weight:700; padding:3px 10px; border-radius:999px; background:rgba(209,250,223,.85); color:#0f8a3f; }
 .dlBtn { display:flex; align-items:center; gap:6px; padding:7px 14px; border-radius:10px; font-size:13px; font-weight:700; cursor:pointer; background:rgba(255,255,255,.55); border:1px solid rgba(255,255,255,.55); color:#7c3aed; transition:all .12s; font-family:'Manrope',sans-serif; }
-.dlBtn:hover { background:rgba(237,233,254,.4); }
+.dlBtn:hover { background:rgba(243,232,255,.4); }
 
 /* ══ Responsive ══════════════════════════════════════════════════════════ */
 @media (max-width: 1180px) {

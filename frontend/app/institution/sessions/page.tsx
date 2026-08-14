@@ -105,7 +105,7 @@ export default function SessionsPage() {
     : '—';
 
   const statusColor: Record<string, string> = { scheduled: '#9333ea', active: '#22c55e', ended: '#9891a6', cancelled: '#ef4444' };
-  const statusBg: Record<string, string> = { scheduled: '#f5f3ff', active: '#f0fdf4', ended: '#faf8ff', cancelled: '#fef2f2' };
+  const statusBg: Record<string, string> = { scheduled: '#faf5ff', active: '#f0fdf4', ended: '#faf5ff', cancelled: '#fef2f2' };
 
   return (
     <InstitutionShell activePage="Sessions" title="Lab Sessions"
@@ -147,7 +147,7 @@ export default function SessionsPage() {
           {loading ? <div className={styles.emptyState}>Loading…</div> :
            liveSessions.length === 0 ? (
             <div className={styles.emptyState}>
-              <Radio size={32} strokeWidth={1.4} style={{ color: '#c4b5fd', marginBottom: 8 }} />
+              <Radio size={32} strokeWidth={1.4} style={{ color: '#d8b4fe', marginBottom: 8 }} />
               <p>No live sessions at the moment.</p>
             </div>
           ) : (
@@ -193,7 +193,7 @@ export default function SessionsPage() {
                 <tr key={s.id}>
                   <td>
                     <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                      <div style={{ width: 34, height: 34, borderRadius: 9, background: s.status === 'active' ? '#f0fdf4' : '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
+                      <div style={{ width: 34, height: 34, borderRadius: 9, background: s.status === 'active' ? '#f0fdf4' : '#faf5ff', display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0 }}>
                         {s.status === 'active' ? <Radio size={15} style={{ color: '#22c55e' }} /> : <PlayCircle size={15} style={{ color: '#9333ea' }} />}
                       </div>
                       <div>
@@ -203,7 +203,7 @@ export default function SessionsPage() {
                     </div>
                   </td>
                   <td>
-                    <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: statusBg[s.status] ?? '#faf8ff', color: statusColor[s.status] ?? '#9891a6' }}>
+                    <span style={{ padding: '3px 10px', borderRadius: 20, fontSize: 11, fontWeight: 700, background: statusBg[s.status] ?? '#faf5ff', color: statusColor[s.status] ?? '#9891a6' }}>
                       {s.status}
                     </span>
                   </td>

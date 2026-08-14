@@ -13,8 +13,8 @@
 .roleCount { font-size:13px; color:#9891a6; font-weight:600; margin:0; }
 .permsList { display:flex; flex-wrap:wrap; gap:7px; margin-bottom:16px; }
 .permTag { display:flex; align-items:center; gap:5px; font-size:12px; font-weight:700; color:#463f57; background:rgba(255,255,255,.6); border:1px solid rgba(255,255,255,.7); border-radius:999px; padding:3px 10px; }
-.editRoleBtn { width:100%; padding:9px; border-radius:10px; font-size:13px; font-weight:700; color:#7c3aed; background:rgba(237,233,254,.3); border:1px solid rgba(147,51,234,.2); cursor:pointer; transition:all .15s; font-family:'Manrope',sans-serif; }
-.editRoleBtn:hover { background:rgba(237,233,254,.5); }
+.editRoleBtn { width:100%; padding:9px; border-radius:10px; font-size:13px; font-weight:700; color:#7c3aed; background:rgba(243,232,255,.3); border:1px solid rgba(147,51,234,.2); cursor:pointer; transition:all .15s; font-family:'Manrope',sans-serif; }
+.editRoleBtn:hover { background:rgba(243,232,255,.5); }
 
 /* ── Table ───────────────────────────────────────────────────────────────── */
 .tableWrap { background:rgba(255,255,255,.42); border:1px solid rgba(255,255,255,.7); border-radius:20px; overflow:hidden; box-shadow:0 10px 30px rgba(20,20,30,.07); }
@@ -26,7 +26,7 @@
 .table tbody tr:last-child td { border-bottom:none; }
 .code { font-family:'JetBrains Mono',monospace; font-size:12px; background:rgba(255,255,255,.6); padding:2px 8px; border-radius:6px; color:#615a72; }
 .tableFooter { display:flex; align-items:center; justify-content:space-between; padding:14px 20px; border-top:1px solid rgba(255,255,255,.5); font-size:13px; font-weight:600; color:#9891a6; }
-.exportBtn { padding:7px 14px; border-radius:10px; font-size:13px; font-weight:700; color:#7c3aed; background:rgba(237,233,254,.3); border:1px solid rgba(147,51,234,.2); cursor:pointer; font-family:'Manrope',sans-serif; }
+.exportBtn { padding:7px 14px; border-radius:10px; font-size:13px; font-weight:700; color:#7c3aed; background:rgba(243,232,255,.3); border:1px solid rgba(147,51,234,.2); cursor:pointer; font-family:'Manrope',sans-serif; }
 .editBtn { padding:6px 14px; border-radius:8px; font-size:12.5px; font-weight:700; color:#463f57; background:rgba(255,255,255,.6); border:1px solid rgba(255,255,255,.6); cursor:pointer; transition:all .12s; font-family:'Manrope',sans-serif; }
 .editBtn:hover { background:rgba(255,255,255,.9); color:#201b2e; }
 

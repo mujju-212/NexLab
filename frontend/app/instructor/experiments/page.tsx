@@ -95,7 +95,7 @@ export default function ExperimentsPage() {
           <p className={styles.sectionSub}>Loading experiments…</p>
         ) : experiments.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
-            <FlaskConical size={30} color="#c4b5fd" style={{ marginBottom: 8 }} />
+            <FlaskConical size={30} color="#d8b4fe" style={{ marginBottom: 8 }} />
             <p className={styles.sectionSub}>No experiments yet. Create your first one.</p>
           </div>
         ) : (

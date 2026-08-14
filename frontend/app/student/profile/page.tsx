@@ -9,7 +9,7 @@ import type { StudentDashboard, SectionSubject } from '@/types';
 import { Loader2 } from 'lucide-react';
 import styles from './page.module.css';
 
-const SUBJECT_COLORS = ['#9333ea', '#d946ef', '#f59e0b', '#ec4899', '#22c55e', '#38bdf8'];
+const SUBJECT_COLORS = ['#9333ea', '#d946ef', '#f59e0b', '#ec4899', '#22c55e', '#c084fc'];
 
 export default function ProfilePage() {
   const user = useAuthStore(s => s.user);

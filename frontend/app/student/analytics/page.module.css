@@ -41,7 +41,7 @@
 
 .gradePill { font-size: 12px; font-weight: 700; padding: 3px 10px; border-radius: 999px; }
 .gradeA { background: rgba(209,250,223,.8); color: #15803d; }
-.gradeB { background: rgba(237,233,254,.8); color: #7c3aed; }
+.gradeB { background: rgba(243,232,255,.8); color: #7c3aed; }
 .gradeC { background: rgba(254,243,199,.8); color: #b45309; }
 
 /* Loading / error / empty states */

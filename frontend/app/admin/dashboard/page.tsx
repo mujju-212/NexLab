@@ -112,7 +112,7 @@ export default function AdminDashboard() {
             </div>
 
             <div className={styles.statCard} onClick={() => router.push('/admin/monitoring')} style={{ cursor:'pointer' }}>
-              <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg,#06b6d4,#d946ef)' }}>
+              <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg,#9333ea,#d946ef)' }}>
                 <Activity size={17} strokeWidth={1.9} color="#fff" />
               </div>
               <p className={styles.statLabel}>Live Sessions</p>
@@ -146,7 +146,7 @@ export default function AdminDashboard() {
         <div className={styles.boardColumns}>
           {[
             { label: 'Manage Institutions', desc: 'Register, suspend, or configure institutions', route: '/admin/institutions', color: '#9333ea' },
-            { label: 'Platform Analytics',  desc: 'Cross-institution usage and trends',           route: '/admin/analytics',    color: '#06b6d4' },
+            { label: 'Platform Analytics',  desc: 'Cross-institution usage and trends',           route: '/admin/analytics',    color: '#9333ea' },
             { label: 'System Health',       desc: 'Judge0, DB, and Groq API status',              route: '/admin/monitoring',   color: '#22c55e' },
             { label: 'Platform Config',     desc: 'Feature flags and global settings',            route: '/admin/settings',     color: '#f59e0b' },
           ].map(a => (

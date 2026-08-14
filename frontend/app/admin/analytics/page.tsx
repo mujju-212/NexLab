@@ -15,7 +15,7 @@ const PERIODS: { id: string; label: string; days: number }[] = [
   { id: 'semester', label: 'Semester', days: 120 },
 ];
 
-const INST_COLORS = ['#7c3aed', '#d946ef', '#f59e0b', '#22c55e', '#ec4899', '#06b6d4'];
+const INST_COLORS = ['#7c3aed', '#d946ef', '#f59e0b', '#22c55e', '#ec4899', '#84cc16'];
 
 export default function AnalyticsPage() {
   const [period, setPeriod] = useState('month');
@@ -76,7 +76,7 @@ export default function AnalyticsPage() {
         {[
           { label: 'Total Users',          value: overview?.total_users,         Icon: Users,      bg: 'linear-gradient(135deg,#7c3aed,#9333ea)' },
           { label: `New Users (${days}d)`, value: overview?.new_users,           Icon: UserPlus,   bg: 'linear-gradient(135deg,#ec4899,#d6409f)' },
-          { label: 'Total Sessions',       value: overview?.total_sessions,      Icon: Activity,   bg: 'linear-gradient(135deg,#06b6d4,#d946ef)' },
+          { label: 'Total Sessions',       value: overview?.total_sessions,      Icon: Activity,   bg: 'linear-gradient(135deg,#9333ea,#d946ef)' },
           { label: `Sessions (${days}d)`,  value: overview?.sessions_in_period,  Icon: BarChart3,  bg: 'linear-gradient(135deg,#22c55e,#16a34a)' },
           { label: 'Active Institutions',  value: overview?.active_institutions, Icon: Building2,  bg: 'linear-gradient(135deg,#f59e0b,#f2994a)' },
           { label: `AI Calls (${Math.min(days, 30)}d)`, value: groqTotal,        Icon: Brain,      bg: 'linear-gradient(135deg,#9333ea,#7c3aed)' },

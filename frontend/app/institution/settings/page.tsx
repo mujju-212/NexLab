@@ -161,7 +161,7 @@ export default function SettingsPage() {
           {/* Change password */}
           <div style={{ background: 'rgba(255,255,255,0.78)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.9)', padding: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 22 }}>
-              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9333ea' }}>
+              <div style={{ width: 36, height: 36, borderRadius: 10, background: '#faf5ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9333ea' }}>
                 <KeyRound size={17} strokeWidth={1.8} />
               </div>
               <div>
@@ -318,7 +318,7 @@ export default function SettingsPage() {
                 <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
                   {plan.features.map(f => (
                     <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500 }}>
-                      <Check size={14} style={{ color: plan.highlight ? '#a5f3fc' : '#22c55e', flexShrink: 0 }} /> {f}
+                      <Check size={14} style={{ color: plan.highlight ? '#e9d5ff' : '#22c55e', flexShrink: 0 }} /> {f}
                     </li>
                   ))}
                 </ul>
@@ -370,7 +370,7 @@ export default function SettingsPage() {
           {/* Contact support */}
           <div className={styles.grid2} style={{ gap: 16 }}>
             <div style={{ background: 'rgba(255,255,255,0.78)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.9)', padding: 24, display: 'flex', flexDirection: 'column', alignItems: 'flex-start', gap: 12 }}>
-              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#f5f3ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9333ea' }}>
+              <div style={{ width: 40, height: 40, borderRadius: 10, background: '#faf5ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9333ea' }}>
                 <MessageSquare size={18} strokeWidth={1.8} />
               </div>
               <div>

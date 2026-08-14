@@ -37,7 +37,7 @@ export default function InstitutionDashboardPage() {
   };
 
   const STAT_CARDS = [
-    { label: 'Students',      value: data?.stats.students,      Icon: GraduationCap, color: '#9333ea', bg: '#f5f3ff', href: '/institution/users?role=student' },
+    { label: 'Students',      value: data?.stats.students,      Icon: GraduationCap, color: '#9333ea', bg: '#faf5ff', href: '/institution/users?role=student' },
     { label: 'Instructors',   value: data?.stats.instructors,   Icon: Users,         color: '#10b981', bg: '#ecfdf5', href: '/institution/users?role=instructor' },
     { label: 'Subjects',      value: data?.stats.subjects,      Icon: BookOpen,      color: '#f59e0b', bg: '#fffbeb', href: '/institution/academic' },
     { label: 'Live Sessions', value: data?.stats.live_sessions, Icon: Radio,         color: '#ef4444', bg: '#fef2f2', href: '/institution/sessions' },
@@ -93,7 +93,7 @@ export default function InstitutionDashboardPage() {
                   height: `${(weeklyActivity[i] / maxActivity) * 100}px`,
                   background: i === new Date().getDay() - 1
                     ? 'linear-gradient(180deg, #9333ea, #7c3aed)'
-                    : 'linear-gradient(180deg, #ddd6fe, #c4b5fd)',
+                    : 'linear-gradient(180deg, #e9d5ff, #d8b4fe)',
                   minHeight: 8,
                 }} />
                 <span style={{ fontSize: 11, fontWeight: 600, color: '#9891a6' }}>{day}</span>
@@ -167,7 +167,7 @@ export default function InstitutionDashboardPage() {
             <div className={styles.errorState}>{error}</div>
           ) : !data?.upcoming_sessions?.length ? (
             <div className={styles.emptyState}>
-              <Calendar size={32} strokeWidth={1.4} style={{ color: '#c4b5fd', marginBottom: 8 }} />
+              <Calendar size={32} strokeWidth={1.4} style={{ color: '#d8b4fe', marginBottom: 8 }} />
               <p>No scheduled sessions yet.</p>
               <button className={styles.btnPrimary} onClick={() => router.push('/institution/sessions')}>
                 <Plus size={14} /> Schedule a Session

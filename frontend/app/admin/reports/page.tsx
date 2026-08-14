@@ -49,7 +49,7 @@ const REPORT_TYPES: {
     Icon: BarChart3,
     title: 'AI Usage by Institution (today)',
     desc: "Today's per-institution Groq call counts against the daily quota.",
-    bg: 'linear-gradient(135deg,#06b6d4,#d946ef)',
+    bg: 'linear-gradient(135deg,#9333ea,#d946ef)',
   },
   {
     id: 'overview',

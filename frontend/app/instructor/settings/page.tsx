@@ -92,7 +92,7 @@ export default function InstructorSettingsPage() {
             </label>
           </div>
 
-          <div style={{ background: '#faf8ff', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', marginTop: '20px' }}>
+          <div style={{ background: '#faf5ff', padding: '14px', borderRadius: '12px', border: '1px solid #e2e8f0', marginTop: '20px' }}>
             <p style={{ margin: '0 0 6px', fontSize: '12px', fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>SERVICE ENDPOINTS</p>
             <p style={{ margin: '0 0 4px', fontSize: '12.5px', color: '#463f57' }}>⚡ Judge0 API: <code>http://localhost:2358</code></p>
             <p style={{ margin: '0 0 4px', fontSize: '12.5px', color: '#463f57' }}>🤖 FastAPI AI Services: <code>http://localhost:8000–8006</code></p>

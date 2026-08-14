@@ -221,7 +221,7 @@
   cursor: pointer; transition: all .15s; font-family: 'Space Grotesk', sans-serif;
 }
 .langTab:hover { border-color: rgba(255,255,255,.2); color: rgba(255,255,255,.7); }
-.langTabActive { background: rgba(147,51,234,.25); border-color: rgba(147,51,234,.5); color: #c4b5fd; }
+.langTabActive { background: rgba(147,51,234,.25); border-color: rgba(147,51,234,.5); color: #d8b4fe; }
 
 .resetBtn {
   display: flex; align-items: center; gap: 5px;

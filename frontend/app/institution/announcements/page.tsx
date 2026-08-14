@@ -39,7 +39,7 @@ export default function AnnouncementsPage() {
       {/* Compose */}
       <form className={styles.announceForm} onSubmit={send}>
         <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:20 }}>
-          <div style={{ width:38, height:38, borderRadius:11, background:'#f5f3ff', display:'flex', alignItems:'center', justifyContent:'center', color:'#9333ea' }}>
+          <div style={{ width:38, height:38, borderRadius:11, background:'#faf5ff', display:'flex', alignItems:'center', justifyContent:'center', color:'#9333ea' }}>
             <Bell size={18} strokeWidth={1.8} />
           </div>
           <div>

@@ -212,7 +212,7 @@ function LiveLabInner() {
         <>
           {/* Session Header Banner */}
           <div className={styles.sectionCard} style={{
-            background: isLive ? 'linear-gradient(135deg, rgba(124,58,237,0.08), rgba(15,118,110,0.08))' : '#faf8ff',
+            background: isLive ? 'linear-gradient(135deg, rgba(124,58,237,0.08), rgba(15,118,110,0.08))' : '#faf5ff',
             marginBottom: 22,
           }}>
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 14 }}>

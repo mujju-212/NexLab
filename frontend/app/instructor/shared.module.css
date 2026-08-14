@@ -58,7 +58,7 @@
   color: #6d28d9;
   border: 1px solid rgba(147,51,234,.18);
 }
-.ghostBtn:hover, .rowAction:hover { background: #f5f3ff; transform: translateY(-1px); }
+.ghostBtn:hover, .rowAction:hover { background: #faf5ff; transform: translateY(-1px); }
 
 /* ── Tab row ────────────────────────────────────────────────────────────── */
 .tabRow {
@@ -302,7 +302,7 @@
 
 /* ── Code block ─────────────────────────────────────────────────────────── */
 .codeBlock {
-  background: #201b2e; color: #38bdf8;
+  background: #201b2e; color: #c084fc;
   font-family: 'JetBrains Mono', monospace; font-size: 13px;
   padding: 16px; border-radius: 12px; overflow-x: auto;
   line-height: 1.55; white-space: pre-wrap;

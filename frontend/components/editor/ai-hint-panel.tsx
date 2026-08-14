@@ -26,9 +26,9 @@ export function AIHintPanel({ hints = [], onRequestHint, isLoading }: AIHintPane
         {hints.map((hint) => (
           <div
             key={hint.id}
-            className="rounded-lg p-3 bg-blue-900/30 border border-blue-800 text-sm text-blue-200"
+            className="rounded-lg p-3 bg-purple-900/30 border border-purple-800 text-sm text-purple-200"
           >
-            <span className="text-xs font-medium text-blue-400 block mb-1">
+            <span className="text-xs font-medium text-purple-400 block mb-1">
               Hint Level {hint.level}
             </span>
             {hint.content}
@@ -39,7 +39,7 @@ export function AIHintPanel({ hints = [], onRequestHint, isLoading }: AIHintPane
         <button
           onClick={onRequestHint}
           disabled={isLoading}
-          className="w-full py-2 rounded-lg bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white text-sm font-medium transition"
+          className="w-full py-2 rounded-lg bg-purple-600 hover:bg-purple-700 disabled:opacity-50 text-white text-sm font-medium transition"
         >
           {isLoading ? 'Thinking...' : '💡 Get a Hint'}
         </button>

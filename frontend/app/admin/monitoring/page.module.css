@@ -3,8 +3,8 @@
 .tabs { display:flex; align-items:center; gap:4px; background:rgba(255,255,255,.4); border-radius:14px; padding:4px; margin-bottom:24px; flex-wrap:wrap; }
 .tab { padding:8px 18px; border-radius:10px; font-size:13.5px; font-weight:700; color:#615a72; cursor:pointer; border:none; background:transparent; transition:all .15s; font-family:'Manrope',sans-serif; }
 .tabActive { background:rgba(255,255,255,.85); color:#201b2e; box-shadow:0 2px 8px rgba(0,0,0,.06); }
-.refreshBtn { display:flex; align-items:center; gap:6px; margin-left:auto; padding:8px 16px; border-radius:10px; font-size:13px; font-weight:700; color:#7c3aed; cursor:pointer; border:1px solid rgba(147,51,234,.25); background:rgba(237,233,254,.3); transition:all .15s; font-family:'Manrope',sans-serif; }
-.refreshBtn:hover { background:rgba(237,233,254,.5); }
+.refreshBtn { display:flex; align-items:center; gap:6px; margin-left:auto; padding:8px 16px; border-radius:10px; font-size:13px; font-weight:700; color:#7c3aed; cursor:pointer; border:1px solid rgba(147,51,234,.25); background:rgba(243,232,255,.3); transition:all .15s; font-family:'Manrope',sans-serif; }
+.refreshBtn:hover { background:rgba(243,232,255,.5); }
 
 /* ── Cards Grid ──────────────────────────────────────────────────────────── */
 .cardsGrid { display:grid; grid-template-columns:repeat(2,1fr); gap:18px; margin-bottom:28px; }
@@ -34,7 +34,7 @@
 .logRow:hover { background:rgba(255,255,255,.35); }
 .logTime { color:#9891a6; font-family:'JetBrains Mono',monospace; font-size:12px; }
 .logLevel { font-size:11px; font-weight:700; padding:2px 7px; border-radius:6px; text-align:center; }
-.logInfo  { background:rgba(237,233,254,.85); color:#6d28d9; }
+.logInfo  { background:rgba(243,232,255,.85); color:#6d28d9; }
 .logWarn  { background:rgba(254,243,199,.85); color:#b45309; }
 .logError { background:rgba(254,226,226,.85); color:#b91c1c; }
 .logService { color:#7c3aed; font-weight:700; font-size:12.5px; }

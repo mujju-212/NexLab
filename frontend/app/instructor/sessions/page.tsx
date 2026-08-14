@@ -225,7 +225,7 @@ export default function SessionsPage() {
             {filtered.map(s => (
               <div key={s.id} className={styles.listRow}>
                 <div className={styles.rowIcon} style={{
-                  background: s.status === 'active' ? '#ecfdf5' : s.status === 'scheduled' ? '#f5f3ff' : '#faf8ff',
+                  background: s.status === 'active' ? '#ecfdf5' : s.status === 'scheduled' ? '#faf5ff' : '#faf5ff',
                 }}>
                   {s.status === 'active' ? <Radio size={16} color="#059669" /> :
                    s.status === 'scheduled' ? <CalendarClock size={16} color="#7c3aed" /> :

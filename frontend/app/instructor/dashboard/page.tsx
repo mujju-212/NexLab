@@ -127,7 +127,7 @@ export default function InstructorDashboard() {
       <div className={styles.statGrid4}>
         {[
           { label: 'My Students',       value: String(stats.student_count),          sub: 'Enrolled in your sections',   Icon: Users,          bg: 'linear-gradient(135deg,#7c3aed,#9333ea)', route: '/instructor/students'   },
-          { label: 'Active Sessions',   value: String(stats.active_session_count),   sub: `${upcomingSessions.length} upcoming scheduled`, Icon: PlayCircle, bg: 'linear-gradient(135deg,#d946ef,#06b6d4)', route: '/instructor/sessions'   },
+          { label: 'Active Sessions',   value: String(stats.active_session_count),   sub: `${upcomingSessions.length} upcoming scheduled`, Icon: PlayCircle, bg: 'linear-gradient(135deg,#d946ef,#9333ea)', route: '/instructor/sessions'   },
           { label: 'Pending Grading',   value: String(stats.pending_grading_count),  sub: 'Final submissions ungraded',  Icon: ClipboardCheck, bg: 'linear-gradient(135deg,#f59e0b,#f2994a)', route: '/instructor/grading'    },
           { label: 'My Experiments',    value: String(stats.experiment_count),       sub: 'Authored lab experiments',    Icon: BarChart3,      bg: 'linear-gradient(135deg,#22c55e,#16a34a)', route: '/instructor/experiments' },
         ].map(s => (
@@ -255,7 +255,7 @@ export default function InstructorDashboard() {
               { label: 'Create Experiment',    sub: 'Aim, theory, code assets',     Icon: FlaskConical,   bg: 'linear-gradient(135deg,#7c3aed,#9333ea)', route: '/instructor/experiments/new' },
               { label: 'Content Library',      sub: 'Pre-lab modules per experiment', Icon: BookOpen,     bg: 'linear-gradient(135deg,#ec4899,#d6409f)', route: '/instructor/content'         },
               { label: 'Analytics & Insights', sub: 'Class performance, at-risk',   Icon: BarChart3,      bg: 'linear-gradient(135deg,#f59e0b,#f2994a)', route: '/instructor/analytics'       },
-              { label: 'Student Management',   sub: 'Roster, attendance, catch-up', Icon: Users,          bg: 'linear-gradient(135deg,#d946ef,#06b6d4)', route: '/instructor/students'        },
+              { label: 'Student Management',   sub: 'Roster, attendance, catch-up', Icon: Users,          bg: 'linear-gradient(135deg,#d946ef,#9333ea)', route: '/instructor/students'        },
               { label: 'Viva Panel',           sub: 'Schedule & conduct vivas',     Icon: ClipboardCheck, bg: 'linear-gradient(135deg,#22c55e,#16a34a)', route: '/instructor/viva'            },
             ].map(q => (
               <div key={q.label} className={styles.quickCard} onClick={() => router.push(q.route)}>

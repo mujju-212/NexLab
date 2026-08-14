@@ -2,13 +2,13 @@
 /* ── Stage ───────────────────────────────────────────────────────────────── */
 .stage {
   position: relative; min-height: 100vh;
-  background: linear-gradient(150deg,#f5f3ff 0%,#f8faff 45%,#f5f3ff 75%,#ffffff 100%);
+  background: linear-gradient(150deg,#faf5ff 0%,#f8faff 45%,#faf5ff 75%,#ffffff 100%);
   overflow: hidden; padding: 32px; font-family: 'Manrope', sans-serif;
 }
 .blob { position: absolute; border-radius: 50%; filter: blur(80px); pointer-events: none; }
-.blob1 { width: 560px; height: 560px; top: -240px; left: 260px; background: radial-gradient(circle at 30% 30%,#ede9fe,#c4b5fd 70%); opacity: .35; }
-.blob2 { width: 460px; height: 460px; bottom: -200px; left: -160px; background: radial-gradient(circle at 40% 40%,#f5f3ff,#ddd6fe 70%); opacity: .3; }
-.blob3 { width: 400px; height: 400px; top: 40px; right: -140px; background: radial-gradient(circle at 50% 50%,#f5f3ff,#ddd6fe 70%); opacity: .28; }
+.blob1 { width: 560px; height: 560px; top: -240px; left: 260px; background: radial-gradient(circle at 30% 30%,#f3e8ff,#d8b4fe 70%); opacity: .35; }
+.blob2 { width: 460px; height: 460px; bottom: -200px; left: -160px; background: radial-gradient(circle at 40% 40%,#faf5ff,#e9d5ff 70%); opacity: .3; }
+.blob3 { width: 400px; height: 400px; top: 40px; right: -140px; background: radial-gradient(circle at 50% 50%,#faf5ff,#e9d5ff 70%); opacity: .28; }
 .sheen { position: absolute; top: -60px; left: 180px; width: 680px; height: 240px; background: linear-gradient(120deg,rgba(255,255,255,.8),rgba(255,255,255,0) 60%); filter: blur(35px); transform: rotate(-8deg); pointer-events: none; }
 
 /* ── App panel ───────────────────────────────────────────────────────────── */
@@ -65,7 +65,7 @@
 .bottomGroup { margin-top: 8px; padding-top: 10px; border-top: 1px solid rgba(255,255,255,.55); }
 
 /* Instructor promo: purple tint matching admin */
-.promoBanner { margin-top: auto; background: linear-gradient(135deg,rgba(237,233,254,.85),rgba(245,243,255,.85)); border: 1px solid rgba(255,255,255,.7); border-radius: 16px; padding: 14px; display: flex; gap: 10px; align-items: flex-start; }
+.promoBanner { margin-top: auto; background: linear-gradient(135deg,rgba(243,232,255,.85),rgba(245,243,255,.85)); border: 1px solid rgba(255,255,255,.7); border-radius: 16px; padding: 14px; display: flex; gap: 10px; align-items: flex-start; }
 .promoIcon { width: 32px; height: 32px; border-radius: 9px; background: rgba(255,255,255,.7); display: flex; align-items: center; justify-content: center; color: #7c3aed; flex-shrink: 0; }
 .promoTitle { margin: 0 0 3px; font-size: 13px; font-weight: 700; color: #5b21b6; font-family: 'Space Grotesk', sans-serif; }
 .promoLink { font-size: 12.5px; color: #7c3aed; font-weight: 700; text-decoration: underline; cursor: pointer; }

@@ -11,10 +11,10 @@
 /* ── Platform Setup Workflow Styles (Clean & Professional) ───────────────── */
 .workflowContainer { background: rgba(255,255,255,.45); border: 1.5px solid rgba(255,255,255,.7); border-radius: 24px; padding: 28px; box-shadow: 0 10px 30px rgba(20,20,30,.06); margin-bottom: 24px; }
 .workflowHeader { display: flex; align-items: flex-start; justify-content: space-between; margin-bottom: 24px; }
-.adminBadge { display: inline-block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: #7c3aed; background: rgba(237,233,254,.6); padding: 4px 12px; border-radius: 999px; margin-bottom: 6px; font-family: 'Space Grotesk', sans-serif; }
+.adminBadge { display: inline-block; font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .08em; color: #7c3aed; background: rgba(243,232,255,.6); padding: 4px 12px; border-radius: 999px; margin-bottom: 6px; font-family: 'Space Grotesk', sans-serif; }
 .workflowMainTitle { font-size: 24px; font-weight: 700; color: #201b2e; font-family: 'Space Grotesk', sans-serif; margin: 0 0 4px; letter-spacing: -.01em; }
 .workflowSubtitle { font-size: 13.5px; font-weight: 600; color: #615a72; margin: 0; }
-.stepProgressPill { font-size: 12.5px; font-weight: 700; color: #7c3aed; background: rgba(237,233,254,.8); padding: 5px 14px; border-radius: 999px; }
+.stepProgressPill { font-size: 12.5px; font-weight: 700; color: #7c3aed; background: rgba(243,232,255,.8); padding: 5px 14px; border-radius: 999px; }
 
 /* Sequence Grid */
 .stepsSequence { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }
@@ -51,7 +51,7 @@
 .pill { font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; display: inline-block; }
 .pillGreen { background: rgba(209,250,223,.85); color: #0f8a3f; }
 .pillOrange { background: rgba(254,243,199,.85); color: #b45309; }
-.pillBlue { background: rgba(237,233,254,.85); color: #6d28d9; }
+.pillBlue { background: rgba(243,232,255,.85); color: #6d28d9; }
 .pillGray { background: rgba(226,232,240,.85); color: #475569; }
 
 .actions { display: flex; gap: 4px; }

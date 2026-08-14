@@ -88,7 +88,7 @@ export default function ProfilePage() {
         {/* Change Password */}
         <div style={{ background:'rgba(255,255,255,0.78)', borderRadius:18, border:'1px solid rgba(255,255,255,0.9)', padding:28, boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
           <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:22 }}>
-            <div style={{ width:36, height:36, borderRadius:10, background:'#f5f3ff', display:'flex', alignItems:'center', justifyContent:'center', color:'#9333ea' }}>
+            <div style={{ width:36, height:36, borderRadius:10, background:'#faf5ff', display:'flex', alignItems:'center', justifyContent:'center', color:'#9333ea' }}>
               <KeyRound size={17} strokeWidth={1.8} />
             </div>
             <div>
