@@ -63,8 +63,11 @@ class FreeExercise(db.Model):
     time_limit_sec   = db.Column(db.Integer, default=5)
     memory_limit_kb  = db.Column(db.Integer, default=131072)
 
-    # Exercise type: coding | mcq | reading
+    # Exercise type: coding | mcq | reading | simulation
     exercise_type    = db.Column(db.String(10), default='coding')
+    # For simulation exercises: static HTML lab served by the frontend
+    # (e.g. '/simulations/python-programming-lab/loops.html')
+    simulation_path  = db.Column(db.Text)
     # For MCQ exercises:
     mcq_options      = db.Column(db.JSON)    # ["Option A", "Option B", ...]
     mcq_answer       = db.Column(db.String(2))  # "A"|"B"|"C"|"D"
@@ -98,6 +101,8 @@ class FreeExercise(db.Model):
             if include_answer:
                 d['mcq_answer'] = self.mcq_answer
                 d['mcq_explanation'] = self.mcq_explanation
+        if self.exercise_type == 'simulation':
+            d['simulation_path'] = self.simulation_path
         return d
 
 

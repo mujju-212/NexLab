@@ -192,9 +192,11 @@ def submit_exercise(exercise_id):
         )
         db.session.add(prog)
 
-    prog.attempts    += 1
+    prog.attempts    = (prog.attempts or 0) + 1
     prog.last_code    = code
     prog.language_used= language
+    prog.best_score   = prog.best_score or 0.0
+    prog.xp_earned    = prog.xp_earned or 0
     if score > prog.best_score:
         prog.best_score = score
     if solved and prog.status != 'solved':
@@ -237,7 +239,8 @@ def submit_mcq(exercise_id):
         prog = FreeProgress(user_id=g.user_id, exercise_id=exercise_id, course_id=ex.course_id)
         db.session.add(prog)
 
-    prog.attempts   += 1
+    prog.attempts    = (prog.attempts or 0) + 1
+    prog.xp_earned   = prog.xp_earned or 0
     if correct and prog.status != 'solved':
         prog.status  = 'solved'
         prog.best_score = 100.0
@@ -256,6 +259,39 @@ def submit_mcq(exercise_id):
 
 # ── Authenticated: My Progress ────────────────────────────────────────────────
 
+@free_bp.route('/exercises/<exercise_id>/complete', methods=['POST'])
+@require_auth
+def complete_simulation(exercise_id):
+    """Mark a simulation experiment as completed — awards XP once."""
+    ex = FreeExercise.query.get_or_404(exercise_id)
+    if ex.exercise_type != 'simulation':
+        return jsonify({'error': 'Not a simulation exercise'}), 400
+
+    prog = FreeProgress.query.filter_by(
+        user_id=g.user_id, exercise_id=exercise_id
+    ).first()
+    if not prog:
+        prog = FreeProgress(user_id=g.user_id, exercise_id=exercise_id,
+                            course_id=ex.course_id)
+        db.session.add(prog)
+
+    already_solved = prog.status == 'solved'
+    prog.attempts    = (prog.attempts or 0) + 1
+    prog.xp_earned   = prog.xp_earned or 0
+    if not already_solved:
+        prog.status     = 'solved'
+        prog.best_score = 100.0
+        prog.solved_at  = datetime.utcnow()
+        prog.xp_earned  = ex.xp_reward
+    db.session.commit()
+
+    return jsonify({
+        'solved':     True,
+        'xp_earned':  0 if already_solved else ex.xp_reward,
+        'status':     prog.status,
+    }), 200
+
+
 @free_bp.route('/progress', methods=['GET'])
 @require_auth
 def my_progress():
@@ -268,13 +304,13 @@ def my_progress():
         cid = r.course_id
         if cid not in by_course:
             by_course[cid] = {'solved': 0, 'attempted': 0, 'xp': 0}
-        by_course[cid]['xp'] += r.xp_earned
+        by_course[cid]['xp'] += (r.xp_earned or 0)
         if r.status == 'solved':
             by_course[cid]['solved'] += 1
         else:
             by_course[cid]['attempted'] += 1
 
-    total_xp = sum(r.xp_earned for r in records)
+    total_xp = sum(r.xp_earned or 0 for r in records)
     total_solved = sum(1 for r in records if r.status == 'solved')
 
     return jsonify({
@@ -375,6 +411,7 @@ def create_exercise(course_id):
         order_index=data.get('order_index', 0),
         time_limit_sec=data.get('time_limit_sec', 5),
         memory_limit_kb=data.get('memory_limit_kb', 131072),
+        simulation_path=data.get('simulation_path'),
     )
     db.session.add(ex)
     db.session.commit()

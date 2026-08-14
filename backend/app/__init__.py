@@ -36,6 +36,7 @@ def create_app(config_name=None):
     from app.admin.platform import platform_bp
     from app.institution.routes import institution_bp
     from app.institution.extended import institution_ext_bp
+    from app.institution.departments import departments_bp
     from app.instructor.routes import instructor_bp
     from app.instructor.content import content_bp
     from app.instructor.simulation import simulation_bp
@@ -51,6 +52,7 @@ def create_app(config_name=None):
     app.register_blueprint(platform_bp,        url_prefix='/api/platform')
     app.register_blueprint(institution_bp,     url_prefix='/api/institution')
     app.register_blueprint(institution_ext_bp, url_prefix='/api/institution')
+    app.register_blueprint(departments_bp,     url_prefix='/api/institution')
     app.register_blueprint(instructor_bp,      url_prefix='/api/instructor')
     app.register_blueprint(content_bp,         url_prefix='/api/instructor')
     app.register_blueprint(simulation_bp,      url_prefix='/api/instructor')

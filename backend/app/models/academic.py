@@ -32,16 +32,42 @@ class Batch(db.Model):
         return {'id': self.id, 'name': self.name, 'program': self.program}
 
 
-class Section(db.Model):
-    __tablename__ = 'sections'
+class Department(db.Model):
+    """Academic department, e.g. Computer Science, Mechanical Engineering."""
+    __tablename__ = 'departments'
     id             = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     institution_id = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
-    batch_id       = db.Column(db.String(36), db.ForeignKey('batches.id'), nullable=False)
-    name           = db.Column(db.String(10), nullable=False)  # e.g. "A", "B"
+    name           = db.Column(db.Text, nullable=False)        # e.g. "Computer Science"
+    code           = db.Column(db.String(20))                  # e.g. "CSE"
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
 
+    users          = db.relationship('User', backref='department', lazy='dynamic')
+
     def to_dict(self):
-        return {'id': self.id, 'name': self.name, 'batch_id': self.batch_id}
+        return {
+            'id': self.id,
+            'name': self.name,
+            'code': self.code,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+        }
+
+
+class Section(db.Model):
+    __tablename__ = 'sections'
+    id                = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    institution_id    = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
+    batch_id          = db.Column(db.String(36), db.ForeignKey('batches.id'), nullable=False)
+    name              = db.Column(db.String(10), nullable=False)  # e.g. "A", "B"
+    class_teacher_id  = db.Column(db.String(36), db.ForeignKey('users.id'))
+    created_at        = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'batch_id': self.batch_id,
+            'class_teacher_id': self.class_teacher_id,
+        }
 
 
 class SectionStudent(db.Model):

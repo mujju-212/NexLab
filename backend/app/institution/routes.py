@@ -9,6 +9,7 @@ from app.extensions import db
 from app.models.user import User
 from app.models.academic import AcademicYear, Batch, Section, SectionStudent, SectionSubject
 from app.models.subject import Subject, EnvironmentProfile
+from app.models.experiment import Experiment
 from app.models.feedback import Notification
 from app.models.session import LabSession
 from datetime import datetime, timedelta
@@ -22,10 +23,23 @@ institution_bp = Blueprint('institution', __name__)
 @institution_bp.route('/users', methods=['GET'])
 @require_role('institution_admin')
 def list_users():
-    role = request.args.get('role')
+    """
+    List/search users within this institution.
+    Params: ?role=student&department_id=...&q=jane (matches name or email)
+    """
+    role          = request.args.get('role')
+    department_id = request.args.get('department_id')
+    q             = (request.args.get('q', '') or '').strip()
+
     query = User.query.filter_by(institution_id=g.institution_id)
     if role:
         query = query.filter_by(role=role)
+    if department_id:
+        query = query.filter_by(department_id=department_id)
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(User.full_name.ilike(like), User.email.ilike(like),
+                                     User.roll_number.ilike(like), User.staff_id.ilike(like)))
     users = query.order_by(User.full_name).all()
     return jsonify({'users': [u.to_dict() for u in users]}), 200
 
@@ -33,6 +47,14 @@ def list_users():
 @institution_bp.route('/users', methods=['POST'])
 @require_role('institution_admin')
 def create_user():
+    """
+    Direct user onboarding (student, instructor, or another institution_admin).
+    Body: {
+      full_name, email, role, password?,
+      roll_number?, staff_id?, department_id?, year_of_study?, semester?, phone?
+    }
+    Never requires OTP — this is a trusted, admin-initiated creation.
+    """
     data = request.get_json()
     if User.query.filter_by(email=data['email'].lower()).first():
         return jsonify({'error': 'Email already exists'}), 409
@@ -43,8 +65,14 @@ def create_user():
         password_hash=bcrypt.hashpw(data.get('password', 'Welcome@123').encode(),
                                     bcrypt.gensalt()).decode(),
         full_name=data['full_name'],
+        first_name=data.get('first_name'),
+        last_name=data.get('last_name'),
         role=data['role'],
         roll_number=data.get('roll_number'),
+        staff_id=data.get('staff_id'),
+        department_id=data.get('department_id'),
+        year_of_study=data.get('year_of_study'),
+        semester=data.get('semester'),
         phone=data.get('phone'),
     )
     db.session.add(user)
@@ -52,13 +80,111 @@ def create_user():
     return jsonify({'user': user.to_dict()}), 201
 
 
+@institution_bp.route('/users/<user_id>', methods=['PATCH'])
+@require_role('institution_admin')
+def update_user(user_id):
+    """
+    Edit an existing user's profile fields.
+    Editable: full_name, first_name, last_name, phone, roll_number, staff_id,
+              department_id, year_of_study, semester.
+    Role and email are changed via their own dedicated endpoints (below) for auditability.
+    """
+    user = User.query.filter_by(id=user_id, institution_id=g.institution_id).first_or_404()
+    data = request.get_json() or {}
+
+    editable = ['full_name', 'first_name', 'last_name', 'phone', 'roll_number',
+                'staff_id', 'department_id', 'year_of_study', 'semester']
+    changed = []
+    for field in editable:
+        if field in data:
+            setattr(user, field, data[field])
+            changed.append(field)
+
+    db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'edit_user_profile', 'user', user_id,
+                 detail=f"Updated fields: {', '.join(changed)}")
+    return jsonify({'user': user.to_dict()}), 200
+
+
+@institution_bp.route('/users/<user_id>/role', methods=['PATCH'])
+@require_role('institution_admin')
+def change_user_role(user_id):
+    """
+    Change a user's role. Body: {"role": "instructor"}
+    Cannot be used to create/demote platform_admin accounts.
+    """
+    ALLOWED_ROLES = ('student', 'instructor', 'institution_admin')
+    user = User.query.filter_by(id=user_id, institution_id=g.institution_id).first_or_404()
+    new_role = (request.get_json() or {}).get('role')
+
+    if new_role not in ALLOWED_ROLES:
+        return jsonify({'error': f'role must be one of {ALLOWED_ROLES}'}), 400
+
+    old_role = user.role
+    user.role = new_role
+    db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'change_user_role', 'user', user_id,
+                 detail=f'{old_role} -> {new_role}')
+    return jsonify({'user': user.to_dict()}), 200
+
+
+@institution_bp.route('/users/<user_id>', methods=['DELETE'])
+@require_role('institution_admin')
+def delete_user(user_id):
+    """
+    Permanently remove a user from the institution.
+    Prefer deactivation (toggle-active) for users with any activity history —
+    this is only safe for users with no submissions/grades/sessions on record,
+    to avoid orphaning foreign-key-referenced data.
+    """
+    user = User.query.filter_by(id=user_id, institution_id=g.institution_id).first_or_404()
+
+    if user.id == g.user_id:
+        return jsonify({'error': 'You cannot delete your own account'}), 400
+
+    from app.models.submission import CodeAttempt, CodeVersion
+    from app.models.grading import Grade
+    has_activity = (
+        CodeAttempt.query.filter_by(student_id=user_id).first() or
+        CodeVersion.query.filter_by(student_id=user_id).first() or
+        Grade.query.filter_by(student_id=user_id).first()
+    )
+    if has_activity:
+        return jsonify({
+            'error': 'This user has submission/grade history and cannot be deleted. '
+                     'Deactivate the account instead to preserve records.'
+        }), 409
+
+    name, email = user.full_name, user.email
+    db.session.delete(user)
+    db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'delete_user', 'user', user_id,
+                 detail=f'Deleted {name} ({email})')
+    return jsonify({'message': f'{name} has been removed'}), 200
+
+
 @institution_bp.route('/users/bulk-upload', methods=['POST'])
 @require_role('institution_admin')
 def bulk_upload_users():
-    """CSV bulk upload for students. Columns: email, full_name, roll_number, phone"""
+    """
+    CSV bulk upload for students AND/OR faculty in one file.
+    Columns: email, full_name, role, roll_number, staff_id, department_code,
+             year_of_study, semester, phone
+
+    - role: 'student' or 'instructor'. Defaults to 'student' if the column is
+      missing/blank, so existing student-only CSVs keep working unchanged.
+    - department_code: looked up against this institution's departments (by
+      `code`); rows with an unrecognised code are still created, just without
+      a department assigned.
+    """
     file = request.files.get('file')
     if not file:
         return jsonify({'error': 'CSV file required'}), 400
+
+    from app.models.academic import Department
+    dept_by_code = {
+        d.code: d.id for d in Department.query.filter_by(institution_id=g.institution_id).all() if d.code
+    }
 
     content = file.read().decode('utf-8')
     reader = csv.DictReader(io.StringIO(content))
@@ -72,13 +198,25 @@ def bulk_upload_users():
             skipped.append(email)
             continue
 
+        role = (row.get('role', '') or 'student').strip().lower()
+        if role not in ('student', 'instructor'):
+            role = 'student'
+
+        dept_code = (row.get('department_code', '') or '').strip().upper()
+        year_raw  = (row.get('year_of_study', '') or '').strip()
+        sem_raw   = (row.get('semester', '') or '').strip()
+
         user = User(
             institution_id=g.institution_id,
             email=email,
             password_hash=bcrypt.hashpw('Welcome@123'.encode(), bcrypt.gensalt()).decode(),
             full_name=row.get('full_name', '').strip(),
-            role='student',
-            roll_number=row.get('roll_number', '').strip(),
+            role=role,
+            roll_number=row.get('roll_number', '').strip() or None,
+            staff_id=row.get('staff_id', '').strip() or None,
+            department_id=dept_by_code.get(dept_code),
+            year_of_study=int(year_raw) if year_raw.isdigit() else None,
+            semester=int(sem_raw) if sem_raw.isdigit() else None,
             phone=row.get('phone', '').strip(),
         )
         db.session.add(user)
@@ -117,6 +255,35 @@ def academic_years():
     return jsonify({'year': year.to_dict()}), 201
 
 
+@institution_bp.route('/academic-years/<year_id>', methods=['PATCH'])
+@require_role('institution_admin')
+def update_academic_year(year_id):
+    year = AcademicYear.query.filter_by(id=year_id, institution_id=g.institution_id).first_or_404()
+    data = request.get_json() or {}
+    for field in ('year_label', 'is_active'):
+        if field in data:
+            setattr(year, field, data[field])
+    db.session.commit()
+    return jsonify({'year': year.to_dict()}), 200
+
+
+@institution_bp.route('/academic-years/<year_id>', methods=['DELETE'])
+@require_role('institution_admin')
+def delete_academic_year(year_id):
+    year = AcademicYear.query.filter_by(id=year_id, institution_id=g.institution_id).first_or_404()
+
+    in_use = Batch.query.filter_by(year_id=year_id).count()
+    if in_use:
+        return jsonify({
+            'error': f'Cannot delete: {in_use} department(s)/batch(es) still belong to this year. '
+                     f'Remove them first.'
+        }), 409
+
+    db.session.delete(year)
+    db.session.commit()
+    return jsonify({'message': 'Academic year deleted'}), 200
+
+
 @institution_bp.route('/batches', methods=['GET', 'POST'])
 @require_role('institution_admin')
 def batches():
@@ -137,6 +304,35 @@ def batches():
     db.session.add(batch)
     db.session.commit()
     return jsonify({'batch': batch.to_dict()}), 201
+
+
+@institution_bp.route('/batches/<batch_id>', methods=['PATCH'])
+@require_role('institution_admin')
+def update_batch(batch_id):
+    batch = Batch.query.filter_by(id=batch_id, institution_id=g.institution_id).first_or_404()
+    data = request.get_json() or {}
+    for field in ('name', 'program', 'year_id'):
+        if field in data:
+            setattr(batch, field, data[field])
+    db.session.commit()
+    return jsonify({'batch': batch.to_dict()}), 200
+
+
+@institution_bp.route('/batches/<batch_id>', methods=['DELETE'])
+@require_role('institution_admin')
+def delete_batch(batch_id):
+    batch = Batch.query.filter_by(id=batch_id, institution_id=g.institution_id).first_or_404()
+
+    in_use = Section.query.filter_by(batch_id=batch_id).count()
+    if in_use:
+        return jsonify({
+            'error': f'Cannot delete: {in_use} section(s) still belong to this department/batch. '
+                     f'Remove them first.'
+        }), 409
+
+    db.session.delete(batch)
+    db.session.commit()
+    return jsonify({'message': 'Batch deleted'}), 200
 
 
 @institution_bp.route('/sections', methods=['GET', 'POST'])
@@ -195,6 +391,36 @@ def subjects():
     db.session.add(subject)
     db.session.commit()
     return jsonify({'subject': subject.to_dict()}), 201
+
+
+@institution_bp.route('/subjects/<subject_id>', methods=['PATCH'])
+@require_role('institution_admin')
+def update_subject(subject_id):
+    subject = Subject.query.filter_by(id=subject_id, institution_id=g.institution_id).first_or_404()
+    data = request.get_json() or {}
+    for field in ('name', 'code', 'description', 'env_profile_id'):
+        if field in data:
+            setattr(subject, field, data[field])
+    db.session.commit()
+    return jsonify({'subject': subject.to_dict()}), 200
+
+
+@institution_bp.route('/subjects/<subject_id>', methods=['DELETE'])
+@require_role('institution_admin')
+def delete_subject(subject_id):
+    subject = Subject.query.filter_by(id=subject_id, institution_id=g.institution_id).first_or_404()
+
+    assigned    = SectionSubject.query.filter_by(subject_id=subject_id).count()
+    experiments = Experiment.query.filter_by(subject_id=subject_id).count()
+    if assigned or experiments:
+        return jsonify({
+            'error': f'Cannot delete: subject has {assigned} section assignment(s) and '
+                     f'{experiments} experiment(s). Remove those first.'
+        }), 409
+
+    db.session.delete(subject)
+    db.session.commit()
+    return jsonify({'message': 'Subject deleted'}), 200
 
 
 @institution_bp.route('/section-subjects', methods=['POST'])

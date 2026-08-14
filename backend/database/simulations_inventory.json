@@ -1,0 +1,386 @@
+[
+  {
+    "course_slug": "artificial-intelligence",
+    "course_folder": "Artificial intelligence",
+    "exp_slug": "ai-depth-first-search",
+    "title": "Depth-First Search — AI Virtual Lab",
+    "order_index": 1,
+    "path": "/simulations/artificial-intelligence/ai-depth-first-search.html"
+  },
+  {
+    "course_slug": "artificial-intelligence",
+    "course_folder": "Artificial intelligence",
+    "exp_slug": "greedy-best-first-search",
+    "title": "Greedy Best-First Search — AI Virtual Lab",
+    "order_index": 2,
+    "path": "/simulations/artificial-intelligence/greedy-best-first-search.html"
+  },
+  {
+    "course_slug": "artificial-intelligence",
+    "course_folder": "Artificial intelligence",
+    "exp_slug": "minimax-search",
+    "title": "Minimax & Alpha-Beta Pruning — AI Virtual Lab",
+    "order_index": 3,
+    "path": "/simulations/artificial-intelligence/minimax-search.html"
+  },
+  {
+    "course_slug": "artificial-intelligence",
+    "course_folder": "Artificial intelligence",
+    "exp_slug": "policy-iteration",
+    "title": "Policy Iteration — AI Virtual Lab",
+    "order_index": 4,
+    "path": "/simulations/artificial-intelligence/policy-iteration.html"
+  },
+  {
+    "course_slug": "artificial-intelligence",
+    "course_folder": "Artificial intelligence",
+    "exp_slug": "q-learning",
+    "title": "Q-Learning — AI Virtual Lab",
+    "order_index": 5,
+    "path": "/simulations/artificial-intelligence/q-learning.html"
+  },
+  {
+    "course_slug": "artificial-intelligence",
+    "course_folder": "Artificial intelligence",
+    "exp_slug": "value-iteration",
+    "title": "Value Iteration — AI Virtual Lab",
+    "order_index": 6,
+    "path": "/simulations/artificial-intelligence/value-iteration.html"
+  },
+  {
+    "course_slug": "data-structures-1",
+    "course_folder": "Data structure - 1",
+    "exp_slug": "graphs",
+    "title": "Graph Traversal — BFS & DFS Virtual Lab",
+    "order_index": 1,
+    "path": "/simulations/data-structures-1/graphs.html"
+  },
+  {
+    "course_slug": "data-structures-1",
+    "course_folder": "Data structure - 1",
+    "exp_slug": "linked-list",
+    "title": "Singly Linked List & Polynomial Addition",
+    "order_index": 2,
+    "path": "/simulations/data-structures-1/linked-list.html"
+  },
+  {
+    "course_slug": "data-structures-1",
+    "course_folder": "Data structure - 1",
+    "exp_slug": "searching",
+    "title": "Searching Algorithms & Hash Tables",
+    "order_index": 3,
+    "path": "/simulations/data-structures-1/searching.html"
+  },
+  {
+    "course_slug": "data-structures-1",
+    "course_folder": "Data structure - 1",
+    "exp_slug": "stacks-queues",
+    "title": "Stacks, Queues & Infix-to-Postfix",
+    "order_index": 4,
+    "path": "/simulations/data-structures-1/stacks-queues.html"
+  },
+  {
+    "course_slug": "data-structures-1",
+    "course_folder": "Data structure - 1",
+    "exp_slug": "trees",
+    "title": "Binary Search Tree",
+    "order_index": 5,
+    "path": "/simulations/data-structures-1/trees.html"
+  },
+  {
+    "course_slug": "data-structures-1",
+    "course_folder": "Data structure - 1",
+    "exp_slug": "sorting",
+    "title": "DSA Lab: Sorting Algorithms",
+    "order_index": 6,
+    "path": "/simulations/data-structures-1/sorting.html"
+  },
+  {
+    "course_slug": "data-structures-2",
+    "course_folder": "Data structure - 2",
+    "exp_slug": "graphs",
+    "title": "Graph Algorithms — Topological Sort, MST & Dijkstra",
+    "order_index": 1,
+    "path": "/simulations/data-structures-2/graphs.html"
+  },
+  {
+    "course_slug": "data-structures-2",
+    "course_folder": "Data structure - 2",
+    "exp_slug": "search-tree",
+    "title": "Self-Balancing Search Tree (AVL)",
+    "order_index": 2,
+    "path": "/simulations/data-structures-2/search-tree.html"
+  },
+  {
+    "course_slug": "data-structures-2",
+    "course_folder": "Data structure - 2",
+    "exp_slug": "sorting",
+    "title": "Sorting Algorithms — Selection & Radix Sort",
+    "order_index": 3,
+    "path": "/simulations/data-structures-2/sorting.html"
+  },
+  {
+    "course_slug": "data-structures-2",
+    "course_folder": "Data structure - 2",
+    "exp_slug": "string",
+    "title": "String Algorithms — Trie & KMP Pattern Matching",
+    "order_index": 4,
+    "path": "/simulations/data-structures-2/string.html"
+  },
+  {
+    "course_slug": "machine-learning-lab",
+    "course_folder": "Machine learning virtual lab",
+    "exp_slug": "binary-classification-and-decision-boundary-analysis-using-logistic-regression",
+    "title": "Binary Classification & Logistic Regression",
+    "order_index": 1,
+    "path": "/simulations/machine-learning-lab/binary-classification-and-decision-boundary-analysis-using-logistic-regression.html"
+  },
+  {
+    "course_slug": "machine-learning-lab",
+    "course_folder": "Machine learning virtual lab",
+    "exp_slug": "clustering-k-means-algorithm",
+    "title": "K-Means Clustering",
+    "order_index": 2,
+    "path": "/simulations/machine-learning-lab/clustering-k-means-algorithm.html"
+  },
+  {
+    "course_slug": "machine-learning-lab",
+    "course_folder": "Machine learning virtual lab",
+    "exp_slug": "data-preprocessing-and-feature-engineer",
+    "title": "Data Preprocessing & Feature Engineering",
+    "order_index": 3,
+    "path": "/simulations/machine-learning-lab/data-preprocessing-and-feature-engineer.html"
+  },
+  {
+    "course_slug": "machine-learning-lab",
+    "course_folder": "Machine learning virtual lab",
+    "exp_slug": "decision-tree",
+    "title": "Decision Tree Classification",
+    "order_index": 4,
+    "path": "/simulations/machine-learning-lab/decision-tree.html"
+  },
+  {
+    "course_slug": "machine-learning-lab",
+    "course_folder": "Machine learning virtual lab",
+    "exp_slug": "dimensionality-reduction-principal-component-analysis-pca",
+    "title": "Principal Component Analysis (PCA)",
+    "order_index": 5,
+    "path": "/simulations/machine-learning-lab/dimensionality-reduction-principal-component-analysis-pca.html"
+  },
+  {
+    "course_slug": "machine-learning-lab",
+    "course_folder": "Machine learning virtual lab",
+    "exp_slug": "linear-regrission",
+    "title": "Linear Regression & Gradient Descent",
+    "order_index": 6,
+    "path": "/simulations/machine-learning-lab/linear-regrission.html"
+  },
+  {
+    "course_slug": "machine-learning-lab",
+    "course_folder": "Machine learning virtual lab",
+    "exp_slug": "naive-bayes-classification-for-text-and-categorical-data-using-prior-and-posterior-probabilities",
+    "title": "Naïve Bayes Classification",
+    "order_index": 7,
+    "path": "/simulations/machine-learning-lab/naive-bayes-classification-for-text-and-categorical-data-using-prior-and-posterior-probabilities.html"
+  },
+  {
+    "course_slug": "machine-learning-lab",
+    "course_folder": "Machine learning virtual lab",
+    "exp_slug": "random-forest",
+    "title": "Random Forest Classification",
+    "order_index": 8,
+    "path": "/simulations/machine-learning-lab/random-forest.html"
+  },
+  {
+    "course_slug": "machine-learning-lab",
+    "course_folder": "Machine learning virtual lab",
+    "exp_slug": "support-vector-machine-svm",
+    "title": "Support Vector Machine (SVM) Classifier",
+    "order_index": 9,
+    "path": "/simulations/machine-learning-lab/support-vector-machine-svm.html"
+  },
+  {
+    "course_slug": "machine-learning-lab",
+    "course_folder": "Machine learning virtual lab",
+    "exp_slug": "k-nearest-neighbors-knn",
+    "title": "k-Nearest Neighbors (KNN)",
+    "order_index": 10,
+    "path": "/simulations/machine-learning-lab/k-nearest-neighbors-knn.html"
+  },
+  {
+    "course_slug": "oop-concepts",
+    "course_folder": "Object oriented programming (OOP)",
+    "exp_slug": "abstraction",
+    "title": "Abstraction",
+    "order_index": 1,
+    "path": "/simulations/oop-concepts/abstraction.html"
+  },
+  {
+    "course_slug": "oop-concepts",
+    "course_folder": "Object oriented programming (OOP)",
+    "exp_slug": "class-and-object",
+    "title": "Classes & Objects",
+    "order_index": 2,
+    "path": "/simulations/oop-concepts/class-and-object.html"
+  },
+  {
+    "course_slug": "oop-concepts",
+    "course_folder": "Object oriented programming (OOP)",
+    "exp_slug": "constructors",
+    "title": "Constructors",
+    "order_index": 3,
+    "path": "/simulations/oop-concepts/constructors.html"
+  },
+  {
+    "course_slug": "oop-concepts",
+    "course_folder": "Object oriented programming (OOP)",
+    "exp_slug": "encapsulation",
+    "title": "Encapsulation",
+    "order_index": 4,
+    "path": "/simulations/oop-concepts/encapsulation.html"
+  },
+  {
+    "course_slug": "oop-concepts",
+    "course_folder": "Object oriented programming (OOP)",
+    "exp_slug": "inheritance",
+    "title": "Inheritance",
+    "order_index": 5,
+    "path": "/simulations/oop-concepts/inheritance.html"
+  },
+  {
+    "course_slug": "oop-concepts",
+    "course_folder": "Object oriented programming (OOP)",
+    "exp_slug": "static-members-variables-methods",
+    "title": "Static Members",
+    "order_index": 6,
+    "path": "/simulations/oop-concepts/static-members-variables-methods.html"
+  },
+  {
+    "course_slug": "oop-concepts",
+    "course_folder": "Object oriented programming (OOP)",
+    "exp_slug": "polymorphism-method-overriding",
+    "title": "Polymorphism (Method Overriding)",
+    "order_index": 7,
+    "path": "/simulations/oop-concepts/polymorphism-method-overriding.html"
+  },
+  {
+    "course_slug": "oop-concepts",
+    "course_folder": "Object oriented programming (OOP)",
+    "exp_slug": "polymorphism-overloading",
+    "title": "Polymorphism (Overloading)",
+    "order_index": 8,
+    "path": "/simulations/oop-concepts/polymorphism-overloading.html"
+  },
+  {
+    "course_slug": "python-programming-lab",
+    "course_folder": "python programming lab",
+    "exp_slug": "arithmetic-operations",
+    "title": "Python Arithmetic Operations",
+    "order_index": 1,
+    "path": "/simulations/python-programming-lab/arithmetic-operations.html"
+  },
+  {
+    "course_slug": "python-programming-lab",
+    "course_folder": "python programming lab",
+    "exp_slug": "built-in-function",
+    "title": "Python Built-in Functions",
+    "order_index": 2,
+    "path": "/simulations/python-programming-lab/built-in-function.html"
+  },
+  {
+    "course_slug": "python-programming-lab",
+    "course_folder": "python programming lab",
+    "exp_slug": "classes-and-objects",
+    "title": "Python Classes & Objects",
+    "order_index": 3,
+    "path": "/simulations/python-programming-lab/classes-and-objects.html"
+  },
+  {
+    "course_slug": "python-programming-lab",
+    "course_folder": "python programming lab",
+    "exp_slug": "constructors-and-inheritance",
+    "title": "Python Constructors & Inheritance",
+    "order_index": 4,
+    "path": "/simulations/python-programming-lab/constructors-and-inheritance.html"
+  },
+  {
+    "course_slug": "python-programming-lab",
+    "course_folder": "python programming lab",
+    "exp_slug": "data-types",
+    "title": "Python Data Types",
+    "order_index": 5,
+    "path": "/simulations/python-programming-lab/data-types.html"
+  },
+  {
+    "course_slug": "python-programming-lab",
+    "course_folder": "python programming lab",
+    "exp_slug": "file-operators",
+    "title": "Python File Handling",
+    "order_index": 6,
+    "path": "/simulations/python-programming-lab/file-operators.html"
+  },
+  {
+    "course_slug": "python-programming-lab",
+    "course_folder": "python programming lab",
+    "exp_slug": "strings",
+    "title": "Python Strings",
+    "order_index": 7,
+    "path": "/simulations/python-programming-lab/strings.html"
+  },
+  {
+    "course_slug": "python-programming-lab",
+    "course_folder": "python programming lab",
+    "exp_slug": "built-in-modules",
+    "title": "Python Built-in Modules",
+    "order_index": 8,
+    "path": "/simulations/python-programming-lab/built-in-modules.html"
+  },
+  {
+    "course_slug": "python-programming-lab",
+    "course_folder": "python programming lab",
+    "exp_slug": "loops",
+    "title": "Python Loops, Iteration & Control Flow",
+    "order_index": 9,
+    "path": "/simulations/python-programming-lab/loops.html"
+  },
+  {
+    "course_slug": "python-programming-advanced",
+    "course_folder": "python programming lab - advanced",
+    "exp_slug": "exception-handling",
+    "title": "Python Exception Handling",
+    "order_index": 1,
+    "path": "/simulations/python-programming-advanced/exception-handling.html"
+  },
+  {
+    "course_slug": "python-programming-advanced",
+    "course_folder": "python programming lab - advanced",
+    "exp_slug": "extended-formal-argument-syntax",
+    "title": "Python Extended Formal Argument Syntax",
+    "order_index": 2,
+    "path": "/simulations/python-programming-advanced/extended-formal-argument-syntax.html"
+  },
+  {
+    "course_slug": "python-programming-advanced",
+    "course_folder": "python programming lab - advanced",
+    "exp_slug": "higher-order-functions",
+    "title": "Python Higher-Order Functions",
+    "order_index": 3,
+    "path": "/simulations/python-programming-advanced/higher-order-functions.html"
+  },
+  {
+    "course_slug": "python-programming-advanced",
+    "course_folder": "python programming lab - advanced",
+    "exp_slug": "complex-datatypes",
+    "title": "Python Complex Data Types",
+    "order_index": 4,
+    "path": "/simulations/python-programming-advanced/complex-datatypes.html"
+  },
+  {
+    "course_slug": "python-programming-advanced",
+    "course_folder": "python programming lab - advanced",
+    "exp_slug": "lambda-functions",
+    "title": "Python Lambda Functions",
+    "order_index": 5,
+    "path": "/simulations/python-programming-advanced/lambda-functions.html"
+  }
+]

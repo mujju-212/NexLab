@@ -45,6 +45,11 @@ class Config:
     CLOUDINARY_API_KEY = os.environ.get('CLOUDINARY_API_KEY', '')
     CLOUDINARY_API_SECRET = os.environ.get('CLOUDINARY_API_SECRET', '')
 
+    # ── Brevo (transactional email — OTP verification only) ────────────────
+    BREVO_API_KEY      = os.environ.get('BREVO_API_KEY', '')
+    BREVO_SENDER_EMAIL = os.environ.get('BREVO_SENDER_EMAIL', 'no-reply@nexlab.app')
+    BREVO_SENDER_NAME  = os.environ.get('BREVO_SENDER_NAME', 'NexLab')
+
     # ── Redis ─────────────────────────────────────────────────────────────
     REDIS_URL = os.environ.get('REDIS_URL', 'redis://localhost:6379/0')
     USE_REDIS = os.environ.get('USE_REDIS', 'false').lower() == 'true'
