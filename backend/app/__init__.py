@@ -23,10 +23,14 @@ def create_app(config_name=None):
     db.init_app(app)
     migrate.init_app(app, db)
     jwt.init_app(app)
-    cors_origins = app.config.get('FRONTEND_URL', '*')
-    if config_name == 'development':
-        cors_origins = '*'   # allow any origin in dev (HTML file, localhost:8765, etc.)
-    cors.init_app(app, resources={r"/api/*": {"origins": cors_origins}})
+    cors.init_app(app, resources={
+        r"/api/*": {
+            "origins": "*",
+            "allow_headers": ["Content-Type", "Authorization", "X-Requested-With", "Accept"],
+            "methods": ["GET", "POST", "PUT", "DELETE", "OPTIONS", "PATCH"]
+        }
+    })
+
     socketio.init_app(app, cors_allowed_origins='*', async_mode='threading')
     limiter.init_app(app)
 

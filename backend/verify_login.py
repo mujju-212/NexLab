@@ -1,11 +1,13 @@
 import requests
 BASE = 'http://localhost:5000/api'
 tests = [
-    ('stud@tinstrc.edu',      'Test@1234'),
-    ('instr@tinstrc.edu',     'Instr@1234'),
-    ('instadmin@test.com',    'Admin@1234'),
-    ('superadmin@nexlab.com', 'Super@1234'),
+    ('admin@nexlab.io',        'Admin@123'),
+    ('inst.admin@nexlab.demo', 'InstAdmin@123'),
+    ('instructor@nexlab.demo', 'Instructor@123'),
+    ('student@nexlab.demo',    'Student@123'),
+    ('free@nexlab.io',         'Free@123'),
 ]
+
 print('=== Login Verification ===')
 for email, pw in tests:
     try:

@@ -2,6 +2,29 @@ import os
 from datetime import timedelta
 
 
+def _get_db_url():
+    db_url = os.environ.get('DATABASE_URL')
+    if db_url and db_url.startswith('postgresql'):
+        try:
+            import socket
+            from urllib.parse import urlparse
+            parsed = urlparse(db_url)
+            host = parsed.hostname or 'localhost'
+            port = parsed.port or 5432
+            s = socket.create_connection((host, port), timeout=1)
+            s.close()
+            return db_url
+        except Exception:
+            base_dir = os.path.dirname(os.path.dirname(__file__))
+            dev_db = os.path.join(base_dir, 'dev.db').replace('\\', '/')
+            return f'sqlite:///{dev_db}'
+    if not db_url:
+        base_dir = os.path.dirname(os.path.dirname(__file__))
+        dev_db = os.path.join(base_dir, 'dev.db').replace('\\', '/')
+        return f'sqlite:///{dev_db}'
+    return db_url
+
+
 class Config:
     # ── Flask Core ────────────────────────────────────────────────────────
     SECRET_KEY = os.environ.get('SECRET_KEY', 'dev-secret-change-in-prod')
@@ -9,13 +32,18 @@ class Config:
     TESTING = False
 
     # ── Database ──────────────────────────────────────────────────────────
-    SQLALCHEMY_DATABASE_URI = os.environ.get('DATABASE_URL', 'postgresql://postgres:password@localhost:5432/virtuallab')
+    SQLALCHEMY_DATABASE_URI = _get_db_url()
     SQLALCHEMY_TRACK_MODIFICATIONS = False
-    SQLALCHEMY_ENGINE_OPTIONS = {
-        'pool_size': 10,
-        'pool_recycle': 300,
-        'pool_pre_ping': True,   # reconnect on stale connections
-    }
+    if SQLALCHEMY_DATABASE_URI.startswith('sqlite'):
+        SQLALCHEMY_ENGINE_OPTIONS = {}
+    else:
+        SQLALCHEMY_ENGINE_OPTIONS = {
+            'pool_size': 10,
+            'pool_recycle': 300,
+            'pool_pre_ping': True,
+        }
+
+
 
     # ── JWT ───────────────────────────────────────────────────────────────
     JWT_SECRET_KEY = os.environ.get('JWT_SECRET_KEY', 'jwt-secret-change-in-prod')

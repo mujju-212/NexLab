@@ -17,7 +17,11 @@ def init_app(app):
 
 def start():
     """Register all jobs and start the scheduler"""
+    if scheduler.running:
+        return
+
     # Job 0: Ensure Judge0 (code execution) containers are up — one-shot on boot
+
     scheduler.add_job(
         func=_ensure_judge0,
         trigger='date',

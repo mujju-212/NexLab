@@ -1,6 +1,6 @@
 from datetime import datetime
 from functools import wraps
-from flask import g, jsonify
+from flask import g, jsonify, request
 from flask_jwt_extended import verify_jwt_in_request, get_jwt
 
 
@@ -31,6 +31,8 @@ def require_auth(f):
     """Verify JWT and inject user context into Flask g"""
     @wraps(f)
     def decorated(*args, **kwargs):
+        if request.method == 'OPTIONS':
+            return f(*args, **kwargs)
         verify_jwt_in_request()
         claims = get_jwt()
         if _is_force_logged_out(claims):
@@ -47,6 +49,8 @@ def require_role(*roles):
     def decorator(f):
         @wraps(f)
         def decorated(*args, **kwargs):
+            if request.method == 'OPTIONS':
+                return f(*args, **kwargs)
             verify_jwt_in_request()
             claims = get_jwt()
             if _is_force_logged_out(claims):
@@ -65,6 +69,8 @@ def require_institution(f):
     """Ensure request comes from an institution user (not platform_admin)"""
     @wraps(f)
     def decorated(*args, **kwargs):
+        if request.method == 'OPTIONS':
+            return f(*args, **kwargs)
         verify_jwt_in_request()
         claims = get_jwt()
         if _is_force_logged_out(claims):
@@ -76,6 +82,7 @@ def require_institution(f):
         g.role           = claims.get('role')
         return f(*args, **kwargs)
     return decorated
+
 
 
 def build_jwt_claims(user):
