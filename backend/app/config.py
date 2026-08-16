@@ -100,6 +100,28 @@ class Config:
     # Code quality
     COMPLEXITY_WARN_THRESHOLD = 10   # Cyclomatic complexity > 10 = warning
 
+    # ── Execution Engine v2 (Docker runner) ───────────────────────────────
+    # Master switch — false means v2 code is never reached; Judge0 stays live.
+    DOCKER_RUNNER_ENABLED = os.environ.get('DOCKER_RUNNER_ENABLED', 'false').lower() == 'true'
+    # Path to the docker binary (override for unusual installs)
+    DOCKER_BIN = os.environ.get('DOCKER_BIN', 'docker')
+    # Concurrency / queue knobs (§13.2)
+    EXEC_MAX_CONCURRENT_RUNS = int(os.environ.get('EXEC_MAX_CONCURRENT_RUNS', 4))
+    EXEC_RUN_QUEUE_MAX       = int(os.environ.get('EXEC_RUN_QUEUE_MAX', 12))
+    EXEC_PER_USER_CONCURRENT = int(os.environ.get('EXEC_PER_USER_CONCURRENT', 2))
+    EXEC_QUEUE_WAIT_TIMEOUT  = int(os.environ.get('EXEC_QUEUE_WAIT_TIMEOUT', 20))
+    # Timeout (seconds) for each phase
+    EXEC_COMPILE_TIMEOUT_SEC = int(os.environ.get('EXEC_COMPILE_TIMEOUT_SEC', 10))
+    EXEC_RUN_TIMEOUT_SEC     = int(os.environ.get('EXEC_RUN_TIMEOUT_SEC', 5))
+    # Memory cap for containers (MB)
+    EXEC_MEMORY_MB           = int(os.environ.get('EXEC_MEMORY_MB', 256))
+    # Per-stream output truncation (KB)
+    EXEC_OUTPUT_CAP_KB       = int(os.environ.get('EXEC_OUTPUT_CAP_KB', 256))
+    # Orphan-container reaper interval (seconds)
+    EXEC_REAPER_INTERVAL_SEC = int(os.environ.get('EXEC_REAPER_INTERVAL_SEC', 300))
+    # Per-language engine overrides, e.g. "python=docker,java=judge0"
+    EXEC_ENGINE_OVERRIDES    = os.environ.get('EXEC_ENGINE_OVERRIDES', '')
+
 
 class DevelopmentConfig(Config):
     DEBUG = True

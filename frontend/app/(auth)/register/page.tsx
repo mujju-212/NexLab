@@ -107,6 +107,16 @@ function RegisterPageInner() {
 
   // Institution-specific
   const [institutionName, setInstitutionName] = useState('');
+  const [institutionType, setInstitutionType] = useState('');
+  const [institutionCode, setInstitutionCode] = useState('');
+  const [institutionPhone, setInstitutionPhone] = useState('');
+  const [address, setAddress] = useState('');
+  const [website, setWebsite] = useState('');
+
+  // Admin identity (institution flow only — individual flow keeps a single Full Name field)
+  const [firstName, setFirstName] = useState('');
+  const [lastName, setLastName] = useState('');
+  const [staffId, setStaffId] = useState('');
 
   // ── Email OTP verification (required before submit) ─────────────────────
   const otpPurpose = accountType === 'institution' ? 'institution_register' : 'individual_register';
@@ -223,18 +233,32 @@ function RegisterPageInner() {
     setError(null);
     if (form.password !== confirmPw) { setError('Passwords do not match.'); return; }
     if (form.password.length < 8)   { setError('Password must be at least 8 characters.'); return; }
-    if (accountType === 'institution' && !institutionName.trim()) {
-      setError('Please enter your institution name.'); return;
+    if (accountType === 'institution') {
+      if (!institutionName.trim()) { setError('Please enter your institution name.'); return; }
+      if (!institutionType) { setError('Please select an institution type.'); return; }
+      if (!firstName.trim() || !lastName.trim()) { setError('Please enter the admin\'s first and last name.'); return; }
+      if (website && !/^https?:\/\//.test(website)) { setError('Website URL must start with http:// or https://'); return; }
     }
     if (!otpVerified) { setError('Please verify your email with the code sent to it first.'); return; }
     setLoading(true);
     try {
       const res = await authService.register({
-        full_name: form.full_name,
+        full_name: accountType === 'institution' ? `${firstName} ${lastName}`.trim() : form.full_name,
         email: form.email,
         password: form.password,
         phone: form.phone || undefined,
-        ...(accountType === 'institution' ? { institution_name: institutionName, role: 'institution_admin' } : {}),
+        ...(accountType === 'institution' ? {
+          role: 'institution_admin',
+          first_name: firstName,
+          last_name: lastName,
+          staff_id: staffId || undefined,
+          institution_name: institutionName,
+          institution_type: institutionType,
+          institution_code: institutionCode || undefined,
+          institution_phone: institutionPhone || undefined,
+          address: address || undefined,
+          website: website || undefined,
+        } : {}),
       });
       setUser(res.user);
       router.push(ROLE_ROUTES[res.user.role] ?? '/practice');
@@ -345,64 +369,155 @@ function RegisterPageInner() {
 
         {/* ── Right: Form ── */}
         <div className={styles.formPane}>
-          <div className={styles.brandRow}>
-            <Image src="/logo.png" alt="NexLab" width={96} height={64} style={{ objectFit: 'contain' }} priority />
+          {/* Fixed — always visible, never scrolls away */}
+          <div className={styles.formTop}>
+            <div className={styles.brandRow}>
+              <Image src="/logo.png" alt="NexLab" width={96} height={64} style={{ objectFit: 'contain' }} priority />
+            </div>
+
+            {/* Account type toggle */}
+            <div style={{ display:'flex', gap:8, background:'rgba(243,232,255,.7)', borderRadius:12, padding:4, border:'1px solid rgba(255,255,255,.9)' }}>
+              {(['individual', 'institution'] as const).map(type => (
+                <button
+                  key={type}
+                  type="button"
+                  onClick={() => { setAccountType(type); setError(null); }}
+                  style={{
+                    flex:1, padding:'8px 10px', borderRadius:9, border:'none', cursor:'pointer',
+                    fontFamily:'Geist,sans-serif', fontSize:13, fontWeight:600,
+                    transition:'all .18s',
+                    background: accountType === type ? '#fff' : 'transparent',
+                    color: accountType === type ? '#7c3aed' : '#6b7280',
+                    boxShadow: accountType === type ? '0 1px 6px rgba(124,58,237,.12)' : 'none',
+                  }}
+                >
+                  {type === 'individual' ? '👤 Individual' : '🏛️ Institution'}
+                </button>
+              ))}
+            </div>
           </div>
 
-          {/* Account type toggle */}
-          <div style={{ display:'flex', gap:8, marginBottom:22, background:'rgba(243,232,255,.7)', borderRadius:12, padding:4, border:'1px solid rgba(255,255,255,.9)' }}>
-            {(['individual', 'institution'] as const).map(type => (
-              <button
-                key={type}
-                type="button"
-                onClick={() => { setAccountType(type); setError(null); }}
-                style={{
-                  flex:1, padding:'8px 10px', borderRadius:9, border:'none', cursor:'pointer',
-                  fontFamily:'Geist,sans-serif', fontSize:13, fontWeight:600,
-                  transition:'all .18s',
-                  background: accountType === type ? '#fff' : 'transparent',
-                  color: accountType === type ? '#7c3aed' : '#6b7280',
-                  boxShadow: accountType === type ? '0 1px 6px rgba(124,58,237,.12)' : 'none',
-                }}
-              >
-                {type === 'individual' ? '👤 Individual' : '🏛️ Institution'}
-              </button>
-            ))}
-          </div>
+          {/* Scrollable — header + fields + footer, contained within the panel */}
+          <div className={styles.formScroll}>
+            <div className={styles.formHead}>
+              <h1>
+                {accountType === 'individual' ? 'Create Free Account' : 'Register Institution'}
+              </h1>
+              <p>
+                {accountType === 'individual'
+                  ? 'Practice DSA, Python & C++ — no institution required.'
+                  : 'Set up your NexLab institution and start managing your labs.'}
+              </p>
+            </div>
 
-          <div className={styles.formHead}>
-            <h1>
-              {accountType === 'individual' ? 'Create Free Account' : 'Register Institution'}
-            </h1>
-            <p>
-              {accountType === 'individual'
-                ? 'Practice DSA, Python & C++ — no institution required.'
-                : 'Set up your NexLab institution and start managing your labs.'}
-            </p>
-          </div>
+            <form onSubmit={submit} className={styles.form} noValidate>
 
-          <form onSubmit={submit} className={styles.form} noValidate>
-
-            {/* Institution name — only for institution type */}
+            {/* ─── Institution details ─── only for institution type ─── */}
             {accountType === 'institution' && (
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Institution Name</label>
-                <input className={styles.textInput}
-                  placeholder="e.g. ABC Engineering College"
-                  value={institutionName}
-                  onChange={e => setInstitutionName(e.target.value)}
-                  required />
-              </div>
+              <>
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>Institution Name</label>
+                  <input className={styles.textInput}
+                    placeholder="e.g. ABC Engineering College"
+                    value={institutionName}
+                    onChange={e => setInstitutionName(e.target.value.replace(/[^A-Za-z\s]/g, ''))}
+                    required />
+                </div>
+
+                <div className={styles.fieldRow}>
+                  <div className={styles.field}>
+                    <label className={styles.fieldLabel}>Institution Type</label>
+                    <select className={styles.textInput} value={institutionType}
+                      onChange={e => setInstitutionType(e.target.value)} required>
+                      <option value="">Select type…</option>
+                      <option value="University">University</option>
+                      <option value="College">College</option>
+                      <option value="School">School</option>
+                      <option value="Coaching">Coaching Institute</option>
+                      <option value="Other">Other</option>
+                    </select>
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.fieldLabel}>
+                      Institution Unique ID <span className={styles.optional}>(optional — auto-generated if blank)</span>
+                    </label>
+                    <input className={styles.textInput}
+                      placeholder="e.g. ABC123"
+                      value={institutionCode}
+                      onChange={e => setInstitutionCode(e.target.value.toUpperCase())} />
+                  </div>
+                </div>
+
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>
+                    Institution Phone <span className={styles.optional}>(optional)</span>
+                  </label>
+                  <input className={styles.textInput} type="tel"
+                    placeholder="+91 98765 43210"
+                    value={institutionPhone}
+                    onChange={e => setInstitutionPhone(e.target.value)} />
+                </div>
+
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>
+                    Physical Address <span className={styles.optional}>(optional)</span>
+                  </label>
+                  <textarea className={styles.textarea ?? styles.textInput}
+                    placeholder="Street, city, state, PIN code"
+                    value={address}
+                    onChange={e => setAddress(e.target.value)}
+                    rows={2} />
+                </div>
+
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>
+                    Website URL <span className={styles.optional}>(optional)</span>
+                  </label>
+                  <input className={styles.textInput} type="url"
+                    placeholder="https://your-institution.edu"
+                    value={website}
+                    onChange={e => setWebsite(e.target.value)} />
+                </div>
+
+                <div className={styles.fieldRow}>
+                  <div className={styles.field}>
+                    <label className={styles.fieldLabel}>Admin First Name</label>
+                    <input className={styles.textInput}
+                      placeholder="First name"
+                      value={firstName}
+                      onChange={e => setFirstName(e.target.value.replace(/[^A-Za-z\s]/g, ''))}
+                      required />
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.fieldLabel}>Admin Last Name</label>
+                    <input className={styles.textInput}
+                      placeholder="Last name"
+                      value={lastName}
+                      onChange={e => setLastName(e.target.value.replace(/[^A-Za-z\s]/g, ''))}
+                      required />
+                  </div>
+                </div>
+
+                <div className={styles.field}>
+                  <label className={styles.fieldLabel}>
+                    Admin Employee/Staff ID <span className={styles.optional}>(optional)</span>
+                  </label>
+                  <input className={styles.textInput}
+                    placeholder="e.g. EMP1001"
+                    value={staffId}
+                    onChange={e => setStaffId(e.target.value)} />
+                </div>
+              </>
             )}
 
-            <div className={styles.field}>
-              <label className={styles.fieldLabel}>
-                {accountType === 'institution' ? 'Admin Full Name' : 'Full Name'}
-              </label>
-              <input className={styles.textInput}
-                placeholder="Your full name"
-                value={form.full_name} onChange={handle('full_name')} required />
-            </div>
+            {accountType === 'individual' && (
+              <div className={styles.field}>
+                <label className={styles.fieldLabel}>Full Name</label>
+                <input className={styles.textInput}
+                  placeholder="Your full name"
+                  value={form.full_name} onChange={handle('full_name')} required />
+              </div>
+            )}
 
             <div className={styles.field}>
               <label className={styles.fieldLabel}>Email</label>
@@ -524,6 +639,7 @@ function RegisterPageInner() {
               </button>
             </p>
           )}
+          </div>
         </div>
       </div>
     </div>

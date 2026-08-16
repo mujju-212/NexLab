@@ -67,6 +67,11 @@ def create_app(config_name=None):
     app.register_blueprint(ml_bp,              url_prefix='/api/ml')
     app.register_blueprint(free_bp,            url_prefix='/api/free')
 
+    # ── Execution Engine v2 (Docker runner) ─────────────────────────────
+    # Registered unconditionally — all routes return 503 when the flag is off.
+    from app.exec_engine.routes_v2 import exec_v2_bp
+    app.register_blueprint(exec_v2_bp, url_prefix='/api/execution')
+
     # ── Register Socket.io event handlers ────────────────────────────────
     from app.sockets import events  # noqa — registers handlers on import
 
@@ -75,6 +80,13 @@ def create_app(config_name=None):
     if not app.testing:
         jobs.init_app(app)
         jobs.start()
+
+    # ── Execution Engine v2 — admission control + reaper ─────────────────
+    # Only started when DOCKER_RUNNER_ENABLED=true (master flag off by default).
+    if app.config.get('DOCKER_RUNNER_ENABLED', False) and not app.testing:
+        from app.exec_engine import admission, reaper
+        admission.init_app(app)
+        reaper.init_app(app)
 
     # ── Seed platform config defaults ─────────────────────────────────────
     with app.app_context():

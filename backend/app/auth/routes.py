@@ -193,7 +193,9 @@ def register():
     data           = request.get_json() or {}
     email          = (data.get('email', '') or '').strip().lower()
     password       = data.get('password', '')
-    full_name      = (data.get('full_name', '') or '').strip()
+    first_name     = (data.get('first_name', '') or '').strip()
+    last_name      = (data.get('last_name', '') or '').strip()
+    full_name      = (data.get('full_name', '') or '').strip() or f'{first_name} {last_name}'.strip()
     institution_name = (data.get('institution_name', '') or '').strip()
     is_institution = data.get('role') == 'institution_admin' and bool(institution_name)
     purpose        = 'institution_register' if is_institution else 'individual_register'
@@ -218,6 +220,17 @@ def register():
         return jsonify({'error': 'Please verify your email with the OTP sent to it before continuing'}), 403
 
     if is_institution:
+        website = (data.get('website', '') or '').strip()
+        if website and not (website.startswith('http://') or website.startswith('https://')):
+            return jsonify({'error': 'website must start with http:// or https://'}), 400
+
+        for phone_field in ('institution_phone', 'phone'):
+            phone_val = (data.get(phone_field, '') or '').strip()
+            if phone_val:
+                digits = re.sub(r'\D', '', phone_val)
+                if not (10 <= len(digits) <= 15):
+                    return jsonify({'error': f'{phone_field} must contain 10 to 15 digits'}), 400
+
         institution_code = (data.get('institution_code', '') or '').strip().upper()
         if institution_code and Institution.query.filter_by(code=institution_code).first():
             return jsonify({'error': 'That institution code is already taken'}), 409
@@ -241,7 +254,10 @@ def register():
             email=email,
             password_hash=bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode(),
             full_name=full_name,
+            first_name=first_name or None,
+            last_name=last_name or None,
             role='institution_admin',
+            staff_id=data.get('staff_id'),
             phone=data.get('phone'),
         )
         db.session.add(user)

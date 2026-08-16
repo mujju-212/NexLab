@@ -13,6 +13,9 @@ export interface RegisterDto {
   phone?: string;
   // Institution self-registration (role='institution_admin' + institution_name)
   role?: 'institution_admin';
+  first_name?: string;
+  last_name?: string;
+  staff_id?: string;
   institution_name?: string;
   institution_type?: string;
   institution_code?: string;
