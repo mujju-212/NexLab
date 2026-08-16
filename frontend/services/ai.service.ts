@@ -1,6 +1,35 @@
 import { apiClient } from './api-client';
 
+/** Assist modes offered by the student Compiler page. */
+export type CodeAssistMode = 'hint' | 'explain_error' | 'review' | 'ask';
+
+export interface CodeAssistResponse {
+  mode: CodeAssistMode;
+  answer: string;
+  language: string;
+  is_fallback: boolean;
+  model_used: string | null;
+  latency_ms: number;
+}
+
 export const aiService = {
+
+  // ── Playground Code Assistant ───────────────────────────────────────────────
+  // POST /api/ai/code-assist
+  // Standalone help for the Compiler page: no experiment, no grade deduction.
+  async codeAssist(payload: {
+    mode: CodeAssistMode;
+    code: string;
+    language: string;
+    error?: string;
+    stdout?: string;
+    question?: string;
+  }): Promise<CodeAssistResponse> {
+    const { data } = await apiClient.post<CodeAssistResponse>(
+      '/ai/code-assist', payload, { timeout: 40_000 },
+    );
+    return data;
+  },
 
   // ── Progressive 3-Level Hint ────────────────────────────────────────────────
   // POST /api/ai/hint

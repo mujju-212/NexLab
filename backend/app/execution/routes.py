@@ -6,6 +6,12 @@ from app.auth.utils import require_auth, require_role
 from app.extensions import db, limiter
 from app.models.submission import CodeVersion, CodeAttempt
 from app.ml.code_quality import analyze_code_quality, quality_to_score
+from app.execution.languages import (
+    LANGUAGE_IDS as _LANGUAGE_IDS,
+    GROUP_ORDER,
+    catalog,
+    resolve as resolve_language,
+)
 from datetime import datetime
 
 execution_bp = Blueprint('execution', __name__)
@@ -31,17 +37,37 @@ def _safe_int(val, default=0):
     """Parse first int from a possibly-repeated string"""
     return int(_safe_float(val, default))
 
-LANGUAGE_IDS = {
-    'python':     71,
-    'cpp':        54,
-    'c':          49,
-    'java':       62,
-    'javascript': 63,
-    'js':         63,
-    'r':          80,
-    'octave':     66,
-    'matlab':     66,
-}
+LANGUAGE_IDS = _LANGUAGE_IDS
+
+
+# ── Blocking I/O under whichever server is actually running ───────────────────
+def _run_blocking(fn):
+    """
+    Call `fn` (blocking HTTP + sleeps) in a way that suits the live server.
+
+    Under eventlet the sockets are monkey-patched, so blocking `requests`
+    would stall the whole hub — the work has to go to a real OS thread via
+    `eventlet.tpool`. Under the threading server (what `socketio.run` uses
+    here, see `async_mode='threading'`) there is no hub at all: `tpool` then
+    deadlocks as soon as two request threads reach it together, because they
+    each try to drive eventlet's shared completion pipe from their own hub.
+    A plain call is already on a real thread there, so just make it.
+    """
+    try:
+        from eventlet.patcher import is_monkey_patched
+    except ImportError:
+        return fn()                      # eventlet not installed at all
+    if not is_monkey_patched('socket'):
+        return fn()                      # threading / plain WSGI server
+    from eventlet import tpool           # `import eventlet` does not bind this
+    return tpool.execute(fn)
+
+
+# ── Playground guard rails ────────────────────────────────────────────────────
+MAX_CODE_CHARS  = 60_000    # ~1.5k lines — generous for a lab exercise
+MAX_STDIN_CHARS = 20_000
+POLL_ATTEMPTS   = 60        # 60 × 0.5s = 30s ceiling
+POLL_INTERVAL   = 0.5
 
 
 @execution_bp.route('/run', methods=['POST'])
@@ -194,8 +220,8 @@ def _run_polling(code: str, language: str, stdin: str) -> dict:
 def run_code_dev():
     """
     DEV-ONLY: Execute code without auth — for HTML test UI.
-    Runs Judge0 calls inside eventlet.tpool to avoid monkey-patching
-    interference with the requests library under eventlet/socketio.
+    Judge0 calls go through `_run_blocking` so they behave under both the
+    threading server and an eventlet one.
     """
     if request.method == 'OPTIONS':
         return '', 204
@@ -214,7 +240,7 @@ def run_code_dev():
     judge0_url = current_app.config.get('JUDGE0_URL', 'http://localhost:2358')
 
     def _call_judge0():
-        """Run in a real OS thread via tpool — bypasses eventlet socket patching."""
+        """Submit to Judge0 and poll — blocking, so it runs via _run_blocking."""
         try:
             # Submit async (no wait=true — avoids eventlet long-poll issues)
             r = requests.post(f"{judge0_url}/submissions",
@@ -239,13 +265,7 @@ def run_code_dev():
         except Exception as e:
             return {'error': str(e)}
 
-    # Run blocking I/O in a real thread — critical under eventlet
-    try:
-        import eventlet
-        d = eventlet.tpool.execute(_call_judge0)
-    except Exception:
-        # Fallback if tpool unavailable
-        d = _call_judge0()
+    d = _run_blocking(_call_judge0)
 
     if 'error' in d and 'status' not in d:
         return jsonify({'error': d['error']}), 502
@@ -299,3 +319,157 @@ def _save_code_version(student_id, experiment_id, session_id, files, save_type):
         save_type=save_type
     )
     db.session.add(version)
+
+
+# ══ Compiler / Playground ═════════════════════════════════════════════════════
+# Free-form code execution for the student Compiler page. Unlike /run it is not
+# tied to an experiment, so it never writes CodeAttempt or CodeVersion rows and
+# never touches grading.
+
+@execution_bp.route('/languages', methods=['GET', 'OPTIONS'])
+def list_languages():
+    if request.method == 'OPTIONS':
+        return '', 204
+    """Language catalog for the compiler picker (ids, versions, starter code)."""
+    return jsonify({'languages': catalog(), 'groups': GROUP_ORDER}), 200
+
+
+
+@execution_bp.route('/playground', methods=['POST'])
+@require_auth
+@limiter.limit("20 per minute")
+def playground_run():
+    """
+    Execute arbitrary code in any supported language and return the full
+    terminal picture: stdout, stderr, compiler diagnostics, exit code,
+    wall time and peak memory.
+    """
+    data     = request.get_json(silent=True) or {}
+    code     = data.get('code') or ''
+    stdin    = data.get('stdin') or ''
+    language = data.get('language') or 'python'
+
+    spec = resolve_language(language)
+    if not spec:
+        return jsonify({'error': f'Unsupported language: {language}'}), 400
+    if not code.strip():
+        return jsonify({'error': 'Nothing to run — the editor is empty.'}), 400
+    if len(code) > MAX_CODE_CHARS:
+        return jsonify({'error': f'Source is too large (limit {MAX_CODE_CHARS:,} characters).'}), 413
+    if len(stdin) > MAX_STDIN_CHARS:
+        return jsonify({'error': f'Input is too large (limit {MAX_STDIN_CHARS:,} characters).'}), 413
+
+    result = _judge0_execute(code, spec['judge0_id'], stdin)
+    if '_error' in result:
+        return jsonify({'error': result['_error']}), 502
+
+    result['language'] = spec['id']
+    result['label']    = f"{spec['label']} {spec['version']}"
+    return jsonify(result), 200
+
+
+def _b64(text: str) -> str:
+    return base64.b64encode((text or '').encode('utf-8')).decode('ascii')
+
+
+def _unb64(value) -> str:
+    """Decode a base64 field from Judge0; tolerate nulls and odd bytes."""
+    if not value:
+        return ''
+    try:
+        return base64.b64decode(value).decode('utf-8', errors='replace')
+    except Exception:
+        return str(value)
+
+
+def _judge0_execute(code: str, lang_id: int, stdin: str) -> dict:
+    """
+    Submit to Judge0 and poll until the verdict is in.
+
+    Uses base64 transport so unicode and binary-ish output survive the round
+    trip, and hands the blocking HTTP calls to `_run_blocking` so they work
+    under both the threading server and eventlet.
+    Returns {'_error': msg} when the engine itself is unreachable.
+    """
+    judge0_url = current_app.config.get('JUDGE0_URL', 'http://localhost:2358')
+    cpu_limit  = current_app.config.get('CODE_TIME_LIMIT_SEC', 10)
+    mem_limit  = current_app.config.get('CODE_MEMORY_LIMIT_KB', 262144)
+    api_key    = current_app.config.get('JUDGE0_API_KEY', '')
+    headers    = {'X-Auth-Token': api_key} if api_key else {}
+
+    FIELDS = ('status,stdout,stderr,compile_output,message,'
+              'exit_code,exit_signal,time,memory')
+
+    def _call():
+        import time as _time
+        try:
+            r = requests.post(
+                f"{judge0_url}/submissions",
+                params={'base64_encoded': 'true'},
+                headers=headers,
+                json={
+                    'source_code':     _b64(code),
+                    'language_id':     lang_id,
+                    'stdin':           _b64(stdin),
+                    'cpu_time_limit':  cpu_limit,
+                    'memory_limit':    mem_limit,
+                },
+                timeout=10,
+            )
+            r.raise_for_status()
+            token = r.json().get('token')
+            if not token:
+                return {'_error': 'Execution engine did not return a submission token.'}
+
+            for _ in range(POLL_ATTEMPTS):
+                _time.sleep(POLL_INTERVAL)
+                pr = requests.get(
+                    f"{judge0_url}/submissions/{token}",
+                    params={'base64_encoded': 'true', 'fields': FIELDS},
+                    headers=headers,
+                    timeout=10,
+                )
+                pr.raise_for_status()
+                payload   = pr.json()
+                status_id = (payload.get('status') or {}).get('id')
+                if status_id and status_id not in (1, 2):   # not Queued / Processing
+                    return payload
+            return {'_error': 'Execution timed out waiting for the engine (30s).'}
+
+        except requests.RequestException as exc:
+            return {'_error': f'Cannot reach the code execution engine: {exc}'}
+
+    raw = _run_blocking(_call)
+
+    if '_error' in raw:
+        return raw
+    return _shape_result(raw)
+
+
+# Judge0 status ids that mean "the program itself blew up" rather than
+# "the platform failed" — used to pick the console banner on the client.
+_COMPILE_ERROR_ID = 6
+_RUNTIME_ERROR_IDS = frozenset({7, 8, 9, 10, 11, 12})
+
+
+def _shape_result(raw: dict) -> dict:
+    """Flatten a Judge0 submission payload into the compiler's console shape."""
+    status      = raw.get('status') or {}
+    status_id   = status.get('id')
+    time_sec    = _safe_float(raw.get('time'), 0.0)
+
+    return {
+        'status':          status.get('description') or 'Unknown',
+        'status_id':       status_id,
+        'success':         status_id == 3,
+        'is_compile_error': status_id == _COMPILE_ERROR_ID,
+        'is_runtime_error': status_id in _RUNTIME_ERROR_IDS,
+        'stdout':          _unb64(raw.get('stdout')),
+        'stderr':          _unb64(raw.get('stderr')),
+        'compile_output':  _unb64(raw.get('compile_output')),
+        'message':         _unb64(raw.get('message')),
+        'exit_code':       raw.get('exit_code'),
+        'exit_signal':     raw.get('exit_signal'),
+        'time_ms':         round(time_sec * 1000, 1),
+        'memory_kb':       _safe_int(raw.get('memory'), 0),
+    }

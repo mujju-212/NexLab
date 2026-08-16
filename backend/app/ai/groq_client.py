@@ -146,10 +146,23 @@ def groq_chat(messages: list, pool: str = 'fast',
     Returns (text, model_used, is_fallback):
       - on success via Groq or Gemini: (content, model id, False)
       - when every Groq AND Gemini attempt failed: (None, None, True)
-    """
-    from groq import Groq, RateLimitError, APIStatusError
 
-    client = Groq(api_key=current_app.config['GROQ_API_KEY'])
+    A missing `groq` package or API key is treated as "the whole Groq pool is
+    unavailable" and skips straight to Gemini — callers already handle that
+    contract, and the AI panels must degrade rather than 500.
+    """
+    try:
+        from groq import Groq, RateLimitError, APIStatusError
+    except ImportError:
+        current_app.logger.warning('[ai] groq SDK not installed — skipping to fallback')
+        return _fallback_or_none(messages, max_tokens, temperature)
+
+    api_key = current_app.config.get('GROQ_API_KEY')
+    if not api_key:
+        current_app.logger.warning('[ai] GROQ_API_KEY not configured — skipping to fallback')
+        return _fallback_or_none(messages, max_tokens, temperature)
+
+    client = Groq(api_key=api_key)
     pool_models = get_pool(pool)
     tried = set()
 
@@ -190,10 +203,14 @@ def groq_chat(messages: list, pool: str = 'fast',
             _mark_down(model, COOLDOWN_SERVER_ERR)
 
     # ── Entire Groq pool exhausted → last-resort Gemini fallback ─────────
+    return _fallback_or_none(messages, max_tokens, temperature)
+
+
+def _fallback_or_none(messages: list, max_tokens: int, temperature: float):
+    """Gemini last resort, normalised to groq_chat's 3-tuple contract."""
     text, gemini_model = _gemini_fallback(messages, max_tokens, temperature)
     if text is not None:
         return text, f'gemini:{gemini_model}', False
-
     return None, None, True
 
 

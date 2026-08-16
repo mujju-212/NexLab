@@ -1,6 +1,39 @@
 import { apiClient } from './api-client';
 import type { RunCodeRequest, RunCodeResponse } from '@/types';
 
+/** One entry of the compiler language catalog (GET /api/execution/languages). */
+export interface CompilerLanguage {
+  id: string;              // canonical id sent back on run, e.g. 'csharp'
+  label: string;           // 'C#'
+  version: string;         // 'Mono 6.6.0'
+  judge0_id: number;
+  editor_mode: string;     // highlighter profile: python | clike | javascript | sql | shell | r | ruby | php | matlab
+  filename: string;        // 'Main.cs' — used for the download filename
+  line_comment: string;    // '//' — used by the Ctrl+/ comment toggle
+  group: string;           // picker optgroup
+  hint: string | null;     // language gotcha shown under the picker
+  starter: string;         // starter snippet
+}
+
+/** Flattened Judge0 verdict returned by POST /api/execution/playground. */
+export interface PlaygroundResult {
+  language: string;
+  label: string;
+  status: string;                 // 'Accepted', 'Compilation Error', …
+  status_id: number | null;
+  success: boolean;
+  is_compile_error: boolean;
+  is_runtime_error: boolean;
+  stdout: string;
+  stderr: string;
+  compile_output: string;
+  message: string;
+  exit_code: number | null;
+  exit_signal: number | null;
+  time_ms: number;
+  memory_kb: number;
+}
+
 export const executionService = {
 
   // ── Run Code (authenticated, stores attempt) ────────────────────────────────
@@ -21,6 +54,31 @@ export const executionService = {
     files: { main: string };
   }): Promise<void> {
     await apiClient.post('/execution/save', payload);
+  },
+
+  // ── Compiler: language catalog ──────────────────────────────────────────────
+  // GET /api/execution/languages
+  // Response: { languages: CompilerLanguage[], groups: string[] }
+  async listLanguages(): Promise<{ languages: CompilerLanguage[]; groups: string[] }> {
+    const { data } = await apiClient.get<{ languages: CompilerLanguage[]; groups: string[] }>(
+      '/execution/languages',
+    );
+    return data;
+  },
+
+  // ── Compiler: free-form run ─────────────────────────────────────────────────
+  // POST /api/execution/playground
+  // Not tied to an experiment — stores no attempt and never affects a grade.
+  // Judge0 polls up to 30s, so this call overrides the client's 15s default.
+  async runPlayground(payload: {
+    code: string;
+    language: string;
+    stdin?: string;
+  }): Promise<PlaygroundResult> {
+    const { data } = await apiClient.post<PlaygroundResult>(
+      '/execution/playground', payload, { timeout: 45_000 },
+    );
+    return data;
   },
 
   // ── Dev-only run (no auth — for testing only) ───────────────────────────────

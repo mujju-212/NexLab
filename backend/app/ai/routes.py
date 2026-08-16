@@ -94,7 +94,7 @@ STRICT RULES:
     db.session.add(log)
     db.session.commit()
 
-    _increment_quota(g.institution_id)
+    _safe_increment_quota(g.institution_id)
 
     # Compute deduction for this experiment
     total_hints = hints_used + 1
@@ -136,7 +136,7 @@ Be encouraging. Use simple language. Ask guiding questions."""
     groq_messages.extend(messages[-10:])   # last 10 messages for context
 
     response, _, _ = _call_groq_messages(groq_messages, POOL_CHAT, max_tokens=400)
-    _increment_quota(g.institution_id)
+    _safe_increment_quota(g.institution_id)
 
     return jsonify({'response': response}), 200
 
@@ -311,6 +311,131 @@ def get_viva_session(viva_session_id):
     }), 200
 
 
+# ══ Compiler playground assistant ════════════════════════════════════════════
+# Standalone code help for the student Compiler page. Deliberately separate from
+# /hint: there is no experiment, no HintLog row and no grade deduction, because
+# playground work is not assessed. Same "guide, never solve" pedagogy applies.
+
+_ASSIST_RULES = (
+    "STRICT RULES:\n"
+    "- Never output the corrected program, a complete function, or a full code block.\n"
+    "- At most one single-line fragment, and only if it is unavoidable.\n"
+    "- Plain text only. No markdown headings, no fenced code.\n"
+    "- Be specific about line numbers and identifiers you can see in their code."
+)
+
+_ASSIST_MODES = {
+    'hint': {
+        'max_tokens': 220,
+        'prompt': (
+            "You are a programming tutor sitting beside a student in a free-practice "
+            "code playground. They want a nudge, not the answer.\n"
+            "Point at the weakest part of their logic, or — if there is an error "
+            "message — name its likely cause and the line to inspect.\n"
+            f"{_ASSIST_RULES}\n- Maximum 700 characters."
+        ),
+    },
+    'explain_error': {
+        'max_tokens': 300,
+        'prompt': (
+            "You explain compiler and runtime errors to students in plain language.\n"
+            "Structure your answer as: (1) one line translating the error into plain "
+            "English, (2) the exact line or token at fault if the message names one, "
+            "(3) the general class of mistake that produces it.\n"
+            f"{_ASSIST_RULES}\n- Maximum 900 characters."
+        ),
+    },
+    'review': {
+        'max_tokens': 340,
+        'prompt': (
+            "You are a lab instructor reviewing a student's program.\n"
+            "Give at most 4 bullet points, each starting with '- ', in priority order: "
+            "correctness risks and unhandled edge cases, readability and naming, "
+            "efficiency, then idiomatic style. Praise one thing if it is genuinely good.\n"
+            f"{_ASSIST_RULES}\n- Maximum 900 characters."
+        ),
+    },
+    'ask': {
+        'max_tokens': 360,
+        'prompt': (
+            "You are a friendly programming tutor answering a student's question about "
+            "the code they are writing in a practice playground.\n"
+            "Answer the question directly and concretely, then stop.\n"
+            f"{_ASSIST_RULES}\n- Maximum 900 characters."
+        ),
+    },
+}
+
+
+@ai_bp.route('/code-assist', methods=['POST'])
+@require_auth
+@limiter.limit("12 per 5 minutes")
+def code_assist():
+    """
+    Playground code help. mode = hint | explain_error | review | ask.
+    Requires no experiment and never affects a grade.
+    """
+    data     = request.get_json(silent=True) or {}
+    mode     = (data.get('mode') or 'hint').strip().lower()
+    code     = (data.get('code') or '').strip()
+    language = (data.get('language') or 'python').strip()
+    error    = (data.get('error') or '').strip()
+    stdout   = (data.get('stdout') or '').strip()
+    question = (data.get('question') or '').strip()
+
+    spec = _ASSIST_MODES.get(mode)
+    if not spec:
+        return jsonify({'error': f"mode must be one of: {', '.join(_ASSIST_MODES)}"}), 400
+    if not code:
+        return jsonify({'error': 'No code to look at yet — write something first.'}), 400
+    if mode == 'explain_error' and not error:
+        return jsonify({'error': 'No error output to explain — run the code first.'}), 400
+    if mode == 'ask' and not question:
+        return jsonify({'error': 'Type a question first.'}), 400
+
+    if not _check_quota(g.institution_id):
+        return jsonify({'error': 'Daily AI assistance limit reached. Resets at midnight.'}), 429
+
+    # Trim from the front: the tail of a file and the tail of an error trace are
+    # where the interesting bits live.
+    parts = [f"Language: {language}"]
+    if question:
+        parts.append(f"Student's question: {question[:400]}")
+    if error:
+        parts.append(f"Error / diagnostics:\n{error[-1200:]}")
+    if stdout:
+        parts.append(f"Program output:\n{stdout[-500:]}")
+    parts.append(f"Code:\n{code[-4000:]}")
+
+    start = time.time()
+    answer, model_used, is_fallback = _call_groq(
+        spec['prompt'], '\n\n'.join(parts), POOL_HINTS, max_tokens=spec['max_tokens']
+    )
+    latency_ms = int((time.time() - start) * 1000)
+
+    _safe_increment_quota(g.institution_id)
+
+    return jsonify({
+        'mode':        mode,
+        'answer':      answer,
+        'language':    language,
+        'is_fallback': is_fallback,
+        'model_used':  model_used,
+        'latency_ms':  latency_ms,
+    }), 200
+
+
+def _safe_increment_quota(institution_id):
+    """Quota bookkeeping must never cost the student an answer they already got."""
+    if not institution_id:
+        return
+    try:
+        _increment_quota(institution_id)
+    except Exception:
+        db.session.rollback()
+        current_app.logger.warning('[ai] quota increment failed', exc_info=True)
+
+
 # ── Groq helpers ────────────────────────────────────────────────────────────
 
 def _call_groq(system_prompt: str, user_message: str, pool: str, max_tokens: int = 200):
@@ -344,21 +469,37 @@ def _get_fallback_hint() -> str:
 
 
 def _check_quota(institution_id: str) -> bool:
-    """Check if institution has Groq quota remaining today"""
+    """
+    True when the institution may still call Groq today.
+
+    Fails **open**: `groq_usage` is created by database/init.sql rather than by a
+    migration, so a database that was set up another way simply has no counter.
+    Losing the meter must not take the AI tutor down with it.
+    """
+    if not institution_id:
+        return True          # platform-level users have no institution meter
     from datetime import date
     from app.extensions import db
     from sqlalchemy import text
+    from sqlalchemy.exc import SQLAlchemyError
     today = date.today().isoformat()
-    result = db.session.execute(
-        text("SELECT count FROM groq_usage WHERE institution_id = :iid AND usage_date = :date"),
-        {'iid': institution_id, 'date': today}
-    ).fetchone()
+    try:
+        result = db.session.execute(
+            text("SELECT count FROM groq_usage WHERE institution_id = :iid AND usage_date = :date"),
+            {'iid': institution_id, 'date': today}
+        ).fetchone()
+    except SQLAlchemyError:
+        db.session.rollback()
+        current_app.logger.warning('[ai] quota lookup failed; allowing request', exc_info=True)
+        return True
     limit = current_app.config['GROQ_DAILY_LIMIT_PER_INSTITUTION']
     return (result is None) or (result[0] < limit)
 
 
 def _increment_quota(institution_id: str):
     """Increment Groq usage counter for institution"""
+    if not institution_id:
+        return               # no meter to move, and NULL breaks the ON CONFLICT key
     from datetime import date
     from app.extensions import db
     from sqlalchemy import text
