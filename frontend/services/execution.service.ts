@@ -7,6 +7,7 @@ export interface CompilerLanguage {
   label: string;           // 'C#'
   version: string;         // 'Mono 6.6.0'
   judge0_id: number;
+  engine: 'judge0' | 'docker' | 'browser'; // execution engine for this language
   editor_mode: string;     // highlighter profile: python | clike | javascript | sql | shell | r | ruby | php | matlab
   filename: string;        // 'Main.cs' — used for the download filename
   line_comment: string;    // '//' — used by the Ctrl+/ comment toggle
@@ -14,6 +15,7 @@ export interface CompilerLanguage {
   hint: string | null;     // language gotcha shown under the picker
   starter: string;         // starter snippet
 }
+
 
 /** Flattened Judge0 verdict returned by POST /api/execution/playground. */
 export interface PlaygroundResult {

@@ -13,7 +13,7 @@ import axios from 'axios';
 import {
   Play, Loader2, Copy, Check, Download, RotateCcw, Terminal, Sparkles,
   Lightbulb, Bug, ClipboardCheck, AlertTriangle, CheckCircle2, Clock,
-  Cpu, Send, Info, Eraser, ChevronDown,
+  Cpu, Send, Info, Eraser, ChevronDown, Globe, RefreshCcw,
 } from 'lucide-react';
 import StudentShell from '@/components/layout/StudentShell';
 import CodeEditor from '@/components/editor/code-editor';
@@ -83,11 +83,16 @@ export default function StudentCompilerPage() {
   const [question, setQuestion] = useState('');
 
   const [copied, setCopied] = useState(false);
+  // ── Browser preview (HTML/CSS) ─────────────────────────────────────────────
+  const [previewSrc, setPreviewSrc] = useState<string | null>(null);
+  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const lang = useMemo(
     () => languages.find((l) => l.id === langId) ?? null,
     [languages, langId],
   );
+
+  const isBrowserLang = lang?.engine === 'browser';
 
   // Ref mirror so the draft-persisting effect and the language switch can read
   // the live buffer without re-subscribing on every keystroke.
@@ -126,6 +131,25 @@ export default function StudentCompilerPage() {
     return () => window.clearTimeout(t);
   }, [code, stdin, langId]);
 
+  // ── Live browser preview (HTML/CSS — debounced 300 ms) ────────────────────
+  useEffect(() => {
+    if (!isBrowserLang) { setPreviewSrc(null); return; }
+    if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
+    previewTimerRef.current = setTimeout(() => {
+      if (langId === 'css') {
+        // Wrap CSS in a minimal demo page
+        setPreviewSrc(`<!DOCTYPE html><html><head><style>${code}</style></head><body>
+<h1>Heading 1</h1><h2>Heading 2</h2><p>Paragraph text. <a href="#">A link</a>.</p>
+<button>Button</button><ul><li>List item 1</li><li>List item 2</li></ul>
+<div class="box" style="padding:1rem;border:1px solid">div.box</div>
+</body></html>`);
+      } else {
+        setPreviewSrc(code);
+      }
+    }, 300);
+    return () => { if (previewTimerRef.current) clearTimeout(previewTimerRef.current); };
+  }, [code, isBrowserLang, langId]);
+
   const switchLanguage = useCallback((nextId: string) => {
     if (nextId === langId) return;
     if (langId) {
@@ -155,6 +179,8 @@ export default function StudentCompilerPage() {
 
   const run = useCallback(async () => {
     if (!lang || running) return;
+    // Browser languages render client-side — no backend call
+    if (isBrowserLang) return;
     if (!code.trim()) {
       setRunError('Nothing to run yet — write some code first.');
       setResult(null);
@@ -173,7 +199,7 @@ export default function StudentCompilerPage() {
     } finally {
       setRunning(false);
     }
-  }, [code, lang, running, stdin]);
+  }, [code, isBrowserLang, lang, running, stdin]);
 
   const askAssist = useCallback(async (mode: CodeAssistMode) => {
     if (!lang || assistBusy) return;
@@ -281,10 +307,15 @@ export default function StudentCompilerPage() {
           <ChevronDown size={15} className={styles.langChevron} />
         </div>
 
-        <button className={styles.runBtn} onClick={run} disabled={running || !lang}>
-          {running ? <Loader2 size={16} className={styles.spin} /> : <Play size={16} />}
-          {running ? 'Running…' : 'Run'}
-          <kbd className={styles.kbd}>Ctrl ⏎</kbd>
+        <button
+          className={styles.runBtn}
+          onClick={isBrowserLang ? () => { /* preview auto-updates */ } : run}
+          disabled={running || !lang || isBrowserLang}
+          title={isBrowserLang ? 'Preview updates automatically as you type' : 'Run code (Ctrl+Enter)'}
+        >
+          {running ? <Loader2 size={16} className={styles.spin} /> : isBrowserLang ? <Globe size={16} /> : <Play size={16} />}
+          {running ? 'Running…' : isBrowserLang ? 'Live Preview' : 'Run'}
+          {!isBrowserLang && <kbd className={styles.kbd}>Ctrl ⏎</kbd>}
         </button>
 
         <div className={styles.toolSpacer} />
@@ -337,7 +368,8 @@ export default function StudentCompilerPage() {
             </div>
           </div>
 
-          {showStdin && (
+          {/* hide stdin panel for browser langs */}
+          {showStdin && !isBrowserLang && (
             <div className={styles.stdinCard}>
               <div className={styles.cardHead}>
                 <span className={styles.cardTitle}>Standard input (stdin)</span>
@@ -360,6 +392,34 @@ export default function StudentCompilerPage() {
         {/* ── Console + AI column ── */}
         <section className={styles.sideCol}>
 
+          {/* ── Browser Preview (HTML / CSS) ── */}
+          {isBrowserLang && (
+            <div className={styles.previewCard}>
+              <div className={styles.cardHead}>
+                <span className={styles.cardTitle}><Globe size={14} /> Live Preview</span>
+                <span className={styles.cardMeta}>sandboxed — updates as you type</span>
+              </div>
+              <div className={styles.previewBody}>
+                {previewSrc ? (
+                  <iframe
+                    className={styles.previewFrame}
+                    srcDoc={previewSrc}
+                    sandbox="allow-scripts"
+                    title="Browser preview"
+                    aria-label="Live browser preview of your HTML or CSS code"
+                  />
+                ) : (
+                  <p className={styles.consoleEmpty}>
+                    <Globe size={22} />
+                    Start typing HTML or CSS — the preview updates instantly.
+                  </p>
+                )}
+              </div>
+            </div>
+          )}
+
+          {/* ── Console (compiled languages only) ── */}
+          {!isBrowserLang && (
           <div className={styles.consoleCard}>
             <div className={styles.cardHead}>
               <span className={styles.cardTitle}><Terminal size={14} /> Console</span>
@@ -441,6 +501,7 @@ export default function StudentCompilerPage() {
               </div>
             )}
           </div>
+          )}
 
           {/* ── AI assistant ── */}
           <div className={styles.aiCard}>
