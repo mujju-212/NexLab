@@ -7,8 +7,8 @@ model in the pool is tried immediately, so AI features stay alive
 on Groq's free-tier limits without manual intervention.
 
 Pools can be overridden at runtime via env vars (comma-separated):
-    GROQ_POOL_FAST=llama-3.1-8b-instant,llama-3.3-70b-versatile
-    GROQ_POOL_QUALITY=llama-3.3-70b-versatile,openai/gpt-oss-120b
+    GROQ_POOL_FAST=openai/gpt-oss-20b,openai/gpt-oss-120b,qwen/qwen3.6-27b
+    GROQ_POOL_QUALITY=openai/gpt-oss-120b,openai/gpt-oss-20b,qwen/qwen3.6-27b
 
 Last-resort fallback: when every Groq model in the pool is on
 cooldown, the call is served by Google Gemini instead (if
@@ -24,19 +24,32 @@ from flask import current_app
 DEFAULT_POOLS = {
     # fast, cheap models for hints / short evaluations
     'fast': [
-        'llama-3.1-8b-instant',
-        'openai/gpt-oss-20b',
+        'openai/gpt-oss-20b',       # primary: 9 reasoning tokens at low effort
+        'openai/gpt-oss-120b',
         'qwen/qwen3.6-27b',
+        'llama-3.1-8b-instant',     # kept as future fallback; will 404 until key gains access
         'llama-3.3-70b-versatile',
     ],
     # stronger reasoning for chat / viva / test-case generation
     'quality': [
-        'llama-3.3-70b-versatile',
-        'openai/gpt-oss-120b',
+        'openai/gpt-oss-120b',      # primary: stronger reasoning, still low-effort-capable
+        'openai/gpt-oss-20b',
         'qwen/qwen3.6-27b',
+        'llama-3.3-70b-versatile',  # kept as future fallback
         'llama-3.1-8b-instant',
     ],
 }
+
+# Models that accept OpenAI-style reasoning controls.  Sending these params
+# to non-reasoning models (e.g. llama, qwen) triggers a 400 error, so they
+# are only included when the selected model is in this set.
+# reasoning_effort=low caps internal thinking tokens; reasoning_format=hidden
+# keeps the <think> block out of the visible content field.
+REASONING_MODELS = frozenset({
+    'openai/gpt-oss-20b',
+    'openai/gpt-oss-120b',
+    'openai/gpt-oss-safeguard-20b',
+})
 
 # Cooldowns applied per failure type (seconds)
 COOLDOWN_RATE_LIMIT = 60     # 429: token / request limit — rest a minute
@@ -172,12 +185,19 @@ def groq_chat(messages: list, pool: str = 'fast',
             break
         tried.add(model)
         try:
-            resp = client.chat.completions.create(
-                model=model,
-                messages=messages,
-                max_tokens=max_tokens,
-                temperature=temperature,
-            )
+            params = {
+                'model': model,
+                'messages': messages,
+                'max_tokens': max_tokens,
+                'temperature': temperature,
+            }
+            # Reasoning models otherwise spend the whole (often tiny) token
+            # budget on hidden thinking and return empty content. Cap the
+            # reasoning at 'low' and keep the <think> block out of content.
+            if model in REASONING_MODELS:
+                params['reasoning_effort'] = 'low'
+                params['reasoning_format'] = 'hidden'
+            resp = client.chat.completions.create(**params)
             content = resp.choices[0].message.content
             if content is not None and content.strip():
                 return content, model, False

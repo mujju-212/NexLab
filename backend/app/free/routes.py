@@ -8,8 +8,8 @@ from app.extensions import db
 from app.models.free import FreeCourse, FreeExercise, FreeProgress
 from app.models.user import User
 from app.auth.utils import require_auth, require_role
+from app.execution.languages import resolve as resolve_language
 from datetime import datetime
-import requests as req
 from flask import current_app
 
 free_bp = Blueprint('free', __name__)
@@ -64,12 +64,36 @@ def get_exercise(exercise_id):
 
 # ── Authenticated: Run Code ───────────────────────────────────────────────────
 
+def _run_case(lang_id, code, stdin):
+    """
+    Execute one test case in the Docker sandbox under admission control.
+
+    Returns (result, error): exactly one is non-None. `result` is the
+    runner.run() dict; `error` is a ready (response, status) tuple —
+    429 + Retry-After when the queue / per-user cap is hit, 503 when the engine
+    itself failed (status_id 13). A compile or runtime error in the student's
+    own code is a normal `result` (not an error), so the batch keeps going.
+    """
+    from app.exec_engine import runner as _runner
+    from app.exec_engine import admission as _adm
+    try:
+        with _adm.get().acquire(g.user_id):
+            result = _runner.run(code=code, language=lang_id, stdin=stdin or '')
+    except _adm.AdmissionError as exc:
+        resp = jsonify({'error': str(exc)})
+        resp.headers['Retry-After'] = str(exc.retry_after)
+        return None, (resp, 429)
+    if result.get('status_id') == 13:
+        return None, (jsonify({'error': result.get('note') or 'Execution engine error.'}), 503)
+    return result, None
+
+
 @free_bp.route('/exercises/<exercise_id>/run', methods=['POST'])
 @require_auth
 def run_exercise(exercise_id):
     """
     Run code against public test cases only (no hidden cases exposed).
-    Uses same Judge0 integration as the main execution service.
+    Each case executes in the Docker sandbox (fixed 5 s / 256 MB caps).
     """
     ex = FreeExercise.query.get_or_404(exercise_id)
     data = request.get_json()
@@ -79,47 +103,35 @@ def run_exercise(exercise_id):
     if not code.strip():
         return jsonify({'error': 'No code provided'}), 400
 
-    judge0_url = current_app.config['JUDGE0_URL']
-    LANG_IDS = {
-        'python': 71, 'python3': 71,
-        'cpp': 54, 'c++': 54,
-        'c': 50,
-        'java': 62,
-        'javascript': 63, 'js': 63,
-    }
-    lang_id = LANG_IDS.get(language.lower(), 71)
+    spec = resolve_language(language)
+    if not spec:
+        return jsonify({'error': f'Unsupported language: {language}'}), 400
+    if spec['engine'] == 'browser':
+        return jsonify({'error': 'Browser languages run client-side only.'}), 400
+    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+        return jsonify({'error': 'Code execution engine is not enabled on this server.'}), 503
 
     results = []
     visible_cases = [tc for tc in (ex.test_cases or []) if not tc.get('hidden', False)]
 
     for tc in visible_cases:
-        try:
-            r = req.post(f'{judge0_url}/submissions?wait=true', json={
-                'source_code': code,
-                'language_id': lang_id,
-                'stdin':       tc.get('input', ''),
-                'expected_output': tc.get('expected', ''),
-                'cpu_time_limit':  ex.time_limit_sec,
-                'memory_limit':    ex.memory_limit_kb,
-            }, timeout=15)
-            result = r.json()
-            stdout = (result.get('stdout') or '').strip()
-            expected = (tc.get('expected', '') or '').strip()
-            passed = stdout == expected and result.get('status', {}).get('id') == 3
-
-            results.append({
-                'input':    tc.get('input', ''),
-                'expected': expected,
-                'output':   stdout,
-                'passed':   passed,
-                'time':     result.get('time'),
-                'memory':   result.get('memory'),
-                'status':   result.get('status', {}).get('description', 'Unknown'),
-                'stderr':   result.get('stderr'),
-                'compile_output': result.get('compile_output'),
-            })
-        except Exception as e:
-            results.append({'passed': False, 'error': str(e), 'input': tc.get('input', '')})
+        result, err = _run_case(spec['id'], code, tc.get('input', ''))
+        if err:
+            return err   # infra failure (429/503) — abort the whole batch
+        stdout   = (result.get('stdout') or '').strip()
+        expected = (tc.get('expected', '') or '').strip()
+        passed   = stdout == expected and result.get('status_id') == 3
+        results.append({
+            'input':          tc.get('input', ''),
+            'expected':       expected,
+            'output':         stdout,
+            'passed':         passed,
+            'time_ms':        result.get('time_ms'),
+            'memory_kb':      result.get('memory_kb'),
+            'status':         result.get('status', 'Unknown'),
+            'stderr':         result.get('stderr'),
+            'compile_output': result.get('compile_output'),
+        })
 
     passed_count = sum(1 for r in results if r.get('passed'))
     score = round(passed_count / len(results) * 100, 1) if results else 0
@@ -149,10 +161,13 @@ def submit_exercise(exercise_id):
     if not code.strip():
         return jsonify({'error': 'No code provided'}), 400
 
-    judge0_url = current_app.config['JUDGE0_URL']
-    LANG_IDS = {'python': 71, 'python3': 71, 'cpp': 54, 'c++': 54,
-                'c': 50, 'java': 62, 'javascript': 63}
-    lang_id = LANG_IDS.get(language.lower(), 71)
+    spec = resolve_language(language)
+    if not spec:
+        return jsonify({'error': f'Unsupported language: {language}'}), 400
+    if spec['engine'] == 'browser':
+        return jsonify({'error': 'Browser languages run client-side only.'}), 400
+    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+        return jsonify({'error': 'Code execution engine is not enabled on this server.'}), 503
 
     all_cases = ex.test_cases or []
     if not all_cases:
@@ -160,21 +175,13 @@ def submit_exercise(exercise_id):
 
     passed_count = 0
     for tc in all_cases:
-        try:
-            r = req.post(f'{judge0_url}/submissions?wait=true', json={
-                'source_code': code, 'language_id': lang_id,
-                'stdin': tc.get('input', ''),
-                'expected_output': tc.get('expected', ''),
-                'cpu_time_limit': ex.time_limit_sec,
-                'memory_limit': ex.memory_limit_kb,
-            }, timeout=15)
-            result = r.json()
-            stdout = (result.get('stdout') or '').strip()
-            expected = (tc.get('expected', '') or '').strip()
-            if stdout == expected and result.get('status', {}).get('id') == 3:
-                passed_count += 1
-        except Exception:
-            pass
+        result, err = _run_case(spec['id'], code, tc.get('input', ''))
+        if err:
+            return err   # infra failure (429/503) — abort before scoring
+        stdout   = (result.get('stdout') or '').strip()
+        expected = (tc.get('expected', '') or '').strip()
+        if stdout == expected and result.get('status_id') == 3:
+            passed_count += 1
 
     score = round(passed_count / len(all_cases) * 100, 1)
     solved = passed_count == len(all_cases)

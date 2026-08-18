@@ -60,6 +60,47 @@ def me():
     return jsonify({'user': user.to_dict()}), 200
 
 
+@auth_bp.route('/profile', methods=['PATCH'])
+def update_profile():
+    """
+    Update the signed-in user's own profile.
+
+    Only fields present in the body are touched, so a form that omits `phone`
+    can never blank a stored phone number. Email changes are validated for
+    shape and uniqueness (a duplicate would break login).
+    """
+    from flask_jwt_extended import verify_jwt_in_request, get_jwt
+    verify_jwt_in_request()
+    claims = get_jwt()
+    user = User.query.get(claims['sub'])
+    if not user:
+        return jsonify({'error': 'User not found'}), 404
+
+    data = request.get_json() or {}
+
+    if 'full_name' in data:
+        name = (data['full_name'] or '').strip()
+        if not name:
+            return jsonify({'error': 'Full name cannot be empty'}), 400
+        user.full_name = name
+
+    if 'email' in data:
+        email = (data['email'] or '').strip().lower()
+        if not re.match(r'^[^@\s]+@[^@\s]+\.[^@\s]+$', email):
+            return jsonify({'error': 'Invalid email address'}), 400
+        clash = User.query.filter(User.email == email, User.id != user.id).first()
+        if clash:
+            return jsonify({'error': 'That email is already in use'}), 409
+        user.email = email
+
+    for field in ('first_name', 'last_name', 'phone'):
+        if field in data:
+            setattr(user, field, (data[field] or '').strip() or None)
+
+    db.session.commit()
+    return jsonify({'message': 'Profile updated', 'user': user.to_dict()}), 200
+
+
 @auth_bp.route('/change-password', methods=['POST'])
 def change_password():
     from flask_jwt_extended import verify_jwt_in_request, get_jwt

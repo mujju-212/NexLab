@@ -35,7 +35,7 @@ export interface FreeExercise {
 export interface RunResult {
   results: Array<{
     input: string; expected: string; output: string;
-    passed: boolean; time: string | null; memory: number | null;
+    passed: boolean; time_ms: number | null; memory_kb: number | null;
     status: string; stderr?: string; compile_output?: string; error?: string;
   }>;
   passed: number;

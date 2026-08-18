@@ -13,7 +13,7 @@ const ROLE_ROUTES: Record<BackendRole, string> = {
   institution_admin: '/institution/dashboard',
   instructor:        '/instructor/dashboard',
   student:           '/student/dashboard',
-  free_user:         '/practice',
+  free_user:         '/practice/dashboard',
 };
 
 // ── Code snippets ──────────────────────────────────────────────────────────
@@ -172,7 +172,7 @@ export default function LoginPageClient() {
     try {
       const data = await authService.login({ email: em, password: pw });
       setUser(data.user);
-      const route = ROLE_ROUTES[data.user.role] ?? '/student/dashboard';
+      const route = ROLE_ROUTES[data.user.role] ?? '/practice/dashboard';
       router.push(route);
     } catch (err: unknown) {
       const msg =

@@ -8,7 +8,7 @@ import styles from './register.module.css';
 import Image from 'next/image';
 
 const ROLE_ROUTES: Record<string, string> = {
-  free_user:         '/practice',
+  free_user:         '/practice/dashboard',
   student:           '/student/dashboard',
   instructor:        '/instructor/dashboard',
   institution_admin: '/institution/dashboard',
@@ -261,7 +261,7 @@ function RegisterPageInner() {
         } : {}),
       });
       setUser(res.user);
-      router.push(ROLE_ROUTES[res.user.role] ?? '/practice');
+      router.push(ROLE_ROUTES[res.user.role] ?? '/practice/dashboard');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error
         ?? 'Registration failed. Please try again.';

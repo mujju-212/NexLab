@@ -10,6 +10,7 @@ const ROLE_ROUTES: Record<string, string> = {
   institution_admin: '/institution/dashboard',
   instructor:        '/instructor/dashboard',
   student:           '/student/dashboard',
+  free_user:         '/practice/dashboard',
 };
 
 export function useAuth() {
@@ -20,7 +21,7 @@ export function useAuth() {
     const data = await authService.login(dto);
     setUser(data.user);
     // Route based on actual backend role string
-    const route = ROLE_ROUTES[data.user.role] ?? '/student/dashboard';
+    const route = ROLE_ROUTES[data.user.role] ?? '/practice/dashboard';
     router.push(route);
   };
 
