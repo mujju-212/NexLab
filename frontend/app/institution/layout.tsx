@@ -33,7 +33,7 @@ export default function InstitutionLayout({ children }: { children: React.ReactN
     } else if (user?.role === 'student') {
       router.replace('/student/dashboard');
     } else if (user?.role === 'free_user') {
-      router.replace('/practice');
+      router.replace('/practice/dashboard');
     }
     // institution_admin is allowed through
   }, [hydrated, isAuthenticated, user, router]);

@@ -126,16 +126,68 @@ export interface AuditLog {
   detail: string;
   created_at: string;
   actor_id: string;
+  actor_name?: string;
+  actor_email?: string;
+  actor_role?: string;
+}
+
+export interface AuditLogPage {
+  logs: AuditLog[];
+  total: number;
+  limit: number;
+  offset: number;
+  days: number;
+  actions: string[];
+}
+
+export interface PlanUsage {
+  plan: string;
+  students: { used: number; limit: number; remaining: number; percent: number };
+  instructors: { used: number; limit: number | null };
+  subjects: number;
+}
+
+export interface NotificationPrefs {
+  email_sessions: boolean;
+  email_announcements: boolean;
+  email_user_activity: boolean;
+  email_weekly_digest: boolean;
+  push_sessions: boolean;
+  push_announcements: boolean;
+}
+
+export interface DashboardActivity {
+  days: Array<{ date: string; label: string; sessions: number; submissions: number; total: number }>;
+  total_week: number;
+  delta_pct: number;
+}
+
+export interface SystemHealth {
+  components: Array<{ label: string; status: string; ok: boolean }>;
+  all_ok: boolean;
+  maintenance: boolean;
+}
+
+export interface ScheduleSessionDto {
+  title: string;
+  section_id: string;
+  subject_id: string;
+  scheduled_at: string;
+  duration_minutes: number;
+  instructor_id?: string;
 }
 
 export interface SectionSubjectDetail {
   id: string;
   section_id: string;
+  section_name?: string | null;
   subject_id: string;
   subject_name: string;
   subject_code?: string;
   instructor_id: string;
   instructor_name: string;
+  co_instructor_id?: string | null;
+  co_instructor_name?: string | null;
 }
 
 export interface UserDetail extends InstitutionUser {
@@ -150,6 +202,21 @@ export interface UserDetail extends InstitutionUser {
     subject_code?: string;
     instructor_name?: string;
   }>;
+}
+
+export interface UserEnrolment {
+  section_id: string;
+  section_name: string;
+  batch_id: string;
+  batch_name?: string | null;
+  program?: string | null;
+  enrolled_at?: string | null;
+}
+
+export interface UserRecord {
+  user: InstitutionUser & { department_name?: string | null };
+  enrolments: UserEnrolment[];
+  teaching: SectionSubjectDetail[];
 }
 
 // ── Institution Service ────────────────────────────────────────────────────────
@@ -169,6 +236,11 @@ export const institutionService = {
   async listUsers(params?: { role?: string; department_id?: string; q?: string }): Promise<InstitutionUser[]> {
     const { data } = await apiClient.get<{ users: InstitutionUser[] }>('/institution/users', { params });
     return data.users;
+  },
+
+  async getUser(userId: string): Promise<UserRecord> {
+    const { data } = await apiClient.get<UserRecord>(`/institution/users/${userId}`);
+    return data;
   },
 
   async createUser(dto: CreateUserDto): Promise<InstitutionUser> {
@@ -345,19 +417,28 @@ export const institutionService = {
 
   // ── Audit Log ─────────────────────────────────────────────────────────────────
 
-  async getAuditLog(params?: { action?: string; days?: number; limit?: number }): Promise<AuditLog[]> {
-    const { data } = await apiClient.get<{ logs: AuditLog[] }>('/institution/audit-log', { params });
-    return data.logs;
+  async getAuditLog(params?: { action?: string; days?: number; limit?: number; offset?: number; q?: string }): Promise<AuditLogPage> {
+    const { data } = await apiClient.get<AuditLogPage>('/institution/audit-log', { params });
+    return data;
   },
 
   // ── Section Detail ────────────────────────────────────────────────────────────
 
   async getSectionStudents(sectionId: string): Promise<InstitutionUser[]> {
-    const { data } = await apiClient.get<{ users: InstitutionUser[] }>('/institution/users', {
-      params: { role: 'student' },
-    });
-    // Backend returns all students; filter client-side until dedicated endpoint exists
-    return data.users;
+    const { data } = await apiClient.get<{ students: InstitutionUser[] }>(
+      `/institution/sections/${sectionId}/students`,
+    );
+    return data.students ?? [];
+  },
+
+  async unenrollStudent(sectionId: string, studentId: string): Promise<{ message: string }> {
+    const { data } = await apiClient.delete(`/institution/sections/${sectionId}/students/${studentId}`);
+    return data;
+  },
+
+  async transferStudents(fromSectionId: string, dto: { to_section_id: string; student_ids: string[] }): Promise<{ moved: number; to_section_id: string }> {
+    const { data } = await apiClient.post(`/institution/sections/${fromSectionId}/transfer`, dto);
+    return data;
   },
 
   async getSectionSubjects(sectionId: string): Promise<SectionSubjectDetail[]> {
@@ -365,10 +446,95 @@ export const institutionService = {
     return (resp.data as any).section_subjects ?? [];
   },
 
+  async updateSectionSubject(ssId: string, dto: { instructor_id: string }): Promise<SectionSubjectDetail> {
+    const { data } = await apiClient.patch<{ section_subject: SectionSubjectDetail }>(`/institution/section-subjects/${ssId}`, dto);
+    return data.section_subject;
+  },
+
+  async deleteSectionSubject(ssId: string): Promise<{ message: string }> {
+    const { data } = await apiClient.delete(`/institution/section-subjects/${ssId}`);
+    return data;
+  },
+
   async getInstructorSessions(instructorId: string) {
     const resp = await apiClient.get('/institution/sessions', {
       params: { instructor_id: instructorId },
     }).catch(() => ({ data: { sessions: [] } }));
     return (resp.data as any).sessions ?? [];
+  },
+
+  // ── Sessions ──────────────────────────────────────────────────────────────────
+
+  async scheduleSession(dto: ScheduleSessionDto): Promise<any> {
+    const { data } = await apiClient.post('/institution/sessions', dto);
+    return data.session ?? data;
+  },
+
+  async updateSession(sessionId: string, dto: { status?: string; title?: string; scheduled_at?: string; duration_minutes?: number }): Promise<any> {
+    const { data } = await apiClient.patch(`/institution/sessions/${sessionId}`, dto);
+    return data.session ?? data;
+  },
+
+  async cancelSession(sessionId: string): Promise<any> {
+    return this.updateSession(sessionId, { status: 'cancelled' });
+  },
+
+  // ── Academic structure: update / delete ────────────────────────────────────
+
+  async updateAcademicYear(yearId: string, dto: { year_label?: string; is_active?: boolean }): Promise<AcademicYear> {
+    const { data } = await apiClient.patch<{ year: AcademicYear }>(`/institution/academic-years/${yearId}`, dto);
+    return data.year;
+  },
+
+  async deleteAcademicYear(yearId: string): Promise<{ message: string }> {
+    const { data } = await apiClient.delete(`/institution/academic-years/${yearId}`);
+    return data;
+  },
+
+  async updateBatch(batchId: string, dto: { name?: string; program?: string }): Promise<Batch> {
+    const { data } = await apiClient.patch<{ batch: Batch }>(`/institution/batches/${batchId}`, dto);
+    return data.batch;
+  },
+
+  async deleteBatch(batchId: string): Promise<{ message: string }> {
+    const { data } = await apiClient.delete(`/institution/batches/${batchId}`);
+    return data;
+  },
+
+  async updateSubject(subjectId: string, dto: { name?: string; code?: string; description?: string }): Promise<Subject> {
+    const { data } = await apiClient.patch<{ subject: Subject }>(`/institution/subjects/${subjectId}`, dto);
+    return data.subject;
+  },
+
+  async deleteSubject(subjectId: string): Promise<{ message: string }> {
+    const { data } = await apiClient.delete(`/institution/subjects/${subjectId}`);
+    return data;
+  },
+
+  // ── Plan usage / settings / health ──────────────────────────────────────────
+
+  async getPlanUsage(): Promise<PlanUsage> {
+    const { data } = await apiClient.get<PlanUsage>('/institution/plan-usage');
+    return data;
+  },
+
+  async getNotificationPrefs(): Promise<NotificationPrefs> {
+    const { data } = await apiClient.get<{ notifications: NotificationPrefs }>('/institution/settings/notifications');
+    return data.notifications;
+  },
+
+  async updateNotificationPrefs(prefs: Partial<NotificationPrefs>): Promise<NotificationPrefs> {
+    const { data } = await apiClient.patch<{ notifications: NotificationPrefs }>('/institution/settings/notifications', prefs);
+    return data.notifications;
+  },
+
+  async getDashboardActivity(): Promise<DashboardActivity> {
+    const { data } = await apiClient.get<DashboardActivity>('/institution/dashboard/activity');
+    return data;
+  },
+
+  async getSystemHealth(): Promise<SystemHealth> {
+    const { data } = await apiClient.get<SystemHealth>('/institution/system-health');
+    return data;
   },
 };

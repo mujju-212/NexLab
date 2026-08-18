@@ -3,8 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import InstitutionShell from '@/components/layout/InstitutionShell';
-import { institutionService, type InstitutionUser } from '@/services/institution.service';
-import { apiClient } from '@/services/api-client';
+import { institutionService, type InstitutionUser, type UserEnrolment, type SectionSubjectDetail } from '@/services/institution.service';
 import {
   User, Mail, Phone, Hash, GraduationCap, BookOpen,
   Radio, ToggleRight, ToggleLeft, LogOut, ArrowLeft,
@@ -16,8 +15,8 @@ export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router  = useRouter();
   const [user,     setUser]     = useState<InstitutionUser | null>(null);
-  const [sections, setSections] = useState<any[]>([]);
-  const [subjects, setSubjects] = useState<any[]>([]);
+  const [sections, setSections] = useState<UserEnrolment[]>([]);
+  const [teaching, setTeaching] = useState<SectionSubjectDetail[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
   const [loading,  setLoading]  = useState(true);
   const [toast,    setToast]    = useState<string | null>(null);
@@ -28,30 +27,18 @@ export default function UserDetailPage() {
     const load = async () => {
       setLoading(true);
       try {
-        // Load user from list (no single-user endpoint yet)
-        const all = await institutionService.listUsers();
-        const u = all.find(x => x.id === id);
-        if (!u) { router.push('/institution/users'); return; }
-        setUser(u);
+        // One call returns the profile, section enrolments, and teaching load.
+        const rec = await institutionService.getUser(id);
+        setUser(rec.user);
+        setSections(rec.enrolments ?? []);
+        setTeaching(rec.teaching ?? []);
 
-        // Load their section enrolments
-        const sAll = await institutionService.getSections();
-        // Load section_students for each section to find this user's sections
-        const mySections: any[] = [];
-        for (const sec of sAll) {
-          try {
-            const { data } = await apiClient.get(`/institution/sections/${sec.id}/students`).catch(() => ({ data: { students: [] } }));
-            const studs: any[] = (data as any)?.students ?? [];
-            if (studs.some((s: any) => s.id === id)) mySections.push(sec);
-          } catch {}
+        // Instructors also get their conducted-session history.
+        if (rec.user.role === 'instructor') {
+          try { setSessions(await institutionService.getInstructorSessions(id)); } catch { /* non-fatal */ }
         }
-        setSections(mySections);
-
-        // For instructors â€” get their sessions
-        if (u.role === 'instructor') {
-          const sess = await institutionService.getInstructorSessions(id);
-          setSessions(sess);
-        }
+      } catch {
+        router.push('/institution/users');
       } finally { setLoading(false); }
     };
     load();
@@ -76,8 +63,8 @@ export default function UserDetailPage() {
   const avatarBg = user?.role === 'student' ? '#9333ea' : '#10b981';
 
   if (loading) return (
-    <InstitutionShell activePage="Users" title="Loadingâ€¦">
-      <div className={styles.emptyState}>Loading profileâ€¦</div>
+    <InstitutionShell activePage="Users" title="Loading…">
+      <div className={styles.emptyState}>Loading profile…</div>
     </InstitutionShell>
   );
 
@@ -97,7 +84,7 @@ export default function UserDetailPage() {
 
       <div className={styles.profileGrid}>
 
-        {/* â”€â”€ Profile Card â”€â”€ */}
+        {/* ── Profile Card ── */}
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
 
           {/* Identity */}
@@ -117,8 +104,8 @@ export default function UserDetailPage() {
             <div style={{ display:'flex', flexDirection:'column', gap:10 }}>
               {[
                 { Icon: Mail,  label: 'Email',       value: user.email },
-                { Icon: Phone, label: 'Phone',       value: user.phone ?? 'â€”' },
-                { Icon: Hash,  label: 'Roll No.',    value: user.roll_number ?? 'â€”' },
+                { Icon: Phone, label: 'Phone',       value: user.phone ?? '—' },
+                { Icon: Hash,  label: 'Roll No.',    value: user.roll_number ?? '—' },
               ].map(({ Icon, label, value }) => (
                 <div key={label} style={{ display:'flex', alignItems:'center', gap:10, padding:'10px 12px', background:'rgba(245,243,255,0.5)', borderRadius:10 }}>
                   <Icon size={14} style={{ color:'#9333ea', flexShrink:0 }} />
@@ -151,7 +138,7 @@ export default function UserDetailPage() {
           </div>
         </div>
 
-        {/* â”€â”€ Right column â”€â”€ */}
+        {/* ── Right column ── */}
         <div style={{ display:'flex', flexDirection:'column', gap:16 }}>
 
           {/* Academic Enrollment (Students) */}
@@ -169,11 +156,45 @@ export default function UserDetailPage() {
                   Not enrolled in any section yet.
                 </div>
               ) : sections.map(sec => (
-                <div key={sec.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', background:'rgba(245,243,255,0.5)', borderRadius:12, marginBottom:8 }}>
+                <div key={sec.section_id} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', background:'rgba(245,243,255,0.5)', borderRadius:12, marginBottom:8 }}>
                   <BookOpen size={14} style={{ color:'#9333ea', flexShrink:0 }} />
                   <div>
-                    <p style={{ margin:0, fontSize:14, fontWeight:700, color:'#201b2e' }}>{sec.name}</p>
-                    <p style={{ margin:'2px 0 0', fontSize:12, color:'#9891a6' }}>Section ID: {sec.id.slice(0,8)}â€¦</p>
+                    <p style={{ margin:0, fontSize:14, fontWeight:700, color:'#201b2e' }}>{sec.section_name}</p>
+                    <p style={{ margin:'2px 0 0', fontSize:12, color:'#9891a6' }}>
+                      {sec.batch_name ?? 'Unassigned batch'}{sec.program ? ` · ${sec.program}` : ''}
+                    </p>
+                  </div>
+                </div>
+              ))}
+            </div>
+          )}
+
+          {/* Teaching assignments (Instructors) */}
+          {user.role === 'instructor' && (
+            <div style={{ background:'rgba(255,255,255,0.78)', borderRadius:18, border:'1px solid rgba(255,255,255,0.9)', padding:24, boxShadow:'0 2px 12px rgba(0,0,0,0.05)' }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:18 }}>
+                <div style={{ width:34, height:34, borderRadius:10, background:'#faf5ff', display:'flex', alignItems:'center', justifyContent:'center', color:'#9333ea' }}>
+                  <BookOpen size={17} strokeWidth={1.8} />
+                </div>
+                <div>
+                  <p style={{ margin:0, fontFamily:'Space Grotesk,sans-serif', fontSize:15, fontWeight:700, color:'#201b2e' }}>Teaching Assignments</p>
+                  <p style={{ margin:0, fontSize:12, color:'#9891a6' }}>{teaching.length} subject{teaching.length === 1 ? '' : 's'} assigned</p>
+                </div>
+              </div>
+              {teaching.length === 0 ? (
+                <div style={{ textAlign:'center', padding:'24px 16px', color:'#9891a6', fontSize:14 }}>
+                  No subjects assigned yet.
+                </div>
+              ) : teaching.map(t => (
+                <div key={t.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', background:'rgba(245,243,255,0.5)', borderRadius:12, marginBottom:8 }}>
+                  <BookOpen size={14} style={{ color:'#9333ea', flexShrink:0 }} />
+                  <div>
+                    <p style={{ margin:0, fontSize:14, fontWeight:700, color:'#201b2e' }}>
+                      {t.subject_name}{t.subject_code ? ` (${t.subject_code})` : ''}
+                    </p>
+                    <p style={{ margin:'2px 0 0', fontSize:12, color:'#9891a6' }}>
+                      Section {t.section_name ?? '—'}{t.co_instructor_name ? ` · with ${t.co_instructor_name}` : ''}
+                    </p>
                   </div>
                 </div>
               ))}

@@ -15,7 +15,7 @@ export const submissionService = {
   // ── Instructor: Grade a Student's Submission ─────────────────────────────────
   // POST /api/instructor/grades
   // Backend fields: manual_grade (0–100) + manual_feedback.
-  // auto_grade is derived server-side from the best Judge0 run.
+  // auto_grade is derived server-side from the best code run.
   async gradeSubmission(payload: {
     student_id: string;
     experiment_id: string;

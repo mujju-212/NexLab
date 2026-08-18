@@ -1,8 +1,10 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { useAuthStore } from '@/store/auth-store';
+import { apiClient } from '@/services/api-client';
+import { institutionService, type PlanUsage } from '@/services/institution.service';
 import {
   User, Bell, CreditCard, HelpCircle, Mail, Phone, Building2, Save,
   KeyRound, ChevronRight, Shield, Zap, Check, MessageSquare, AlertTriangle,
@@ -28,11 +30,23 @@ const FAQ_ITEMS = [
   { q: 'Who can I contact for support?', a: 'Use the Help section below or email support@nexlab.io for platform-level assistance.' },
 ];
 
+const PLAN_META: Record<string, { name: string; blurb: string; price: string; sub: string; rank: number }> = {
+  free:       { name: 'Institution Starter', blurb: 'For small to medium institutions getting started with virtual labs.', price: 'Free',    sub: 'during beta',  rank: 0 },
+  pro:        { name: 'Pro',                  blurb: 'For growing institutions that need more capacity and priority support.', price: '₹4,999', sub: 'per month',    rank: 1 },
+  enterprise: { name: 'Enterprise',           blurb: 'Unlimited scale with dedicated support and deployment options.',         price: 'Custom', sub: 'contact sales', rank: 2 },
+};
+
+const UPGRADE_PLANS = [
+  { key: 'pro',        name: 'Pro',        price: '₹4,999/mo', features: ['500 students', '50 instructors', 'Priority support', 'Custom environments', 'Advanced analytics'], highlight: true },
+  { key: 'enterprise', name: 'Enterprise', price: 'Custom',    features: ['Unlimited students', 'Unlimited instructors', 'Dedicated support', 'SSO / SAML', 'On-premise option'], highlight: false },
+];
+
 export default function SettingsPage() {
-  const { user } = useAuthStore();
+  const { user, setUser } = useAuthStore();
   const [tab, setTab] = useState<Tab>('profile');
   const [toast, setToast] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
+  const [notifSaving, setNotifSaving] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
 
   // Profile form
@@ -56,14 +70,30 @@ export default function SettingsPage() {
     push_announcements: false,
   });
 
+  // Plan & billing
+  const [plan, setPlan] = useState<PlanUsage | null>(null);
+
   const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+
+  // Load current profile (incl. phone), notification prefs, and plan usage on mount.
+  useEffect(() => {
+    (async () => {
+      try {
+        const { data } = await apiClient.get('/auth/me');
+        const u = data.user ?? {};
+        setProfileForm({ full_name: u.full_name ?? '', email: u.email ?? '', phone: u.phone ?? '' });
+      } catch { /* fall back to store values already set */ }
+      try { setNotifs(await institutionService.getNotificationPrefs()); } catch { /* keep defaults */ }
+      try { setPlan(await institutionService.getPlanUsage()); } catch { /* plan card hides live values */ }
+    })();
+  }, []);
 
   const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
-      const { apiClient } = await import('@/services/api-client');
-      await apiClient.patch('/auth/profile', profileForm);
+      const { data } = await apiClient.patch('/auth/profile', profileForm);
+      if (data?.user && user) setUser({ ...user, full_name: data.user.full_name, email: data.user.email });
       toast3('Profile updated successfully!');
     } catch (err: any) {
       toast3(err?.response?.data?.error ?? 'Failed to update profile.');
@@ -76,7 +106,6 @@ export default function SettingsPage() {
     if (pwForm.newPw.length < 8) { toast3('Min 8 characters required.'); return; }
     setSaving(true);
     try {
-      const { apiClient } = await import('@/services/api-client');
       await apiClient.post('/auth/change-password', {
         current_password: pwForm.current,
         new_password: pwForm.newPw,
@@ -88,8 +117,15 @@ export default function SettingsPage() {
     } finally { setSaving(false); }
   };
 
-  const saveNotifs = () => {
-    toast3('Notification preferences saved!');
+  const saveNotifs = async () => {
+    setNotifSaving(true);
+    try {
+      const updated = await institutionService.updateNotificationPrefs(notifs);
+      setNotifs(updated);
+      toast3('Notification preferences saved!');
+    } catch (err: any) {
+      toast3(err?.response?.data?.error ?? 'Failed to save preferences.');
+    } finally { setNotifSaving(false); }
   };
 
   const initials = user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? 'IA';
@@ -261,15 +297,24 @@ export default function SettingsPage() {
               </div>
             ))}
 
-            <button className={styles.btnPrimary} onClick={saveNotifs} style={{ marginTop: 24 }}>
-              <Save size={14} /> Save Preferences
+            <button className={styles.btnPrimary} onClick={saveNotifs} disabled={notifSaving} style={{ marginTop: 24 }}>
+              <Save size={14} /> {notifSaving ? 'Saving…' : 'Save Preferences'}
             </button>
           </div>
         </div>
       )}
 
       {/* ═══ PLAN & BILLING ═══ */}
-      {tab === 'plan' && (
+      {tab === 'plan' && (() => {
+        const pm = PLAN_META[plan?.plan ?? 'free'] ?? PLAN_META.free;
+        const fmtLimit = (n?: number | null) => (n == null || n >= 99999) ? 'Unlimited' : String(n);
+        const usageCards = [
+          { label: 'Students',    value: plan ? String(plan.students.used) : '—',    max: plan ? fmtLimit(plan.students.limit) : '' },
+          { label: 'Instructors', value: plan ? String(plan.instructors.used) : '—', max: plan ? fmtLimit(plan.instructors.limit) : '' },
+          { label: 'Subjects',    value: plan ? String(plan.subjects) : '—',         max: '' },
+        ];
+        const upgrades = UPGRADE_PLANS.filter(p => PLAN_META[p.key].rank > pm.rank);
+        return (
         <div style={{ maxWidth: 700 }}>
           {/* Current plan */}
           <div style={{ background: 'linear-gradient(135deg, rgba(124,58,237,0.06), rgba(124,58,237,0.02))', borderRadius: 18, border: '1.5px solid rgba(124,58,237,0.18)', padding: 28, marginBottom: 20 }}>
@@ -279,62 +324,68 @@ export default function SettingsPage() {
                   <Zap size={16} style={{ color: '#9333ea' }} />
                   <span style={{ fontSize: 12, fontWeight: 700, color: '#9333ea', textTransform: 'uppercase', letterSpacing: '.05em' }}>Current Plan</span>
                 </div>
-                <h3 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>Institution Starter</h3>
-                <p style={{ margin: 0, fontSize: 13, color: '#726a85' }}>For small to medium institutions getting started with virtual labs.</p>
+                <h3 style={{ margin: '0 0 4px', fontSize: 22, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>{pm.name}</h3>
+                <p style={{ margin: 0, fontSize: 13, color: '#726a85' }}>{pm.blurb}</p>
               </div>
               <div style={{ textAlign: 'right' }}>
-                <p style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>Free</p>
-                <p style={{ margin: 0, fontSize: 12, color: '#9891a6' }}>during beta</p>
+                <p style={{ margin: 0, fontSize: 28, fontWeight: 800, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>{pm.price}</p>
+                <p style={{ margin: 0, fontSize: 12, color: '#9891a6' }}>{pm.sub}</p>
               </div>
             </div>
 
             <div className={styles.grid3} style={{ marginTop: 20 }}>
-              {[
-                { label: 'Students', value: '100', max: '100' },
-                { label: 'Instructors', value: '10', max: '10' },
-                { label: 'Sessions/mo', value: 'Unlimited', max: '' },
-              ].map(u => (
+              {usageCards.map(u => (
                 <div key={u.label} style={{ background: 'rgba(255,255,255,0.7)', borderRadius: 12, padding: '12px 16px', border: '1px solid rgba(255,255,255,0.9)' }}>
                   <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#9891a6', textTransform: 'uppercase', letterSpacing: '.04em' }}>{u.label}</p>
-                  <p style={{ margin: '4px 0 0', fontSize: 18, fontWeight: 700, color: '#201b2e' }}>{u.value}{u.max ? <span style={{ fontSize: 13, color: '#9891a6', fontWeight: 500 }}>/{u.max}</span> : null}</p>
+                  <p style={{ margin: '4px 0 0', fontSize: 18, fontWeight: 700, color: '#201b2e' }}>
+                    {u.value}
+                    {u.max === 'Unlimited'
+                      ? <span style={{ fontSize: 13, color: '#9891a6', fontWeight: 500 }}> / ∞</span>
+                      : u.max ? <span style={{ fontSize: 13, color: '#9891a6', fontWeight: 500 }}>/{u.max}</span> : null}
+                  </p>
                 </div>
               ))}
             </div>
           </div>
 
-          {/* Upgrade options */}
-          <div className={styles.grid2} style={{ gap: 16 }}>
-            {[
-              { name: 'Pro', price: '₹4,999/mo', features: ['500 students', '50 instructors', 'Priority support', 'Custom environments', 'Advanced analytics'], highlight: true },
-              { name: 'Enterprise', price: 'Custom', features: ['Unlimited students', 'Unlimited instructors', 'Dedicated support', 'SSO / SAML', 'On-premise option'], highlight: false },
-            ].map(plan => (
-              <div key={plan.name} style={{
-                background: plan.highlight ? 'linear-gradient(135deg, #9333ea, #7c3aed)' : 'rgba(255,255,255,0.78)',
-                borderRadius: 18, padding: 24, border: plan.highlight ? 'none' : '1px solid rgba(255,255,255,0.9)',
-                color: plan.highlight ? '#fff' : '#201b2e',
-              }}>
-                <h4 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif" }}>{plan.name}</h4>
-                <p style={{ margin: '0 0 16px', fontSize: 24, fontWeight: 800 }}>{plan.price}</p>
-                <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  {plan.features.map(f => (
-                    <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500 }}>
-                      <Check size={14} style={{ color: plan.highlight ? '#e9d5ff' : '#22c55e', flexShrink: 0 }} /> {f}
-                    </li>
-                  ))}
-                </ul>
-                <button style={{
-                  width: '100%', padding: '10px 0', borderRadius: 10, border: plan.highlight ? '1.5px solid rgba(255,255,255,0.4)' : '1.5px solid #9333ea',
-                  background: plan.highlight ? 'rgba(255,255,255,0.15)' : 'transparent',
-                  color: plan.highlight ? '#fff' : '#9333ea', cursor: 'pointer',
-                  fontSize: 13.5, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif",
+          {/* Upgrade options — only plans above the current tier */}
+          {upgrades.length > 0 ? (
+            <div className={styles.grid2} style={{ gap: 16 }}>
+              {upgrades.map(plan => (
+                <div key={plan.name} style={{
+                  background: plan.highlight ? 'linear-gradient(135deg, #9333ea, #7c3aed)' : 'rgba(255,255,255,0.78)',
+                  borderRadius: 18, padding: 24, border: plan.highlight ? 'none' : '1px solid rgba(255,255,255,0.9)',
+                  color: plan.highlight ? '#fff' : '#201b2e',
                 }}>
-                  {plan.name === 'Enterprise' ? 'Contact Sales' : 'Upgrade to Pro'}
-                </button>
-              </div>
-            ))}
-          </div>
+                  <h4 style={{ margin: '0 0 4px', fontSize: 18, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif" }}>{plan.name}</h4>
+                  <p style={{ margin: '0 0 16px', fontSize: 24, fontWeight: 800 }}>{plan.price}</p>
+                  <ul style={{ listStyle: 'none', padding: 0, margin: '0 0 20px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {plan.features.map(f => (
+                      <li key={f} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13, fontWeight: 500 }}>
+                        <Check size={14} style={{ color: plan.highlight ? '#e9d5ff' : '#22c55e', flexShrink: 0 }} /> {f}
+                      </li>
+                    ))}
+                  </ul>
+                  <button style={{
+                    width: '100%', padding: '10px 0', borderRadius: 10, border: plan.highlight ? '1.5px solid rgba(255,255,255,0.4)' : '1.5px solid #9333ea',
+                    background: plan.highlight ? 'rgba(255,255,255,0.15)' : 'transparent',
+                    color: plan.highlight ? '#fff' : '#9333ea', cursor: 'pointer',
+                    fontSize: 13.5, fontWeight: 700, fontFamily: "'Space Grotesk', sans-serif",
+                  }}>
+                    {plan.name === 'Enterprise' ? 'Contact Sales' : `Upgrade to ${plan.name}`}
+                  </button>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <div style={{ background: 'rgba(255,255,255,0.78)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.9)', padding: 24, display: 'flex', alignItems: 'center', gap: 10 }}>
+              <Check size={18} style={{ color: '#22c55e' }} />
+              <span style={{ fontSize: 14, fontWeight: 600, color: '#201b2e' }}>You're on our highest tier — thank you for being an Enterprise partner.</span>
+            </div>
+          )}
         </div>
-      )}
+        );
+      })()}
 
       {/* ═══ HELP & FAQ ═══ */}
       {tab === 'help' && (

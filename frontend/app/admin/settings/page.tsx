@@ -16,7 +16,7 @@ interface FeatureFlag {
 
 const FLAG_META: FeatureFlag[] = [
   { key: 'ai_hints_enabled',        label: 'AI Hint System',          desc: 'Allow Groq-powered hints and feedback during lab sessions.' },
-  { key: 'code_execution_enabled',  label: 'Code Execution (Judge0)', desc: 'Allow students to run code against test cases in the sandbox.' },
+  { key: 'code_execution_enabled',  label: 'Code Execution (Docker)', desc: 'Allow students to run code against test cases in the sandbox.' },
   { key: 'allow_self_registration', label: 'Self Registration',       desc: 'Allow new institutions/users to register without approval.' },
 ];
 

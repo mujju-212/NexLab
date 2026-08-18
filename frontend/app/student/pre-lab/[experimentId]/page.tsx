@@ -5,8 +5,10 @@ import { useParams, useRouter } from 'next/navigation';
 import DOMPurify from 'dompurify';
 import StudentShell from '@/components/layout/StudentShell';
 import { studentService } from '@/services/student.service';
+import { executionService, type PlaygroundResult } from '@/services/execution.service';
+import { renderMarkdown } from '@/lib/markdown';
 import type { ContentModule, QuizQuestion } from '@/types';
-import { Loader2, ArrowLeft, CheckCircle2, FileText, PlayCircle, HelpCircle, BookOpen } from 'lucide-react';
+import { Loader2, ArrowLeft, CheckCircle2, FileText, PlayCircle, HelpCircle, BookOpen, Code2, Image as ImageIcon, FileCode, Play } from 'lucide-react';
 import styles from '../page.module.css';
 
 interface QuizResult {
@@ -20,6 +22,7 @@ interface QuizResult {
 
 const MODULE_ICONS: Record<string, typeof BookOpen> = {
   text: BookOpen, video: PlayCircle, pdf: FileText, quiz: HelpCircle,
+  markdown: FileCode, code: Code2, image: ImageIcon,
 };
 
 export default function PreLabDetailPage() {
@@ -39,6 +42,10 @@ export default function PreLabDetailPage() {
   const [answers, setAnswers] = useState<Record<string, string>>({});
   const [submitting, setSubmitting] = useState(false);
   const [result, setResult] = useState<QuizResult | null>(null);
+
+  // Runnable code-block state (keyed by module id)
+  const [codeRunning, setCodeRunning] = useState(false);
+  const [codeResult, setCodeResult] = useState<PlaygroundResult | null>(null);
 
   const loadModules = useCallback(async () => {
     try {
@@ -66,6 +73,33 @@ export default function PreLabDetailPage() {
     const raw = String((active.content_data as { html?: string })?.html || '<p>No content available.</p>');
     return DOMPurify.sanitize(raw);
   }, [active]);
+
+  // Render + sanitize markdown for the active markdown module
+  const safeMd = useMemo(() => {
+    if (!active || active.type !== 'markdown') return '';
+    return renderMarkdown(String((active.content_data as { md?: string })?.md || ''));
+  }, [active]);
+
+  // Reset any code-run output when switching modules
+  useEffect(() => { setCodeResult(null); setCodeRunning(false); }, [activeId]);
+
+  const runStudentCode = async () => {
+    if (!active) return;
+    const cd = (active.content_data as { code?: string; language?: string; stdin?: string }) || {};
+    if (!cd.code) return;
+    setCodeRunning(true);
+    setCodeResult(null);
+    try {
+      const res = await executionService.runPlayground({
+        code: String(cd.code), language: String(cd.language || 'python'), stdin: String(cd.stdin || ''),
+      });
+      setCodeResult(res);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Could not run code');
+    } finally {
+      setCodeRunning(false);
+    }
+  };
 
   const markComplete = async (mod: ContentModule) => {
     try {
@@ -164,7 +198,12 @@ export default function PreLabDetailPage() {
                     <Icon size={15} strokeWidth={2} /> {m.title}
                   </p>
                   <p className={styles.expMeta}>
-                    {m.type === 'text' ? 'Reading' : m.type === 'video' ? 'Video' : m.type === 'pdf' ? 'PDF Document' : `Quiz · pass ≥ ${m.quiz_config?.pass_threshold ?? 70}%`}
+                    {m.type === 'text' || m.type === 'markdown' ? 'Reading'
+                      : m.type === 'video' ? 'Video'
+                      : m.type === 'pdf' ? 'PDF Document'
+                      : m.type === 'code' ? 'Code Snippet'
+                      : m.type === 'image' ? 'Image'
+                      : `Quiz · pass ≥ ${m.quiz_config?.pass_threshold ?? 70}%`}
                     {m.type === 'quiz' && ` · ${m.quiz_config?.attempts_used ?? 0}/${m.quiz_config?.max_attempts ?? 3} attempts used`}
                     {m.type === 'quiz' && m.score != null && ` · last score ${Math.round(m.score)}%`}
                   </p>
@@ -193,6 +232,81 @@ export default function PreLabDetailPage() {
                   />
                   {!active.completed && (
                     <button className={styles.submitBtn} onClick={() => markComplete(active)}>✓ Mark as Read</button>
+                  )}
+                  {active.completed && <p className={styles.completedNote}><CheckCircle2 size={14} style={{ display: 'inline', verticalAlign: '-2px' }} /> Completed</p>}
+                </div>
+              </div>
+            )}
+
+            {active && active.type === 'markdown' && (
+              <div className={styles.tabContent}>
+                <div className={styles.theoryBox}>
+                  <h3 className={styles.theoryHeading}>📖 {active.title}</h3>
+                  <div className={styles.theoryText} dangerouslySetInnerHTML={{ __html: safeMd }} />
+                  {!active.completed && (
+                    <button className={styles.submitBtn} onClick={() => markComplete(active)}>✓ Mark as Read</button>
+                  )}
+                  {active.completed && <p className={styles.completedNote}><CheckCircle2 size={14} style={{ display: 'inline', verticalAlign: '-2px' }} /> Completed</p>}
+                </div>
+              </div>
+            )}
+
+            {active && active.type === 'code' && (
+              <div className={styles.tabContent}>
+                <div className={styles.theoryBox}>
+                  <h3 className={styles.theoryHeading}>💻 {active.title}</h3>
+                  <p className={styles.expMeta} style={{ marginBottom: 8 }}>
+                    {String((active.content_data as { language?: string })?.language || 'code')}
+                    {(active.content_data as { runnable?: boolean })?.runnable ? ' · runnable' : ' · read-only'}
+                  </p>
+                  <pre style={{ margin: 0, padding: '12px 14px', borderRadius: 8, background: '#0f0b17', color: '#e7e3f0', fontSize: 13, overflow: 'auto', whiteSpace: 'pre', lineHeight: 1.5 }}>
+                    {String((active.content_data as { code?: string })?.code || '')}
+                  </pre>
+
+                  {(active.content_data as { runnable?: boolean })?.runnable && (
+                    <div style={{ marginTop: 12 }}>
+                      <button className={styles.submitBtn} disabled={codeRunning} onClick={runStudentCode}>
+                        {codeRunning ? <><Loader2 size={14} className={styles.spinner} /> Running…</> : <><Play size={14} style={{ display: 'inline', verticalAlign: '-2px' }} /> Run Code</>}
+                      </button>
+                      {codeResult && (
+                        <div style={{ marginTop: 12, border: '1px solid #2a2440', borderRadius: 8, overflow: 'hidden' }}>
+                          <div style={{ display: 'flex', gap: 12, padding: '8px 12px', fontSize: 12, fontWeight: 600, background: codeResult.status_id === 3 ? '#ecfdf3' : '#fef2f2', color: codeResult.status_id === 3 ? '#067647' : '#b42318' }}>
+                            <span>{codeResult.status}</span>
+                            {codeResult.time_ms != null && <span style={{ fontWeight: 500 }}>{codeResult.time_ms} ms</span>}
+                          </div>
+                          <pre style={{ margin: 0, padding: '10px 12px', fontSize: 12.5, whiteSpace: 'pre-wrap', wordBreak: 'break-word', maxHeight: 240, overflow: 'auto', background: '#0f0b17', color: '#e7e3f0' }}>
+                            {codeResult.compile_output || codeResult.stderr || codeResult.stdout || '(no output)'}
+                          </pre>
+                        </div>
+                      )}
+                    </div>
+                  )}
+
+                  {!active.completed && (
+                    <button className={styles.submitBtn} style={{ marginTop: 12 }} onClick={() => markComplete(active)}>✓ Mark as Read</button>
+                  )}
+                  {active.completed && <p className={styles.completedNote}><CheckCircle2 size={14} style={{ display: 'inline', verticalAlign: '-2px' }} /> Completed</p>}
+                </div>
+              </div>
+            )}
+
+            {active && active.type === 'image' && (
+              <div className={styles.tabContent}>
+                <div className={styles.theoryBox}>
+                  <h3 className={styles.theoryHeading}>🖼️ {active.title}</h3>
+                  {(active.content_data as { url?: string })?.url ? (
+                    // eslint-disable-next-line @next/next/no-img-element
+                    <img src={String((active.content_data as { url?: string })?.url)}
+                      alt={String((active.content_data as { alt?: string })?.alt || active.title)}
+                      style={{ maxWidth: '100%', borderRadius: 8, border: '1px solid #e5e0ec' }} />
+                  ) : (
+                    <p className={styles.expMeta}>Image not available yet.</p>
+                  )}
+                  {(active.content_data as { caption?: string })?.caption && (
+                    <p className={styles.videoCaption}>{String((active.content_data as { caption?: string }).caption)}</p>
+                  )}
+                  {!active.completed && (
+                    <button className={styles.submitBtn} style={{ marginTop: 12 }} onClick={() => markComplete(active)}>✓ Mark as Viewed</button>
                   )}
                   {active.completed && <p className={styles.completedNote}><CheckCircle2 size={14} style={{ display: 'inline', verticalAlign: '-2px' }} /> Completed</p>}
                 </div>

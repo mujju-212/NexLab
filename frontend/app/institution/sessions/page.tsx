@@ -4,7 +4,7 @@ import { useEffect, useState } from 'react';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { apiClient } from '@/services/api-client';
 import { institutionService } from '@/services/institution.service';
-import { Radio, Calendar, Clock, Users, PlayCircle, StopCircle, History, Plus, X, Filter } from 'lucide-react';
+import { Radio, Calendar, PlayCircle, StopCircle, History, Plus } from 'lucide-react';
 import styles from '../dashboard/page.module.css';
 
 interface Session {
@@ -32,7 +32,6 @@ export default function SessionsPage() {
   const [toast, setToast] = useState<string | null>(null);
 
   // Schedule form
-  const [showSchedule, setShowSchedule] = useState(false);
   const [batches, setBatches] = useState<any[]>([]);
   const [sections, setSections] = useState<any[]>([]);
   const [subjects, setSubjects] = useState<any[]>([]);
@@ -47,7 +46,7 @@ export default function SessionsPage() {
   const loadLive = async () => {
     try {
       const { data } = await apiClient.get('/institution/sessions/live');
-      setLiveSessions(data.sessions ?? []);
+      setLiveSessions(data.live_sessions ?? []);
     } catch { setLiveSessions([]); }
   };
 
@@ -92,9 +91,9 @@ export default function SessionsPage() {
         duration_minutes: parseInt(scheduleForm.duration_minutes),
       });
       toast3('Session scheduled!');
-      setShowSchedule(false);
       setScheduleForm({ title: '', section_id: '', subject_id: '', instructor_id: '', scheduled_at: '', duration_minutes: '60' });
       loadHistory();
+      setTab('history');
     } catch (err: any) {
       toast3(err?.response?.data?.error ?? 'Failed to schedule session.');
     }
@@ -127,7 +126,7 @@ export default function SessionsPage() {
             </button>
           ))}
         </div>
-        <button className={styles.btnPrimary} onClick={() => setShowSchedule(true)}>
+        <button className={styles.btnPrimary} onClick={() => setTab('schedule')}>
           <Plus size={14} /> Schedule Session
         </button>
       </div>
@@ -280,34 +279,6 @@ export default function SessionsPage() {
               <button type="submit" className={styles.btnPrimary} style={{ width: '100%', justifyContent: 'center', marginTop: 8 }}>
                 <Calendar size={14} /> Schedule Session
               </button>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ SCHEDULE MODAL ═══ */}
-      {showSchedule && (
-        <div className={styles.modalOverlay} onClick={() => setShowSchedule(false)}>
-          <div className={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 className={styles.modalTitle}>Quick Schedule Session</h2>
-              <button onClick={() => setShowSchedule(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9891a6' }}><X size={20} /></button>
-            </div>
-            <form onSubmit={scheduleSession}>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Title *</label>
-                <input className={styles.input} placeholder="Session title" required
-                  value={scheduleForm.title} onChange={e => setScheduleForm(f => ({ ...f, title: e.target.value }))} />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Date & Time *</label>
-                <input className={styles.input} type="datetime-local" required
-                  value={scheduleForm.scheduled_at} onChange={e => setScheduleForm(f => ({ ...f, scheduled_at: e.target.value }))} />
-              </div>
-              <div className={styles.modalFooter}>
-                <button type="button" className={styles.btnSecondary} onClick={() => setShowSchedule(false)}>Cancel</button>
-                <button type="submit" className={styles.btnPrimary}>Schedule</button>
-              </div>
             </form>
           </div>
         </div>

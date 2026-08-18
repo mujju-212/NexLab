@@ -19,12 +19,15 @@ export default function AnalyticsPage() {
     const load = async () => {
       setLoading(true);
       try {
-        const [ov, ar, sc] = await Promise.all([
+        // allSettled so one failing endpoint doesn't blank the whole page.
+        const [ov, ar, sc] = await Promise.allSettled([
           institutionService.getAnalyticsOverview(),
           institutionService.getAtRiskStudents(),
           institutionService.getSectionComparison(),
         ]);
-        setOverview(ov); setAtRisk(ar); setSections(sc);
+        if (ov.status === 'fulfilled') setOverview(ov.value);
+        if (ar.status === 'fulfilled') setAtRisk(ar.value);
+        if (sc.status === 'fulfilled') setSections(sc.value);
       } finally { setLoading(false); }
     };
     load();

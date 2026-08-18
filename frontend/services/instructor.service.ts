@@ -92,7 +92,7 @@ export const instructorService = {
 
   // POST /api/instructor/experiments/<exp_id>/content
   async addContentModule(expId: string, payload: {
-    module_type: 'text' | 'video' | 'pdf' | 'quiz';
+    module_type: 'text' | 'video' | 'pdf' | 'quiz' | 'markdown' | 'code' | 'image';
     title: string;
     content_data?: Record<string, unknown>;
     display_order?: number;

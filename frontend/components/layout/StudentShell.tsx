@@ -6,7 +6,8 @@ import {
   LayoutDashboard, BookOpen, FlaskConical, LogIn,
   Terminal, Upload, TrendingUp, Trophy, Clock, RotateCcw,
   ShieldCheck, Settings, LogOut, Bell, Search, MessageCircle,
-  ChevronRight, User, Menu, GraduationCap, Code2
+  ChevronRight, User, Menu, GraduationCap, Code2,
+  Library, Zap, Flame, BookMarked
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './StudentShell.module.css';
@@ -14,12 +15,19 @@ import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
 
 const NAV_FAVORITES = [
-  { id: 'Dashboard Home',     Icon: LayoutDashboard, route: '/student/dashboard'  },
-  { id: 'My Subjects',        Icon: BookOpen,         route: '/student/subjects'   },
-  { id: 'Courses',            Icon: GraduationCap,    route: '/student/courses'    },
-  { id: 'Compiler',           Icon: Code2,            route: '/student/compiler'   },
-  { id: 'Pre-Lab',            Icon: FlaskConical,     route: '/student/pre-lab'    },
-  { id: 'Join Lab',           Icon: LogIn,            route: '/student/live-lab'   },
+  { id: 'Dashboard Home',     Icon: LayoutDashboard, route: '/student/dashboard'         },
+  { id: 'My Subjects',        Icon: BookOpen,         route: '/student/subjects'          },
+  { id: 'Courses',            Icon: GraduationCap,    route: '/student/courses'           },
+  { id: 'Practice Library',   Icon: Library,          route: '/student/practice'          },
+  { id: 'Compiler',           Icon: Code2,            route: '/student/compiler'          },
+  { id: 'Pre-Lab',            Icon: FlaskConical,     route: '/student/pre-lab'           },
+  { id: 'Join Lab',           Icon: LogIn,            route: '/student/live-lab'          },
+];
+const NAV_PRACTICE = [
+  { id: 'Practice Library',   Icon: Library,          route: '/student/practice'          },
+  { id: 'Study Plans',        Icon: BookMarked,        route: '/student/practice/study-plans' },
+  { id: 'Daily Challenge',    Icon: Flame,             route: '/student/practice/daily'   },
+  { id: 'Quest',              Icon: Zap,               route: '/student/practice/quest'   },
 ];
 const NAV_MAIN = [
   { id: 'Live Coding Lab',              Icon: Terminal,    route: '/student/live-lab'      },
@@ -83,6 +91,18 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
             <span className={styles.navLabel}>Favorites</span>
             <ul>
               {NAV_FAVORITES.map(({ id, Icon, route }) => (
+                <li key={id} className={navCls(id)} title={id} onClick={() => go(id, route)}>
+                  <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
+                  <span className={styles.label}>{id}</span>
+                </li>
+              ))}
+            </ul>
+          </nav>
+
+          <nav className={styles.navGroup}>
+            <span className={styles.navLabel}>Practice</span>
+            <ul>
+              {NAV_PRACTICE.map(({ id, Icon, route }) => (
                 <li key={id} className={navCls(id)} title={id} onClick={() => go(id, route)}>
                   <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
                   <span className={styles.label}>{id}</span>

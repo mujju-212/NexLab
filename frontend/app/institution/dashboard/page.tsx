@@ -3,11 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import InstitutionShell from '@/components/layout/InstitutionShell';
-import { institutionService, type InstitutionDashboard } from '@/services/institution.service';
+import { institutionService, type InstitutionDashboard, type DashboardActivity, type SystemHealth } from '@/services/institution.service';
 import { useAuthStore } from '@/store/auth-store';
 import {
   Users, GraduationCap, BookOpen, Radio, Calendar, RefreshCw, Plus, ArrowRight,
-  TrendingUp, Clock, Activity, AlertTriangle, CheckCircle
+  TrendingUp, TrendingDown, Clock, Activity, AlertTriangle, CheckCircle
 } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -15,6 +15,8 @@ export default function InstitutionDashboardPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const [data, setData] = useState<InstitutionDashboard | null>(null);
+  const [activity, setActivity] = useState<DashboardActivity | null>(null);
+  const [health, setHealth] = useState<SystemHealth | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -27,6 +29,9 @@ export default function InstitutionDashboardPage() {
     } catch {
       setError('Could not load dashboard.');
     } finally { setLoading(false); }
+    // Secondary widgets — independent, never block the main dashboard.
+    try { setActivity(await institutionService.getDashboardActivity()); } catch { /* chart shows fallback */ }
+    try { setHealth(await institutionService.getSystemHealth()); } catch { /* health shows fallback */ }
   };
 
   useEffect(() => { load(); }, []);
@@ -43,10 +48,11 @@ export default function InstitutionDashboardPage() {
     { label: 'Live Sessions', value: data?.stats.live_sessions, Icon: Radio,         color: '#ef4444', bg: '#fef2f2', href: '/institution/sessions' },
   ];
 
-  // Mock weekly activity data for the chart
-  const weekDays = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-  const weeklyActivity = [12, 18, 8, 22, 15, 5, 3];
-  const maxActivity = Math.max(...weeklyActivity, 1);
+  // Weekly activity — real last-7-days data from the backend.
+  const activityDays = activity?.days ?? [];
+  const maxActivity = Math.max(...activityDays.map(d => d.total), 1);
+  const deltaPct = activity?.delta_pct ?? 0;
+  const deltaUp = deltaPct >= 0;
 
   return (
     <InstitutionShell activePage="Dashboard"
@@ -80,23 +86,30 @@ export default function InstitutionDashboardPage() {
               <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>Weekly Activity</h3>
               <p style={{ margin: '2px 0 0', fontSize: 12, color: '#9891a6' }}>Sessions & submissions this week</p>
             </div>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: '#22c55e' }}>
-              <TrendingUp size={14} /> +12% vs last week
-            </div>
+            {activity && (
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: deltaUp ? '#22c55e' : '#ef4444' }}>
+                {deltaUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />} {deltaUp ? '+' : ''}{deltaPct}% vs last week
+              </div>
+            )}
           </div>
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 140 }}>
-            {weekDays.map((day, i) => (
-              <div key={day} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#9333ea' }}>{weeklyActivity[i]}</span>
+            {activityDays.length === 0 ? (
+              <div style={{ width: '100%', textAlign: 'center', color: '#9891a6', fontSize: 13, alignSelf: 'center' }}>
+                {loading ? 'Loading…' : 'No activity in the last 7 days.'}
+              </div>
+            ) : activityDays.map((d, i) => (
+              <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}
+                title={`${d.sessions} session${d.sessions === 1 ? '' : 's'}, ${d.submissions} submission${d.submissions === 1 ? '' : 's'}`}>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#9333ea' }}>{d.total}</span>
                 <div style={{
                   width: '100%', borderRadius: 6, transition: 'height .3s ease',
-                  height: `${(weeklyActivity[i] / maxActivity) * 100}px`,
-                  background: i === new Date().getDay() - 1
+                  height: `${(d.total / maxActivity) * 100}px`,
+                  background: i === activityDays.length - 1
                     ? 'linear-gradient(180deg, #9333ea, #7c3aed)'
                     : 'linear-gradient(180deg, #e9d5ff, #d8b4fe)',
                   minHeight: 8,
                 }} />
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#9891a6' }}>{day}</span>
+                <span style={{ fontSize: 11, fontWeight: 600, color: '#9891a6' }}>{d.label}</span>
               </div>
             ))}
           </div>
@@ -104,24 +117,38 @@ export default function InstitutionDashboardPage() {
 
         {/* System health card */}
         <div style={{ background: 'rgba(255,255,255,0.78)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.9)', padding: '24px 28px', boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
-          <h3 style={{ margin: '0 0 18px', fontSize: 15, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>System Health</h3>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
+            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>System Health</h3>
+            {health?.maintenance && (
+              <span style={{ fontSize: 11, fontWeight: 700, color: '#d97706', background: 'rgba(245,158,11,0.12)', padding: '3px 10px', borderRadius: 20 }}>
+                Maintenance mode
+              </span>
+            )}
+          </div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {[
-              { label: 'API Server', status: 'Operational', ok: true },
-              { label: 'Code Execution', status: 'Operational', ok: true },
-              { label: 'Database', status: 'Operational', ok: true },
-              { label: 'AI Services', status: 'Degraded', ok: false },
-            ].map(s => (
-              <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: s.ok ? 'rgba(34,197,94,0.04)' : 'rgba(245,158,11,0.04)', borderRadius: 10, border: `1px solid ${s.ok ? 'rgba(34,197,94,0.12)' : 'rgba(245,158,11,0.15)'}` }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                  {s.ok
-                    ? <CheckCircle size={15} style={{ color: '#22c55e' }} />
-                    : <AlertTriangle size={15} style={{ color: '#f59e0b' }} />}
-                  <span style={{ fontSize: 13, fontWeight: 600, color: '#201b2e' }}>{s.label}</span>
-                </div>
-                <span style={{ fontSize: 12, fontWeight: 600, color: s.ok ? '#16a34a' : '#d97706' }}>{s.status}</span>
+            {(health?.components ?? []).length === 0 ? (
+              <div style={{ color: '#9891a6', fontSize: 13, padding: '8px 0' }}>
+                {loading ? 'Checking services…' : 'Health data unavailable.'}
               </div>
-            ))}
+            ) : health!.components.map(s => {
+              const down = !s.ok && s.status === 'down';
+              const palette = s.ok
+                ? { bg: 'rgba(34,197,94,0.04)',  border: 'rgba(34,197,94,0.12)', icon: '#22c55e', text: '#16a34a' }
+                : down
+                ? { bg: 'rgba(239,68,68,0.04)',  border: 'rgba(239,68,68,0.15)', icon: '#ef4444', text: '#dc2626' }
+                : { bg: 'rgba(245,158,11,0.04)', border: 'rgba(245,158,11,0.15)', icon: '#f59e0b', text: '#d97706' };
+              return (
+                <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: palette.bg, borderRadius: 10, border: `1px solid ${palette.border}` }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    {s.ok
+                      ? <CheckCircle size={15} style={{ color: palette.icon }} />
+                      : <AlertTriangle size={15} style={{ color: palette.icon }} />}
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#201b2e' }}>{s.label}</span>
+                  </div>
+                  <span style={{ fontSize: 12, fontWeight: 600, color: palette.text, textTransform: 'capitalize' }}>{s.status}</span>
+                </div>
+              );
+            })}
           </div>
         </div>
       </div>

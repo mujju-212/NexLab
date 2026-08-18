@@ -56,12 +56,12 @@ export default function MonitoringPage() {
       desc: 'Primary data store — institutions, users, sessions, submissions.',
     },
     {
-      id: 'judge0',
+      id: 'execution',
       Icon: Code2,
-      label: 'Judge0 Execution Engine',
-      status: health?.judge0,
+      label: 'Docker Execution Engine',
+      status: health?.execution,
       bg: 'linear-gradient(135deg,#22c55e,#16a34a)',
-      desc: 'Sandboxed code compilation & test execution service.',
+      desc: 'Docker sandbox — code compilation & test execution.',
     },
     {
       id: 'groq',

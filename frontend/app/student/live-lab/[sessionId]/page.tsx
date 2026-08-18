@@ -55,7 +55,7 @@ export default function LiveLabRoomPage() {
       .finally(() => setGateLoading(false));
   }, [sessionId]);
 
-  // ── Real code execution via Judge0 ─────────────────────────────────────────
+  // ── Real code execution via Docker sandbox ─────────────────────────────────
   const runCode = async () => {
     if (!gate) return;
     setRunning(true);
@@ -73,7 +73,7 @@ export default function LiveLabRoomPage() {
         res.compile_output ? `[Compile]\n${res.compile_output}` : '',
         res.stdout || '',
         res.stderr ? `[Error]\n${res.stderr}` : '',
-        `\n>>> Status: ${res.status} | Time: ${res.time}s | Memory: ${res.memory} KB`,
+        `\n>>> Status: ${res.status} | Time: ${res.time_ms ?? '—'}ms | Memory: ${res.memory_kb ?? '—'} KB`,
       ].filter(Boolean);
       setOutput(parts.join('\n'));
     } catch (e) {
@@ -222,7 +222,7 @@ export default function LiveLabRoomPage() {
                   {running ? (
                     <div className={styles.outputRunning}>
                       <div className={styles.outputSpinner} />
-                      <span>Executing in Judge0 sandbox…</span>
+                      <span>Executing in Docker sandbox…</span>
                     </div>
                   ) : output ? (
                     <pre className={styles.outputText}>{output}</pre>

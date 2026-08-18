@@ -147,7 +147,7 @@ export default function AdminDashboard() {
           {[
             { label: 'Manage Institutions', desc: 'Register, suspend, or configure institutions', route: '/admin/institutions', color: '#9333ea' },
             { label: 'Platform Analytics',  desc: 'Cross-institution usage and trends',           route: '/admin/analytics',    color: '#9333ea' },
-            { label: 'System Health',       desc: 'Judge0, DB, and Groq API status',              route: '/admin/monitoring',   color: '#22c55e' },
+            { label: 'System Health',       desc: 'Execution, DB, and Groq API status',            route: '/admin/monitoring',   color: '#22c55e' },
             { label: 'Platform Config',     desc: 'Feature flags and global settings',            route: '/admin/settings',     color: '#f59e0b' },
           ].map(a => (
             <div key={a.label} className={styles.actCard} onClick={() => router.push(a.route)} style={{ cursor:'pointer' }}>

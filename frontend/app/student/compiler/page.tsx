@@ -1,8 +1,8 @@
 'use client';
 
 /**
- * Student Compiler — a free-practice playground that runs real code through
- * Judge0 and shows the whole verdict, not just stdout.
+ * Student Compiler — a free-practice playground that runs real code in a
+ * Docker sandbox and shows the whole verdict, not just stdout.
  *
  * Nothing here is graded: it posts to /execution/playground (no experiment, no
  * attempt row) and /ai/code-assist (no HintLog, no deduction).
@@ -83,9 +83,15 @@ export default function StudentCompilerPage() {
   const [question, setQuestion] = useState('');
 
   const [copied, setCopied] = useState(false);
-  // ── Browser preview (HTML/CSS) ─────────────────────────────────────────────
+  // ── Typewriter animation state ─────────────────────────────────────────
+  const [typedLines, setTypedLines] = useState<string[]>([]);
+  const [typingDone, setTypingDone] = useState(false);
+  const [phase, setPhase]   = useState<'idle'|'compiling'|'running'|'done'|'failed'>('idle');
+  const typeTimerRef = useRef<number | null>(null);
+  const termBodyRef  = useRef<HTMLDivElement | null>(null);
+  // ── Browser preview (HTML/CSS) ──────────────────────────────────────────
   const [previewSrc, setPreviewSrc] = useState<string | null>(null);
-  const previewTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const previewTimerRef = useRef<number | null>(null);
 
   const lang = useMemo(
     () => languages.find((l) => l.id === langId) ?? null,
@@ -135,7 +141,7 @@ export default function StudentCompilerPage() {
   useEffect(() => {
     if (!isBrowserLang) { setPreviewSrc(null); return; }
     if (previewTimerRef.current) clearTimeout(previewTimerRef.current);
-    previewTimerRef.current = setTimeout(() => {
+    previewTimerRef.current = window.setTimeout(() => {
       if (langId === 'css') {
         // Wrap CSS in a minimal demo page
         setPreviewSrc(`<!DOCTYPE html><html><head><style>${code}</style></head><body>
@@ -177,6 +183,54 @@ export default function StudentCompilerPage() {
       .trim();
   }, [result]);
 
+  // ── Typewriter animation when a new result arrives ────────────────────────────
+  useEffect(() => {
+    if (!result) {
+      setTypedLines([]);
+      setTypingDone(false);
+      if (phase !== 'idle') setPhase('idle');
+      return;
+    }
+    // Build the full list of output lines to animate
+    const allLines: string[] = [];
+    if (result.compile_output?.trim()) {
+      allLines.push(...result.compile_output.trimEnd().split('\n').map(l => `\x01${l}`)); // \x01 = compiler stream marker
+    }
+    if (result.stdout?.trim()) {
+      allLines.push(...result.stdout.trimEnd().split('\n'));
+    }
+    if (result.stderr?.trim()) {
+      allLines.push(...result.stderr.trimEnd().split('\n').map(l => `\x02${l}`)); // \x02 = stderr marker
+    }
+    if (result.message?.trim() && !result.stdout?.trim() && !result.stderr?.trim()) {
+      allLines.push(`\x03${result.message.trim()}`); // \x03 = runner msg marker
+    }
+    if (allLines.length === 0) allLines.push('\x04'); // empty output marker
+
+    // Defensive: ensure every entry is a string (split can't produce undefined
+    // but JS APIs can if output contains \r — strip \r to be safe)
+    const safeLines = allLines
+      .map(l => (typeof l === 'string' ? l.replace(/\r/g, '') : ''))
+      .filter((l): l is string => l !== undefined);
+
+    setTypedLines([]);
+    setTypingDone(false);
+    setPhase(result.success ? 'done' : 'failed');
+
+    let i = 0;
+    function tick() {
+      if (i >= safeLines.length) { setTypingDone(true); return; }
+      setTypedLines(prev => [...prev, safeLines[i]]);
+      i++;
+      window.setTimeout(() => {
+        if (termBodyRef.current) termBodyRef.current.scrollTop = termBodyRef.current.scrollHeight;
+      }, 20);
+      typeTimerRef.current = window.setTimeout(tick, i === 1 ? 60 : 22);
+    }
+    typeTimerRef.current = window.setTimeout(tick, 80); // initial 80ms delay
+    return () => { if (typeTimerRef.current) clearTimeout(typeTimerRef.current); };
+  }, [result]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const run = useCallback(async () => {
     if (!lang || running) return;
     // Browser languages render client-side — no backend call
@@ -200,6 +254,20 @@ export default function StudentCompilerPage() {
       setRunning(false);
     }
   }, [code, isBrowserLang, lang, running, stdin]);
+
+  /** Build the command string echoed in the terminal header */
+  const terminalCmd = useMemo(() => {
+    if (!lang) return '';
+    const cmds: Record<string, string> = {
+      python: 'python main.py', javascript: 'node main.js',
+      typescript: 'tsc main.ts && node main.js', c: 'gcc main.c -o prog && ./prog',
+      cpp: 'g++ main.cpp -o prog && ./prog', java: 'javac Main.java && java Main',
+      kotlin: 'kotlinc Main.kt -d app.jar && java -jar app.jar',
+      csharp: 'dotnet run Main.cs', r: 'Rscript main.R',
+      bash: 'bash main.sh', sql: 'sqlite3 :memory: < script.sql',
+    };
+    return cmds[lang.id] ?? lang.filename;
+  }, [lang]);
 
   const askAssist = useCallback(async (mode: CodeAssistMode) => {
     if (!lang || assistBusy) return;
@@ -320,11 +388,6 @@ export default function StudentCompilerPage() {
 
         <div className={styles.toolSpacer} />
 
-        <button className={styles.toolBtn} onClick={() => setShowStdin((p) => !p)}
-          title="Standard input passed to the program">
-          <Terminal size={15} /> {showStdin ? 'Hide input' : 'Input'}
-          {stdin.trim() && <span className={styles.dot} />}
-        </button>
         <button className={styles.toolBtn} onClick={copyCode} title="Copy code">
           {copied ? <Check size={15} /> : <Copy size={15} />} {copied ? 'Copied' : 'Copy'}
         </button>
@@ -418,88 +481,185 @@ export default function StudentCompilerPage() {
             </div>
           )}
 
-          {/* ── Console (compiled languages only) ── */}
+          {/* ── Terminal panel (compiled languages only) ── */}
           {!isBrowserLang && (
-          <div className={styles.consoleCard}>
-            <div className={styles.cardHead}>
-              <span className={styles.cardTitle}><Terminal size={14} /> Console</span>
-              {result && (
-                <button className={styles.linkBtn} onClick={() => { setResult(null); setRunError(''); }}>
-                  <Eraser size={13} /> Clear
+          <div className={styles.terminalCard}>
+
+            {/* Traffic-light header */}
+            <div className={styles.termHead}>
+              <div className={styles.termDots}>
+                <div className={`${styles.termDot} ${styles.termDotRed}`} />
+                <div className={`${styles.termDot} ${styles.termDotYel}`} />
+                <div className={`${styles.termDot} ${styles.termDotGrn}`} />
+              </div>
+              <span className={styles.termTitle}>Terminal</span>
+              {lang && <span className={styles.termBadge}>{lang.id.toUpperCase()}</span>}
+              {(result || runError) && (
+                <button className={styles.termClearBtn}
+                  onClick={() => { setResult(null); setRunError(''); setTypedLines([]); setTypingDone(false); setPhase('idle'); }}>
+                  clear
                 </button>
               )}
             </div>
 
-            <div className={styles.consoleBody}>
-              {runError && (
-                <div className={`${styles.verdict} ${styles.vFail}`}>
-                  <AlertTriangle size={15} /> {runError}
+            {/* Phase progress bar — shown while running or after */}
+            {(running || result) && (
+              <div className={styles.phaseBar}>
+                {/* compile phase — only for languages with a compile step */}
+                {lang && ['c','cpp','java','kotlin','typescript','csharp'].includes(lang.id) && (
+                  <>
+                    <div className={`${styles.phaseStep} ${
+                      running ? styles.active
+                      : result?.is_compile_error ? styles.failed
+                      : styles.done
+                    }`}>
+                      <div className={styles.phaseDot} />
+                      Compile
+                      {result?.compile_ms != null && result.compile_ms > 0 && (
+                        <span style={{fontSize:'9px',opacity:.6}}>{result.compile_ms}ms</span>
+                      )}
+                    </div>
+                    <span className={styles.phaseSep}>›</span>
+                  </>
+                )}
+                {/* run phase */}
+                <div className={`${styles.phaseStep} ${
+                  running ? (result?.is_compile_error ? styles.failed : styles.active)
+                  : result?.success ? styles.done
+                  : styles.failed
+                }`}>
+                  <div className={styles.phaseDot} />
+                  Run
+                  {result?.time_ms != null && (
+                    <span style={{fontSize:'9px',opacity:.6}}>{result.time_ms}ms</span>
+                  )}
                 </div>
-              )}
+                {result?.time_ms != null && (
+                  <span className={styles.phaseTime}>
+                    total {(result.compile_ms ?? 0) + (result.time_ms ?? 0)}ms
+                  </span>
+                )}
+              </div>
+            )}
 
-              {verdict && (
-                <div className={`${styles.verdict} ${verdict.tone}`}>
-                  <verdict.Icon size={15} /> {verdict.text}
-                  {result?.label && <span className={styles.verdictLang}>{result.label}</span>}
-                </div>
-              )}
+            {/* Output area */}
+            <div className={styles.termBody} ref={termBodyRef}>
 
-              {result?.compile_output?.trim() && (
-                <pre className={`${styles.stream} ${styles.streamErr}`}>
-                  <span className={styles.streamLabel}>compiler</span>
-                  {result.compile_output}
-                </pre>
-              )}
-
-              {result?.stdout?.trim() && (
-                <pre className={styles.stream}>
-                  <span className={styles.streamLabel}>stdout</span>
-                  {result.stdout}
-                </pre>
-              )}
-
-              {result?.stderr?.trim() && (
-                <pre className={`${styles.stream} ${styles.streamErr}`}>
-                  <span className={styles.streamLabel}>stderr</span>
-                  {result.stderr}
-                </pre>
-              )}
-
-              {result?.message?.trim() && (
-                <pre className={`${styles.stream} ${styles.streamWarn}`}>
-                  <span className={styles.streamLabel}>runner</span>
-                  {result.message}
-                </pre>
-              )}
-
-              {result && !hasOutput && (
-                <p className={styles.emptyLine}>Program produced no output.</p>
-              )}
-
+              {/* Idle state */}
               {!result && !runError && !running && (
-                <p className={styles.consoleEmpty}>
-                  <Terminal size={22} />
-                  Press <strong>Run</strong> to execute your code. Output, errors and
-                  compiler diagnostics all land here.
-                </p>
+                <div className={styles.termIdle}>
+                  <span className={styles.termIdleIcon}>&#9654;</span>
+                  Press <strong style={{color:'#a855f7'}}>Run</strong> to execute — output appears here.
+                </div>
               )}
 
+              {/* Running spinner */}
               {running && (
-                <p className={styles.consoleEmpty}>
-                  <Loader2 size={22} className={styles.spin} />
-                  Queued on the runner — this can take a few seconds on first run.
-                </p>
+                <div className={styles.termIdle}>
+                  <Loader2 size={22} className={styles.spin} style={{color:'#a855f7'}} />
+                  <span>Queued on the Docker runner…</span>
+                </div>
+              )}
+
+              {/* Error banner */}
+              {runError && !running && (
+                <div className={`${styles.termVerdict} ${styles.tvFail}`}>
+                  <AlertTriangle size={14} /> {runError}
+                </div>
+              )}
+
+              {/* Command echo */}
+              {result && !running && terminalCmd && (
+                <div className={styles.termCmd}>
+                  <span className={styles.termPromptChar}>$</span>{terminalCmd}
+                </div>
+              )}
+
+              {/* Typewriter lines */}
+              {typedLines.map((line, i) => {
+                // Defensive guard — all entries should be strings after safeLines filter
+                if (typeof line !== 'string') return null;
+                const isComp  = line.startsWith('\x01');
+                const isErr   = line.startsWith('\x02');
+                const isWarn  = line.startsWith('\x03');
+                const isEmpty = line === '\x04';
+                const text    = isComp || isErr || isWarn ? line.slice(1) : line;
+                if (isEmpty) return (
+                  <span key={i} className={styles.termLine}
+                    style={{color:'rgba(196,181,253,.3)',fontStyle:'italic'}}>
+                    (no output)
+                  </span>
+                );
+                return (
+                  <span key={i} className={`${styles.termLine} ${
+                    isComp ? styles.termLineComp
+                    : isErr ? styles.termLineErr
+                    : isWarn ? styles.termLineWarn
+                    : ''
+                  }`}>
+                    {text || '\u00a0'}
+                  </span>
+                );
+              })}
+
+              {/* Blinking cursor while typing */}
+              {result && !typingDone && <span className={styles.termCursor} />}
+
+              {/* Verdict + truncation after typing finishes */}
+              {result && typingDone && verdict && (
+                <div className={`${styles.termVerdict} ${
+                  result.success ? styles.tvPass
+                  : result.is_compile_error || result.is_runtime_error ? styles.tvFail
+                  : styles.tvWarn
+                }`}>
+                  <verdict.Icon size={13} />
+                  {verdict.text}
+                  <span className={styles.termVerdictSub}>
+                    🐳 docker
+                  </span>
+                </div>
+              )}
+
+              {result?.truncated && typingDone && (
+                <div className={styles.termTrunc}>⚠ Output truncated at 256 KB</div>
               )}
             </div>
 
-            {result && (
-              <div className={styles.consoleFoot}>
-                <span><Clock size={13} /> {result.time_ms} ms</span>
-                <span><Cpu size={13} /> {(result.memory_kb / 1024).toFixed(1)} MB</span>
+            {/* Metrics footer */}
+            {result && typingDone && (
+              <div className={styles.termFoot}>
+                <span><Clock size={12} />
+                  {result.time_ms != null ? `${result.time_ms} ms` : '—'}
+                </span>
+                <span><Cpu size={12} />
+                  {result.memory_kb != null ? `${(result.memory_kb/1024).toFixed(1)} MB` : '—'}
+                </span>
                 <span>exit {result.exit_code ?? '—'}</span>
-                {result.exit_signal ? <span>signal {result.exit_signal}</span> : null}
+                {result.compile_ms != null && result.compile_ms > 0 && (
+                  <span>🔨 compile {result.compile_ms}ms</span>
+                )}
               </div>
             )}
+
+            {/* Stdin input row — always visible, hidden for browser langs */}
+            <div className={styles.termStdinRow}>
+              <span className={styles.termStdinPrompt}>stdin ›</span>
+              <textarea
+                className={styles.termStdinInput}
+                value={stdin}
+                onChange={(e) => setStdin(e.target.value)}
+                placeholder="Type input here (one value per line)…"
+                spellCheck={false}
+                rows={1}
+                aria-label="Standard input"
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter' && (e.ctrlKey || e.metaKey)) {
+                    e.preventDefault();
+                    run();
+                  }
+                }}
+              />
+            </div>
           </div>
           )}
 

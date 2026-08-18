@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import InstitutionShell from '@/components/layout/InstitutionShell';
-import { institutionService, type AcademicYear, type Batch, type Section, type Subject, type InstitutionUser, type Department } from '@/services/institution.service';
+import { institutionService, type AcademicYear, type Batch, type Section, type Subject, type InstitutionUser, type Department, type SectionSubjectDetail } from '@/services/institution.service';
 import { ChevronRight, Plus, X, ChevronDown, Users, BookOpen, UserCheck, GraduationCap, Edit3, Trash2, Building2 } from 'lucide-react';
 import styles from '../dashboard/page.module.css';
 
@@ -32,6 +32,8 @@ export default function AcademicPage() {
   const [selectedStudents, setSelectedStudents] = useState<string[]>([]);
   const [enrolling, setEnrolling] = useState(false);
   const [assigning, setAssigning] = useState(false);
+  const [sectionSubjects, setSectionSubjects] = useState<SectionSubjectDetail[]>([]);
+  const [ssLoading, setSsLoading] = useState(false);
 
   // Modals
   const [showYearModal,    setShowYearModal]    = useState(false);
@@ -88,9 +90,28 @@ export default function AcademicPage() {
       setStudents(studs.filter(u => u.is_active));
       setInstructors(insts.filter(u => u.is_active));
       setDepartments(depts);
+    } catch {
+      toast3('Could not load academic data. Please retry.');
     } finally { setLoading(false); }
   };
   useEffect(() => { loadAll(); }, []);
+
+  // Load subjects already assigned to the picked section (race-guarded on quick switches).
+  useEffect(() => {
+    if (!selectedSection) { setSectionSubjects([]); return; }
+    let active = true;
+    setSsLoading(true);
+    institutionService.getSectionSubjects(selectedSection)
+      .then(list => { if (active) setSectionSubjects(list); })
+      .catch(() => { if (active) setSectionSubjects([]); })
+      .finally(() => { if (active) setSsLoading(false); });
+    return () => { active = false; };
+  }, [selectedSection]);
+
+  const refreshSectionSubjects = async () => {
+    if (!selectedSection) return;
+    try { setSectionSubjects(await institutionService.getSectionSubjects(selectedSection)); } catch { /* keep prior list */ }
+  };
 
   const createDepartment = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -143,8 +164,26 @@ export default function AcademicPage() {
       await institutionService.assignSubjectToSection({ section_id: selectedSection, subject_id: selectedSubject, instructor_id: selectedInstructor });
       toast3('Subject assigned to section with instructor!');
       setSelectedSubject(''); setSelectedInstructor('');
+      refreshSectionSubjects();
     } catch { toast3('Assignment failed.'); }
     finally { setAssigning(false); }
+  };
+
+  const changeSSInstructor = async (ssId: string, instructorId: string) => {
+    try {
+      await institutionService.updateSectionSubject(ssId, { instructor_id: instructorId });
+      toast3('Instructor updated.');
+      refreshSectionSubjects();
+    } catch { toast3('Could not update instructor.'); }
+  };
+
+  const removeSS = async (ssId: string) => {
+    if (!confirm('Remove this subject from the section?')) return;
+    try {
+      await institutionService.deleteSectionSubject(ssId);
+      toast3('Subject assignment removed.');
+      refreshSectionSubjects();
+    } catch { toast3('Could not remove assignment.'); }
   };
 
   const toggleStudent = (id: string) => {
@@ -431,6 +470,54 @@ export default function AcademicPage() {
             </div>
           )}
 
+          {/* Currently assigned subjects for this section */}
+          {selectedSection && (
+            <div style={{ background:'rgba(255,255,255,0.78)', borderRadius:18, border:'1px solid rgba(255,255,255,0.9)', padding:24, boxShadow:'0 2px 10px rgba(0,0,0,0.05)', marginTop:20 }}>
+              <div style={{ display:'flex', alignItems:'center', gap:10, marginBottom:16 }}>
+                <div style={{ width:34, height:34, borderRadius:10, background:'#fffbeb', display:'flex', alignItems:'center', justifyContent:'center', color:'#f59e0b' }}>
+                  <BookOpen size={17} strokeWidth={1.8}/>
+                </div>
+                <div>
+                  <p style={{ margin:0, fontFamily:'Space Grotesk,sans-serif', fontSize:15, fontWeight:700, color:'#201b2e' }}>Assigned Subjects</p>
+                  <p style={{ margin:0, fontSize:12, color:'#9891a6' }}>{sectionSubjects.length} subject{sectionSubjects.length!==1?'s':''} linked to this section</p>
+                </div>
+              </div>
+
+              {ssLoading ? (
+                <p style={{ color:'#9891a6', fontSize:13, padding:'8px 0' }}>Loading…</p>
+              ) : sectionSubjects.length===0 ? (
+                <p style={{ color:'#9891a6', fontSize:13, padding:'8px 0' }}>No subjects assigned to this section yet. Use the panel above to link one.</p>
+              ) : (
+                <div style={{ display:'flex', flexDirection:'column', gap:8 }}>
+                  {sectionSubjects.map(ss => (
+                    <div key={ss.id} style={{ display:'flex', alignItems:'center', gap:12, padding:'12px 14px', background:'rgba(245,243,255,0.5)', borderRadius:12, flexWrap:'wrap' }}>
+                      <BookOpen size={15} style={{ color:'#9333ea', flexShrink:0 }}/>
+                      <div style={{ flex:1, minWidth:160 }}>
+                        <p style={{ margin:0, fontSize:14, fontWeight:700, color:'#201b2e' }}>
+                          {ss.subject_name}{ss.subject_code?` (${ss.subject_code})`:''}
+                        </p>
+                        {ss.co_instructor_name && (
+                          <p style={{ margin:'2px 0 0', fontSize:12, color:'#9891a6' }}>Co-instructor: {ss.co_instructor_name}</p>
+                        )}
+                      </div>
+                      <select className={styles.select} style={{ maxWidth:220, padding:'6px 10px', fontSize:13 }}
+                        value={ss.instructor_id}
+                        onChange={e=>changeSSInstructor(ss.id, e.target.value)} title="Change instructor">
+                        {!instructors.some(i=>i.id===ss.instructor_id) && (
+                          <option value={ss.instructor_id}>{ss.instructor_name} (inactive)</option>
+                        )}
+                        {instructors.map(i=><option key={i.id} value={i.id}>{i.full_name}</option>)}
+                      </select>
+                      <button onClick={()=>removeSS(ss.id)} style={{ background:'none', border:'1px solid #fecaca', borderRadius:8, padding:'6px 8px', cursor:'pointer', color:'#ef4444', flexShrink:0 }} title="Remove assignment">
+                        <Trash2 size={13}/>
+                      </button>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+
           {!selectedSection && (
             <div className={styles.emptyState}>
               <UserCheck size={32} strokeWidth={1.4} style={{ color:'#d8b4fe', marginBottom:8 }}/>
@@ -468,7 +555,7 @@ export default function AcademicPage() {
               <h2 className={styles.modalTitle}>New Department / Batch</h2>
               <button onClick={()=>setShowBatchModal(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'#9891a6' }}><X size={20}/></button>
             </div>
-            <form onSubmit={wrap(()=>institutionService.createBatch(batchForm),()=>setShowBatchModal(false),'Department created!')}>
+            <form onSubmit={wrap(()=>institutionService.createBatch(batchForm),()=>setShowBatchModal(false),'Batch created!')}>
               <div className={styles.field}><label className={styles.fieldLabel}>Academic Year</label>
                 <select className={styles.select} required value={batchForm.year_id} onChange={e=>setBatchForm(f=>({...f,year_id:e.target.value}))}>
                   <option value="">Select year…</option>{years.map(y=><option key={y.id} value={y.id}>{y.year_label}</option>)}</select></div>

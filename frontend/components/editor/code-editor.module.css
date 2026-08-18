@@ -11,8 +11,9 @@
   min-height: 0;
   height: 100%;
   overflow: hidden;
-  border-radius: 14px;
-  background: #14101f;
+  border-radius: 15px;
+  background: #191225;
+  border: 1px solid rgba(124, 58, 237, 0.30);
   font-variant-ligatures: none;
 }
 
@@ -42,9 +43,9 @@
   padding: 14px 10px 14px 14px;
   min-width: 3.4ch;
   text-align: right;
-  color: rgba(196, 181, 253, 0.38);
-  background: rgba(255, 255, 255, 0.025);
-  border-right: 1px solid rgba(147, 51, 234, 0.16);
+  color: #7a6f95;
+  background: #1f1730;
+  border-right: 1px solid rgba(124, 58, 237, 0.30);
   overflow: hidden;
   user-select: none;
   pointer-events: none;
@@ -68,7 +69,7 @@
 
 .backdrop {
   z-index: 0;
-  color: #e9e4f7;
+  color: #e8e2f5;
   pointer-events: none;
   /* The textarea owns scrolling; syncScroll drives this layer. */
   overflow: hidden;
@@ -92,18 +93,18 @@
   resize: none;
   background: transparent;
   color: transparent;
-  caret-color: #c4b5fd;
+  caret-color: #7c3aed;
   outline: none;
   /* Keep the native selection visible on top of transparent text. */
   -webkit-text-fill-color: transparent;
 }
 
 .input::selection {
-  background: rgba(147, 51, 234, 0.34);
+  background: rgba(124, 58, 237, 0.28);
 }
 
 .input::-moz-selection {
-  background: rgba(147, 51, 234, 0.34);
+  background: rgba(124, 58, 237, 0.28);
 }
 
 .input:focus-visible {
@@ -113,7 +114,7 @@
 /* Thin scrollbars so the editor does not look like a document. */
 .input {
   scrollbar-width: thin;
-  scrollbar-color: rgba(147, 51, 234, 0.45) transparent;
+  scrollbar-color: rgba(124, 58, 237, 0.45) transparent;
 }
 
 .input::-webkit-scrollbar {
@@ -126,14 +127,14 @@
 }
 
 .input::-webkit-scrollbar-thumb {
-  background: rgba(147, 51, 234, 0.4);
+  background: rgba(124, 58, 237, 0.4);
   border: 3px solid transparent;
   background-clip: content-box;
   border-radius: 999px;
 }
 
 .input::-webkit-scrollbar-thumb:hover {
-  background: rgba(147, 51, 234, 0.62);
+  background: rgba(124, 58, 237, 0.62);
   background-clip: content-box;
 }
 
@@ -147,25 +148,25 @@
  * Modules and must be declared :global.
  */
 .backdrop :global(.tok-comment) {
-  color: #7d7494;
+  color: #8b7fae;
   font-style: italic;
 }
 
 .backdrop :global(.tok-string) {
-  color: #9ae6a4;
+  color: #7ee787;
 }
 
 .backdrop :global(.tok-number) {
-  color: #ffb86c;
+  color: #f0a868;
 }
 
 .backdrop :global(.tok-keyword) {
-  color: #d8a4ff;
+  color: #c084fc;
   font-weight: 600;
 }
 
 .backdrop :global(.tok-type) {
-  color: #7fd3f7;
+  color: #82b1ff;
 }
 
 .backdrop :global(.tok-builtin) {
@@ -181,7 +182,7 @@
 }
 
 .backdrop :global(.tok-punct) {
-  color: #b6acd1;
+  color: #cbb8f0;
 }
 
 @media (max-width: 720px) {

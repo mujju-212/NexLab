@@ -51,7 +51,7 @@ export interface Experiment {
 // ─── Pre-Lab Content ──────────────────────────────────────────────────────────
 export interface ContentModule {
   id: string;
-  type: 'text' | 'video' | 'pdf' | 'quiz';
+  type: 'text' | 'video' | 'pdf' | 'quiz' | 'markdown' | 'code' | 'image';
   title: string;
   display_order: number;
   completed: boolean;
@@ -95,8 +95,8 @@ export interface LabSession {
 }
 
 // ─── Code Execution ───────────────────────────────────────────────────────────
-// Supported language keys (must match LANGUAGE_IDS in backend execution/routes.py)
-export type Language = 'python' | 'cpp' | 'c' | 'java' | 'javascript' | 'r' | 'octave';
+// Supported language keys (a subset of the catalog in backend app/execution/languages.py)
+export type Language = 'python' | 'cpp' | 'c' | 'java' | 'javascript' | 'r';
 
 export interface RunCodeRequest {
   files: { main: string };           // { main: '<source code>' }
@@ -109,12 +109,13 @@ export interface RunCodeRequest {
 
 export interface RunCodeResponse {
   status: string;                    // e.g. 'Accepted', 'Runtime Error'
+  status_id?: number | null;         // Judge0-compatible verdict code (3 = Accepted)
   stdout: string;
   stderr: string;
   compile_output: string;
-  time: number;
-  memory: number;
-  quality_metrics?: Record<string, unknown>;
+  time_ms: number | null;            // wall time in ms (null if runner didn't report)
+  memory_kb: number | null;          // peak memory in KB (null when unreadable)
+  quality_metrics?: Record<string, unknown>;  // only on is_final_submission
   quality_score?: number;
 }
 

@@ -5,11 +5,13 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { institutionService, type InstitutionUser, type CreateUserDto, type Department } from '@/services/institution.service';
 import {
-  Plus, Upload, Search, ToggleLeft, ToggleRight, LogOut, X, Eye, Trash2, Edit3,
+  Plus, Upload, Download, Search, ToggleLeft, ToggleRight, LogOut, X, Eye, Trash2, Edit3,
   Mail, Phone, Shield, Calendar, MoreHorizontal, KeyRound, Ban, CheckCircle, User, AlertTriangle, Repeat,
-  GraduationCap, Building2,
+  GraduationCap, Building2, ChevronLeft, ChevronRight,
 } from 'lucide-react';
 import styles from '../dashboard/page.module.css';
+
+const PAGE_SIZE = 25;
 
 export default function UsersPage() {
   const searchParams = useSearchParams();
@@ -17,7 +19,8 @@ export default function UsersPage() {
   const [users, setUsers]           = useState<InstitutionUser[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
   const [loading, setLoading]       = useState(true);
-  const [search, setSearch]         = useState('');
+  const [search, setSearch]         = useState(searchParams.get('search') ?? '');
+  const [page, setPage]             = useState(1);
   const [roleFilter, setRoleFilter] = useState(searchParams.get('role') ?? 'all');
   const [showModal, setShowModal]   = useState(searchParams.get('create') === 'student' || searchParams.get('create') === 'instructor');
   const [saving, setSaving]         = useState(false);
@@ -46,10 +49,14 @@ export default function UsersPage() {
     try {
       const data = await institutionService.listUsers(roleFilter === 'all' ? undefined : { role: roleFilter });
       setUsers(data);
+    } catch {
+      setUsers([]);
+      showToast('Could not load users. Please retry.');
     } finally { setLoading(false); }
   };
 
   useEffect(() => { load(); }, [roleFilter]);
+  useEffect(() => { setPage(1); }, [search, roleFilter]);
   useEffect(() => { institutionService.listDepartments().then(setDepartments).catch(() => {}); }, []);
 
   const deptName = (id?: string | null) => departments.find(d => d.id === id)?.name ?? '—';
@@ -150,6 +157,33 @@ export default function UsersPage() {
     (u.roll_number ?? '').toLowerCase().includes(search.toLowerCase())
   );
 
+  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
+  const safePage  = Math.min(page, pageCount);
+  const paged     = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
+
+  const exportCsv = () => {
+    if (filtered.length === 0) { showToast('Nothing to export.'); return; }
+    const esc = (v: any) => {
+      const s = String(v ?? '');
+      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+    const headers = ['Name', 'Email', 'Role', 'Roll Number', 'Staff ID', 'Department', 'Status', 'Joined'];
+    const rows = filtered.map(u => [
+      u.full_name, u.email, u.role, u.roll_number ?? '', u.staff_id ?? '',
+      deptName(u.department_id), u.is_active ? 'Active' : 'Inactive',
+      new Date(u.created_at).toLocaleDateString('en-IN'),
+    ].map(esc).join(','));
+    const csv = [headers.join(','), ...rows].join('\n');
+    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `users-${new Date().toISOString().slice(0, 10)}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+    showToast(`Exported ${filtered.length} user${filtered.length === 1 ? '' : 's'}.`);
+  };
+
   const initials = (name: string) => name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
   const roleCounts = {
@@ -203,6 +237,9 @@ export default function UsersPage() {
           <Upload size={14} /> Bulk Upload
         </button>
         <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={bulkUpload} />
+        <button className={styles.btnSecondary} onClick={exportCsv} title="Export current list to CSV">
+          <Download size={14} /> Export
+        </button>
         <button className={styles.btnPrimary} onClick={() => setShowModal(true)}>
           <Plus size={14} /> Add User
         </button>
@@ -221,7 +258,7 @@ export default function UsersPage() {
               <tr><td colSpan={6} style={{ textAlign: 'center', color: '#9891a6', padding: 32 }}>Loading…</td></tr>
             ) : filtered.length === 0 ? (
               <tr><td colSpan={6} style={{ textAlign: 'center', color: '#9891a6', padding: 32 }}>No users found.</td></tr>
-            ) : filtered.map(u => (
+            ) : paged.map(u => (
               <tr key={u.id}>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
@@ -313,6 +350,28 @@ export default function UsersPage() {
           </tbody>
         </table>
       </div>
+
+      {/* Pagination */}
+      {!loading && filtered.length > PAGE_SIZE && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
+          <span style={{ fontSize: 12.5, color: '#9891a6', fontWeight: 600 }}>
+            Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}
+          </span>
+          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+            <button className={styles.btnSecondary} style={{ padding: '6px 10px', opacity: safePage <= 1 ? 0.5 : 1 }}
+              disabled={safePage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
+              <ChevronLeft size={14} /> Prev
+            </button>
+            <span style={{ fontSize: 13, fontWeight: 600, color: '#726a85', padding: '0 6px' }}>
+              Page {safePage} / {pageCount}
+            </span>
+            <button className={styles.btnSecondary} style={{ padding: '6px 10px', opacity: safePage >= pageCount ? 0.5 : 1 }}
+              disabled={safePage >= pageCount} onClick={() => setPage(p => Math.min(pageCount, p + 1))}>
+              Next <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
 
       {/* ═══ VIEW USER DRAWER ═══ */}
       {viewUser && (

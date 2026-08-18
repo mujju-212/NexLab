@@ -24,7 +24,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
     } else if (user?.role === 'instructor') {
       router.replace('/instructor/dashboard');
     } else if (user?.role === 'free_user') {
-      router.replace('/practice');
+      router.replace('/practice/dashboard');
     }
     // only platform_admin is allowed through
   }, [isAuthenticated, user, router]);

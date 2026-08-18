@@ -15,6 +15,8 @@ const ACTION_COLORS: Record<string, string> = {
 
 export default function AuditLogPage() {
   const [logs,    setLogs]    = useState<AuditLog[]>([]);
+  const [actions, setActions] = useState<string[]>([]);
+  const [total,   setTotal]   = useState(0);
   const [loading, setLoading] = useState(true);
   const [days,    setDays]    = useState(30);
   const [action,  setAction]  = useState('');
@@ -22,13 +24,21 @@ export default function AuditLogPage() {
   const load = async () => {
     setLoading(true);
     try {
-      const data = await institutionService.getAuditLog({ days, action: action || undefined });
-      setLogs(data);
+      const page = await institutionService.getAuditLog({ days, action: action || undefined, limit: 200 });
+      setLogs(page.logs);
+      setTotal(page.total);
+      // Only refresh the action dropdown from the unfiltered response so the
+      // current selection never disappears out from under the user.
+      if (!action) setActions(page.actions ?? []);
+    } catch {
+      setLogs([]);
+      setTotal(0);
     } finally { setLoading(false); }
   };
   useEffect(() => { load(); }, [days, action]);
 
   const color = (a: string) => ACTION_COLORS[a] ?? ACTION_COLORS.default;
+  const fmtAction = (a: string) => a.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
 
   return (
     <InstitutionShell activePage="Audit Log" title="Audit Log" subtitle="Full history of admin actions in your institution.">
@@ -44,10 +54,13 @@ export default function AuditLogPage() {
         </select>
         <select className={styles.filterSelect} value={action} onChange={e => setAction(e.target.value)}>
           <option value="">All Actions</option>
-          <option value="force_logout">Force Logout</option>
-          <option value="create_user">Create User</option>
-          <option value="toggle_active">Toggle Active</option>
+          {actions.map(a => <option key={a} value={a}>{fmtAction(a)}</option>)}
         </select>
+        {!loading && (
+          <span style={{ marginLeft: 'auto', fontSize: 12.5, color: '#9891a6', fontWeight: 600 }}>
+            {total} event{total === 1 ? '' : 's'}
+          </span>
+        )}
       </div>
 
       {loading ? (
@@ -66,13 +79,18 @@ export default function AuditLogPage() {
               </div>
               <div style={{ flex:1 }}>
                 <p className={styles.auditAction} style={{ color:color(log.action) }}>
-                  {log.action.replace(/_/g,' ')}
+                  {fmtAction(log.action)}
                 </p>
                 <p className={styles.auditDetail}>{log.detail || `${log.target_type} · ${log.target_id}`}</p>
               </div>
-              <span className={styles.auditTime}>
-                {new Date(log.created_at).toLocaleString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}
-              </span>
+              <div style={{ textAlign: 'right' }}>
+                {log.actor_name && (
+                  <p style={{ margin: 0, fontSize: 12.5, fontWeight: 600, color: '#726a85' }}>{log.actor_name}</p>
+                )}
+                <span className={styles.auditTime}>
+                  {new Date(log.created_at).toLocaleString('en-IN', { day:'numeric', month:'short', hour:'2-digit', minute:'2-digit' })}
+                </span>
+              </div>
             </div>
           ))}
         </div>
