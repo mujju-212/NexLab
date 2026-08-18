@@ -10,7 +10,7 @@ class Grade(db.Model):
     experiment_id       = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=False)
     session_id          = db.Column(db.String(36), db.ForeignKey('lab_sessions.id'))
 
-    auto_grade          = db.Column(db.Float)       # from Judge0 test cases
+    auto_grade          = db.Column(db.Float)       # from code test cases
     manual_grade        = db.Column(db.Float)       # instructor adjustment
     manual_feedback     = db.Column(db.Text)        # overall feedback
     viva_grade          = db.Column(db.Float)       # from viva session

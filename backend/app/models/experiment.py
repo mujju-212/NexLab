@@ -127,7 +127,7 @@ class ContentModule(db.Model):
     __tablename__ = 'content_modules'
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     experiment_id   = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=False)
-    module_type     = db.Column(db.String(10), nullable=False)  # text | video | pdf | quiz
+    module_type     = db.Column(db.String(10), nullable=False)  # text|markdown|code|image|video|pdf|quiz
     title           = db.Column(db.Text, nullable=False)
     content_data    = db.Column(db.JSON)
     # text:  {"html": "<p>...</p>"}

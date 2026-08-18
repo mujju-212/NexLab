@@ -418,7 +418,7 @@ def schedule_session():
 def start_session(session_id):
     """Start session with environment health check"""
     from flask import current_app
-    import requests as req
+    import subprocess
 
     session = LabSession.query.filter_by(
         id=session_id, institution_id=g.institution_id
@@ -427,10 +427,17 @@ def start_session(session_id):
     if session.status != 'scheduled':
         return jsonify({'error': f'Session is already {session.status}'}), 400
 
-    # Health check Judge0
+    # Gate on the code execution engine — a live coding session is useless
+    # without it, so refuse to start if Docker is disabled or the daemon is down.
+    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+        return jsonify({'error': 'Code execution engine is not enabled. Cannot start session.'}), 503
     try:
-        r = req.get(f"{current_app.config['JUDGE0_URL']}/system_info", timeout=3)
-        if r.status_code != 200:
+        probe = subprocess.run(
+            [current_app.config.get('DOCKER_BIN', 'docker'),
+             'version', '--format', '{{.Server.Version}}'],
+            capture_output=True, timeout=5,
+        )
+        if probe.returncode != 0:
             return jsonify({'error': 'Code execution service is unavailable. Cannot start session.'}), 503
     except Exception:
         return jsonify({'error': 'Code execution service is offline. Cannot start session.'}), 503
@@ -600,7 +607,7 @@ def save_grade():
     grade.graded_by       = g.user_id
     grade.graded_at       = datetime.utcnow()
 
-    # ── Auto-populate auto_grade from best Judge0 submission ──────────────────
+    # ── Auto-populate auto_grade from the best code submission ────────────────
     # Pick the final submission with the most test cases passed
     best_submission = CodeAttempt.query.filter_by(
         student_id=student_id,

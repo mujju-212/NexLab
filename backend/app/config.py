@@ -55,12 +55,6 @@ class Config:
     # ── CORS ──────────────────────────────────────────────────────────────
     FRONTEND_URL = os.environ.get('FRONTEND_URL', 'http://localhost:3000')
 
-    # ── Judge0 (code execution) ────────────────────────────────────────────
-    JUDGE0_URL = os.environ.get('JUDGE0_URL', 'http://localhost:2358')
-    JUDGE0_API_KEY = os.environ.get('JUDGE0_API_KEY', '')
-    JUDGE0_MODE = os.environ.get('JUDGE0_MODE', 'polling')   # polling | webhook
-    JUDGE0_WEBHOOK_SECRET = os.environ.get('JUDGE0_WEBHOOK_SECRET', '')
-
     # ── Groq API ──────────────────────────────────────────────────────────
     GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
     GROQ_DAILY_LIMIT_PER_INSTITUTION = int(os.environ.get('GROQ_DAILY_LIMIT_PER_INSTITUTION', 500))
@@ -90,18 +84,15 @@ class Config:
     BASE_URL = os.environ.get('BASE_URL', 'http://localhost:5000')
     JITSI_DOMAIN = os.environ.get('JITSI_DOMAIN', 'meet.jit.si')
 
-    # Code execution limits (applied to all Docker containers)
-    CODE_TIME_LIMIT_SEC = 10
-    CODE_MEMORY_LIMIT_KB = 262144    # 256 MB
-
     # Plagiarism threshold
     PLAGIARISM_THRESHOLD = 0.85      # 85% similarity → flag
 
     # Code quality
     COMPLEXITY_WARN_THRESHOLD = 10   # Cyclomatic complexity > 10 = warning
 
-    # ── Execution Engine v2 (Docker runner) ───────────────────────────────
-    # Master switch — false means v2 code is never reached; Judge0 stays live.
+    # ── Execution Engine (Docker runner) ──────────────────────────────────
+    # Master switch for code execution. When false, /run and /playground return
+    # 503 — Docker is the only execution path (Judge0 was removed).
     DOCKER_RUNNER_ENABLED = os.environ.get('DOCKER_RUNNER_ENABLED', 'false').lower() == 'true'
     # Path to the docker binary (override for unusual installs)
     DOCKER_BIN = os.environ.get('DOCKER_BIN', 'docker')
@@ -119,7 +110,7 @@ class Config:
     EXEC_OUTPUT_CAP_KB       = int(os.environ.get('EXEC_OUTPUT_CAP_KB', 256))
     # Orphan-container reaper interval (seconds)
     EXEC_REAPER_INTERVAL_SEC = int(os.environ.get('EXEC_REAPER_INTERVAL_SEC', 300))
-    # Per-language engine overrides, e.g. "python=docker,java=judge0"
+    # Per-language engine overrides, e.g. "html=browser" (docker|browser only)
     EXEC_ENGINE_OVERRIDES    = os.environ.get('EXEC_ENGINE_OVERRIDES', '')
 
 

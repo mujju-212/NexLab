@@ -110,18 +110,24 @@ def platform_dashboard():
 @require_role('platform_admin')
 def system_health():
     """Check health of external services"""
-    import requests as req
+    import subprocess
     from flask import current_app
 
-    judge0_url = current_app.config['JUDGE0_URL']
-    health = {'judge0': 'unknown', 'database': 'unknown', 'groq': 'unknown'}
+    health = {'execution': 'unknown', 'database': 'unknown', 'groq': 'unknown'}
 
-    # Check Judge0
-    try:
-        r = req.get(f"{judge0_url}/system_info", timeout=3)
-        health['judge0'] = 'online' if r.status_code == 200 else 'degraded'
-    except Exception:
-        health['judge0'] = 'offline'
+    # Check the Docker execution engine (daemon reachable + enabled)
+    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+        health['execution'] = 'disabled'
+    else:
+        try:
+            r = subprocess.run(
+                [current_app.config.get('DOCKER_BIN', 'docker'),
+                 'version', '--format', '{{.Server.Version}}'],
+                capture_output=True, timeout=5,
+            )
+            health['execution'] = 'online' if r.returncode == 0 else 'degraded'
+        except Exception:
+            health['execution'] = 'offline'
 
     # Check DB
     try:

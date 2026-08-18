@@ -7,11 +7,14 @@ from flask import Blueprint, request, jsonify, g
 from app.auth.utils import require_role, require_institution
 from app.extensions import db
 from app.models.user import User
-from app.models.academic import AcademicYear, Batch, Section, SectionStudent, SectionSubject
+from app.models.academic import (
+    AcademicYear, Batch, Department, Section, SectionStudent, SectionSubject,
+)
 from app.models.subject import Subject, EnvironmentProfile
 from app.models.experiment import Experiment
 from app.models.feedback import Notification
 from app.models.session import LabSession
+from app.institution.quota import student_quota, student_headroom
 from datetime import datetime, timedelta
 import bcrypt, uuid, csv, io
 
@@ -26,6 +29,7 @@ def list_users():
     """
     List/search users within this institution.
     Params: ?role=student&department_id=...&q=jane (matches name or email)
+            &page=1&per_page=50  — omit page to get every match (legacy shape)
     """
     role          = request.args.get('role')
     department_id = request.args.get('department_id')
@@ -40,8 +44,64 @@ def list_users():
         like = f'%{q}%'
         query = query.filter(db.or_(User.full_name.ilike(like), User.email.ilike(like),
                                      User.roll_number.ilike(like), User.staff_id.ilike(like)))
-    users = query.order_by(User.full_name).all()
-    return jsonify({'users': [u.to_dict() for u in users]}), 200
+
+    query = query.order_by(User.full_name)
+    total = query.count()
+
+    if request.args.get('page'):
+        page     = max(int(request.args.get('page', 1)), 1)
+        per_page = min(int(request.args.get('per_page', 50)), 200)
+        paged    = query.paginate(page=page, per_page=per_page, error_out=False)
+        return jsonify({
+            'users': [u.to_dict() for u in paged.items],
+            'total': total, 'page': page, 'pages': paged.pages, 'per_page': per_page,
+        }), 200
+
+    return jsonify({'users': [u.to_dict() for u in query.all()], 'total': total}), 200
+
+
+@institution_bp.route('/users/<user_id>', methods=['GET'])
+@require_role('institution_admin')
+def get_user(user_id):
+    """
+    One user's full record: profile, section enrolments, and — for instructors —
+    the subjects they teach. Saves the client fetching the whole user list.
+    """
+    user = User.query.filter_by(
+        id=user_id, institution_id=g.institution_id
+    ).first_or_404()
+    data = user.to_dict()
+
+    dept = Department.query.get(user.department_id) if user.department_id else None
+    data['department_name'] = dept.name if dept else None
+
+    enrolments = []
+    if user.role == 'student':
+        rows = db.session.query(SectionStudent, Section, Batch).join(
+            Section, Section.id == SectionStudent.section_id
+        ).outerjoin(Batch, Batch.id == Section.batch_id).filter(
+            SectionStudent.student_id == user_id,
+            Section.institution_id == g.institution_id,
+        ).all()
+        enrolments = [{
+            'section_id':   sec.id,
+            'section_name': sec.name,
+            'batch_id':     sec.batch_id,
+            'batch_name':   batch.name if batch else None,
+            'program':      batch.program if batch else None,
+            'enrolled_at':  link.enrolled_at.isoformat() if link.enrolled_at else None,
+        } for link, sec, batch in rows]
+
+    teaching = []
+    if user.role in ('instructor', 'institution_admin'):
+        rows = SectionSubject.query.filter(
+            SectionSubject.institution_id == g.institution_id,
+            db.or_(SectionSubject.instructor_id == user_id,
+                   SectionSubject.co_instructor_id == user_id),
+        ).all()
+        teaching = [_ss_dict(ss) for ss in rows]
+
+    return jsonify({'user': data, 'enrolments': enrolments, 'teaching': teaching}), 200
 
 
 @institution_bp.route('/users', methods=['POST'])
@@ -58,6 +118,11 @@ def create_user():
     data = request.get_json()
     if User.query.filter_by(email=data['email'].lower()).first():
         return jsonify({'error': 'Email already exists'}), 409
+
+    if data.get('role') == 'student':
+        blocked = student_headroom(g.institution_id, adding=1)
+        if blocked:
+            return jsonify(blocked), 409
 
     user = User(
         institution_id=g.institution_id,
@@ -77,6 +142,8 @@ def create_user():
     )
     db.session.add(user)
     db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'create_user', 'user', user.id,
+                 f"Created {user.role} {user.full_name} ({user.email})")
     return jsonify({'user': user.to_dict()}), 201
 
 
@@ -188,7 +255,13 @@ def bulk_upload_users():
 
     content = file.read().decode('utf-8')
     reader = csv.DictReader(io.StringIO(content))
-    created, skipped = [], []
+    created, skipped, rejected = [], [], []
+
+    # Plan cap is checked per row so a 500-row CSV fills the remaining seats
+    # instead of being rejected wholesale.
+    quota     = student_quota(g.institution_id)
+    seats     = quota['remaining']          # None => uncapped
+    new_students = 0
 
     for row in reader:
         email = row.get('email', '').lower().strip()
@@ -201,6 +274,10 @@ def bulk_upload_users():
         role = (row.get('role', '') or 'student').strip().lower()
         if role not in ('student', 'instructor'):
             role = 'student'
+
+        if role == 'student' and seats is not None and new_students >= seats:
+            rejected.append(email)
+            continue
 
         dept_code = (row.get('department_code', '') or '').strip().upper()
         year_raw  = (row.get('year_of_study', '') or '').strip()
@@ -221,17 +298,42 @@ def bulk_upload_users():
         )
         db.session.add(user)
         created.append(email)
+        if role == 'student':
+            new_students += 1
 
     db.session.commit()
-    return jsonify({'created': len(created), 'skipped': len(skipped), 'skipped_emails': skipped}), 201
+    if created:
+        _write_audit(g.user_id, g.institution_id, 'bulk_upload', 'user', None,
+                     f"Bulk upload: {len(created)} created, {len(skipped)} duplicate(s), "
+                     f"{len(rejected)} over plan limit")
+    payload = {
+        'created': len(created), 'skipped': len(skipped), 'skipped_emails': skipped,
+    }
+    if rejected:
+        payload['rejected_over_limit'] = rejected
+        payload['message'] = (f"{len(rejected)} student row(s) skipped — the "
+                              f"{quota['plan']} plan allows {quota['limit']} students.")
+    return jsonify(payload), 201
 
 
 @institution_bp.route('/users/<user_id>/toggle-active', methods=['PATCH'])
 @require_role('institution_admin')
 def toggle_user_active(user_id):
     user = User.query.filter_by(id=user_id, institution_id=g.institution_id).first_or_404()
+
+    # Re-activating a student consumes a seat, so it goes through the same cap.
+    if not user.is_active and user.role == 'student':
+        blocked = student_headroom(g.institution_id, adding=1)
+        if blocked:
+            return jsonify(blocked), 409
+
     user.is_active = not user.is_active
     db.session.commit()
+    _write_audit(g.user_id, g.institution_id,
+                 'activate_user' if user.is_active else 'deactivate_user',
+                 'user', user_id,
+                 f"{'Activated' if user.is_active else 'Deactivated'} "
+                 f"{user.full_name} ({user.email})")
     return jsonify({'is_active': user.is_active}), 200
 
 
@@ -252,6 +354,8 @@ def academic_years():
     )
     db.session.add(year)
     db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'create_academic_year', 'academic_year',
+                 year.id, f"Created academic year {year.year_label}")
     return jsonify({'year': year.to_dict()}), 201
 
 
@@ -260,10 +364,14 @@ def academic_years():
 def update_academic_year(year_id):
     year = AcademicYear.query.filter_by(id=year_id, institution_id=g.institution_id).first_or_404()
     data = request.get_json() or {}
+    changed = []
     for field in ('year_label', 'is_active'):
         if field in data:
             setattr(year, field, data[field])
+            changed.append(field)
     db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'update_academic_year', 'academic_year',
+                 year_id, f"Updated {year.year_label} ({', '.join(changed) or 'no change'})")
     return jsonify({'year': year.to_dict()}), 200
 
 
@@ -279,8 +387,11 @@ def delete_academic_year(year_id):
                      f'Remove them first.'
         }), 409
 
+    label = year.year_label
     db.session.delete(year)
     db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'delete_academic_year', 'academic_year',
+                 year_id, f"Deleted academic year {label}")
     return jsonify({'message': 'Academic year deleted'}), 200
 
 
@@ -303,6 +414,8 @@ def batches():
     )
     db.session.add(batch)
     db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'create_batch', 'batch', batch.id,
+                 f"Created department/batch {batch.name}")
     return jsonify({'batch': batch.to_dict()}), 201
 
 
@@ -311,10 +424,14 @@ def batches():
 def update_batch(batch_id):
     batch = Batch.query.filter_by(id=batch_id, institution_id=g.institution_id).first_or_404()
     data = request.get_json() or {}
+    changed = []
     for field in ('name', 'program', 'year_id'):
         if field in data:
             setattr(batch, field, data[field])
+            changed.append(field)
     db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'update_batch', 'batch', batch_id,
+                 f"Updated {batch.name} ({', '.join(changed) or 'no change'})")
     return jsonify({'batch': batch.to_dict()}), 200
 
 
@@ -330,9 +447,19 @@ def delete_batch(batch_id):
                      f'Remove them first.'
         }), 409
 
+    name = batch.name
     db.session.delete(batch)
     db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'delete_batch', 'batch', batch_id,
+                 f"Deleted department/batch {name}")
     return jsonify({'message': 'Batch deleted'}), 200
+
+
+def _own_section(section_id):
+    """Fetch a section that belongs to the caller's institution, or 404."""
+    return Section.query.filter_by(
+        id=section_id, institution_id=g.institution_id
+    ).first_or_404()
 
 
 @institution_bp.route('/sections', methods=['GET', 'POST'])
@@ -353,6 +480,8 @@ def sections():
     )
     db.session.add(section)
     db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'create_section', 'section', section.id,
+                 f"Created section {section.name}")
     return jsonify({'section': section.to_dict()}), 201
 
 
@@ -360,15 +489,103 @@ def sections():
 @require_role('institution_admin')
 def enroll_students(section_id):
     """Enroll students into a section"""
-    data = request.get_json()
+    section = _own_section(section_id)
+    data = request.get_json() or {}
     student_ids = data.get('student_ids', [])
+
+    # Only students of this institution may be enrolled.
+    valid = {u.id for u in User.query.filter(
+        User.institution_id == g.institution_id,
+        User.role == 'student',
+        User.id.in_(student_ids or ['-']),
+    ).all()}
+    rejected = [sid for sid in student_ids if sid not in valid]
+
     enrolled = 0
     for sid in student_ids:
-        if not SectionStudent.query.filter_by(section_id=section_id, student_id=sid).first():
+        if sid in valid and not SectionStudent.query.filter_by(
+            section_id=section_id, student_id=sid
+        ).first():
             db.session.add(SectionStudent(section_id=section_id, student_id=sid))
             enrolled += 1
     db.session.commit()
-    return jsonify({'enrolled': enrolled}), 200
+
+    if enrolled:
+        _write_audit(g.user_id, g.institution_id, 'enroll_students', 'section', section_id,
+                     f"Enrolled {enrolled} student(s) into section {section.name}")
+    return jsonify({'enrolled': enrolled, 'rejected': rejected}), 200
+
+
+@institution_bp.route('/sections/<section_id>/students', methods=['GET'])
+@require_role('institution_admin')
+def section_students(section_id):
+    """Students actually enrolled in one section, with their enrolment date."""
+    _own_section(section_id)
+    rows = db.session.query(SectionStudent, User).join(
+        User, User.id == SectionStudent.student_id
+    ).filter(SectionStudent.section_id == section_id).all()
+
+    students = []
+    for link, user in rows:
+        d = user.to_dict()
+        d['enrolled_at'] = link.enrolled_at.isoformat() if link.enrolled_at else None
+        students.append(d)
+    students.sort(key=lambda s: (s.get('roll_number') or '', s['full_name']))
+    return jsonify({'students': students, 'count': len(students)}), 200
+
+
+@institution_bp.route('/sections/<section_id>/students/<student_id>', methods=['DELETE'])
+@require_role('institution_admin')
+def unenroll_student(section_id, student_id):
+    """Remove one student from a section. The user account is untouched."""
+    section = _own_section(section_id)
+    link = SectionStudent.query.filter_by(
+        section_id=section_id, student_id=student_id
+    ).first_or_404()
+    student = User.query.filter_by(
+        id=student_id, institution_id=g.institution_id
+    ).first_or_404()
+
+    db.session.delete(link)
+    db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'unenroll_student', 'section', section_id,
+                 f"Removed {student.full_name} from section {section.name}")
+    return jsonify({'message': f'{student.full_name} removed from {section.name}'}), 200
+
+
+@institution_bp.route('/sections/<section_id>/transfer', methods=['POST'])
+@require_role('institution_admin')
+def transfer_students(section_id):
+    """
+    Move students from this section into another one.
+    Body: {"student_ids": [...], "to_section_id": "..."}
+    Skips students already in the destination instead of erroring.
+    """
+    src  = _own_section(section_id)
+    data = request.get_json() or {}
+    dest_id = data.get('to_section_id')
+    student_ids = data.get('student_ids', [])
+
+    if not dest_id:
+        return jsonify({'error': 'to_section_id is required'}), 400
+    if dest_id == section_id:
+        return jsonify({'error': 'Source and destination sections are the same'}), 400
+    dest = _own_section(dest_id)
+
+    moved = 0
+    for sid in student_ids:
+        link = SectionStudent.query.filter_by(section_id=section_id, student_id=sid).first()
+        if not link:
+            continue
+        db.session.delete(link)
+        if not SectionStudent.query.filter_by(section_id=dest_id, student_id=sid).first():
+            db.session.add(SectionStudent(section_id=dest_id, student_id=sid))
+        moved += 1
+    db.session.commit()
+
+    _write_audit(g.user_id, g.institution_id, 'transfer_students', 'section', section_id,
+                 f"Moved {moved} student(s) from {src.name} to {dest.name}")
+    return jsonify({'moved': moved, 'to_section_id': dest_id}), 200
 
 
 # ── Subject & Section-Subject Assignment ──────────────────────────────────────
@@ -390,6 +607,9 @@ def subjects():
     )
     db.session.add(subject)
     db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'create_subject', 'subject', subject.id,
+                 f"Created subject {subject.name}"
+                 + (f" ({subject.code})" if subject.code else ''))
     return jsonify({'subject': subject.to_dict()}), 201
 
 
@@ -398,10 +618,14 @@ def subjects():
 def update_subject(subject_id):
     subject = Subject.query.filter_by(id=subject_id, institution_id=g.institution_id).first_or_404()
     data = request.get_json() or {}
+    changed = []
     for field in ('name', 'code', 'description', 'env_profile_id'):
         if field in data:
             setattr(subject, field, data[field])
+            changed.append(field)
     db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'update_subject', 'subject', subject_id,
+                 f"Updated {subject.name} ({', '.join(changed) or 'no change'})")
     return jsonify({'subject': subject.to_dict()}), 200
 
 
@@ -418,16 +642,74 @@ def delete_subject(subject_id):
                      f'{experiments} experiment(s). Remove those first.'
         }), 409
 
+    name = subject.name
     db.session.delete(subject)
     db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'delete_subject', 'subject', subject_id,
+                 f"Deleted subject {name}")
     return jsonify({'message': 'Subject deleted'}), 200
+
+
+def _ss_dict(ss, section=None, subject=None):
+    """Assignment enriched with the names an admin screen needs."""
+    section  = section  or Section.query.get(ss.section_id)
+    subject  = subject  or Subject.query.get(ss.subject_id)
+    lead     = User.query.get(ss.instructor_id)    if ss.instructor_id    else None
+    co       = User.query.get(ss.co_instructor_id) if ss.co_instructor_id else None
+    return {
+        'id':                  ss.id,
+        'section_id':          ss.section_id,
+        'section_name':        section.name if section else None,
+        'batch_id':            section.batch_id if section else None,
+        'subject_id':          ss.subject_id,
+        'subject_name':        subject.name if subject else None,
+        'subject_code':        subject.code if subject else None,
+        'instructor_id':       ss.instructor_id,
+        'instructor_name':     lead.full_name if lead else None,
+        'co_instructor_id':    ss.co_instructor_id,
+        'co_instructor_name':  co.full_name if co else None,
+        'created_at':          ss.created_at.isoformat() if ss.created_at else None,
+    }
+
+
+def _own_instructor(user_id, field):
+    """Validate that `user_id` is an active instructor in this institution."""
+    if not user_id:
+        return None
+    user = User.query.filter_by(id=user_id, institution_id=g.institution_id).first()
+    if not user or user.role not in ('instructor', 'institution_admin'):
+        raise ValueError(f'{field} must be an instructor of this institution')
+    return user
 
 
 @institution_bp.route('/section-subjects', methods=['POST'])
 @require_role('institution_admin')
 def assign_subject():
-    """Assign a subject + instructor to a section"""
-    data = request.get_json()
+    """Assign a subject + instructor to a section."""
+    data = request.get_json() or {}
+    for field in ('section_id', 'subject_id', 'instructor_id'):
+        if not data.get(field):
+            return jsonify({'error': f'{field} is required'}), 400
+
+    section = _own_section(data['section_id'])
+    subject = Subject.query.filter_by(
+        id=data['subject_id'], institution_id=g.institution_id
+    ).first_or_404()
+    try:
+        lead = _own_instructor(data['instructor_id'], 'instructor_id')
+        _own_instructor(data.get('co_instructor_id'), 'co_instructor_id')
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    existing = SectionSubject.query.filter_by(
+        section_id=data['section_id'], subject_id=data['subject_id']
+    ).first()
+    if existing:
+        return jsonify({
+            'error': f'{subject.name} is already assigned to section {section.name}.',
+            'section_subject_id': existing.id,
+        }), 409
+
     ss = SectionSubject(
         institution_id=g.institution_id,
         section_id=data['section_id'],
@@ -437,7 +719,106 @@ def assign_subject():
     )
     db.session.add(ss)
     db.session.commit()
-    return jsonify({'section_subject': ss.to_dict()}), 201
+    _write_audit(g.user_id, g.institution_id, 'assign_instructor', 'section', section.id,
+                 f"Assigned {subject.name} to section {section.name} "
+                 f"under {lead.full_name if lead else 'unknown'}")
+    return jsonify({'section_subject': _ss_dict(ss, section, subject)}), 201
+
+
+@institution_bp.route('/section-subjects', methods=['GET'])
+@require_role('institution_admin')
+def list_section_subjects():
+    """
+    All subject+instructor assignments for this institution.
+    Filters: ?section_id=...&subject_id=...&instructor_id=...
+    """
+    q = SectionSubject.query.filter_by(institution_id=g.institution_id)
+    for param, column in (('section_id',    SectionSubject.section_id),
+                          ('subject_id',    SectionSubject.subject_id),
+                          ('instructor_id', SectionSubject.instructor_id)):
+        value = request.args.get(param)
+        if value:
+            q = q.filter(column == value)
+    rows = q.order_by(SectionSubject.created_at.desc()).all()
+    return jsonify({'section_subjects': [_ss_dict(ss) for ss in rows]}), 200
+
+
+@institution_bp.route('/sections/<section_id>/subjects', methods=['GET'])
+@require_role('institution_admin')
+def section_subjects(section_id):
+    """Subjects taught in one section, with the assigned instructors."""
+    section = _own_section(section_id)
+    rows = SectionSubject.query.filter_by(
+        institution_id=g.institution_id, section_id=section_id
+    ).all()
+    return jsonify({
+        'section_subjects': [_ss_dict(ss, section) for ss in rows],
+        'count': len(rows),
+    }), 200
+
+
+@institution_bp.route('/section-subjects/<ss_id>', methods=['PATCH'])
+@require_role('institution_admin')
+def update_section_subject(ss_id):
+    """
+    Reassign an existing subject slot — typically swapping the instructor when
+    someone leaves mid-semester. Pass co_instructor_id: null to clear it.
+    """
+    ss = SectionSubject.query.filter_by(
+        id=ss_id, institution_id=g.institution_id
+    ).first_or_404()
+    data = request.get_json() or {}
+
+    try:
+        if 'instructor_id' in data:
+            if not data['instructor_id']:
+                return jsonify({'error': 'instructor_id cannot be empty'}), 400
+            _own_instructor(data['instructor_id'], 'instructor_id')
+        if 'co_instructor_id' in data and data['co_instructor_id']:
+            _own_instructor(data['co_instructor_id'], 'co_instructor_id')
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    before = _ss_dict(ss)
+    for field in ('instructor_id', 'co_instructor_id'):
+        if field in data:
+            setattr(ss, field, data[field] or None)
+    db.session.commit()
+
+    after = _ss_dict(ss)
+    if before['instructor_id'] != after['instructor_id']:
+        _write_audit(g.user_id, g.institution_id, 'reassign_instructor', 'section',
+                     ss.section_id,
+                     f"{after['subject_name']} / section {after['section_name']}: "
+                     f"{before['instructor_name']} → {after['instructor_name']}")
+    return jsonify({'section_subject': after}), 200
+
+
+@institution_bp.route('/section-subjects/<ss_id>', methods=['DELETE'])
+@require_role('institution_admin')
+def delete_section_subject(ss_id):
+    """
+    Remove a subject from a section. Refused while lab sessions reference it,
+    so history is never orphaned — cancel or delete those first.
+    """
+    ss = SectionSubject.query.filter_by(
+        id=ss_id, institution_id=g.institution_id
+    ).first_or_404()
+    info = _ss_dict(ss)
+
+    sessions = LabSession.query.filter_by(section_subject_id=ss_id).count()
+    if sessions:
+        return jsonify({
+            'error': f'Cannot remove: {sessions} lab session(s) are attached to this '
+                     f'assignment. Cancel or delete them first.'
+        }), 409
+
+    db.session.delete(ss)
+    db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'unassign_instructor', 'section',
+                 info['section_id'],
+                 f"Removed {info['subject_name']} from section {info['section_name']}")
+    return jsonify({'message': 'Assignment removed'}), 200
 
 
 # ── Environment Profiles ───────────────────────────────────────────────────────
@@ -543,7 +924,9 @@ def send_announcement():
     # 'all' → no extra filter
 
     if section_id:
-        # Scope to students in a specific section
+        # Scope to students in a specific section (404s if it is not ours, so an
+        # announcement can never leak into another institution's section).
+        _own_section(section_id)
         enrolled_ids = [
             e.student_id
             for e in SectionStudent.query.filter_by(section_id=section_id).all()
@@ -572,6 +955,9 @@ def send_announcement():
     }, room=f"institution_{g.institution_id}")
 
     db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'send_announcement', 'announcement', None,
+                 f"\"{title}\" sent to {created} {target}"
+                 + (f" in one section" if section_id else ""))
     return jsonify({'sent_to': created, 'target': target}), 201
 
 
@@ -636,12 +1022,19 @@ def force_logout_user(user_id):
 def get_audit_log():
     """
     View admin action history for this institution.
-    Query params: ?limit=50&action=force_logout&days=7
+
+    Query params: ?limit=50&offset=0&action=force_logout&days=30&q=<text>
+    Rows carry `actor_name`/`actor_email` resolved in one extra query — the raw
+    actor_id is useless to a human reading the table.
+    Also returns `actions`: every distinct action present in the window, so the
+    UI can build its filter dropdown without a second round trip.
     """
     from app.models.academic import AuditLog
-    limit  = int(request.args.get('limit', 50))
+    limit  = min(max(int(request.args.get('limit', 50) or 50), 1), 500)
+    offset = max(int(request.args.get('offset', 0) or 0), 0)
     action = request.args.get('action')
-    days   = int(request.args.get('days', 30))
+    days   = int(request.args.get('days', 30) or 30)
+    search = (request.args.get('q') or '').strip()
 
     since = datetime.utcnow() - timedelta(days=days)
     query = AuditLog.query.filter_by(
@@ -650,27 +1043,52 @@ def get_audit_log():
 
     if action:
         query = query.filter_by(action=action)
+    if search:
+        query = query.filter(AuditLog.detail.ilike(f'%{search}%'))
 
-    logs = query.order_by(AuditLog.created_at.desc()).limit(limit).all()
-    return jsonify({'logs': [l.to_dict() for l in logs]}), 200
+    total = query.count()
+    logs = (query.order_by(AuditLog.created_at.desc())
+                 .offset(offset).limit(limit).all())
+
+    # Resolve actor names in one pass instead of N queries.
+    actor_ids = {l.actor_id for l in logs if l.actor_id}
+    actors = {}
+    if actor_ids:
+        actors = {
+            u.id: u for u in User.query.filter(User.id.in_(actor_ids)).all()
+        }
+
+    rows = []
+    for l in logs:
+        row = l.to_dict()
+        actor = actors.get(l.actor_id)
+        row['actor_name']  = actor.full_name if actor else 'Deleted user'
+        row['actor_email'] = actor.email if actor else None
+        row['actor_role']  = actor.role if actor else None
+        rows.append(row)
+
+    distinct_actions = [
+        a[0] for a in db.session.query(AuditLog.action)
+        .filter(AuditLog.institution_id == g.institution_id,
+                AuditLog.created_at >= since)
+        .distinct().order_by(AuditLog.action).all()
+    ]
+
+    return jsonify({
+        'logs':    rows,
+        'total':   total,
+        'limit':   limit,
+        'offset':  offset,
+        'days':    days,
+        'actions': distinct_actions,
+    }), 200
 
 
 def _write_audit(actor_id, institution_id, action, target_type, target_id, detail=''):
-    """Helper — write one audit log row. Call from any route that needs tracking."""
-    try:
-        from app.models.academic import AuditLog
-        log = AuditLog(
-            institution_id=institution_id,
-            actor_id=actor_id,
-            action=action,
-            target_type=target_type,
-            target_id=target_id,
-            detail=detail,
-        )
-        db.session.add(log)
-        db.session.commit()
-    except Exception:
-        pass  # Never crash a real request due to audit failure
+    """Helper — write one audit log row. Delegates to the shared writer so all
+    three institution blueprints share one implementation."""
+    from app.institution.audit import write_audit
+    write_audit(actor_id, institution_id, action, target_type, target_id, detail)
 
 
 # ── Per-Institution Analytics ──────────────────────────────────────────────────
@@ -816,15 +1234,12 @@ def students_at_risk():
 def section_comparison():
     """Compare performance across all sections in the institution"""
     from app.models.knowledge import StudentRanking
-    from sqlalchemy import func
+    from app.models.academic import SectionSubject
 
     sections = Section.query.filter_by(institution_id=g.institution_id).all()
     result = []
 
     for sec in sections:
-        rankings = StudentRanking.query.filter_by(section_subject_id=None).all()  # placeholder
-        # Use section's section_subjects to find rankings
-        from app.models.academic import SectionSubject
         ss_ids = [ss.id for ss in SectionSubject.query.filter_by(section_id=sec.id).all()]
         rankings = StudentRanking.query.filter(
             StudentRanking.section_subject_id.in_(ss_ids)

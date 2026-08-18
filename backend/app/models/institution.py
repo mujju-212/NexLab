@@ -35,6 +35,33 @@ class Institution(db.Model):
     has_experiments         = db.Column(db.Boolean, default=False)
     has_environment         = db.Column(db.Boolean, default=False)
 
+    # ── Admin notification preferences ────────────────────────────────────
+    # JSON blob; see NOTIFICATION_DEFAULTS for the accepted keys.
+    notification_prefs      = db.Column(db.Text)
+
+    NOTIFICATION_DEFAULTS = {
+        'email_sessions':       True,   # session scheduled / started / ended
+        'email_announcements':  True,   # copy announcements to the admin inbox
+        'email_user_activity':  False,  # users created / deactivated / modified
+        'email_weekly_digest':  True,   # Monday summary of institution activity
+        'push_sessions':        True,   # real-time alert when a session goes live
+        'push_announcements':   False,  # push when an announcement is sent
+    }
+
+    def notifications(self) -> dict:
+        """Stored preferences merged over the defaults (defaults win on gaps)."""
+        import json
+        prefs = dict(self.NOTIFICATION_DEFAULTS)
+        if self.notification_prefs:
+            try:
+                stored = json.loads(self.notification_prefs)
+                if isinstance(stored, dict):
+                    prefs.update({k: bool(v) for k, v in stored.items()
+                                  if k in self.NOTIFICATION_DEFAULTS})
+            except (ValueError, TypeError):
+                pass
+        return prefs
+
     # Relationships
     users           = db.relationship('User', backref='institution', lazy='dynamic')
     subjects        = db.relationship('Subject', backref='institution', lazy='dynamic')
@@ -122,4 +149,11 @@ class PlatformConfig(db.Model):
         for k, v in cls.DEFAULTS.items():
             if not cls.query.get(k):
                 db.session.add(cls(key=k, value=v))
+
+        # Ensure allow_self_registration is 'true' so individual users can register.
+        # The initial migration seeded it as 'false'; correct it here if still at that value.
+        row = cls.query.get('allow_self_registration')
+        if row and row.value == 'false':
+            row.value = 'true'
+
         db.session.commit()

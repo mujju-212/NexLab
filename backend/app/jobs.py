@@ -20,15 +20,6 @@ def start():
     if scheduler.running:
         return
 
-    # Job 0: Ensure Judge0 (code execution) containers are up — one-shot on boot
-
-    scheduler.add_job(
-        func=_ensure_judge0,
-        trigger='date',
-        id='ensure_judge0',
-        replace_existing=True
-    )
-
     # Job 1: Send session reminders (every 15 minutes)
     scheduler.add_job(
         func=_send_session_reminders,
@@ -60,53 +51,6 @@ def start():
 
 
 # ── Individual job functions ──────────────────────────────────────────────────
-
-def _ensure_judge0():
-    """Auto-start the Judge0 Docker stack if it is not reachable.
-
-    Runs once right after backend boot so code execution works without
-    manually starting containers. Best-effort: failures only log.
-    """
-    import os, time, subprocess
-    import requests
-
-    app = scheduler.app   # stored Flask app — scheduler threads have no app context
-    try:
-        url = app.config['JUDGE0_URL']
-    except Exception:
-        return
-
-    def _reachable():
-        try:
-            return requests.get(f'{url}/about', timeout=4).status_code == 200
-        except Exception:
-            return False
-
-    if _reachable():
-        app.logger.info('[judge0] already running at %s', url)
-        return
-
-    app.logger.warning('[judge0] not reachable — starting Docker stack…')
-    compose_dir = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'docker')
-    compose_file = os.path.join(compose_dir, 'docker-compose.judge0.yml')
-    try:
-        subprocess.run(
-            f'docker compose -f "{compose_file}" up -d',
-            shell=True, cwd=compose_dir, timeout=180,
-            capture_output=True,
-        )
-    except Exception as e:
-        app.logger.error('[judge0] docker compose failed: %s', e)
-        return
-
-    # Wait up to ~90s for the API to come up
-    for _ in range(18):
-        time.sleep(5)
-        if _reachable():
-            app.logger.info('[judge0] started successfully')
-            return
-    app.logger.error('[judge0] containers started but API still unreachable')
-
 
 def _send_session_reminders():
     from datetime import datetime, timedelta

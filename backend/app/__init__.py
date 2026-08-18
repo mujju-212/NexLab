@@ -50,6 +50,7 @@ def create_app(config_name=None):
     from app.ai.routes import ai_bp
     from app.ml.routes import ml_bp
     from app.free.routes import free_bp
+    from app.practice.routes import practice_bp
 
     app.register_blueprint(auth_bp,            url_prefix='/api/auth')
     app.register_blueprint(admin_bp,           url_prefix='/api/admin')
@@ -66,6 +67,7 @@ def create_app(config_name=None):
     app.register_blueprint(ai_bp,              url_prefix='/api/ai')
     app.register_blueprint(ml_bp,              url_prefix='/api/ml')
     app.register_blueprint(free_bp,            url_prefix='/api/free')
+    app.register_blueprint(practice_bp,        url_prefix='/api/practice')
 
     # ── Execution Engine v2 (Docker runner) ─────────────────────────────
     # Registered unconditionally — all routes return 503 when the flag is off.

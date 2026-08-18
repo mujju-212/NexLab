@@ -11,6 +11,7 @@ from app.auth.utils import require_role
 from app.extensions import db
 from app.models.academic import Department, Section, SectionStudent, SectionSubject
 from app.models.user import User
+from app.institution.audit import write_audit
 
 departments_bp = Blueprint('departments', __name__)
 
@@ -44,6 +45,8 @@ def create_department():
     )
     db.session.add(dept)
     db.session.commit()
+    write_audit(g.user_id, g.institution_id, 'create_department', 'department',
+                dept.id, f"Created department {dept.name}")
     return jsonify({'department': dept.to_dict()}), 201
 
 
@@ -56,6 +59,8 @@ def update_department(dept_id):
         if field in data:
             setattr(dept, field, data[field])
     db.session.commit()
+    write_audit(g.user_id, g.institution_id, 'update_department', 'department',
+                dept.id, f"Updated department {dept.name}")
     return jsonify({'department': dept.to_dict()}), 200
 
 
@@ -71,8 +76,11 @@ def delete_department(dept_id):
                      f'Reassign them first.'
         }), 409
 
+    name = dept.name
     db.session.delete(dept)
     db.session.commit()
+    write_audit(g.user_id, g.institution_id, 'delete_department', 'department',
+                dept_id, f"Deleted department {name}")
     return jsonify({'message': 'Department deleted'}), 200
 
 
@@ -106,6 +114,8 @@ def update_section(section_id):
         section.class_teacher_id = teacher_id
 
     db.session.commit()
+    write_audit(g.user_id, g.institution_id, 'update_section', 'section',
+                section.id, f"Updated section {section.name}")
     return jsonify({'section': section.to_dict()}), 200
 
 
@@ -122,6 +132,9 @@ def delete_section(section_id):
                      f'{assigned} subject assignment(s). Remove those first.'
         }), 409
 
+    name = section.name
     db.session.delete(section)
     db.session.commit()
+    write_audit(g.user_id, g.institution_id, 'delete_section', 'section',
+                section_id, f"Deleted section {name}")
     return jsonify({'message': 'Section deleted'}), 200

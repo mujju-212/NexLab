@@ -23,7 +23,7 @@ class CodeVersion(db.Model):
 
 
 class CodeAttempt(db.Model):
-    """Every Judge0 execution — all attempts, not just final"""
+    """Every code execution — all attempts, not just final"""
     __tablename__ = 'code_attempts'
     id                  = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     student_id          = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)

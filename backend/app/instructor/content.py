@@ -1,7 +1,8 @@
 """
 Instructor — Pre-lab Content Module Management
-Routes for creating/editing content sections (text, video, quiz, pdf)
-that students must complete before entering a live session.
+Routes for creating/editing content sections
+(text, markdown, code, image, video, pdf, quiz) that students must complete
+before entering a live session.
 """
 from flask import Blueprint, request, jsonify, g
 from app.auth.utils import require_role
@@ -46,7 +47,7 @@ def add_content_module(exp_id):
     """
     Add a content module to an experiment.
     Body: {
-      "module_type": "text" | "video" | "pdf" | "quiz",
+      "module_type": "text"|"video"|"pdf"|"quiz"|"markdown"|"code"|"image",
       "title": "...",
       "content_data": { ... },   ← type-specific
       "display_order": 1,        ← optional, auto-assigned if missing
@@ -54,11 +55,17 @@ def add_content_module(exp_id):
     }
 
     content_data shapes:
-      text:  {"html": "<p>...</p>"}
-      video: {"url": "https://youtube.com/...", "duration_sec": 300}
-      pdf:   {"url": "https://cloudinary.com/...", "pages": 12}
-      quiz:  {"pass_threshold": 70, "max_attempts": 3,
-              "cooldown_minutes": 30, "shuffle": true}
+      text:     {"html": "<p>...</p>"}
+      markdown: {"md": "# heading\n..."}            ← rendered client-side
+      code:     {"language": "python", "code": "...",
+                 "runnable": true, "stdin": ""}     ← runnable via /execution/playground
+      image:    {"url": "https://...", "alt": "...", "caption": "..."}
+      video:    {"url": "https://youtube.com/...", "duration_sec": 300}
+      pdf:      {"url": "https://cloudinary.com/...", "pages": 12}
+      quiz:     {"pass_threshold": 70, "max_attempts": 3,
+                 "cooldown_minutes": 30, "shuffle": true}
+
+    NOTE: module_type is a VARCHAR(10) column — keep new type names ≤10 chars.
     """
     exp = Experiment.query.filter_by(
         id=exp_id, institution_id=g.institution_id
@@ -66,8 +73,9 @@ def add_content_module(exp_id):
 
     data = request.get_json() or {}
     module_type = data.get('module_type')
-    if module_type not in ('text', 'video', 'pdf', 'quiz'):
-        return jsonify({'error': 'module_type must be text | video | pdf | quiz'}), 400
+    _ALLOWED = ('text', 'video', 'pdf', 'quiz', 'markdown', 'code', 'image')
+    if module_type not in _ALLOWED:
+        return jsonify({'error': f'module_type must be one of: {", ".join(_ALLOWED)}'}), 400
 
     # Auto display_order — append to end
     max_order = db.session.query(

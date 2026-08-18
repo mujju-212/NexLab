@@ -8,8 +8,11 @@ class LabSession(db.Model):
     id                      = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     institution_id          = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
     section_subject_id      = db.Column(db.String(36), db.ForeignKey('section_subjects.id'), nullable=False)
-    experiment_id           = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=False)
+    # NULL when an institution admin books the slot first and the instructor
+    # attaches the experiment later.
+    experiment_id           = db.Column(db.String(36), db.ForeignKey('experiments.id'))
 
+    title                   = db.Column(db.Text)        # admin-facing label, e.g. "DS Lab 5"
     scheduled_at            = db.Column(db.DateTime, nullable=False)
     duration_minutes        = db.Column(db.Integer, nullable=False)
     gate_score_threshold    = db.Column(db.Integer, default=70)     # % to pass pre-lab quiz
@@ -36,6 +39,8 @@ class LabSession(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'title': self.title,
+            'section_subject_id': self.section_subject_id,
             'experiment_id': self.experiment_id,
             'scheduled_at': self.scheduled_at.isoformat() if self.scheduled_at else None,
             'duration_minutes': self.duration_minutes,
@@ -46,6 +51,8 @@ class LabSession(db.Model):
             'catchup_deadline': self.catchup_deadline.isoformat() if self.catchup_deadline else None,
             'status': self.status,
             'jitsi_room_name': self.jitsi_room_name,
+            'started_at': self.started_at.isoformat() if self.started_at else None,
+            'ended_at': self.ended_at.isoformat() if self.ended_at else None,
         }
 
 
