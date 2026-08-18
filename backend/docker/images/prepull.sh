@@ -15,7 +15,7 @@ echo ""
 stock_images=(
     "python:3.14-slim"
     "gcc:16"
-    "mcr.microsoft.com/dotnet/sdk:10.0"
+    "mcr.microsoft.com/dotnet/sdk:10.0"   # base for nexlab/csharp:10 (built below)
     "r-base:latest"          # pinned by tag after first pull — see §18
 )
 
@@ -28,6 +28,12 @@ done
 # ── 2. Build custom NexLab images ────────────────────────────────────────────
 echo ""
 echo "[2/2] Building NexLab custom images..."
+
+echo "  building nexlab/csharp:10 (.NET 10, pre-restored console project) ..."
+docker build \
+    -f "${SCRIPT_DIR}/csharp.Dockerfile" \
+    -t nexlab/csharp:10 \
+    "${SCRIPT_DIR}"
 
 echo "  building nexlab/jvm:25 (Java 25 + Kotlin 2.4.10) ..."
 docker build \

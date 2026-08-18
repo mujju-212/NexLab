@@ -1,13 +1,9 @@
-import base64
-import time
-import requests
 from flask import Blueprint, request, jsonify, current_app, g
-from app.auth.utils import require_auth, require_role
+from app.auth.utils import require_auth
 from app.extensions import db, limiter
 from app.models.submission import CodeVersion, CodeAttempt
 from app.ml.code_quality import analyze_code_quality, quality_to_score
 from app.execution.languages import (
-    LANGUAGE_IDS as _LANGUAGE_IDS,
     GROUP_ORDER,
     catalog,
     resolve as resolve_language,
@@ -16,58 +12,37 @@ from datetime import datetime
 
 execution_bp = Blueprint('execution', __name__)
 
-# ── Judge0 safe value parsers ─────────────────────────────────────────────────
-# Judge0 sometimes returns time as a repeated string e.g. "0.0860.086"
-# This happens when polling returns the value multiple times concatenated.
-# We take the FIRST valid float in the string.
-def _safe_float(val, default=0.0):
-    """Parse first float from a possibly-repeated string like '0.0860.086'"""
-    if val is None:
-        return default
-    try:
-        return float(val)
-    except (ValueError, TypeError):
-        s = str(val)
-        # Find first valid float prefix
-        import re
-        m = re.match(r'[-+]?\d*\.?\d+', s)
-        return float(m.group()) if m else default
 
-def _safe_int(val, default=0):
-    """Parse first int from a possibly-repeated string"""
-    return int(_safe_float(val, default))
-
-LANGUAGE_IDS = _LANGUAGE_IDS
-
-
-# ── Blocking I/O under whichever server is actually running ───────────────────
-def _run_blocking(fn):
-    """
-    Call `fn` (blocking HTTP + sleeps) in a way that suits the live server.
-
-    Under eventlet the sockets are monkey-patched, so blocking `requests`
-    would stall the whole hub — the work has to go to a real OS thread via
-    `eventlet.tpool`. Under the threading server (what `socketio.run` uses
-    here, see `async_mode='threading'`) there is no hub at all: `tpool` then
-    deadlocks as soon as two request threads reach it together, because they
-    each try to drive eventlet's shared completion pipe from their own hub.
-    A plain call is already on a real thread there, so just make it.
-    """
-    try:
-        from eventlet.patcher import is_monkey_patched
-    except ImportError:
-        return fn()                      # eventlet not installed at all
-    if not is_monkey_patched('socket'):
-        return fn()                      # threading / plain WSGI server
-    from eventlet import tpool           # `import eventlet` does not bind this
-    return tpool.execute(fn)
-
-
-# ── Playground guard rails ────────────────────────────────────────────────────
+# ── Playground / run guard rails ──────────────────────────────────────────────
 MAX_CODE_CHARS  = 60_000    # ~1.5k lines — generous for a lab exercise
 MAX_STDIN_CHARS = 20_000
-POLL_ATTEMPTS   = 60        # 60 × 0.5s = 30s ceiling
-POLL_INTERVAL   = 0.5
+
+
+# ── Shared Docker execution path ──────────────────────────────────────────────
+def _run_docker(code: str, lang_id: str, stdin: str, user_id):
+    """
+    Execute code in the Docker sandbox under admission control.
+
+    Returns (result, error) where exactly one is non-None:
+      result — the runner.run() dict (status_id / stdout / stderr / time_ms / …)
+      error  — a ready (response, status_code) tuple to hand straight back:
+                 429 + Retry-After when the queue is full / per-user cap hit,
+                 503 when the engine itself failed (status_id 13, not the code).
+    A compile/runtime error (status 6/11/…) is a normal `result`, not an error —
+    the caller still stores it, because a failed attempt is a real attempt.
+    """
+    from app.exec_engine import runner as _runner
+    from app.exec_engine import admission as _adm
+    try:
+        with _adm.get().acquire(user_id):
+            result = _runner.run(code=code, language=lang_id, stdin=stdin)
+    except _adm.AdmissionError as exc:
+        resp = jsonify({'error': str(exc)})
+        resp.headers['Retry-After'] = str(exc.retry_after)
+        return None, (resp, 429)
+    if result.get('status_id') == 13:   # Internal Error — platform, never the student
+        return None, (jsonify({'error': result.get('note') or 'Execution engine error.'}), 503)
+    return result, None
 
 
 @execution_bp.route('/run', methods=['POST'])
@@ -75,7 +50,7 @@ POLL_INTERVAL   = 0.5
 @limiter.limit("10 per minute")   # prevent Run-button spam
 def run_code():
     """
-    Execute student code via Judge0.
+    Execute student code in the Docker sandbox.
     Stores every attempt (even failed/non-compiling) per srcML-DKT paper.
     """
     data          = request.get_json()
@@ -86,19 +61,21 @@ def run_code():
     session_id    = data.get('session_id')
     is_submit     = data.get('is_final_submission', False)
 
-    if not code_files or language not in LANGUAGE_IDS:
+    spec = resolve_language(language)
+    if not code_files or not spec:
         return jsonify({'error': 'Invalid code or language'}), 400
+    if spec['engine'] == 'browser':
+        return jsonify({'error': 'Browser languages run client-side only.'}), 400
+    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+        return jsonify({'error': 'Code execution engine is not enabled on this server.'}), 503
 
     # For single execution, use main file
     primary_code = code_files.get('main', next(iter(code_files.values()), ''))
 
-    # ── Execute via Judge0 ────────────────────────────────────────────────
-    mode = current_app.config['JUDGE0_MODE']
-    if mode == 'polling':
-        result = _run_polling(primary_code, language, stdin)
-    else:
-        result = _run_webhook(primary_code, language, stdin, g.user_id)
-        return jsonify({'status': 'pending', 'message': 'Executing...'}), 202
+    # ── Execute in the Docker sandbox ─────────────────────────────────────
+    result, error = _run_docker(primary_code, spec['id'], stdin, g.user_id)
+    if error:
+        return error
 
     # ── Store attempt (EVERY run, not just final) ─────────────────────────
     if experiment_id:
@@ -127,8 +104,10 @@ def run_code():
             stderr=result.get('stderr'),
             test_cases_passed=result.get('test_cases_passed', 0),
             test_cases_total=result.get('test_cases_total', 0),
-            execution_time_ms=_safe_int((result.get('time') or 0), 0) * 1000,
-            memory_used_kb=_safe_int(result.get('memory'), 0) or None,
+            # runner.run() reports wall time already in ms and memory in KB —
+            # no Judge0-style seconds→ms conversion needed.
+            execution_time_ms=int(result.get('time_ms') or 0),
+            memory_used_kb=result.get('memory_kb') or None,
             loc=quality_metrics.get('loc'),
             cyclomatic_complexity=quality_metrics.get('cyclomatic_complexity'),
             quality_grade=quality_metrics.get('quality_grade'),
@@ -161,142 +140,6 @@ def auto_save():
     )
     db.session.commit()
     return jsonify({'status': 'saved'}), 200
-
-
-@execution_bp.route('/callback', methods=['PUT'])
-def judge0_callback():
-    """Judge0 webhook callback (production mode)"""
-    # Verify webhook secret
-    secret = request.headers.get('Authorization', '')
-    if secret != current_app.config.get('JUDGE0_WEBHOOK_SECRET'):
-        return '', 403
-
-    result = request.get_json()
-    student_id = result.get('metadata', {}).get('student_id')
-    if student_id:
-        from app.extensions import socketio
-        socketio.emit('code_result', result, room=f"student_{student_id}")
-    return '', 200
-
-
-# ── Internal helpers ──────────────────────────────────────────────────────────
-
-def _run_polling(code: str, language: str, stdin: str) -> dict:
-    judge0_url = current_app.config['JUDGE0_URL']
-    time_limit = current_app.config['CODE_TIME_LIMIT_SEC']
-    mem_limit  = current_app.config['CODE_MEMORY_LIMIT_KB']
-
-    # Submit
-    resp = requests.post(f"{judge0_url}/submissions", json={
-        'source_code': code,
-        'language_id': LANGUAGE_IDS[language],
-        'stdin':       stdin,
-        'cpu_time_limit': time_limit,
-        'memory_limit':   mem_limit,
-    }, timeout=5)
-    resp.raise_for_status()
-    token = resp.json()['token']
-
-    # Poll (max 10s)
-    for _ in range(20):
-        time.sleep(0.5)
-        r = requests.get(f"{judge0_url}/submissions/{token}",
-                         params={'fields': 'status,stdout,stderr,compile_output,time,memory'},
-                         timeout=5)
-        data = r.json()
-        if data['status']['id'] not in (1, 2):  # not Queued/Processing
-            return {
-                'status':          data['status']['description'],
-                'stdout':          data.get('stdout', ''),
-                'stderr':          data.get('stderr', ''),
-                'compile_output':  data.get('compile_output', ''),
-                'time':            data.get('time', 0),
-                'memory':          data.get('memory', 0),
-            }
-    return {'status': 'timeout', 'stdout': '', 'stderr': 'Execution timed out.'}
-
-
-@execution_bp.route('/run-dev', methods=['POST', 'OPTIONS'])
-def run_code_dev():
-    """
-    DEV-ONLY: Execute code without auth — for HTML test UI.
-    Judge0 calls go through `_run_blocking` so they behave under both the
-    threading server and an eventlet one.
-    """
-    if request.method == 'OPTIONS':
-        return '', 204
-
-    data     = request.get_json()
-    code     = data.get('code', '')
-    language = data.get('language', 'python').lower()
-    stdin    = data.get('stdin', '')
-
-    lang_id = LANGUAGE_IDS.get(language)
-    if not lang_id:
-        return jsonify({'error': f'Unsupported language: {language}'}), 400
-    if not code.strip():
-        return jsonify({'error': 'No code provided'}), 400
-
-    judge0_url = current_app.config.get('JUDGE0_URL', 'http://localhost:2358')
-
-    def _call_judge0():
-        """Submit to Judge0 and poll — blocking, so it runs via _run_blocking."""
-        try:
-            # Submit async (no wait=true — avoids eventlet long-poll issues)
-            r = requests.post(f"{judge0_url}/submissions",
-                json={'source_code': code, 'language_id': lang_id, 'stdin': stdin},
-                timeout=10)
-            r.raise_for_status()
-            token = r.json().get('token')
-            if not token:
-                return {'error': 'No token from Judge0'}
-
-            # Poll until done (max 30s)
-            import time as _time
-            for _ in range(60):
-                _time.sleep(0.5)
-                pr = requests.get(f"{judge0_url}/submissions/{token}", timeout=10)
-                pd = pr.json()
-                sid = (pd.get('status') or {}).get('id')
-                if sid and sid not in (1, 2):   # not In Queue / Processing
-                    return pd
-            return {'error': 'Execution timed out after 30s', 'status': {'id': None, 'description': 'Timeout'}}
-
-        except Exception as e:
-            return {'error': str(e)}
-
-    d = _run_blocking(_call_judge0)
-
-    if 'error' in d and 'status' not in d:
-        return jsonify({'error': d['error']}), 502
-
-    status_id   = (d.get('status') or {}).get('id')
-    status_desc = (d.get('status') or {}).get('description', 'Unknown')
-
-    return jsonify({
-        'status':         status_desc,
-        'status_id':      status_id,
-        'stdout':         d.get('stdout')  or '',
-        'stderr':         d.get('stderr')  or '',
-        'compile_output': d.get('compile_output') or '',
-        'time':           d.get('time'),
-        'memory':         d.get('memory'),
-        'language':       language,
-        'lang_id':        lang_id,
-    }), 200
-
-
-def _run_webhook(code: str, language: str, stdin: str, student_id: str) -> dict:
-    judge0_url  = current_app.config['JUDGE0_URL']
-    callback    = f"{current_app.config['BASE_URL']}/api/execution/callback"
-    resp = requests.post(f"{judge0_url}/submissions", json={
-        'source_code': code,
-        'language_id': LANGUAGE_IDS[language],
-        'stdin':       stdin,
-        'callback_url': callback,
-        'metadata':    {'student_id': student_id},
-    }, timeout=5)
-    return {'status': 'pending', 'token': resp.json().get('token')}
 
 
 def _save_code_version(student_id, experiment_id, session_id, files, save_type):
@@ -334,7 +177,6 @@ def list_languages():
     return jsonify({'languages': catalog(), 'groups': GROUP_ORDER}), 200
 
 
-
 @execution_bp.route('/playground', methods=['POST'])
 @require_auth
 @limiter.limit("20 per minute")
@@ -342,7 +184,7 @@ def playground_run():
     """
     Execute arbitrary code in any supported language and return the full
     terminal picture: stdout, stderr, compiler diagnostics, exit code,
-    wall time and peak memory.
+    wall time and peak memory — all from the Docker sandbox.
     """
     data     = request.get_json(silent=True) or {}
     code     = data.get('code') or ''
@@ -352,124 +194,23 @@ def playground_run():
     spec = resolve_language(language)
     if not spec:
         return jsonify({'error': f'Unsupported language: {language}'}), 400
+    if spec['engine'] == 'browser':
+        # client renders these in a sandboxed iframe; never a backend call
+        return jsonify({'error': 'Browser languages run client-side only.'}), 400
     if not code.strip():
         return jsonify({'error': 'Nothing to run — the editor is empty.'}), 400
     if len(code) > MAX_CODE_CHARS:
         return jsonify({'error': f'Source is too large (limit {MAX_CODE_CHARS:,} characters).'}), 413
     if len(stdin) > MAX_STDIN_CHARS:
         return jsonify({'error': f'Input is too large (limit {MAX_STDIN_CHARS:,} characters).'}), 413
+    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+        return jsonify({'error': 'Code execution engine is not enabled on this server.'}), 503
 
-    result = _judge0_execute(code, spec['judge0_id'], stdin)
-    if '_error' in result:
-        return jsonify({'error': result['_error']}), 502
+    result, error = _run_docker(code, spec['id'], stdin, g.user_id)
+    if error:
+        return error
 
     result['language'] = spec['id']
     result['label']    = f"{spec['label']} {spec['version']}"
+    result['engine']   = 'docker'
     return jsonify(result), 200
-
-
-def _b64(text: str) -> str:
-    return base64.b64encode((text or '').encode('utf-8')).decode('ascii')
-
-
-def _unb64(value) -> str:
-    """Decode a base64 field from Judge0; tolerate nulls and odd bytes."""
-    if not value:
-        return ''
-    try:
-        return base64.b64decode(value).decode('utf-8', errors='replace')
-    except Exception:
-        return str(value)
-
-
-def _judge0_execute(code: str, lang_id: int, stdin: str) -> dict:
-    """
-    Submit to Judge0 and poll until the verdict is in.
-
-    Uses base64 transport so unicode and binary-ish output survive the round
-    trip, and hands the blocking HTTP calls to `_run_blocking` so they work
-    under both the threading server and eventlet.
-    Returns {'_error': msg} when the engine itself is unreachable.
-    """
-    judge0_url = current_app.config.get('JUDGE0_URL', 'http://localhost:2358')
-    cpu_limit  = current_app.config.get('CODE_TIME_LIMIT_SEC', 10)
-    mem_limit  = current_app.config.get('CODE_MEMORY_LIMIT_KB', 262144)
-    api_key    = current_app.config.get('JUDGE0_API_KEY', '')
-    headers    = {'X-Auth-Token': api_key} if api_key else {}
-
-    FIELDS = ('status,stdout,stderr,compile_output,message,'
-              'exit_code,exit_signal,time,memory')
-
-    def _call():
-        import time as _time
-        try:
-            r = requests.post(
-                f"{judge0_url}/submissions",
-                params={'base64_encoded': 'true'},
-                headers=headers,
-                json={
-                    'source_code':     _b64(code),
-                    'language_id':     lang_id,
-                    'stdin':           _b64(stdin),
-                    'cpu_time_limit':  cpu_limit,
-                    'memory_limit':    mem_limit,
-                },
-                timeout=10,
-            )
-            r.raise_for_status()
-            token = r.json().get('token')
-            if not token:
-                return {'_error': 'Execution engine did not return a submission token.'}
-
-            for _ in range(POLL_ATTEMPTS):
-                _time.sleep(POLL_INTERVAL)
-                pr = requests.get(
-                    f"{judge0_url}/submissions/{token}",
-                    params={'base64_encoded': 'true', 'fields': FIELDS},
-                    headers=headers,
-                    timeout=10,
-                )
-                pr.raise_for_status()
-                payload   = pr.json()
-                status_id = (payload.get('status') or {}).get('id')
-                if status_id and status_id not in (1, 2):   # not Queued / Processing
-                    return payload
-            return {'_error': 'Execution timed out waiting for the engine (30s).'}
-
-        except requests.RequestException as exc:
-            return {'_error': f'Cannot reach the code execution engine: {exc}'}
-
-    raw = _run_blocking(_call)
-
-    if '_error' in raw:
-        return raw
-    return _shape_result(raw)
-
-
-# Judge0 status ids that mean "the program itself blew up" rather than
-# "the platform failed" — used to pick the console banner on the client.
-_COMPILE_ERROR_ID = 6
-_RUNTIME_ERROR_IDS = frozenset({7, 8, 9, 10, 11, 12})
-
-
-def _shape_result(raw: dict) -> dict:
-    """Flatten a Judge0 submission payload into the compiler's console shape."""
-    status      = raw.get('status') or {}
-    status_id   = status.get('id')
-    time_sec    = _safe_float(raw.get('time'), 0.0)
-
-    return {
-        'status':          status.get('description') or 'Unknown',
-        'status_id':       status_id,
-        'success':         status_id == 3,
-        'is_compile_error': status_id == _COMPILE_ERROR_ID,
-        'is_runtime_error': status_id in _RUNTIME_ERROR_IDS,
-        'stdout':          _unb64(raw.get('stdout')),
-        'stderr':          _unb64(raw.get('stderr')),
-        'compile_output':  _unb64(raw.get('compile_output')),
-        'message':         _unb64(raw.get('message')),
-        'exit_code':       raw.get('exit_code'),
-        'exit_signal':     raw.get('exit_signal'),
-        'time_ms':         round(time_sec * 1000, 1),
-        'memory_kb':       _safe_int(raw.get('memory'), 0),
-    }

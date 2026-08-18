@@ -16,6 +16,7 @@ import subprocess
 import tempfile
 import threading
 import logging
+import uuid
 from pathlib import Path
 
 from app.exec_engine.sandbox import build_flags
@@ -45,7 +46,11 @@ def _get_output_cap() -> int:
 def run(code: str, language: str, stdin: str = '') -> dict:
     """
     Execute `code` in the language's Docker container.
-    Returns the same dict shape as _shape_result() in execution/routes.py.
+
+    Returns a result dict combining the verdict fields from verdict.from_meta()
+    (status_id / status / success / is_compile_error / …) with the captured
+    stdout, stderr, compile_output, time_ms, compile_ms, memory_kb, truncated,
+    engine and image. This is the single result shape the whole app consumes.
     """
     spec = get_spec(language)
     if not spec:
@@ -58,13 +63,16 @@ def run(code: str, language: str, stdin: str = '') -> dict:
         from flask import current_app
         cfg = current_app.config
         docker_bin      = cfg.get('DOCKER_BIN', 'docker')
-        memory_mb       = cfg.get('EXEC_MEMORY_MB', 256)
+        # Compile-heavy toolchains (kotlinc, dotnet build) need far more RAM to
+        # COMPILE than to run — a spec can raise the whole-container cap via
+        # 'memory_mb'. Simple/interpreted languages keep the tight default.
+        memory_mb       = spec.get('memory_mb') or cfg.get('EXEC_MEMORY_MB', 256)
         compile_timeout = spec['compile_timeout'] or cfg.get('EXEC_COMPILE_TIMEOUT_SEC', 10)
         run_timeout     = cfg.get('EXEC_RUN_TIMEOUT_SEC', 5)
     except RuntimeError:
         docker_bin      = 'docker'
-        memory_mb       = 256
-        compile_timeout = 10
+        memory_mb       = spec.get('memory_mb') or 256
+        compile_timeout = spec['compile_timeout'] or 10
         run_timeout     = 5
 
     # Hard deadline = compile + run + 3 s grace
@@ -72,6 +80,15 @@ def run(code: str, language: str, stdin: str = '') -> dict:
 
     with tempfile.TemporaryDirectory(prefix='nexlab_run_') as tmpdir:
         tmpdir_path = Path(tmpdir)
+
+        # Make the work dir world-writable so uid 65534 (nobody) inside the
+        # container can write meta.json / compile.txt back to the host mount.
+        # On Windows / WSL2 this is a no-op for host security (NTFS ACLs own
+        # the permissions), but it lets Linux containers honour the mode.
+        try:
+            os.chmod(tmpdir, 0o777)
+        except OSError:
+            pass  # Windows — NTFS doesn't map Unix modes, but Docker handles it
 
         # Write source, stdin, wrapper into the temp dir
         (tmpdir_path / spec['filename']).write_text(code, encoding='utf-8')
@@ -81,40 +98,65 @@ def run(code: str, language: str, stdin: str = '') -> dict:
         wrapper_bytes = _WRAPPER_SH.read_bytes().replace(b'\r\n', b'\n')
         (tmpdir_path / 'wrapper.sh').write_bytes(wrapper_bytes)
 
-        # Build env vars for the wrapper (COMPILE_CMD, RUN_CMD)
+        # Build env vars for the wrapper (COMPILE_CMD, RUN_CMD, timeouts)
         env = {}
         if spec['compile_cmd']:
             env['COMPILE_CMD'] = spec['compile_cmd']
         env['RUN_CMD'] = spec['run_cmd']
+        # Per-phase timeouts enforced INSIDE the container by wrapper.sh's
+        # `timeout` calls, so EXEC_RUN_TIMEOUT_SEC is a real wall-clock cap
+        # (not just the host-side backstop). Values are whole seconds.
+        env['RUN_TIMEOUT'] = str(run_timeout)
+        env['COMPILE_TIMEOUT'] = str(compile_timeout)
+        # Per-language env overrides (e.g. C# needs HOME=/tmp). Applied last so
+        # a spec can override the sandbox default HOME=/work.
+        env.update(spec.get('env_extra') or {})
 
-        # Get security flags (no tmpfs since we're bind-mounting now)
-        flags = build_flags(spec['image'], memory_mb, env)
+        # Get security flags. Some languages need a writable in-memory /tmp
+        # (e.g. .NET) even though the rootfs is --read-only; specs opt in via
+        # a 'tmpfs' list. A few also need a higher single-file write ceiling
+        # (e.g. .NET's mmap'd GC heap) via 'fsize_bytes'.
+        flags = build_flags(spec['image'], memory_mb, env,
+                             tmpfs=spec.get('tmpfs'),
+                             fsize_bytes=spec.get('fsize_bytes', 8388608))
 
         # Bind-mount the temp dir as /work (read-write so wrapper can write meta.json)
         # On Docker Desktop for Windows, forward slashes work in volume paths.
         host_path = str(tmpdir_path).replace('\\', '/')
         volume_flag = ['-v', f'{host_path}:/work']
 
+        # Unique container name so we can kill THIS run on host-deadline without
+        # touching another student's container (the old label lookup grabbed the
+        # first nexlab container, which under load could be someone else's).
+        container_name = f"nexlab_{uuid.uuid4().hex[:16]}"
+
         # --rm means Docker removes the container on exit — cleaner than manual rm
         # We still label it nexlab.run=1 so the reaper catches any orphans
-        run_flags = ['run', '--rm'] + volume_flag + flags
+        run_flags = ['run', '--rm', '--name', container_name] + volume_flag + flags
 
         container_id = None
         try:
             stdout_buf, stderr_buf, timed_out, container_id = _docker_run(
-                docker_bin, run_flags, spec['image'], hard_deadline
+                docker_bin, run_flags, spec['image'], hard_deadline, container_name
             )
 
-            # Determine timeout phase from wrapper's phase.txt
+            # Timeout detection has two sources:
+            #  1. wrapper.sh's own `timeout` fired and wrote /work/timeout.txt
+            #     (the normal case — container exits cleanly, host never waits).
+            #  2. the host `hard_deadline` backstop fired (`timed_out`), e.g. the
+            #     container hung before wrapper could self-limit.
+            # Either way we surface a timeout; timeout.txt also tells us the phase.
             timeout_phase = 'run'
-            if timed_out:
+            timeout_file = tmpdir_path / 'timeout.txt'
+            container_timed_out = timeout_file.exists()
+            if container_timed_out:
+                timeout_phase = timeout_file.read_text().strip() or 'run'
+            elif timed_out:
                 phase_file = tmpdir_path / 'phase.txt'
                 if phase_file.exists():
                     timeout_phase = phase_file.read_text().strip() or 'run'
 
-            # OOMKilled — only inspectable if container still exists (--rm removes it)
-            # We can't inspect after --rm exits, so rely on exit code 137
-            oom_killed = False  # handled via exit code below if needed
+            effective_timeout = timed_out or container_timed_out
 
             # Read meta.json written by wrapper.sh
             meta = {}
@@ -125,6 +167,18 @@ def run(code: str, language: str, stdin: str = '') -> dict:
                 except Exception:
                     pass
 
+            # OOMKilled — only inspectable if container still exists (--rm removes
+            # it), so we can't `docker inspect`. wrapper.sh distinguishes OOM from
+            # a real timeout by elapsed time, so a 137 run_exit WITHOUT timeout.txt
+            # means the kernel OOM-killed the program. verdict.py maps that to a
+            # clearer "memory limit exceeded" message instead of a bare exit code.
+            oom_killed = False
+            try:
+                if not effective_timeout and int(meta.get('run_exit', 0)) == 137:
+                    oom_killed = True
+            except (TypeError, ValueError):
+                pass
+
             # Read compile output
             compile_out = ''
             compile_file = tmpdir_path / 'compile.txt'
@@ -132,7 +186,7 @@ def run(code: str, language: str, stdin: str = '') -> dict:
                 compile_out = compile_file.read_text(encoding='utf-8', errors='replace')
 
             verdict = from_meta(meta, oom_killed=oom_killed,
-                                 timed_out=timed_out, timeout_phase=timeout_phase)
+                                 timed_out=effective_timeout, timeout_phase=timeout_phase)
 
             cap       = _get_output_cap()
             stdout    = _decode_truncate(stdout_buf, cap)
@@ -192,7 +246,8 @@ def _docker(docker_bin: str, args: list[str], timeout: int) -> str:
         raise _DockerError("Docker binary not found — is Docker Desktop running?")
 
 
-def _docker_run(docker_bin: str, run_flags: list[str], image: str, deadline: int):
+def _docker_run(docker_bin: str, run_flags: list[str], image: str, deadline: int,
+                container_name: str):
     """
     Launch `docker run ...` and stream stdout+stderr concurrently.
     Returns (stdout_bytes, stderr_bytes, timed_out, container_id_or_None).
@@ -232,36 +287,22 @@ def _docker_run(docker_bin: str, run_flags: list[str], image: str, deadline: int
     try:
         proc.wait(timeout=deadline)
     except subprocess.TimeoutExpired:
+        # Host backstop fired (wrapper's internal `timeout` should normally
+        # catch a runaway first). Kill THIS run's container by its exact name
+        # — never a label lookup, which under load could hit another student's.
         timed_out = True
+        try:
+            subprocess.run([docker_bin, 'kill', container_name],
+                           capture_output=True, timeout=5)
+        except Exception:
+            pass
         proc.kill()
-        # Try to extract the container name from stderr (docker prints it on start)
-        # or let the reaper clean it up
-        container_id = _find_container_by_label(docker_bin)
+        container_id = container_name
 
     t_out.join(timeout=5)
     t_err.join(timeout=5)
 
-    if timed_out and container_id:
-        try:
-            subprocess.run([docker_bin, 'kill', container_id],
-                           capture_output=True, timeout=5)
-        except Exception:
-            pass
-
     return b''.join(stdout_chunks), b''.join(stderr_chunks), timed_out, container_id
-
-
-def _find_container_by_label(docker_bin: str) -> str | None:
-    """Find any running nexlab container (used on timeout to kill it)."""
-    try:
-        r = subprocess.run(
-            [docker_bin, 'ps', '-q', '--filter', 'label=nexlab.run=1'],
-            capture_output=True, timeout=5,
-        )
-        ids = [x for x in r.stdout.decode().split() if x]
-        return ids[0] if ids else None
-    except Exception:
-        return None
 
 
 def _decode_truncate(raw: bytes, cap: int) -> str:

@@ -31,8 +31,6 @@ services:
       FLASK_ENV: ${FLASK_ENV:-development}
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/virtuallab
       GROQ_API_KEY: ${GROQ_API_KEY}
-      JUDGE0_URL: http://judge0_server:2358
-      JUDGE0_MODE: polling
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
       CLOUDINARY_API_SECRET: ${CLOUDINARY_API_SECRET}
@@ -40,6 +38,9 @@ services:
       JWT_SECRET_KEY: ${JWT_SECRET_KEY}
       FRONTEND_URL: ${FRONTEND_URL:-http://localhost:3000}
       BASE_URL: ${BASE_URL:-http://localhost:5000}
+      # Code execution (Docker runner) is OFF by default in this compose. To enable,
+      # set DOCKER_RUNNER_ENABLED=true and mount the host Docker socket into this
+      # container (e.g. - /var/run/docker.sock:/var/run/docker.sock).
     ports:
       - "5000:5000"
     volumes:
@@ -47,49 +48,7 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
-      judge0_server:
-        condition: service_started
     restart: unless-stopped
-
-  # ── Judge0 (Code Execution) ────────────────────────────────────────────────
-  judge0_server:
-    image: judge0/judge0:1.13.0
-    container_name: vlab_judge0
-    volumes:
-      - ./judge0.conf:/judge0.conf:ro
-    ports:
-      - "2358:2358"
-    depends_on:
-      - judge0_db
-      - judge0_redis
-    privileged: true
-    restart: always
-
-  judge0_workers:
-    image: judge0/judge0:1.13.0
-    container_name: vlab_judge0_workers
-    command: ["./scripts/workers"]
-    volumes:
-      - ./judge0.conf:/judge0.conf:ro
-    depends_on:
-      - judge0_db
-      - judge0_redis
-    privileged: true
-    restart: always
-
-  judge0_db:
-    image: postgres:13
-    container_name: vlab_judge0_db
-    environment:
-      POSTGRES_PASSWORD: judge0password
-      POSTGRES_DB: judge0
-    volumes:
-      - judge0pgdata:/var/lib/postgresql/data
-
-  judge0_redis:
-    image: redis:5.0.9
-    container_name: vlab_judge0_redis
 
 volumes:
   pgdata:
-  judge0pgdata:

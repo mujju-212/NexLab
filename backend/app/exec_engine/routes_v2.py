@@ -1,106 +1,60 @@
 """
 backend/app/exec_engine/routes_v2.py
-New endpoints for the Docker execution engine (v2).
+Health endpoint for the Docker execution engine.
 
-POST /api/execution/playground-v2   — execute code, identical response shape to /playground
-GET  /api/execution/engine-health   — reports which images are present
+GET /api/execution/engine-health — Docker daemon status, image presence,
+    per-language routing, and active/orphan container counts.
 
-Judge0's /playground is NOT touched. This route is alongside it, behind
-DOCKER_RUNNER_ENABLED, until cutover (§14.3 step 5).
+Code execution itself is served by /api/execution/playground and /run
+(app/execution/routes.py); this module only exposes engine diagnostics.
 """
 import subprocess
-from flask import Blueprint, request, jsonify, current_app, g
+from flask import Blueprint, jsonify, current_app
 from app.auth.utils import require_auth
-from app.execution.languages import resolve_engine
 
 exec_v2_bp = Blueprint('exec_v2', __name__)
 
-# Languages that have Docker specs — used for the health endpoint
+# Images backing the Docker language specs — used for the health endpoint
 _DOCKER_IMAGES = [
     'python:3.14-slim',
     'gcc:16',
-    'mcr.microsoft.com/dotnet/sdk:10.0',
     'r-base:latest',
+    'nexlab/csharp:10',
     'nexlab/jvm:25',
     'nexlab/node:24',
     'nexlab/shell:1',
 ]
 
 
-@exec_v2_bp.route('/playground-v2', methods=['POST', 'OPTIONS'])
-@require_auth
-def playground_v2():
-    """
-    Execute arbitrary code via Docker sandbox.
-    Same request/response shape as /playground so the frontend can switch
-    by changing one URL string.
-    """
-    if request.method == 'OPTIONS':
-        return '', 204
-
-    from app.exec_engine.specs import get as get_spec
-    from app.exec_engine import runner
-    from app.exec_engine import admission as adm
-
-    data     = request.get_json(silent=True) or {}
-    code     = (data.get('code') or '').strip()
-    stdin    = data.get('stdin') or ''
-    language = data.get('language') or 'python'
-
-    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
-        return jsonify({
-            'error': 'Docker execution engine is not enabled on this server.'
-        }), 503
-
-    spec = get_spec(language)
-    if not spec or spec['engine'] == 'browser':
-        return jsonify({'error': f'Unsupported language for Docker engine: {language}'}), 400
-
-    if not code:
-        return jsonify({'error': 'Nothing to run — the editor is empty.'}), 400
-
-    max_chars = current_app.config.get('MAX_CODE_CHARS', 60_000)
-    if len(code) > max_chars:
-        return jsonify({'error': f'Source is too large (limit {max_chars:,} characters).'}), 413
-
-    user_id = getattr(g, 'user_id', 'anonymous')
-    try:
-        with adm.get().acquire(user_id):
-            result = runner.run(code=code, language=language, stdin=stdin)
-    except adm.AdmissionError as exc:
-        resp = jsonify({'error': str(exc)})
-        resp.headers['Retry-After'] = str(exc.retry_after)
-        return resp, 429
-
-    return jsonify(result), 200
-
-
 @exec_v2_bp.route('/engine-health', methods=['GET'])
 @require_auth
 def engine_health():
     """
-    Reports Docker engine availability and which images are present.
-    Used by /system_info dashboards and the cutover checklist.
+    Reports Docker engine availability, image presence, per-language routing,
+    and active/orphan container counts. Consumed by the admin monitoring page.
     """
     docker_bin = current_app.config.get('DOCKER_BIN', 'docker')
     enabled    = current_app.config.get('DOCKER_RUNNER_ENABLED', False)
+    overrides  = current_app.config.get('EXEC_ENGINE_OVERRIDES', '')
 
-    # Check daemon
-    daemon_ok = False
-    daemon_error = ''
+    # ── Docker daemon ────────────────────────────────────────────────────────
+    daemon_ok      = False
+    daemon_version = ''
+    daemon_error   = ''
     try:
         r = subprocess.run(
             [docker_bin, 'version', '--format', '{{.Server.Version}}'],
             capture_output=True, timeout=5,
         )
         if r.returncode == 0:
-            daemon_ok = True
+            daemon_ok      = True
+            daemon_version = r.stdout.decode('utf-8', errors='replace').strip()
         else:
             daemon_error = r.stderr.decode('utf-8', errors='replace').strip()
     except Exception as exc:
         daemon_error = str(exc)
 
-    # Check images
+    # ── Image presence ───────────────────────────────────────────────────────
     images = {}
     for img in _DOCKER_IMAGES:
         try:
@@ -112,27 +66,57 @@ def engine_health():
         except Exception:
             images[img] = False
 
-    # Orphan count
-    orphans = 0
+    # ── Active + orphan containers ───────────────────────────────────────────
+    active_containers = 0
+    orphan_containers = 0
     try:
+        # Running containers
         r = subprocess.run(
+            [docker_bin, 'ps', '-q', '--filter', 'label=nexlab.run=1'],
+            capture_output=True, timeout=5,
+        )
+        active_containers = len([x for x in r.stdout.decode().split() if x])
+        # All (including exited) = orphans
+        r2 = subprocess.run(
             [docker_bin, 'ps', '-a', '-q', '--filter', 'label=nexlab.run=1'],
             capture_output=True, timeout=5,
         )
-        orphans = len([x for x in r.stdout.decode().split() if x])
+        orphan_containers = len([x for x in r2.stdout.decode().split() if x])
     except Exception:
         pass
+
+    # ── Per-language routing table (docker / browser only) ───────────────────
+    from app.execution.languages import LANGUAGES, resolve_engine
+    routing = []
+    for spec in LANGUAGES:
+        routing.append({
+            'id':      spec['id'],
+            'label':   spec['label'],
+            'version': spec['version'],
+            'engine':  resolve_engine(spec['id'], enabled, overrides),
+            'group':   spec['group'],
+        })
+    docker_count = sum(1 for r in routing if r['engine'] == 'docker')
 
     missing = [img for img, present in images.items() if not present]
     ready   = daemon_ok and not missing
 
     return jsonify({
-        'enabled':       enabled,
-        'daemon_ok':     daemon_ok,
-        'daemon_error':  daemon_error,
-        'images':        images,
-        'missing_images': missing,
-        'orphan_containers': orphans,
-        'ready':         ready,
-        'action':        'run backend/docker/images/prepull.sh' if missing else None,
+        # Engine status
+        'enabled':           enabled,
+        'daemon_ok':         daemon_ok,
+        'daemon_version':    daemon_version,
+        'daemon_error':      daemon_error,
+        'ready':             ready,
+        # Images
+        'images':            images,
+        'missing_images':    missing,
+        'action':            'run backend/docker/images/prepull.sh' if missing else None,
+        # Container counts
+        'active_containers': active_containers,
+        'orphan_containers': orphan_containers,
+        # Routing
+        'routing':           routing,
+        'docker_languages':  docker_count,
+        'overrides':         overrides,
     }), 200

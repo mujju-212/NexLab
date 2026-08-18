@@ -2,9 +2,8 @@
 backend/app/exec_engine/verdict.py
 Map container exit information to Judge0-compatible status ids (§9.3).
 
-The frontend already branches on status_id / is_compile_error / is_runtime_error
-(see _shape_result in execution/routes.py) — v2 reuses the exact same numbers
-so the console needs no change.
+The frontend branches on status_id / is_compile_error / is_runtime_error, so these
+numbers are a stable contract — the console needs no change when the engine changes.
 
 Status ID reference:
   3   Accepted

@@ -8,7 +8,9 @@ without touching execution logic.
 """
 
 
-def build_flags(image: str, memory_mb: int, env: dict) -> list[str]:
+def build_flags(image: str, memory_mb: int, env: dict,
+                tmpfs: list | None = None,
+                fsize_bytes: int = 8388608) -> list[str]:
     """
     Return the docker-run flag list (not including the image name or command).
 
@@ -17,6 +19,16 @@ def build_flags(image: str, memory_mb: int, env: dict) -> list[str]:
     image      : e.g. 'python:3.14-slim' or 'nexlab/jvm:25'
     memory_mb  : hard RAM cap in megabytes (e.g. 256)
     env        : dict of environment variables to inject (COMPILE_CMD, RUN_CMD)
+    tmpfs      : optional list of container paths to mount as writable in-memory
+                 tmpfs (e.g. ['/tmp']). Needed by toolchains that insist on
+                 writing outside /work under --read-only (e.g. .NET's mutex/shm
+                 in /tmp). Each tmpfs is size-capped and RAM-backed, so it adds
+                 no persistent disk and is wiped when the container exits.
+    fsize_bytes: RLIMIT_FSIZE — the largest single file the process may create.
+                 Defaults to 8 MB (stops disk fillers). A few toolchains need
+                 more: .NET reserves its GC heap through a memory-mapped file it
+                 ftruncates to a large size, and an 8 MB cap makes that fail as
+                 a bogus "Out of memory" abort — so the C# spec raises this.
     """
     mem = f"{memory_mb}m"
     flags = [
@@ -35,18 +47,21 @@ def build_flags(image: str, memory_mb: int, env: dict) -> list[str]:
 
         # ── File descriptor / write limits ──────────────────────────────────
         "--ulimit", "nofile=256:256", # fd exhaustion
-        "--ulimit", "fsize=8388608",  # 8 MB write ceiling — stops disk fillers
+        "--ulimit", f"fsize={fsize_bytes}",  # single-file write ceiling
 
         # ── Privilege drop ──────────────────────────────────────────────────
         "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges",
-        # Note: --user 65534:65534 (nobody) is omitted — Docker Desktop for Windows
-        # bind-mounted dirs are owned by the Windows user, not uid 65534.
-        # Isolation is still enforced by --cap-drop ALL, no-new-privileges, --network none.
+        # Run as nobody (uid 65534) — never root inside the container.
+        # runner.py does chmod(tmpdir, 0o777) so the bind-mounted /work
+        # is writable by uid 65534 even though the host owns it.
+        "--user", "65534:65534",
 
         # ── Filesystem ──────────────────────────────────────────────────────
         # /work is bind-mounted by runner.py (host temp dir → container /work).
-        # No tmpfs needed. workdir and HOME are set here so toolchains behave.
+        # --read-only blocks all rootfs writes (image layers).
+        # The bind-mounted /work is still writable (bind mounts bypass --read-only).
+        "--read-only",
         "--workdir", "/work",
         "-e", "HOME=/work",           # toolchains that need a writable HOME
 
@@ -60,6 +75,16 @@ def build_flags(image: str, memory_mb: int, env: dict) -> list[str]:
         # stdout and stderr stay on separate multiplexed frames automatically
         # when no TTY is allocated — which is what the console UI expects.
     ]
+
+    # ── Writable in-memory scratch (opt-in per language) ────────────────────
+    # Size-capped so it can't be used to exhaust host RAM beyond --memory, and
+    # RAM-backed so nothing persists to disk. `nosuid`/`nodev` are standard
+    # hardening. We deliberately do NOT add `noexec`: .NET extracts and execs
+    # helper binaries from /tmp during `dotnet build`, and it buys no real
+    # security here anyway — the bind-mounted /work is already exec-capable, and
+    # the process is already nobody + --cap-drop ALL + --no-new-privileges.
+    for path in (tmpfs or []):
+        flags += ["--tmpfs", f"{path}:rw,nosuid,nodev,size={memory_mb}m"]
 
     # Inject environment variables (COMPILE_CMD + RUN_CMD from specs.py)
     for k, v in env.items():

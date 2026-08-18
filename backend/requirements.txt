@@ -18,7 +18,7 @@ eventlet==0.36.1
 # ── Background Jobs ──────────────────────────────────────────────────────────
 apscheduler==3.10.4
 
-# ── HTTP Requests (Judge0, Groq) ──────────────────────────────────────────────
+# ── HTTP Requests (Groq, Gemini, Brevo, Cloudinary) ──────────────────────────
 requests==2.32.3
 tenacity==8.3.0
 

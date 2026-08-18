@@ -84,6 +84,11 @@ SPECS: list[dict] = [
         'version_label': 'JDK 25',
     },
     # ── Kotlin ───────────────────────────────────────────────────────────────
+    # kotlinc is heavy: it needs a big heap AND writes jansi's native lib to
+    # java.io.tmpdir (defaults to /tmp, which is read-only here). JAVA_OPTS is
+    # read by the kotlinc launcher script (not by the `java` run phase), so we
+    # scope both fixes to compile: redirect tmpdir to the writable /work and
+    # give the compiler a 768 MB heap inside a 1 GB container.
     {
         'id': 'kotlin',
         'engine': 'docker',
@@ -91,33 +96,73 @@ SPECS: list[dict] = [
         'filename': 'Main.kt',
         'compile_cmd': 'kotlinc Main.kt -include-runtime -d app.jar',
         'run_cmd': 'java -jar app.jar',
-        'compile_timeout': 20,   # kotlinc is genuinely slow (§5)
+        'compile_timeout': 40,   # cold kotlinc + -include-runtime bundling (§5)
         'version_label': 'Kotlin 2.4 / JDK 25',
+        # kotlinc is the heaviest compiler here. Measured floor for a small
+        # program is ~512 MB; 768 MB container / 512 MB heap leaves headroom for
+        # real multi-file programs without the 1 GB we used before tuning.
+        'memory_mb': 768,
+        'env_extra': {'JAVA_OPTS': '-Xmx512m -Djava.io.tmpdir=/work'},
     },
     # ── C# ───────────────────────────────────────────────────────────────────
-    # .NET 10 file-based apps — top-level statements, no class wrapper.
-    # `dotnet run` compiles + runs in one step (no explicit compile_cmd).
+    # .NET 10. `dotnet run Main.cs` (file-based) forces an online NuGet restore,
+    # which --network none blocks. So nexlab/csharp:10 bakes a pre-restored
+    # console project at /opt/csapp; at run time we copy it into the writable
+    # /work, drop the student's code in as Program.cs, and build OFFLINE
+    # (--no-restore) reusing the baked package cache. Needs a writable /tmp
+    # (tmpfs) for .NET's mutex/shm — provided by sandbox.py for this image.
     {
         'id': 'csharp',
         'engine': 'docker',
-        'image': 'mcr.microsoft.com/dotnet/sdk:10.0',
+        'image': 'nexlab/csharp:10',
         'filename': 'Main.cs',
-        'compile_cmd': '',
-        'run_cmd': 'dotnet run --project . Main.cs',
-        'compile_timeout': None,
+        'compile_cmd': (
+            'cp -r /opt/csapp /work/proj && '
+            'cp /work/Main.cs /work/proj/Program.cs && '
+            'cd /work/proj && dotnet build -c Release --no-restore -o ./out'
+        ),
+        'run_cmd': 'dotnet /work/proj/out/app.dll',
+        'compile_timeout': 30,   # offline build of a console app ~6–10 s
         'version_label': '.NET 10 / C# 14',
+        # .NET Server GC (the default) creates ONE heap per logical CPU it sees,
+        # and it sees all host cores despite --cpus 1.0 (that caps quota, not the
+        # visible count). It then tries to reserve memory for every heap and
+        # aborts with a bogus "Out of memory" in ~1.5 s. DOTNET_gcServer=0 forces
+        # the single-heap Workstation GC — correct and frugal for a 1-core box.
+        # DOTNET_CLI_USE_MSBUILD_SERVER=0 keeps the build single-process.
+        # With Workstation GC the measured floor is ~256 MB; 512 MB leaves 2x
+        # headroom for real programs (the old 1 GB was masking the fsize bug).
+        'memory_mb': 512,
+        # The runner's default 8 MB RLIMIT_FSIZE makes dotnet build abort with a
+        # bogus "Out of memory": .NET reserves its GC heap via a memory-mapped
+        # file it ftruncates far past 8 MB. Raise the single-file write ceiling
+        # to 512 MB for this toolchain (sparse — no real disk until written).
+        'fsize_bytes': 536870912,
+        # .NET writes its mutex/shm to /tmp regardless of HOME, so /tmp must be
+        # writable even though the rootfs is --read-only. HOME=/tmp keeps the
+        # CLI's own scratch off the read-only rootfs too.
+        'tmpfs': ['/tmp'],
+        'env_extra': {
+            'HOME': '/tmp',
+            'DOTNET_CLI_HOME': '/tmp',
+            'DOTNET_CLI_USE_MSBUILD_SERVER': '0',
+            'DOTNET_gcServer': '0',
+        },
     },
     # ── R ────────────────────────────────────────────────────────────────────
+    # Rscript needs a writable TMPDIR; with --read-only only /work is writable.
+    # Setting TMPDIR=/work and R_USER_TEMPDIR=/work redirects R's session temp.
     {
         'id': 'r',
         'engine': 'docker',
         'image': 'r-base:latest',  # pinned by digest after first prepull
         'filename': 'main.R',
         'compile_cmd': '',
-        'run_cmd': 'Rscript main.R',
+        'run_cmd': 'TMPDIR=/work R_USER_TEMPDIR=/work Rscript main.R',
         'compile_timeout': None,
         'version_label': 'R 4.5+',  # updated by prepull.sh
     },
+
     # ── Bash ─────────────────────────────────────────────────────────────────
     {
         'id': 'bash',
