@@ -11,6 +11,7 @@ class Subject(db.Model):
     code            = db.Column(db.String(20))               # e.g. "CS3401"
     description     = db.Column(db.Text)
     env_profile_id  = db.Column(db.String(36), db.ForeignKey('environment_profiles.id'))
+    total_marks     = db.Column(db.Integer, default=100)     # sum of all experiment weightages → max marks for the subject
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)
 
     experiments     = db.relationship('Experiment', backref='subject', lazy='dynamic')
@@ -22,6 +23,7 @@ class Subject(db.Model):
             'code': self.code,
             'description': self.description,
             'env_profile_id': self.env_profile_id,
+            'total_marks': self.total_marks,
         }
 
 

@@ -47,6 +47,13 @@ class Experiment(db.Model):
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at          = db.Column(db.DateTime, onupdate=datetime.utcnow)
 
+    # Phase-2 grading rollup fields
+    # weightage  — how many marks this experiment contributes toward Subject.total_marks
+    # grade_scale — the denominator of this experiment's own score (100-point or 10-point tasks)
+    #   subject_score = Σ (experiment_score / grade_scale) × weightage
+    weightage           = db.Column(db.Integer, default=1)   # marks assigned to this experiment
+    grade_scale         = db.Column(db.Integer, default=100) # 100 or 10
+
     test_cases      = db.relationship('TestCase', backref='experiment', lazy='dynamic')
     content_modules = db.relationship('ContentModule', backref='experiment',
                                       order_by='ContentModule.display_order', lazy='dynamic')
@@ -88,6 +95,8 @@ class Experiment(db.Model):
             'allow_ai_hints': self.allow_ai_hints,
             'time_limit_sec': self.time_limit_sec,
             'is_published': self.is_published,
+            'weightage': self.weightage,
+            'grade_scale': self.grade_scale,
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'rubric': {
                 'test_cases':   self.rubric_test_cases,
@@ -122,18 +131,63 @@ class TestCase(db.Model):
         }
 
 
+class ContentPage(db.Model):
+    """A page (tab) inside an experiment's pre-lab. Blocks (ContentModule) are
+    grouped under a page via ContentModule.page_id. Pages are ordered by
+    display_order; a NULL page_id on a module means it predates pages / is
+    unassigned (rendered in a default first group).
+
+    Scheduling fields:
+      release_at  — if set, the page is only visible to students at/after this datetime.
+      is_live     — instructor's "publish now" toggle; overrides release_at when True.
+    A page is visible to a student when: is_live=True OR (release_at IS NOT NULL AND release_at <= now).
+    """
+    __tablename__ = 'content_pages'
+    id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    experiment_id   = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=False, index=True)
+    title           = db.Column(db.Text, nullable=False)
+    display_order   = db.Column(db.Integer, nullable=False, default=0)
+    created_at      = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # ── Per-page scheduling (Feature 1) ───────────────────────────────────────
+    release_at      = db.Column(db.DateTime, nullable=True)   # scheduled go-live datetime (UTC)
+    is_live         = db.Column(db.Boolean, default=False, nullable=False)  # instant go-live toggle
+
+    def is_visible_to_students(self):
+        """True if a student should be able to see this page right now."""
+        if self.is_live:
+            return True
+        if self.release_at is not None and datetime.utcnow() >= self.release_at:
+            return True
+        return False
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'experiment_id': self.experiment_id,
+            'title': self.title,
+            'display_order': self.display_order,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'release_at': self.release_at.isoformat() if self.release_at else None,
+            'is_live': self.is_live,
+        }
+
+
 class ContentModule(db.Model):
     """Pre-lab content blocks: text, video, pdf, quiz"""
     __tablename__ = 'content_modules'
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     experiment_id   = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=False)
-    module_type     = db.Column(db.String(10), nullable=False)  # text|markdown|code|image|video|pdf|quiz
+    page_id         = db.Column(db.String(36), db.ForeignKey('content_pages.id'), nullable=True, index=True)
+    module_type     = db.Column(db.String(10), nullable=False)  # text|markdown|code|image|video|pdf|html|link|file|quiz|assign|viva
     title           = db.Column(db.Text, nullable=False)
     content_data    = db.Column(db.JSON)
     # text:  {"html": "<p>...</p>"}
     # video: {"url": "cloudinary_url", "duration_sec": 300}
     # pdf:   {"url": "cloudinary_url", "pages": 12}
     # quiz:  {"pass_threshold": 70, "max_attempts": 3, "cooldown_minutes": 30, "shuffle": true}
+    # viva:  {"mode": "topics"|"content", "topics": [...], "count": 5, "difficulty": 2,
+    #         "pass_threshold": 70, "questions": [{"question", "expected_answer", "topics": [...], "difficulty"}]}
     display_order   = db.Column(db.Integer, nullable=False)
     min_watch_pct   = db.Column(db.Integer, default=80)   # for video modules only
 
