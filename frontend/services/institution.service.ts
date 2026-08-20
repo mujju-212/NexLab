@@ -77,6 +77,7 @@ export interface Subject {
   code?: string;
   description?: string;
   env_profile_id?: string;
+  total_marks?: number;
 }
 
 export interface InstitutionDashboard {
@@ -175,6 +176,49 @@ export interface ScheduleSessionDto {
   scheduled_at: string;
   duration_minutes: number;
   instructor_id?: string;
+}
+
+export interface BulkScheduleDto {
+  section_id: string;
+  subject_id: string;
+  instructor_id?: string;
+  title_prefix: string;
+  day_of_week: number; // 0=Mon … 6=Sun
+  start_time: string;  // HH:MM (24-h)
+  start_date: string;  // YYYY-MM-DD
+  end_date: string;    // YYYY-MM-DD
+  duration_minutes: number;
+}
+
+export interface BulkScheduleConflict {
+  date: string;
+  time: string;
+  reason: string;
+}
+
+export interface BulkScheduleResult {
+  created: SessionEnriched[];
+  conflicts: BulkScheduleConflict[];
+  created_count: number;
+  skipped_count: number;
+  message?: string;
+}
+
+export interface SessionEnriched {
+  id: string;
+  title?: string;
+  status: string;
+  scheduled_at: string;
+  started_at?: string;
+  ended_at?: string;
+  duration_minutes: number;
+  instructor_id?: string;
+  instructor_name?: string;
+  subject_name?: string;
+  subject_code?: string;
+  section_name?: string;
+  section_id?: string;
+  student_count?: number;
 }
 
 export interface SectionSubjectDetail {
@@ -363,7 +407,7 @@ export const institutionService = {
     return data.subjects;
   },
 
-  async createSubject(dto: { name: string; code?: string; description?: string }): Promise<Subject> {
+  async createSubject(dto: { name: string; code?: string; description?: string; total_marks?: number }): Promise<Subject> {
     const { data } = await apiClient.post<{ subject: Subject }>('/institution/subjects', dto);
     return data.subject;
   },
@@ -446,6 +490,13 @@ export const institutionService = {
     return (resp.data as any).section_subjects ?? [];
   },
 
+  // Returns ALL section-subject assignments for the institution in one call.
+  // Used to build the sectionSubjectsMap in the Academic structure tree.
+  async listAllSectionSubjects(): Promise<SectionSubjectDetail[]> {
+    const resp = await apiClient.get('/institution/section-subjects').catch(() => ({ data: { section_subjects: [] } }));
+    return (resp.data as any).section_subjects ?? [];
+  },
+
   async updateSectionSubject(ssId: string, dto: { instructor_id: string }): Promise<SectionSubjectDetail> {
     const { data } = await apiClient.patch<{ section_subject: SectionSubjectDetail }>(`/institution/section-subjects/${ssId}`, dto);
     return data.section_subject;
@@ -479,7 +530,14 @@ export const institutionService = {
     return this.updateSession(sessionId, { status: 'cancelled' });
   },
 
-  // ── Academic structure: update / delete ────────────────────────────────────
+  async bulkScheduleSessions(dto: BulkScheduleDto): Promise<BulkScheduleResult> {
+    const { data } = await apiClient.post<BulkScheduleResult>(
+      '/institution/sessions/bulk-schedule', dto
+    );
+    return data;
+  },
+
+
 
   async updateAcademicYear(yearId: string, dto: { year_label?: string; is_active?: boolean }): Promise<AcademicYear> {
     const { data } = await apiClient.patch<{ year: AcademicYear }>(`/institution/academic-years/${yearId}`, dto);
@@ -501,7 +559,7 @@ export const institutionService = {
     return data;
   },
 
-  async updateSubject(subjectId: string, dto: { name?: string; code?: string; description?: string }): Promise<Subject> {
+  async updateSubject(subjectId: string, dto: { name?: string; code?: string; description?: string; total_marks?: number }): Promise<Subject> {
     const { data } = await apiClient.patch<{ subject: Subject }>(`/institution/subjects/${subjectId}`, dto);
     return data.subject;
   },

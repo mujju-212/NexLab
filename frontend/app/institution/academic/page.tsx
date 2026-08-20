@@ -22,6 +22,8 @@ export default function AcademicPage() {
   const [students, setStudents] = useState<InstitutionUser[]>([]);
   const [instructors, setInstructors] = useState<InstitutionUser[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
+  // Bulk map: sectionId → subjects assigned to it (shown as chips in the structure tree).
+  const [sectionSubjectsMap, setSectionSubjectsMap] = useState<Record<string, SectionSubjectDetail[]>>({});
   const [loading,  setLoading]  = useState(true);
   const [toast, setToast]       = useState<string|null>(null);
 
@@ -44,7 +46,7 @@ export default function AcademicPage() {
   const [yearLabel,   setYearLabel]   = useState('');
   const [batchForm,   setBatchForm]   = useState({ year_id:'', name:'', program:'' });
   const [sectionForm, setSectionForm] = useState({ batch_id:'', name:'' });
-  const [subjectForm, setSubjectForm] = useState({ name:'', code:'', description:'' });
+  const [subjectForm, setSubjectForm] = useState({ name:'', code:'', description:'', total_marks: 100 });
   const [deptForm,    setDeptForm]    = useState({ name:'', code:'' });
 
   // Edit state
@@ -77,7 +79,7 @@ export default function AcademicPage() {
   const loadAll = async () => {
     setLoading(true);
     try {
-      const [y, b, s, sub, studs, insts, depts] = await Promise.all([
+      const [y, b, s, sub, studs, insts, depts, allSS] = await Promise.all([
         institutionService.getAcademicYears(),
         institutionService.getBatches(),
         institutionService.getSections(),
@@ -85,11 +87,19 @@ export default function AcademicPage() {
         institutionService.listUsers({ role: 'student' }),
         institutionService.listUsers({ role: 'instructor' }),
         institutionService.listDepartments(),
+        institutionService.listAllSectionSubjects(),
       ]);
       setYears(y); setBatches(b); setSections(s); setSubjects(sub);
       setStudents(studs.filter(u => u.is_active));
       setInstructors(insts.filter(u => u.is_active));
       setDepartments(depts);
+      // Build a sectionId → SectionSubjectDetail[] map for the structure tree.
+      const ssMap: Record<string, SectionSubjectDetail[]> = {};
+      allSS.forEach(ss => {
+        if (!ssMap[ss.section_id]) ssMap[ss.section_id] = [];
+        ssMap[ss.section_id].push(ss);
+      });
+      setSectionSubjectsMap(ssMap);
     } catch {
       toast3('Could not load academic data. Please retry.');
     } finally { setLoading(false); }
@@ -218,7 +228,7 @@ export default function AcademicPage() {
       {tab==='structure' && (
         <>
           <div className={styles.sectionHead}>
-            <h2 className={styles.sectionTitle}>Academic Years & Departments</h2>
+            <h2 className={styles.sectionTitle}>Academic Years & Batches</h2>
             <div style={{ display:'flex', gap:8 }}>
               <button className={styles.btnSecondary} onClick={()=>setShowBatchModal(true)}><Plus size={13}/> Add Batch</button>
               <button className={styles.btnPrimary}   onClick={()=>setShowYearModal(true)}><Plus size={13}/> Add Year</button>
@@ -239,14 +249,14 @@ export default function AcademicPage() {
                 <ChevronDown size={15} style={{ color:'#9333ea' }}/>
                 <span className={styles.treeLabel} style={{ fontSize:15 }}>{yr.year_label}</span>
                 {yr.is_active && <span className={styles.badgeActive} style={{ fontSize:10 }}>Active</span>}
-                <span className={styles.treeCount}>{batches.filter(b=>b.year_id===yr.id).length} departments</span>
+                <span className={styles.treeCount}>{batches.filter(b=>b.year_id===yr.id).length} batches</span>
                 <button onClick={()=>{setEditYearId(yr.id);setEditYearLabel(yr.year_label);}} style={{ background:'none',border:'none',cursor:'pointer',color:'#9333ea',padding:4 }} title="Edit"><Edit3 size={13}/></button>
                 <button onClick={()=>deleteEntity('academic-years',yr.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#ef4444',padding:4 }} title="Delete"><Trash2 size={13}/></button>
               </div>
 
-              {/* Batches = Departments */}
+              {/* Batches under this year */}
               {batches.filter(b=>b.year_id===yr.id).length === 0 ? (
-                <p style={{ fontSize:13, color:'#9891a6', padding:'4px 12px' }}>No departments — <button onClick={()=>setShowBatchModal(true)} style={{ background:'none', border:'none', color:'#9333ea', cursor:'pointer', fontWeight:700, fontSize:13 }}>Add one</button></p>
+                <p style={{ fontSize:13, color:'#9891a6', padding:'4px 12px' }}>No batches — <button onClick={()=>setShowBatchModal(true)} style={{ background:'none', border:'none', color:'#9333ea', cursor:'pointer', fontWeight:700, fontSize:13 }}>Add one</button></p>
               ) : batches.filter(b=>b.year_id===yr.id).map(batch => (
                 <div key={batch.id} style={{ marginLeft:16, marginBottom:8 }}>
                   {/* Batch header */}
@@ -266,15 +276,27 @@ export default function AcademicPage() {
                   {/* Sections under batch */}
                   <div style={{ marginLeft:20, marginTop:4, display:'flex', flexDirection:'column', gap:4 }}>
                     {sections.filter(s=>s.batch_id===batch.id).map(sec=>(
-                      <div key={sec.id} className={styles.treeItem} style={{ background:'rgba(255,255,255,0.6)', borderRadius:8 }}>
+                      <div key={sec.id} className={styles.treeItem} style={{ background:'rgba(255,255,255,0.6)', borderRadius:8, flexWrap:'wrap', gap:6 }}>
                         <div style={{ width:6, height:6, borderRadius:'50%', background:'#d8b4fe', flexShrink:0 }}/>
-                        <span style={{ fontSize:13.5, fontWeight:600, color:'#463f57', flex:1 }}>{sec.name}</span>
-                        <button onClick={()=>setEditSection(sec)} style={{ background:'none',border:'none',cursor:'pointer',color:'#9333ea',padding:4 }} title="Edit"><Edit3 size={12}/></button>
-                        <button onClick={()=>deleteEntity('sections',sec.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#ef4444',padding:4 }} title="Delete"><Trash2 size={12}/></button>
-                        <button onClick={() => { setSelectedSection(sec.id); setTab('enroll'); }}
-                          style={{ background:'rgba(124,58,237,0.08)', border:'none', borderRadius:7, padding:'3px 10px', fontSize:12, color:'#7c3aed', fontWeight:700, cursor:'pointer' }}>
-                          Manage →
-                        </button>
+                        <span style={{ fontSize:13.5, fontWeight:600, color:'#463f57' }}>{sec.name}</span>
+                        {/* Subject chips — populated from the bulk sectionSubjectsMap loaded in loadAll() */}
+                        {(sectionSubjectsMap[sec.id] ?? []).map(ss => (
+                          <span key={ss.id} style={{
+                            fontSize:11, fontWeight:600,
+                            background:'rgba(124,58,237,0.08)', color:'#7c3aed',
+                            borderRadius:6, padding:'2px 7px', whiteSpace:'nowrap',
+                          }}>
+                            {ss.subject_name}{ss.subject_code ? ` (${ss.subject_code})` : ''}
+                          </span>
+                        ))}
+                        <div style={{ marginLeft:'auto', display:'flex', gap:4, alignItems:'center' }}>
+                          <button onClick={()=>setEditSection(sec)} style={{ background:'none',border:'none',cursor:'pointer',color:'#9333ea',padding:4 }} title="Edit"><Edit3 size={12}/></button>
+                          <button onClick={()=>deleteEntity('sections',sec.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#ef4444',padding:4 }} title="Delete"><Trash2 size={12}/></button>
+                          <button onClick={() => { setSelectedSection(sec.id); setTab('enroll'); }}
+                            style={{ background:'rgba(124,58,237,0.08)', border:'none', borderRadius:7, padding:'3px 10px', fontSize:12, color:'#7c3aed', fontWeight:700, cursor:'pointer' }}>
+                            Manage →
+                          </button>
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -610,6 +632,8 @@ export default function AcademicPage() {
                 <input className={styles.input} placeholder="e.g. CS301" value={subjectForm.code} onChange={e=>setSubjectForm(f=>({...f,code:e.target.value}))}/></div>
               <div className={styles.field}><label className={styles.fieldLabel}>Description</label>
                 <textarea className={styles.textarea} style={{ minHeight:80 }} value={subjectForm.description} onChange={e=>setSubjectForm(f=>({...f,description:e.target.value}))}/></div>
+              <div className={styles.field}><label className={styles.fieldLabel}>Total Marks</label>
+                <input className={styles.input} type="number" min={1} value={subjectForm.total_marks} onChange={e=>setSubjectForm(f=>({...f,total_marks:parseInt(e.target.value)||100}))}/></div>
               <div className={styles.modalFooter}>
                 <button type="button" className={styles.btnSecondary} onClick={()=>setShowSubjectModal(false)}>Cancel</button>
                 <button type="submit" className={styles.btnPrimary}>Create</button>
@@ -696,13 +720,15 @@ export default function AcademicPage() {
               <h2 className={styles.modalTitle}>Edit Subject</h2>
               <button onClick={()=>setEditSubject(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'#9891a6' }}><X size={20}/></button>
             </div>
-            <form onSubmit={e=>{e.preventDefault();updateEntity('subjects',editSubject.id,{name:editSubject.name,code:editSubject.code,description:editSubject.description},()=>setEditSubject(null));}}>
+            <form onSubmit={e=>{e.preventDefault();updateEntity('subjects',editSubject.id,{name:editSubject.name,code:editSubject.code,description:editSubject.description,total_marks:editSubject.total_marks},()=>setEditSubject(null));}}>
               <div className={styles.field}><label className={styles.fieldLabel}>Name</label>
                 <input className={styles.input} required value={editSubject.name} onChange={e=>setEditSubject((s:any)=>({...s,name:e.target.value}))}/></div>
               <div className={styles.field}><label className={styles.fieldLabel}>Code</label>
                 <input className={styles.input} value={editSubject.code??''} onChange={e=>setEditSubject((s:any)=>({...s,code:e.target.value}))}/></div>
               <div className={styles.field}><label className={styles.fieldLabel}>Description</label>
                 <textarea className={styles.textarea} style={{minHeight:80}} value={editSubject.description??''} onChange={e=>setEditSubject((s:any)=>({...s,description:e.target.value}))}/></div>
+              <div className={styles.field}><label className={styles.fieldLabel}>Total Marks</label>
+                <input className={styles.input} type="number" min={1} value={editSubject.total_marks ?? 100} onChange={e=>setEditSubject((s:any)=>({...s,total_marks:parseInt(e.target.value)||100}))}/></div>
               <div className={styles.modalFooter}>
                 <button type="button" className={styles.btnSecondary} onClick={()=>setEditSubject(null)}>Cancel</button>
                 <button type="submit" className={styles.btnPrimary}>Save</button>
