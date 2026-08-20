@@ -610,6 +610,268 @@ def schedule_session():
     return jsonify({'session': _enrich_sessions([session])[0]}), 201
 
 
+@institution_ext_bp.route('/sessions/bulk-schedule', methods=['POST'])
+@require_role('institution_admin')
+def bulk_schedule_sessions():
+    """
+    Generate weekly recurring sessions for a section+subject over a date range.
+
+    Body: {
+      section_id,  subject_id,  instructor_id?,  title_prefix,
+      day_of_week  (0=Mon … 6=Sun),
+      start_time   (HH:MM, 24-h),
+      start_date   (YYYY-MM-DD),
+      end_date     (YYYY-MM-DD),
+      duration_minutes
+    }
+
+    Returns: {created: [...enriched...], conflicts: [{date, reason}],
+              created_count, skipped_count}
+
+    Conflict rules
+    ──────────────
+    * Section conflict  — another LabSession for the same section overlaps the
+      proposed slot (students can't be in two labs at once).
+    * Instructor conflict — another LabSession whose instructor is the same as
+      the one being booked overlaps the proposed slot.
+    Time overlap is tested as:  existing.start < proposed.end  AND
+                                existing.end   > proposed.start
+    """
+    from app.models.academic import SectionSubject, Section, SectionStudent
+    from app.models.subject import Subject
+
+    data = request.get_json() or {}
+    section_id    = data.get('section_id', '').strip()
+    subject_id    = data.get('subject_id', '').strip()
+    instr_id      = data.get('instructor_id', '').strip() or None
+    title_prefix  = (data.get('title_prefix') or '').strip()
+    day_of_week   = data.get('day_of_week')      # 0=Mon … 6=Sun
+    start_time    = (data.get('start_time') or '').strip()
+    start_date_s  = (data.get('start_date') or '').strip()
+    end_date_s    = (data.get('end_date') or '').strip()
+    duration      = data.get('duration_minutes', 60)
+
+    # ── Validation ────────────────────────────────────────────────────────────
+    errors = []
+    if not section_id:
+        errors.append('section_id is required')
+    if not subject_id:
+        errors.append('subject_id is required')
+    if not title_prefix:
+        errors.append('title_prefix is required')
+    if day_of_week is None or not isinstance(day_of_week, int) or day_of_week not in range(7):
+        errors.append('day_of_week must be an integer 0–6 (0=Monday)')
+    if not start_time:
+        errors.append('start_time is required (HH:MM)')
+    if not start_date_s:
+        errors.append('start_date is required (YYYY-MM-DD)')
+    if not end_date_s:
+        errors.append('end_date is required (YYYY-MM-DD)')
+    if errors:
+        return jsonify({'error': '; '.join(errors)}), 400
+
+    try:
+        hour, minute = [int(x) for x in start_time.split(':')]
+    except (ValueError, TypeError):
+        return jsonify({'error': 'start_time must be HH:MM (24-h)'}), 400
+
+    try:
+        start_date = datetime.strptime(start_date_s, '%Y-%m-%d').date()
+        end_date   = datetime.strptime(end_date_s,   '%Y-%m-%d').date()
+    except ValueError:
+        return jsonify({'error': 'start_date / end_date must be YYYY-MM-DD'}), 400
+
+    if end_date < start_date:
+        return jsonify({'error': 'end_date must be on or after start_date'}), 400
+
+    try:
+        duration = int(duration)
+        if duration <= 0:
+            raise ValueError
+    except (TypeError, ValueError):
+        return jsonify({'error': 'duration_minutes must be a positive integer'}), 400
+
+    # ── Validate section / subject belong to this institution ─────────────────
+    section = Section.query.filter_by(
+        id=section_id, institution_id=g.institution_id).first()
+    if not section:
+        return jsonify({'error': 'Unknown section'}), 404
+
+    subject = Subject.query.filter_by(
+        id=subject_id, institution_id=g.institution_id).first()
+    if not subject:
+        return jsonify({'error': 'Unknown subject'}), 404
+
+    # ── Find or create the SectionSubject assignment ──────────────────────────
+    ss = SectionSubject.query.filter_by(
+        institution_id=g.institution_id,
+        section_id=section_id,
+        subject_id=subject_id,
+    ).first()
+
+    if not ss:
+        if not instr_id:
+            return jsonify({
+                'error': (f'{subject.name} is not assigned to section {section.name} '
+                          f'yet. Provide instructor_id to create the assignment now.')
+            }), 400
+        instr = User.query.filter_by(
+            id=instr_id, institution_id=g.institution_id).first()
+        if not instr or instr.role not in ('instructor', 'institution_admin'):
+            return jsonify({'error': 'Chosen instructor is not part of this institution'}), 400
+        ss = SectionSubject(
+            institution_id=g.institution_id,
+            section_id=section_id,
+            subject_id=subject_id,
+            instructor_id=instr_id,
+        )
+        db.session.add(ss)
+        db.session.flush()   # get an id without committing yet
+
+    effective_instr_id = ss.instructor_id
+
+    # ── Build the list of weekly occurrence datetimes ─────────────────────────
+    # Python weekday(): Mon=0 … Sun=6 — matches the caller's convention.
+    occurrences = []
+    cursor = start_date
+    while cursor <= end_date:
+        if cursor.weekday() == day_of_week:
+            occurrences.append(
+                datetime(cursor.year, cursor.month, cursor.day, hour, minute)
+            )
+        cursor += timedelta(days=1)
+
+    if not occurrences:
+        return jsonify({
+            'created': [], 'conflicts': [],
+            'created_count': 0, 'skipped_count': 0,
+            'message': 'No occurrences of that weekday fall within the date range.',
+        }), 200
+
+    # ── Pre-load existing sessions that might overlap ─────────────────────────
+    # We look at a wide window covering the whole planner range (plus the max
+    # slot length so we don't miss sessions that start before but end inside).
+    range_start = datetime(start_date.year, start_date.month, start_date.day, 0, 0)
+    range_end   = datetime(end_date.year,   end_date.month,   end_date.day,   23, 59)
+
+    # All section_subject_ids in this institution whose section = our section
+    # (section conflict) or whose instructor = our instructor (instructor conflict).
+    same_section_ss_ids = [
+        row.id for row in SectionSubject.query.filter_by(
+            institution_id=g.institution_id,
+            section_id=section_id,
+        ).all()
+    ]
+
+    same_instr_ss_ids = []
+    if effective_instr_id:
+        same_instr_ss_ids = [
+            row.id for row in SectionSubject.query.filter_by(
+                institution_id=g.institution_id,
+                instructor_id=effective_instr_id,
+            ).all()
+        ]
+
+    conflict_ss_ids = list(set(same_section_ss_ids + same_instr_ss_ids))
+
+    existing = []
+    if conflict_ss_ids:
+        existing = LabSession.query.filter(
+            LabSession.section_subject_id.in_(conflict_ss_ids),
+            LabSession.status.in_(['scheduled', 'active']),
+            LabSession.scheduled_at < range_end,
+        ).all()
+
+    # Build a quick lookup: ss_id → section_id and instructor_id
+    ss_meta = {}
+    for row in SectionSubject.query.filter(
+        SectionSubject.id.in_(conflict_ss_ids)
+    ).all():
+        ss_meta[row.id] = {
+            'section_id':    row.section_id,
+            'instructor_id': row.instructor_id,
+        }
+
+    # ── Iterate occurrences, check conflicts, create ──────────────────────────
+    created     = []
+    conflicts   = []
+    session_num = 1
+
+    # Count how many sessions of this subject already exist for numbering.
+    existing_for_ss = LabSession.query.filter_by(
+        section_subject_id=ss.id
+    ).count()
+    session_num = existing_for_ss + 1
+
+    for slot_start in occurrences:
+        slot_end = slot_start + timedelta(minutes=duration)
+
+        # Check against all existing conflicting sessions.
+        conflict_reason = None
+        for ex in existing:
+            ex_start = ex.scheduled_at
+            ex_end   = ex_start + timedelta(minutes=ex.duration_minutes)
+
+            # Standard overlap: A starts before B ends AND A ends after B starts.
+            if ex_start < slot_end and ex_end > slot_start:
+                meta = ss_meta.get(ex.section_subject_id, {})
+                if meta.get('section_id') == section_id:
+                    conflict_reason = (
+                        f'Section "{section.name}" already has a session '
+                        f'{ex_start.strftime("%H:%M")}–{ex_end.strftime("%H:%M")} on that day.'
+                    )
+                elif effective_instr_id and meta.get('instructor_id') == effective_instr_id:
+                    conflict_reason = (
+                        f'The instructor already has a session '
+                        f'{ex_start.strftime("%H:%M")}–{ex_end.strftime("%H:%M")} on that day.'
+                    )
+                if conflict_reason:
+                    break
+
+        if conflict_reason:
+            conflicts.append({
+                'date':   slot_start.strftime('%Y-%m-%d'),
+                'time':   slot_start.strftime('%H:%M'),
+                'reason': conflict_reason,
+            })
+            continue
+
+        title = f'{title_prefix} — Session {session_num}'
+        new_session = LabSession(
+            institution_id=g.institution_id,
+            section_subject_id=ss.id,
+            experiment_id=None,
+            title=title,
+            scheduled_at=slot_start,
+            duration_minutes=duration,
+            status='scheduled',
+        )
+        db.session.add(new_session)
+        db.session.flush()   # get id for enrichment without committing
+        created.append(new_session)
+        session_num += 1
+
+    db.session.commit()
+
+    enriched = _enrich_sessions(created) if created else []
+
+    write_audit(
+        g.user_id, g.institution_id,
+        'bulk_schedule_sessions', 'session', ss.id,
+        f"Bulk-scheduled {len(created)} sessions for {subject.name} / "
+        f"{section.name} ({start_date_s} → {end_date_s}, "
+        f"{start_time} every {['Mon','Tue','Wed','Thu','Fri','Sat','Sun'][day_of_week]}); "
+        f"{len(conflicts)} conflict(s) skipped.",
+    )
+
+    return jsonify({
+        'created':       enriched,
+        'conflicts':     conflicts,
+        'created_count': len(created),
+        'skipped_count': len(conflicts),
+    }), 201 if created else 200
+
+
 @institution_ext_bp.route('/sessions/<session_id>', methods=['PATCH'])
 @require_role('institution_admin')
 def update_session(session_id):

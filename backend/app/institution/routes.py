@@ -604,6 +604,7 @@ def subjects():
         code=data.get('code'),
         description=data.get('description'),
         env_profile_id=data.get('env_profile_id'),
+        total_marks=data.get('total_marks', 100),
     )
     db.session.add(subject)
     db.session.commit()
@@ -619,7 +620,7 @@ def update_subject(subject_id):
     subject = Subject.query.filter_by(id=subject_id, institution_id=g.institution_id).first_or_404()
     data = request.get_json() or {}
     changed = []
-    for field in ('name', 'code', 'description', 'env_profile_id'):
+    for field in ('name', 'code', 'description', 'env_profile_id', 'total_marks'):
         if field in data:
             setattr(subject, field, data[field])
             changed.append(field)
