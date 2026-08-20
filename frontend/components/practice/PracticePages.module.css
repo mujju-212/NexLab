@@ -1,0 +1,382 @@
+/* ── Study Plan Detail + Quest + Daily shared styles ─────────────────── */
+
+/* ── Study Plan Detail ── */
+.page {
+  padding: 1rem 1.5rem 3rem;
+  max-width: 1100px;
+  font-family: 'Manrope', sans-serif;
+}
+
+.backBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: .35rem;
+  background: none;
+  border: none;
+  color: #7c3aed;
+  font-size: .82rem;
+  font-weight: 700;
+  cursor: pointer;
+  font-family: 'Manrope', sans-serif;
+  padding: 0;
+  margin-bottom: 1.25rem;
+  transition: color .15s;
+}
+.backBtn:hover { color: #6d28d9; }
+
+/* Plan hero */
+.planHero {
+  background: rgba(255,255,255,.6);
+  border: 1px solid rgba(255,255,255,.7);
+  border-radius: 20px;
+  padding: 1.6rem 1.8rem;
+  margin-bottom: 1.5rem;
+  box-shadow: 0 4px 20px rgba(30,20,60,.07);
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.planHeroLeft { display: flex; align-items: flex-start; gap: 1rem; }
+.planHeroIcon { font-size: 2.8rem; flex-shrink: 0; }
+.planHeroTitle {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: #201b2e;
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: -.02em;
+  margin: 0 0 .3rem;
+}
+.planHeroDesc {
+  font-size: .83rem;
+  color: #9891a6;
+  font-weight: 600;
+  margin: 0 0 .75rem;
+  line-height: 1.55;
+}
+.planHeroMeta {
+  display: flex;
+  gap: .5rem;
+  flex-wrap: wrap;
+}
+.metaChip {
+  background: rgba(124,58,237,.09);
+  color: #7c3aed;
+  font-size: .72rem;
+  font-weight: 700;
+  padding: .22rem .65rem;
+  border-radius: 7px;
+  font-family: 'Space Grotesk', sans-serif;
+}
+.metaChipGray {
+  background: rgba(0,0,0,.05);
+  color: #6b7280;
+  font-size: .72rem;
+  font-weight: 700;
+  padding: .22rem .65rem;
+  border-radius: 7px;
+}
+
+/* Overall progress */
+.overallProgress {
+  min-width: 200px;
+  flex-shrink: 0;
+}
+.overallTitle {
+  font-size: .72rem;
+  font-weight: 800;
+  color: #9891a6;
+  text-transform: uppercase;
+  letter-spacing: .06em;
+  margin-bottom: .5rem;
+}
+.overallNumbers {
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: #201b2e;
+  font-family: 'Space Grotesk', sans-serif;
+  margin-bottom: .4rem;
+}
+.overallNumbers span { color: #9891a6; font-size: 1rem; }
+.progressBar {
+  height: 8px;
+  background: rgba(124,58,237,.1);
+  border-radius: 99px;
+  overflow: hidden;
+  margin-bottom: .35rem;
+}
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #9333ea);
+  border-radius: 99px;
+  transition: width .4s ease;
+}
+.progressPct {
+  font-size: .75rem;
+  font-weight: 700;
+  color: #9891a6;
+}
+.enrollBtn {
+  width: 100%;
+  margin-top: .75rem;
+  background: linear-gradient(135deg, #7c3aed, #9333ea);
+  color: #fff;
+  font-size: .82rem;
+  font-weight: 800;
+  padding: .58rem;
+  border-radius: 10px;
+  border: none;
+  cursor: pointer;
+  transition: opacity .15s, transform .15s;
+  font-family: 'Manrope', sans-serif;
+}
+.enrollBtn:hover { opacity: .88; transform: translateY(-1px); }
+
+/* Sections */
+.sectionCard {
+  background: rgba(255,255,255,.6);
+  border: 1px solid rgba(255,255,255,.7);
+  border-radius: 16px;
+  margin-bottom: 1rem;
+  overflow: hidden;
+  box-shadow: 0 2px 10px rgba(30,20,60,.05);
+}
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: .9rem 1.2rem;
+  cursor: pointer;
+  transition: background .15s;
+  background: rgba(248,246,255,.7);
+  border-bottom: 1px solid rgba(0,0,0,.05);
+  gap: .75rem;
+}
+.sectionHeader:hover { background: rgba(124,58,237,.05); }
+.sectionTitle {
+  font-size: .9rem;
+  font-weight: 800;
+  color: #201b2e;
+  font-family: 'Space Grotesk', sans-serif;
+}
+.sectionProgress {
+  display: flex;
+  align-items: center;
+  gap: .65rem;
+  margin-left: auto;
+}
+.sectionCount {
+  font-size: .75rem;
+  font-weight: 700;
+  color: #9891a6;
+}
+.sectionDone {
+  font-size: .75rem;
+  font-weight: 800;
+  color: #15803d;
+}
+.chevron {
+  color: #9891a6;
+  transition: transform .18s;
+  flex-shrink: 0;
+}
+.chevronOpen { transform: rotate(180deg); }
+
+/* Problem rows inside section */
+.probList { padding: .5rem 0; }
+.probRow {
+  display: flex;
+  align-items: center;
+  gap: .75rem;
+  padding: .62rem 1.2rem;
+  cursor: pointer;
+  transition: background .12s;
+  border-bottom: 1px solid rgba(0,0,0,.03);
+}
+.probRow:last-child { border-bottom: none; }
+.probRow:hover { background: rgba(124,58,237,.04); }
+.probRowNum { color: #9891a6; font-size: .75rem; font-weight: 700; min-width: 30px; }
+.probRowTitle {
+  font-size: .84rem;
+  font-weight: 700;
+  color: #201b2e;
+  font-family: 'Space Grotesk', sans-serif;
+  flex: 1;
+  transition: color .12s;
+}
+.probRow:hover .probRowTitle { color: #7c3aed; }
+.diffBadge {
+  font-size: .68rem;
+  font-weight: 800;
+  padding: .15rem .5rem;
+  border-radius: 6px;
+  font-family: 'Space Grotesk', sans-serif;
+  flex-shrink: 0;
+}
+.easy   { background: rgba(22,163,74,.1);  color: #15803d; }
+.medium { background: rgba(234,179,8,.12); color: #a16207; }
+.hard   { background: rgba(220,38,38,.1);  color: #b91c1c; }
+.statusIcon { flex-shrink: 0; }
+.solved   { color: #15803d; }
+.todo     { color: #d1d5db; }
+
+/* ── Quest / XP Page ── */
+.questPage {
+  padding: 1rem 1.5rem 3rem;
+  max-width: 980px;
+  font-family: 'Manrope', sans-serif;
+}
+.questHeader { margin-bottom: 1.75rem; }
+.questHeader h1 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #201b2e;
+  font-family: 'Space Grotesk', sans-serif;
+  margin: 0 0 .25rem;
+}
+.questHeader p { color: #9891a6; font-size: .83rem; font-weight: 600; margin: 0; }
+
+/* Level card */
+.levelCard {
+  background: linear-gradient(135deg, rgba(124,58,237,.1), rgba(147,51,234,.06));
+  border: 1px solid rgba(124,58,237,.2);
+  border-radius: 20px;
+  padding: 1.4rem 1.6rem;
+  margin-bottom: 1.25rem;
+  display: flex;
+  align-items: center;
+  gap: 1.5rem;
+  flex-wrap: wrap;
+}
+.levelIcon { font-size: 3.2rem; flex-shrink: 0; }
+.levelInfo { flex: 1; min-width: 200px; }
+.levelName {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #4c1d95;
+  font-family: 'Space Grotesk', sans-serif;
+  margin: 0 0 .25rem;
+}
+.levelXp {
+  font-size: .83rem;
+  font-weight: 700;
+  color: #6b21a8;
+  margin-bottom: .75rem;
+}
+.xpBar { height: 10px; background: rgba(124,58,237,.12); border-radius: 99px; overflow: hidden; }
+.xpFill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #a855f7);
+  border-radius: 99px;
+  transition: width .5s ease;
+}
+.xpToNext { font-size: .75rem; font-weight: 700; color: #9891a6; margin-top: .35rem; }
+
+.statsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
+  gap: .75rem;
+  flex-shrink: 0;
+}
+.statCard {
+  background: rgba(255,255,255,.7);
+  border: 1px solid rgba(255,255,255,.8);
+  border-radius: 12px;
+  padding: .75rem .9rem;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(30,20,60,.05);
+}
+.statValue {
+  font-size: 1.3rem;
+  font-weight: 800;
+  color: #201b2e;
+  font-family: 'Space Grotesk', sans-serif;
+  display: block;
+}
+.statLabel { font-size: .72rem; font-weight: 700; color: #9891a6; }
+
+/* Badges */
+.badgesSection { margin-top: 1.5rem; }
+.sectionHeading {
+  font-size: .82rem;
+  font-weight: 800;
+  color: #9891a6;
+  text-transform: uppercase;
+  letter-spacing: .07em;
+  margin-bottom: .85rem;
+  font-family: 'Space Grotesk', sans-serif;
+}
+.badgeGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(155px, 1fr));
+  gap: .75rem;
+}
+.badgeCard {
+  background: rgba(255,255,255,.6);
+  border: 1px solid rgba(255,255,255,.7);
+  border-radius: 14px;
+  padding: 1rem;
+  text-align: center;
+  box-shadow: 0 2px 8px rgba(30,20,60,.05);
+  transition: all .18s;
+}
+.badgeCard:hover { border-color: rgba(124,58,237,.25); transform: translateY(-2px); }
+.badgeCard.locked { opacity: .45; }
+.badgeEmoji { font-size: 2rem; display: block; margin-bottom: .4rem; }
+.badgeName {
+  font-size: .78rem;
+  font-weight: 800;
+  color: #201b2e;
+  font-family: 'Space Grotesk', sans-serif;
+  margin-bottom: .2rem;
+}
+.badgeDesc { font-size: .7rem; color: #9891a6; font-weight: 600; }
+.badgeEarned { color: #15803d; font-size: .68rem; font-weight: 800; margin-top: .3rem; }
+
+/* ── Daily Challenge Page ── */
+.dailyPage {
+  padding: 1rem 1.5rem 3rem;
+  max-width: 1100px;
+  font-family: 'Manrope', sans-serif;
+}
+.dailyHeader { margin-bottom: 1.5rem; }
+.dailyHeader h1 {
+  font-size: 1.6rem;
+  font-weight: 800;
+  color: #201b2e;
+  font-family: 'Space Grotesk', sans-serif;
+  margin: 0 0 .25rem;
+}
+.dailyHeader p { color: #9891a6; font-size: .83rem; font-weight: 600; margin: 0; }
+.dailyDate {
+  display: inline-block;
+  background: rgba(220,38,38,.08);
+  color: #dc2626;
+  font-size: .72rem;
+  font-weight: 800;
+  padding: .22rem .7rem;
+  border-radius: 7px;
+  margin-top: .5rem;
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: .04em;
+}
+
+/* Loading */
+.loading {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem;
+  color: #9891a6;
+  font-size: .9rem;
+  font-weight: 600;
+}
+
+@media (max-width: 768px) {
+  .page, .questPage, .dailyPage { padding: .75rem .75rem 2.5rem; }
+  .planHero { flex-direction: column; }
+  .overallProgress { min-width: unset; width: 100%; }
+  .statsGrid { grid-template-columns: repeat(2, 1fr); }
+  .badgeGrid { grid-template-columns: repeat(2, 1fr); }
+}
