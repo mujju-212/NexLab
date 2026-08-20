@@ -51,7 +51,9 @@ export interface Experiment {
 // ─── Pre-Lab Content ──────────────────────────────────────────────────────────
 export interface ContentModule {
   id: string;
-  type: 'text' | 'video' | 'pdf' | 'quiz' | 'markdown' | 'code' | 'image';
+  page_id?: string | null;
+  type: 'text' | 'video' | 'pdf' | 'quiz' | 'markdown' | 'code' | 'image'
+      | 'html' | 'link' | 'file' | 'assign' | 'viva';
   title: string;
   display_order: number;
   completed: boolean;
@@ -64,6 +66,17 @@ export interface ContentModule {
     shuffle: boolean;
     attempts_used: number;
     last_attempt_at: string | null;
+  };
+  viva_config?: {
+    pass_threshold: number;
+    count: number;
+    questions: {
+      index: number;
+      question: string;
+      topics: string[];
+      difficulty: string | null;
+    }[];
+    attempts_used: number;
   };
 }
 
@@ -92,6 +105,20 @@ export interface LabSession {
   catchup_enabled: boolean;
   catchup_deadline: string | null;
   gate_score_threshold: number;
+}
+
+// ─── Gate Check Response ───────────────────────────────────────────────────────
+// Returned by GET /student/sessions/<id>/check-gate
+export interface GateResult {
+  gate_passed:      boolean;
+  session:          LabSession;
+  jitsi_room:       string | null;   // kept for backward compat
+  livekit_token:    string | null;   // null when LiveKit is not configured
+  livekit_url:      string;          // wss://... or empty string
+  focus_ml_enabled: boolean;
+  lockdown_enabled: boolean;
+  session_status:   string;
+  can_join_live:    boolean;
 }
 
 // ─── Code Execution ───────────────────────────────────────────────────────────

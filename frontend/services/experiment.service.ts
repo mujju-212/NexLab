@@ -81,4 +81,21 @@ export const experimentService = {
     );
     return data;
   },
+
+  // ── Instructor: Preview-generate test cases (no experiment id yet) ───────────
+  // POST /api/instructor/experiments/generate-test-cases-preview
+  // Generates from a raw problem statement WITHOUT persisting — used by the
+  // create page, where the experiment does not exist yet. The caller stages the
+  // returned rows and saves them via addTestCases() once the experiment is made.
+  async previewTestCases(payload: {
+    problem_statement: string;
+    input_format?: string;
+    output_format?: string;
+    count?: number;
+  }): Promise<{ test_cases: Array<{ input: string; expected_output: string; description?: string; is_hidden?: boolean }>; count: number }> {
+    const { data } = await apiClient.post<{ test_cases: Array<{ input: string; expected_output: string; description?: string; is_hidden?: boolean }>; count: number }>(
+      '/instructor/experiments/generate-test-cases-preview', payload
+    );
+    return data;
+  },
 };
