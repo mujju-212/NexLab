@@ -17,14 +17,13 @@ import { useAuthStore } from '@/store/auth-store';
 const NAV_FAVORITES = [
   { id: 'Dashboard Home',     Icon: LayoutDashboard, route: '/student/dashboard'         },
   { id: 'My Subjects',        Icon: BookOpen,         route: '/student/subjects'          },
-  { id: 'Courses',            Icon: GraduationCap,    route: '/student/courses'           },
-  { id: 'Practice Library',   Icon: Library,          route: '/student/practice'          },
   { id: 'Compiler',           Icon: Code2,            route: '/student/compiler'          },
   { id: 'Pre-Lab',            Icon: FlaskConical,     route: '/student/pre-lab'           },
   { id: 'Join Lab',           Icon: LogIn,            route: '/student/live-lab'          },
 ];
 const NAV_PRACTICE = [
   { id: 'Practice Library',   Icon: Library,          route: '/student/practice'          },
+  { id: 'Courses',            Icon: GraduationCap,    route: '/student/courses'           },
   { id: 'Study Plans',        Icon: BookMarked,        route: '/student/practice/study-plans' },
   { id: 'Daily Challenge',    Icon: Flame,             route: '/student/practice/daily'   },
   { id: 'Quest',              Icon: Zap,               route: '/student/practice/quest'   },
