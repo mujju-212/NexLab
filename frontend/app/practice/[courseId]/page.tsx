@@ -1,14 +1,14 @@
-﻿'use client';
+'use client';
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import IndividualShell from '@/components/layout/IndividualShell';
 import { freeService, type FreeCourse, type FreeExercise } from '@/services/free.service';
 import { useAuthStore } from '@/store/auth-store';
-import { authService } from '@/services/auth.service';
 import styles from './course.module.css';
 import {
-  ChevronLeft, Code2, HelpCircle, CheckCircle2, Trophy, Zap,
-  Home, LogOut, LogIn, UserCircle2, RefreshCw, FlaskConical
+  Code2, HelpCircle, CheckCircle2, Trophy, Zap,
+  RefreshCw, FlaskConical
 } from 'lucide-react';
 
 const DIFF_MAP: Record<string, string> = {
@@ -20,12 +20,19 @@ const DIFF_MAP: Record<string, string> = {
 export default function CoursePage() {
   const { courseId } = useParams<{ courseId: string }>();
   const router = useRouter();
-  const { user, clearAuth } = useAuthStore();
+  const { user, isAuthenticated } = useAuthStore();
 
   const [course,    setCourse]    = useState<FreeCourse | null>(null);
   const [exercises, setExercises] = useState<FreeExercise[]>([]);
   const [solvedIds, setSolvedIds] = useState<Set<string>>(new Set());
   const [loading,   setLoading]   = useState(true);
+
+  // Guard: only logged-in users may see this page
+  useEffect(() => {
+    if (!isAuthenticated || !user) {
+      router.replace('/login');
+    }
+  }, [isAuthenticated, user, router]);
 
   const load = useCallback(async () => {
     try {
@@ -41,141 +48,34 @@ export default function CoursePage() {
     }
   }, [courseId, user]);
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (!user) return;
+    load();
+  }, [load, user]);
 
-  const handleLogout = async () => {
-    await authService.logout();
-    clearAuth();
-    router.push('/login');
-  };
+  if (!isAuthenticated || !user) return null;
 
   const solvedCount = exercises.filter(e => solvedIds.has(e.id)).length;
   const totalXP     = exercises.reduce((a, e) => a + e.xp_reward, 0);
   const earnedXP    = exercises.filter(e => solvedIds.has(e.id)).reduce((a, e) => a + e.xp_reward, 0);
   const pct = exercises.length ? Math.round((solvedCount / exercises.length) * 100) : 0;
 
-  const initials = user?.full_name
-    ? user.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase()
-    : '?';
-
-  if (loading) return (
-    <div className={styles.loading}>
-      <RefreshCw size={24} className={styles.spinIcon} />
-      <span>Loading courseâ€¦</span>
-    </div>
-  );
+  const pageTitle = loading ? 'Loading course…' : (course?.title || 'Course');
+  const pageSubtitle = course?.description || 'Work through the exercises to earn XP and track your progress.';
 
   return (
-    <div className={styles.stage}>
-      <div className={`${styles.blob} ${styles.blob1}`} />
-      <div className={`${styles.blob} ${styles.blob2}`} />
-      <div className={`${styles.blob} ${styles.blob3}`} />
-      <div className={styles.sheen} />
-
-      <div className={styles.appPanel}>
-        {/* â”€â”€ Sidebar â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-        <aside className={styles.sidebar}>
-          <div className={styles.sidebarTop}>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src="/logo.png" alt="NexLab" className={styles.logo} onClick={() => router.push('/')} />
-            <span className={styles.logoLabel}>Practice</span>
-          </div>
-
-          <span className={styles.navLabel}>Navigation</span>
-          <nav className={styles.navGroup}>
-            <ul>
-              <li>
-                <div className={styles.navItem} onClick={() => router.push('/practice')}>
-                  <Home size={17} className={styles.navIcon} /> All Courses
-                </div>
-              </li>
-              {course && (
-                <li>
-                  <div className={`${styles.navItem} ${styles.navItemActive}`}>
-                    <Code2 size={17} className={styles.navIcon} />
-                    {course.title}
-                  </div>
-                </li>
-              )}
-            </ul>
-          </nav>
-
-          {/* Exercise mini-list in sidebar */}
-          {exercises.length > 0 && (
-            <>
-              <span className={styles.navLabel}>Exercises</span>
-              <nav className={styles.navGroup}>
-                <ul>
-                  {exercises.map((ex, i) => (
-                    <li key={ex.id}>
-                      <div className={styles.navItem}
-                        onClick={() => router.push(`/practice/${courseId}/${ex.id}`)}>
-                        {solvedIds.has(ex.id)
-                          ? <CheckCircle2 size={15} style={{ color: '#0f8a3f', flexShrink: 0 }} />
-                          : <span style={{ width:15, height:15, flexShrink:0, display:'flex', alignItems:'center', justifyContent:'center', fontSize:'11px', fontWeight:700, color:'#a79fbb' }}>{i+1}</span>
-                        }
-                        <span style={{ overflow:'hidden', textOverflow:'ellipsis', fontSize:'13px' }}>{ex.title}</span>
-                      </div>
-                    </li>
-                  ))}
-                </ul>
-              </nav>
-            </>
-          )}
-
-          <div className={styles.bottomGroup}>
-            <nav className={styles.navGroup}>
-              <ul>
-                {user ? (
-                  <li>
-                    <div className={`${styles.navItem} ${styles.navItemLogout}`} onClick={handleLogout}>
-                      <LogOut size={17} className={styles.navIcon} /> Sign Out
-                    </div>
-                  </li>
-                ) : (
-                  <>
-                    <li><div className={styles.navItem} onClick={() => router.push('/login')}><LogIn size={17} className={styles.navIcon} /> Sign In</div></li>
-                    <li><div className={styles.navItem} onClick={() => router.push('/register')}><UserCircle2 size={17} className={styles.navIcon} /> Register Free</div></li>
-                  </>
-                )}
-              </ul>
-            </nav>
-          </div>
-
-          <div className={styles.freeBanner}>
-            <p className={styles.freeBannerTitle}>ðŸŽ“ Free & Open</p>
-            <p className={styles.freeBannerSub}>All courses are free forever.</p>
-          </div>
-        </aside>
-
-        {/* â”€â”€ Content â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */}
-        <main className={styles.content}>
-          {/* Header */}
-          <div className={styles.contentHeader}>
-            <div className={styles.breadcrumb}>
-              <span className={styles.crumbLink} onClick={() => router.push('/practice')}>
-                Practice
-              </span>
-              <span className={styles.sep}>/</span>
-              <strong>{course?.title}</strong>
-            </div>
-            <div className={styles.headerRight}>
-              <button className={styles.backBtn} onClick={() => router.push('/practice')}>
-                <ChevronLeft size={15} /> All Courses
-              </button>
-              {user ? (
-                <div className={styles.profileChip}>
-                  <div className={styles.avatar}>{initials}</div>
-                  <span>{user.full_name?.split(' ')[0]}</span>
-                </div>
-              ) : (
-                <button className={styles.loginBtn} onClick={() => router.push('/login')}>
-                  <LogIn size={14} /> Sign In
-                </button>
-              )}
-            </div>
-          </div>
-
+    <IndividualShell
+      activePage="courses"
+      title={pageTitle}
+      subtitle={pageSubtitle}
+    >
+      {loading ? (
+        <div className={styles.loading}>
+          <RefreshCw size={24} className={styles.spinIcon} />
+          <span>Loading course…</span>
+        </div>
+      ) : (
+        <>
           {/* Course Hero */}
           {course && (
             <div className={styles.courseHero}>
@@ -220,8 +120,14 @@ export default function CoursePage() {
             </div>
           )}
 
+          {/* Free-tier banner */}
+          <div className={styles.freeBanner}>
+            <p className={styles.freeBannerTitle}>🎓 Free &amp; Open</p>
+            <p className={styles.freeBannerSub}>All courses are free forever.</p>
+          </div>
+
           {/* Exercise List */}
-          <p className={styles.listTitle}>Exercises â€” {exercises.length} total</p>
+          <p className={styles.listTitle}>Exercises — {exercises.length} total</p>
           <div className={styles.exerciseList}>
             {exercises.map((ex, i) => {
               const solved = solvedIds.has(ex.id);
@@ -256,15 +162,14 @@ export default function CoursePage() {
                     <span className={styles.xpPill}><Zap size={11} /> {ex.xp_reward} XP</span>
                     {solved
                       ? <CheckCircle2 size={18} color="#0f8a3f" />
-                      : <span className={styles.exArrow}>â€º</span>}
+                      : <span className={styles.exArrow}>›</span>}
                   </div>
                 </div>
               );
             })}
           </div>
-        </main>
-      </div>
-    </div>
+        </>
+      )}
+    </IndividualShell>
   );
 }
-

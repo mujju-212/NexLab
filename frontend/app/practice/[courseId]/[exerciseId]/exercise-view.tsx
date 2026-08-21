@@ -334,7 +334,7 @@ export default function ExerciseView({ basePath = '/practice', embedded = false 
                         <div className={styles.rowHeader}>
                           {r.passed ? <CheckCircle2 size={14} /> : <XCircle size={14} />}
                           <span>Test {i + 1}</span>
-                          <span className={styles.rowTime}>{r.time ? `${r.time}s` : ''}</span>
+                          <span className={styles.rowTime}>{r.time_ms != null ? `${r.time_ms}ms` : ''}</span>
                           <span className={styles.rowStatus}>{r.status}</span>
                         </div>
                         {!r.passed && (
