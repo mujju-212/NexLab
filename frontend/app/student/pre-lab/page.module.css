@@ -3,6 +3,9 @@
 
 /* ── Experiment List ── */
 .expList { display: flex; flex-direction: column; gap: 14px; overflow-y: auto; padding-right: 4px; }
+
+/* Page section header in the sidebar (multi-page experiments). */
+.pageHeader { display: block; margin: 8px 0 6px; }
 .expList::-webkit-scrollbar { width: 5px; }
 .expList::-webkit-scrollbar-thumb { background: rgba(147,51,234,.2); border-radius: 99px; }
 

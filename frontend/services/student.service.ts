@@ -5,6 +5,53 @@ import type {
   StudentRanking, Grade, Notification
 } from '@/types';
 
+/** One test-case outcome from a graded-assignment submission. Hidden tests omit the I/O fields. */
+export interface AssignmentTestResult {
+  index: number;
+  passed: boolean;
+  hidden: boolean;
+  input?: string;
+  expected?: string;
+  actual?: string;
+  status?: string;
+  stderr?: string;
+}
+
+/** Response of POST /student/prelab/<module_id>/assignment/submit. */
+export interface AssignmentSubmitResult {
+  score: number;
+  best_score: number;
+  passed: boolean;
+  threshold: number;
+  passed_tests: number;
+  total_tests: number;
+  attempts_used: number;
+  results: AssignmentTestResult[];
+}
+
+/** Response of POST /student/prelab/<module_id>/viva/submit. */
+export interface VivaSubmitResult {
+  score: number;
+  best_score: number;
+  passed: boolean;
+  threshold: number;
+  per_question: { index: number; score: number; feedback: string }[];
+  attempts_used: number;
+}
+
+/** Page shape returned by getPreLabContent. */
+export interface ContentPage {
+  id: string;
+  title: string;
+  display_order: number;
+}
+
+/** Full getPreLabContent response (new shape includes pages). */
+export interface PreLabContentResponse {
+  modules: ContentModule[];
+  pages: ContentPage[];
+}
+
 export const studentService = {
 
   // ── Dashboard ───────────────────────────────────────────────────────────────
@@ -29,14 +76,36 @@ export const studentService = {
 
   // ── Pre-Lab Content ─────────────────────────────────────────────────────────
   // GET /api/student/prelab/<experiment_id>
-  async getPreLabContent(experimentId: string): Promise<ContentModule[]> {
-    const { data } = await apiClient.get<{ modules: ContentModule[] }>(`/student/prelab/${experimentId}`);
-    return data.modules;
+  async getPreLabContent(experimentId: string): Promise<PreLabContentResponse> {
+    const { data } = await apiClient.get<PreLabContentResponse>(`/student/prelab/${experimentId}`);
+    return data;
   },
 
   // POST /api/student/prelab/<module_id>/complete  (text/video/pdf)
   async markModuleComplete(moduleId: string): Promise<void> {
     await apiClient.post(`/student/prelab/${moduleId}/complete`);
+  },
+
+  // POST /api/student/prelab/<module_id>/assignment/submit  (graded coding task)
+  async submitAssignment(
+    moduleId: string,
+    payload: { code: string; language?: string },
+  ): Promise<AssignmentSubmitResult> {
+    const { data } = await apiClient.post<AssignmentSubmitResult>(
+      `/student/prelab/${moduleId}/assignment/submit`, payload,
+    );
+    return data;
+  },
+
+  // POST /api/student/prelab/<module_id>/viva/submit  (AI viva block)
+  async submitVivaAnswers(
+    moduleId: string,
+    answers: Record<string | number, string>,
+  ): Promise<VivaSubmitResult> {
+    const { data } = await apiClient.post<VivaSubmitResult>(
+      `/student/prelab/${moduleId}/viva/submit`, { answers },
+    );
+    return data;
   },
 
   // ── Quiz Gate ───────────────────────────────────────────────────────────────

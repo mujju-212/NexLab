@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StudentShell from '@/components/layout/StudentShell';
 import { studentService } from '@/services/student.service';
+import type { ContentPage } from '@/services/student.service';
 import type { Experiment, ContentModule } from '@/types';
 import { Loader2 } from 'lucide-react';
 import styles from './page.module.css';
@@ -37,8 +38,8 @@ export default function PreLabListPage() {
         // Load module progress for each experiment (small fan-out for a class)
         const withProgress = await Promise.all(
           all.map(async e => {
-            const modules = await studentService.getPreLabContent(e.id).catch(() => [] as ContentModule[]);
-            return { ...e, modules };
+            const res = await studentService.getPreLabContent(e.id).catch(() => ({ modules: [] as ContentModule[], pages: [] as ContentPage[] }));
+            return { ...e, modules: res.modules };
           })
         );
         if (!cancelled) setItems(withProgress);
