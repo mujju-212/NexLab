@@ -3,10 +3,10 @@ Student Blueprint
 Handles: dashboard, pre-lab content, quiz gate, join session, catch-up,
          grades, analytics, notifications, feedback, lab record
 """
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, current_app
 from app.auth.utils import require_role
-from app.extensions import db
-from app.models.experiment import Experiment, ContentModule, ContentProgress, QuizQuestion
+from app.extensions import db, limiter
+from app.models.experiment import Experiment, ContentModule, ContentPage, ContentProgress, QuizQuestion
 from app.models.session import LabSession, SessionAttendance
 from app.models.submission import CodeAttempt, CodeVersion
 from app.models.grading import Grade, HintLog
@@ -63,13 +63,35 @@ def list_experiments(subject_id):
 @student_bp.route('/prelab/<experiment_id>', methods=['GET'])
 @require_role('student')
 def get_prelab_content(experiment_id):
-    """Get all content modules for an experiment (in display order)"""
+    """Get all content modules for an experiment (in display order).
+
+    Only returns pages that are visible to students right now:
+      is_live=True  OR  (release_at IS NOT NULL AND release_at <= now())
+    Modules belonging to hidden pages are omitted. Pages with no published
+    state at all (is_live=False, release_at=None) are excluded entirely —
+    students see nothing until the instructor flips the toggle.
+
+    Modules carry `page_id` so the client can group them into page tabs.
+    Each page in `pages[]` includes `is_live`, `release_at` so the student
+    UI can show a countdown if desired.
+    """
     modules = ContentModule.query.filter_by(
         experiment_id=experiment_id
     ).order_by(ContentModule.display_order).all()
 
+    all_pages = ContentPage.query.filter_by(experiment_id=experiment_id)\
+        .order_by(ContentPage.display_order, ContentPage.created_at).all()
+
+    # Only expose pages that are currently visible to students
+    visible_pages = [p for p in all_pages if p.is_visible_to_students()]
+    visible_page_ids = {p.id for p in visible_pages}
+
     result = []
     for module in modules:
+        # Skip modules whose page is not yet released
+        if module.page_id is not None and module.page_id not in visible_page_ids:
+            continue
+
         # Get student's progress on this module
         progress = ContentProgress.query.filter_by(
             student_id=g.user_id, module_id=module.id
@@ -77,6 +99,7 @@ def get_prelab_content(experiment_id):
 
         module_data = {
             'id': module.id,
+            'page_id': module.page_id,
             'type': module.module_type,
             'title': module.title,
             'display_order': module.display_order,
@@ -84,10 +107,7 @@ def get_prelab_content(experiment_id):
             'score': progress.score if progress else None,
         }
 
-        # Only include content_data for text/pdf/video (not quiz answers)
-        if module.module_type != 'quiz':
-            module_data['content_data'] = module.content_data
-        else:
+        if module.module_type == 'quiz':
             config = module.content_data or {}
             module_data['quiz_config'] = {
                 'pass_threshold': config.get('pass_threshold', 70),
@@ -97,10 +117,37 @@ def get_prelab_content(experiment_id):
                 'attempts_used': progress.attempts if progress else 0,
                 'last_attempt_at': progress.last_attempt_at.isoformat() if (progress and progress.last_attempt_at) else None,
             }
+        elif module.module_type == 'viva':
+            # Never leak the stored expected_answer to students — return only
+            # the question text + metadata. Grading happens server-side.
+            config = module.content_data or {}
+            questions = config.get('questions', []) or []
+            module_data['viva_config'] = {
+                'pass_threshold': config.get('pass_threshold', 70),
+                'count': len(questions),
+                'questions': [{
+                    'index': i,
+                    'question': (q or {}).get('question', ''),
+                    'topics': (q or {}).get('topics', []),
+                    'difficulty': (q or {}).get('difficulty'),
+                } for i, q in enumerate(questions)],
+                'attempts_used': progress.attempts if progress else 0,
+            }
+        else:
+            # text/pdf/video/markdown/code/image/html/link/file/assign
+            module_data['content_data'] = module.content_data
 
         result.append(module_data)
 
-    return jsonify({'modules': result}), 200
+    pages_out = [{
+        'id': p.id,
+        'title': p.title,
+        'display_order': p.display_order,
+        'is_live': p.is_live,
+        'release_at': p.release_at.isoformat() if p.release_at else None,
+    } for p in visible_pages]
+
+    return jsonify({'modules': result, 'pages': pages_out}), 200
 
 
 @student_bp.route('/prelab/<module_id>/quiz/start', methods=['GET'])
@@ -163,10 +210,14 @@ def submit_quiz(module_id):
         student_id=g.user_id, module_id=module_id
     ).first()
     if not progress:
-        progress = ContentProgress(student_id=g.user_id, module_id=module_id)
+        progress = ContentProgress(
+            student_id=g.user_id, module_id=module_id,
+            attempts=0,          # explicit init — column default only applies at flush
+            score=0.0,
+        )
         db.session.add(progress)
 
-    progress.attempts += 1
+    progress.attempts = (progress.attempts or 0) + 1
     progress.last_attempt_at = datetime.utcnow()
     progress.score = score
 
@@ -193,7 +244,13 @@ def submit_quiz(module_id):
 @student_bp.route('/sessions/<session_id>/check-gate', methods=['GET'])
 @require_role('student')
 def check_gate(session_id):
-    """Check if student passes pre-lab gate for a session"""
+    """Check if student passes pre-lab gate for a session.
+
+    A session must be 'active' to hand out a Jitsi room.  A 'scheduled'
+    session returns gate status so the student can prepare, but jitsi_room
+    stays null until the session starts.  'ended' and 'cancelled' sessions
+    never grant access (use the catch-up endpoint instead).
+    """
     session = LabSession.query.filter_by(
         id=session_id, institution_id=g.institution_id
     ).first_or_404()
@@ -215,12 +272,36 @@ def check_gate(session_id):
             all_passed = False
             break
 
+    quiz_gate_passed = all_passed or not quiz_modules
+
+    # Active sessions always hand out the Jitsi room (video access).
+    # The late-join window only controls whether NEW attendance can be created
+    # (handled in the join/catchup routes), not whether the student sees the
+    # video room — so an active session = video room available.
+    can_join_live = session.status == 'active' and quiz_gate_passed
+
+    # Generate a student LiveKit JWT when they are clear to join the live room
+    livekit_token = None
+    if can_join_live and current_app.config.get('LIVEKIT_URL'):
+        from app.livekit_helper import make_token
+        livekit_token = make_token(
+            room_name=session.jitsi_room_name,   # reused as LiveKit room name
+            identity=f"student-{g.user_id[:8]}",
+            name=getattr(g, 'full_name', None) or 'Student',
+            can_publish=True,    # camera + mic
+            can_subscribe=True,  # see/hear instructor
+        )
+
     return jsonify({
-        'gate_passed': all_passed or not quiz_modules,  # Pass if no quiz modules
-        'session': session.to_dict(),
-        'jitsi_room': session.jitsi_room_name if (all_passed or not quiz_modules) else None,
+        'gate_passed':      quiz_gate_passed,
+        'session':          session.to_dict(),
+        'jitsi_room':       session.jitsi_room_name if can_join_live else None,  # kept for compat
+        'livekit_token':    livekit_token,
+        'livekit_url':      current_app.config.get('LIVEKIT_URL', '') if can_join_live else '',
         'focus_ml_enabled': session.focus_ml_enabled,
         'lockdown_enabled': session.lockdown_enabled,
+        'session_status':   session.status,
+        'can_join_live':    can_join_live,
     }), 200
 
 
@@ -533,3 +614,239 @@ def mark_module_complete(module_id):
     progress.completed_at = datetime.utcnow()
     db.session.commit()
     return jsonify({'message': 'Module marked as complete', 'module_id': module_id}), 200
+
+
+# ── Graded code assignment ('assign' block) ─────────────────────────────────────
+def _norm_output(s):
+    """Trailing-space + trailing-newline tolerant line-by-line comparison key."""
+    text = (s or '').replace('\r\n', '\n').rstrip('\n')
+    return '\n'.join(line.rstrip() for line in text.split('\n'))
+
+
+@student_bp.route('/prelab/<module_id>/assignment/submit', methods=['POST'])
+@require_role('student')
+@limiter.limit("10 per minute")   # each submit spawns one container per test case
+def submit_assignment(module_id):
+    """
+    Run a student's code for a graded 'assign' block against the block's own
+    test cases (kept in content_data — migration-free), auto-score, and record
+    the attempt.
+
+    Body: { "code": "...", "language": "python" (optional; else content_data.language) }
+
+    Scoring: weighted % of test cases whose stdout matches `expected`
+    (status_id 3 + normalized-output match). Best score across attempts is kept;
+    `completed` once best >= content_data.pass_threshold (default 60).
+    Hidden test cases are graded but never reveal their input/expected/actual.
+
+    NOTE: submission is intentionally UNGATED here; Phase 3 binds it to the
+    active LabSession (hybrid delivery model).
+    """
+    from app.execution.routes import _run_docker
+    from app.execution.languages import resolve as resolve_language
+
+    module = ContentModule.query.get_or_404(module_id)
+    if module.module_type != 'assign':
+        return jsonify({'error': 'This module is not a graded assignment.'}), 400
+
+    cfg = module.content_data or {}
+    test_cases = cfg.get('test_cases') or []
+    if not test_cases:
+        return jsonify({'error': 'This assignment has no test cases yet.'}), 400
+
+    data = request.get_json() or {}
+    code = (data.get('code') or '').strip()
+    if not code:
+        return jsonify({'error': 'No code submitted.'}), 400
+
+    language = data.get('language') or cfg.get('language') or 'python'
+    spec = resolve_language(language)
+    if not spec:
+        return jsonify({'error': f'Unknown language: {language}'}), 400
+    if spec['engine'] == 'browser':
+        return jsonify({'error': 'Browser languages run client-side only.'}), 400
+    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+        return jsonify({'error': 'Code execution engine is not enabled on this server.'}), 503
+
+    # ── Run the submission against each test case ─────────────────────────
+    results = []
+    earned = 0.0
+    total_weight = 0.0
+    passed_count = 0
+
+    for i, tc in enumerate(test_cases):
+        weight = tc.get('weight', 1) or 1
+        total_weight += weight
+        stdin = str(tc.get('input', '') or '')
+        result, error = _run_docker(code, spec['id'], stdin, g.user_id)
+        if error:
+            # queue full (429) / engine down (503) — surface it, grade nothing
+            return error
+        ok = (result.get('status_id') == 3
+              and _norm_output(result.get('stdout')) == _norm_output(str(tc.get('expected', ''))))
+        if ok:
+            earned += weight
+            passed_count += 1
+        hidden = bool(tc.get('hidden'))
+        row = {'index': i, 'passed': ok, 'hidden': hidden}
+        if not hidden:
+            row.update({
+                'input': stdin,
+                'expected': str(tc.get('expected', '')),
+                'actual': result.get('stdout', ''),
+                'status': result.get('status'),
+                'stderr': result.get('stderr') or result.get('compile_output') or '',
+            })
+        results.append(row)
+
+    score = (earned / total_weight * 100) if total_weight > 0 else 0.0
+
+    # ── Upsert progress, keeping the best score across attempts ───────────
+    progress = ContentProgress.query.filter_by(
+        student_id=g.user_id, module_id=module_id
+    ).first()
+    if not progress:
+        progress = ContentProgress(student_id=g.user_id, module_id=module_id)
+        db.session.add(progress)
+    progress.attempts += 1
+    progress.last_attempt_at = datetime.utcnow()
+    best = max(progress.score or 0, score)
+    progress.score = best
+    threshold = cfg.get('pass_threshold', 60)
+    if best >= threshold:
+        progress.completed = True
+        progress.completed_at = datetime.utcnow()
+
+    # ── Record the attempt (analytics parity with /execution/run) ─────────
+    attempt_count = CodeAttempt.query.filter_by(
+        student_id=g.user_id, experiment_id=module.experiment_id
+    ).count()
+    db.session.add(CodeAttempt(
+        student_id=g.user_id,
+        experiment_id=module.experiment_id,
+        session_id=None,                       # Phase 3 binds to the live session
+        attempt_number=attempt_count + 1,
+        language=language,
+        files={'main': code},
+        stdin='',
+        compile_status='graded',
+        test_cases_passed=passed_count,
+        test_cases_total=len(test_cases),
+        is_final_submission=True,
+    ))
+    db.session.commit()
+
+    return jsonify({
+        'score': round(score, 1),
+        'best_score': round(best, 1),
+        'passed': best >= threshold,
+        'threshold': threshold,
+        'passed_tests': passed_count,
+        'total_tests': len(test_cases),
+        'attempts_used': progress.attempts,
+        'results': results,
+    }), 200
+
+
+# ── AI Viva ('viva' block) ──────────────────────────────────────────────────────
+@student_bp.route('/prelab/<module_id>/viva/submit', methods=['POST'])
+@require_role('student')
+@limiter.limit("6 per minute")   # each submit calls the LLM once per question
+def submit_viva(module_id):
+    """
+    Grade a student's answers to an author-time AI Viva block.
+
+    The block's content_data holds the generated questions with their
+    `expected_answer` (never sent to the student — see get_prelab_content).
+    Each submitted answer is scored 0–10 by the LLM against the expected
+    answer; the block score is the mean, scaled to 0–100. `completed` once
+    score >= content_data.pass_threshold (default 70).
+
+    Body: { "answers": { "<index>": "student answer text", ... } }
+    Returns: { score, passed, threshold, per_question: [...], attempts_used }
+    """
+    module = ContentModule.query.get_or_404(module_id)
+    if module.module_type != 'viva':
+        return jsonify({'error': 'This module is not a viva block.'}), 400
+
+    cfg = module.content_data or {}
+    questions = cfg.get('questions') or []
+    if not questions:
+        return jsonify({'error': 'This viva has no questions yet.'}), 400
+
+    data = request.get_json() or {}
+    answers = data.get('answers') or {}
+    if not isinstance(answers, dict):
+        return jsonify({'error': 'answers must be an object keyed by question index.'}), 400
+
+    from app.ai.groq_client import groq_chat
+    import json as _json
+    import re as _re
+
+    per_question = []
+    total_score = 0.0
+    for i, q in enumerate(questions):
+        q = q or {}
+        question_text  = q.get('question', '')
+        expected       = q.get('expected_answer', '')
+        student_answer = str(answers.get(str(i), answers.get(i, '')) or '').strip()
+
+        if not student_answer:
+            per_question.append({'index': i, 'score': 0, 'feedback': 'No answer provided.'})
+            continue
+
+        system_prompt = (
+            "You are grading a student's oral-exam (viva) answer against a model answer. "
+            'Return ONLY valid JSON: {"score": <0-10 integer>, "feedback": "<one short sentence>"}. '
+            'Score guide: 9-10=excellent, 7-8=good, 5-6=partial, 3-4=weak, 0-2=incorrect or off-topic.'
+        )
+        user_msg = (
+            f"Question: {question_text}\n"
+            f"Model answer: {expected}\n"
+            f"Student answer: {student_answer}"
+        )
+        messages = [
+            {'role': 'system', 'content': system_prompt},
+            {'role': 'user', 'content': user_msg},
+        ]
+        try:
+            response, _, _ = groq_chat(messages, pool='fast', max_tokens=80, temperature=0.1)
+            match = _re.search(r'\{.*\}', response or '', _re.DOTALL)
+            parsed = _json.loads(match.group()) if match else {}
+            q_score = int(parsed.get('score', 5))
+            feedback = str(parsed.get('feedback', ''))[:300]
+        except Exception:
+            q_score = 5
+            feedback = 'Could not evaluate automatically.'
+        q_score = max(0, min(10, q_score))
+        total_score += q_score
+        per_question.append({'index': i, 'score': q_score, 'feedback': feedback})
+
+    # Mean of 0–10 scores → 0–100
+    score = (total_score / len(questions) * 10) if questions else 0.0
+
+    # Upsert progress, keeping the best score across attempts
+    progress = ContentProgress.query.filter_by(
+        student_id=g.user_id, module_id=module_id
+    ).first()
+    if not progress:
+        progress = ContentProgress(student_id=g.user_id, module_id=module_id)
+        db.session.add(progress)
+    progress.attempts += 1
+    progress.last_attempt_at = datetime.utcnow()
+    best = max(progress.score or 0, score)
+    progress.score = best
+    threshold = cfg.get('pass_threshold', 70)
+    if best >= threshold:
+        progress.completed = True
+        progress.completed_at = datetime.utcnow()
+    db.session.commit()
+
+    return jsonify({
+        'score': round(score, 1),
+        'best_score': round(best, 1),
+        'passed': best >= threshold,
+        'threshold': threshold,
+        'per_question': per_question,
+        'attempts_used': progress.attempts,
+    }), 200

@@ -52,14 +52,22 @@ def instructor_dashboard():
     """Aggregate stats for the instructor dashboard."""
     now = datetime.utcnow()
 
-    active_sessions = LabSession.query.filter_by(
-        institution_id=g.institution_id, status='active'
-    ).all()
+    # Only sessions whose section-subject this instructor teaches
+    my_ss_ids = [
+        ss.id for ss in SectionSubject.query.filter_by(
+            institution_id=g.institution_id, instructor_id=g.user_id
+        ).all()
+    ]
+
+    active_sessions = LabSession.query.filter(
+        LabSession.section_subject_id.in_(my_ss_ids),
+        LabSession.status == 'active',
+    ).all() if my_ss_ids else []
     upcoming_sessions = LabSession.query.filter(
-        LabSession.institution_id == g.institution_id,
+        LabSession.section_subject_id.in_(my_ss_ids),
         LabSession.status == 'scheduled',
         LabSession.scheduled_at >= now,
-    ).order_by(LabSession.scheduled_at.asc()).limit(5).all()
+    ).order_by(LabSession.scheduled_at.asc()).limit(5).all() if my_ss_ids else []
 
     my_exp_ids = [
         e.id for e in Experiment.query.filter_by(
@@ -222,6 +230,8 @@ def create_experiment():
         enable_lockdown=data.get('enable_lockdown', False),
         allow_ai_hints=data.get('allow_ai_hints', True),
         time_limit_sec=data.get('time_limit_sec', 10),
+        weightage=data.get('weightage', 1),
+        grade_scale=data.get('grade_scale', 100),
     )
     db.session.add(exp)
     db.session.commit()
@@ -273,7 +283,8 @@ def update_experiment(exp_id):
                       'output_format', 'difficulty_level', 'concept_tags', 'allowed_languages',
                       'is_multi_file', 'file_structure', 'rubric_test_cases', 'rubric_lab_report',
                       'rubric_code_quality', 'rubric_viva', 'enable_viva', 'enable_lockdown',
-                      'allow_ai_hints', 'time_limit_sec', 'is_published']
+                      'allow_ai_hints', 'time_limit_sec', 'is_published',
+                      'weightage', 'grade_scale']
     for field in allowed_fields:
         if field in data:
             setattr(exp, field, data[field])
@@ -378,14 +389,67 @@ Output format: {exp.output_format}"""
     return jsonify({'generated': len(saved), 'test_cases': saved}), 201
 
 
+@instructor_bp.route('/experiments/generate-test-cases-preview', methods=['POST'])
+@require_role('instructor', 'institution_admin')
+def generate_test_cases_preview():
+    """Generate test cases from a problem statement WITHOUT persisting.
+
+    Used by the create-experiment page, where no experiment id exists yet.
+    The instructor stages the returned cases client-side and they are saved
+    (via the normal batch add-test-cases route) once the experiment is created.
+    """
+    from app.ai.groq_client import groq_single
+    import json, re
+
+    data = request.get_json() or {}
+    problem = (data.get('problem_statement') or '').strip()
+    if not problem:
+        return jsonify({'error': 'A problem statement is required to generate test cases.'}), 400
+    count = data.get('count', 6)
+
+    prompt = f"""Generate {count} test cases for this programming problem.
+Return ONLY a JSON array (no explanation):
+[{{"input": "...", "expected_output": "...", "description": "...", "is_hidden": false}}]
+Make 2/3 visible and 1/3 hidden. Cover edge cases.
+
+Problem: {problem}
+Input format: {data.get('input_format') or ''}
+Output format: {data.get('output_format') or ''}"""
+
+    content, model_used, is_fallback = groq_single(
+        prompt, pool='quality', max_tokens=800, temperature=0.3
+    )
+    if is_fallback or content is None:
+        return jsonify({'error': 'AI generator temporarily unavailable (all Groq models rate-limited). Try again in a minute.'}), 503
+
+    try:
+        json_match = re.search(r'\[.*\]', content, re.DOTALL)
+        test_cases = json.loads(json_match.group()) if json_match else []
+    except Exception:
+        return jsonify({'error': 'Could not parse generated test cases'}), 500
+
+    return jsonify({'test_cases': test_cases, 'count': len(test_cases)}), 200
+
+
 # ── Session Management ─────────────────────────────────────────────────────────
 
 @instructor_bp.route('/sessions', methods=['GET'])
 @require_role('instructor', 'institution_admin')
 def list_sessions():
-    sessions = LabSession.query.filter_by(institution_id=g.institution_id).order_by(
-        LabSession.scheduled_at.desc()
-    ).limit(50).all()
+    # institution_admin sees all; instructor sees only their own section-subjects
+    if g.role == 'institution_admin':
+        sessions = LabSession.query.filter_by(
+            institution_id=g.institution_id
+        ).order_by(LabSession.scheduled_at.desc()).limit(50).all()
+    else:
+        my_ss_ids = [
+            ss.id for ss in SectionSubject.query.filter_by(
+                institution_id=g.institution_id, instructor_id=g.user_id
+            ).all()
+        ]
+        sessions = LabSession.query.filter(
+            LabSession.section_subject_id.in_(my_ss_ids)
+        ).order_by(LabSession.scheduled_at.desc()).limit(50).all() if my_ss_ids else []
     return jsonify({'sessions': [_enriched_session(s) for s in sessions]}), 200
 
 
@@ -460,14 +524,29 @@ def start_session(session_id):
     session.started_at = datetime.utcnow()
     db.session.commit()
 
-    # Broadcast via Socket.io
+    # Create LiveKit room and generate instructor JWT token
+    livekit_token = None
+    if current_app.config.get('LIVEKIT_URL'):
+        from app.livekit_helper import create_room, make_token
+        create_room(session.jitsi_room_name)   # jitsi_room_name doubles as LiveKit room name
+        livekit_token = make_token(
+            room_name=session.jitsi_room_name,
+            identity=f"instructor-{g.user_id[:8]}",
+            name=getattr(g, 'full_name', None) or 'Instructor',
+            can_publish=True,
+            can_subscribe=True,
+        )
+
+    # Broadcast via Socket.io — include livekit_token so instructor page
+    # can connect immediately without a separate REST round-trip
     from app.extensions import socketio
     socketio.emit('session_started', {
-        'session_id': session_id,
-        'jitsi_room': session.jitsi_room_name,
+        'session_id':    session_id,
+        'jitsi_room':    session.jitsi_room_name,   # kept for backward compat
+        'livekit_token': livekit_token,
     }, room=f"session_{session_id}_students")
 
-    return jsonify({'session': session.to_dict()}), 200
+    return jsonify({'session': session.to_dict(), 'livekit_token': livekit_token}), 200
 
 
 @instructor_bp.route('/sessions/<session_id>/end', methods=['POST'])
@@ -556,6 +635,102 @@ def live_dashboard(session_id):
         'session_id': session_id,
         'session_status': session.status if session else None,
         'students': students_status,
+    }), 200
+
+
+# ── Phase-2: Subject grade-summary rollup ─────────────────────────────────────
+
+@instructor_bp.route('/subjects/<subject_id>/grade-summary', methods=['GET'])
+@require_role('instructor', 'institution_admin')
+def subject_grade_summary(subject_id):
+    """Return per-experiment weightage/scale and per-student rollup scores.
+
+    Formula:  subject_score = Σ (experiment_score / grade_scale) × weightage
+    experiment_score = the student's best final-submission score for any graded
+    task in that experiment (from Grade.final_grade when present, else 0).
+
+    Response:
+      {
+        "subject": {id, name, code, total_marks},
+        "experiments": [{id, title, weightage, grade_scale, exp_number}, ...],
+        "students": [
+          {
+            "student_id": ..., "full_name": ..., "roll_number": ...,
+            "experiment_scores": {exp_id: score},   // raw score on that experiment
+            "subject_score": float                   // rollup (may exceed total_marks for bonus)
+          },
+          ...
+        ]
+      }
+    """
+    from app.models.grading import Grade
+
+    subject = Subject.query.filter_by(
+        id=subject_id, institution_id=g.institution_id).first_or_404()
+
+    exps = Experiment.query.filter_by(
+        subject_id=subject_id, institution_id=g.institution_id
+    ).order_by(Experiment.exp_number).all()
+
+    exp_ids = [e.id for e in exps]
+
+    # Fetch the best final grade per (student, experiment)
+    from sqlalchemy import func as sqfunc
+    grade_rows = (
+        db.session.query(
+            Grade.student_id,
+            Grade.experiment_id,
+            sqfunc.max(Grade.final_grade).label('best_grade')
+        )
+        .filter(Grade.experiment_id.in_(exp_ids))
+        .group_by(Grade.student_id, Grade.experiment_id)
+        .all()
+    ) if exp_ids else []
+
+    # student_id → {exp_id: best_grade}
+    grade_map: dict = {}
+    student_ids: set = set()
+    for row in grade_rows:
+        grade_map.setdefault(row.student_id, {})[row.experiment_id] = float(row.best_grade or 0)
+        student_ids.add(row.student_id)
+
+    users = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
+
+    students_out = []
+    for sid, exp_scores in grade_map.items():
+        rollup = sum(
+            (exp_scores.get(e.id, 0) / (e.grade_scale or 100)) * (e.weightage or 0)
+            for e in exps
+        )
+        u = users.get(sid)
+        students_out.append({
+            'student_id': sid,
+            'full_name': u.full_name if u else sid,
+            'roll_number': getattr(u, 'roll_number', None) if u else None,
+            'experiment_scores': exp_scores,
+            'subject_score': round(rollup, 2),
+        })
+
+    students_out.sort(key=lambda x: x['full_name'])
+
+    return jsonify({
+        'subject': {
+            'id': subject.id,
+            'name': subject.name,
+            'code': subject.code,
+            'total_marks': subject.total_marks,
+        },
+        'experiments': [
+            {
+                'id': e.id,
+                'exp_number': e.exp_number,
+                'title': e.title,
+                'weightage': e.weightage,
+                'grade_scale': e.grade_scale,
+            }
+            for e in exps
+        ],
+        'students': students_out,
     }), 200
 
 

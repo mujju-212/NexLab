@@ -76,16 +76,24 @@ def handle_join_session(data):
         join_room(f"session_{session_id}_students")
         join_room(f"student_{user['user_id']}")  # private room for targeted messages
 
-        # Update attendance record
+        # Update attendance record — create if missing (e.g. student added after session started)
         attendance = SessionAttendance.query.filter_by(
             session_id=session_id, student_id=user['user_id']
         ).first()
-        if attendance:
-            if not attendance.joined_at:
-                attendance.joined_at = datetime.utcnow()
-            else:
-                attendance.reconnect_count += 1
-            db.session.commit()
+        if not attendance:
+            attendance = SessionAttendance(
+                session_id=session_id,
+                student_id=user['user_id'],
+                status='absent',
+                total_time_seconds=0,
+                reconnect_count=0,
+            )
+            db.session.add(attendance)
+        if not attendance.joined_at:
+            attendance.joined_at = datetime.utcnow()
+        else:
+            attendance.reconnect_count = (attendance.reconnect_count or 0) + 1
+        db.session.commit()
 
         # Notify instructor
         emit('student_joined', {
@@ -113,6 +121,30 @@ def handle_leave_session(data):
             'student_id': user['user_id'],
             'timestamp': datetime.utcnow().isoformat(),
         }, room=f"session_{session_id}_instructor")
+
+
+@socketio.on('heartbeat')
+def handle_heartbeat(data):
+    """Student sends a heartbeat every 30s while in the live-lab page.
+
+    Accumulates total_time_seconds on the attendance row so that
+    _finalize_attendance can correctly grade presence (requires >= 1800s).
+    Frontend sends: {session_id, elapsed_seconds}  (elapsed since last heartbeat)
+    """
+    from flask import session as sock_session
+    user = sock_session.get('user')
+    if not user or user['role'] != 'student':
+        return
+
+    session_id    = data.get('session_id')
+    elapsed       = int(data.get('elapsed_seconds', 30))
+
+    attendance = SessionAttendance.query.filter_by(
+        session_id=session_id, student_id=user['user_id']
+    ).first()
+    if attendance:
+        attendance.total_time_seconds = (attendance.total_time_seconds or 0) + elapsed
+        db.session.commit()
 
 
 # ── Checkpoint Events ──────────────────────────────────────────────────────────
@@ -301,6 +333,33 @@ def handle_screen_share_stopped(data):
         'message':   'Please share your screen to continue the proctored session.',
         'timestamp': datetime.utcnow().isoformat(),
     }, room=f"student_{user['user_id']}")
+
+
+@socketio.on('screenshot_frame')
+def handle_screenshot_frame(data):
+    """Student sends a periodic JPEG screenshot for instructor monitoring grid.
+
+    Frontend sends every ~30 s:
+      { session_id: str, frame: '<base64 jpeg data-url>' }
+
+    The frame is forwarded directly to the instructor socket room — it is never
+    persisted to the database.  The instructor page stores the latest frame per
+    student in React state and renders a thumbnail grid.
+    """
+    from flask import session as sock_session
+    user = sock_session.get('user')
+    if not user or user['role'] != 'student':
+        return
+
+    session_id = data.get('session_id')
+    frame      = data.get('frame', '')
+
+    emit('student_screenshot', {
+        'student_id': user['user_id'],
+        'full_name':  user.get('full_name', ''),
+        'frame':      frame,
+        'timestamp':  datetime.utcnow().isoformat(),
+    }, room=f"session_{session_id}_instructor")
 
 
 @socketio.on('lockdown_violation')
