@@ -82,7 +82,12 @@ class Config:
 
     # ── Misc ──────────────────────────────────────────────────────────────
     BASE_URL = os.environ.get('BASE_URL', 'http://localhost:5000')
-    JITSI_DOMAIN = os.environ.get('JITSI_DOMAIN', 'meet.jit.si')
+    JITSI_DOMAIN = os.environ.get('JITSI_DOMAIN', 'meet.jit.si')  # kept for backward compat
+
+    # ── LiveKit Cloud (replaces Jitsi for live session video) ─────────────
+    LIVEKIT_URL        = os.environ.get('LIVEKIT_URL', '')
+    LIVEKIT_API_KEY    = os.environ.get('LIVEKIT_API_KEY', '')
+    LIVEKIT_API_SECRET = os.environ.get('LIVEKIT_API_SECRET', '')
 
     # Plagiarism threshold
     PLAGIARISM_THRESHOLD = 0.85      # 85% similarity → flag
