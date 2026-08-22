@@ -92,11 +92,14 @@ export const instructorService = {
 
   // POST /api/instructor/experiments/<exp_id>/content
   async addContentModule(expId: string, payload: {
-    module_type: 'text' | 'video' | 'pdf' | 'quiz' | 'markdown' | 'code' | 'image';
+    module_type:
+      | 'text' | 'video' | 'pdf' | 'quiz' | 'markdown' | 'code' | 'image'
+      | 'html' | 'link' | 'file' | 'assign' | 'viva';
     title: string;
     content_data?: Record<string, unknown>;
     display_order?: number;
     min_watch_pct?: number;
+    page_id?: string | null;
   }) {
     const { data } = await apiClient.post(`/instructor/experiments/${expId}/content`, payload);
     return data;
@@ -124,6 +127,110 @@ export const instructorService = {
   // GET /api/instructor/experiments/<exp_id>/content/progress-summary
   async getContentProgress(expId: string) {
     const { data } = await apiClient.get(`/instructor/experiments/${expId}/content/progress-summary`);
+    return data;
+  },
+
+  // ── Content Pages ────────────────────────────────────────────────────────────
+  // GET /api/instructor/experiments/<exp_id>/pages
+  async listPages(expId: string) {
+    const { data } = await apiClient.get(`/instructor/experiments/${expId}/pages`);
+    return data;
+  },
+
+  // POST /api/instructor/experiments/<exp_id>/pages
+  async addPage(expId: string, payload: {
+    title?: string;
+    display_order?: number;
+    is_live?: boolean;
+    release_at?: string | null;
+  }) {
+    const { data } = await apiClient.post(`/instructor/experiments/${expId}/pages`, payload);
+    return data;
+  },
+
+  // PATCH /api/instructor/experiments/<exp_id>/pages/<page_id>
+  async updatePage(expId: string, pageId: string, payload: {
+    title?: string;
+    display_order?: number;
+    is_live?: boolean;
+    release_at?: string | null;
+  }) {
+    const { data } = await apiClient.patch(`/instructor/experiments/${expId}/pages/${pageId}`, payload);
+    return data;
+  },
+
+  // DELETE /api/instructor/experiments/<exp_id>/pages/<page_id>
+  async deletePage(expId: string, pageId: string) {
+    await apiClient.delete(`/instructor/experiments/${expId}/pages/${pageId}`);
+  },
+
+  // ── AI Viva Generation ───────────────────────────────────────────────────────
+  // POST /api/instructor/experiments/<exp_id>/viva/generate
+  async generateVivaQuestions(expId: string, payload: {
+    source: 'topics' | 'content';
+    topics?: string[];
+    count?: number;
+    difficulty?: number;
+  }): Promise<{
+    questions: { question: string; expected_answer: string; topics: string[]; difficulty: number | null }[];
+    count: number;
+    source: string;
+    topics: string[];
+    difficulty: number | null;
+  }> {
+    const { data } = await apiClient.post(`/instructor/experiments/${expId}/viva/generate`, payload);
+    return data;
+  },
+
+  // ── AI Text Extraction ────────────────────────────────────────────────────────
+  // POST /api/instructor/experiments/<exp_id>/ai/extract-text
+  // Accepts multipart (file) or JSON ({ url })
+  async extractTextFromFile(
+    expId: string, file: File
+  ): Promise<{ text: string; chars: number; source: string }> {
+    const form = new FormData();
+    form.append('file', file);
+    const token = (await import('js-cookie')).default.get('access_token');
+    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
+    const res = await fetch(`${base}/instructor/experiments/${expId}/ai/extract-text`, {
+      method: 'POST',
+      headers: token ? { Authorization: `Bearer ${token}` } : {},
+      body: form,
+    });
+    const data = await res.json();
+    if (!res.ok) throw { response: { data } };
+    return data;
+  },
+
+  async extractTextFromUrl(
+    expId: string, url: string
+  ): Promise<{ text: string; chars: number; source: string }> {
+    const { data } = await apiClient.post(
+      `/instructor/experiments/${expId}/ai/extract-text`, { url }
+    );
+    return data;
+  },
+
+  // ── AI Content Generation ─────────────────────────────────────────────────────
+  // POST /api/instructor/experiments/<exp_id>/ai/generate
+  async generateAiContent(
+    expId: string,
+    payload: {
+      source: 'text' | 'experiment';
+      text?: string;
+      generate: Array<'notes' | 'code' | 'quiz' | 'viva'>;
+      language?: string;
+      count_quiz?: number;
+      count_viva?: number;
+    }
+  ): Promise<{
+    notes?: { markdown: string };
+    code_snippets?: { title: string; language: string; description: string; code: string }[];
+    quiz_questions?: { question: string; options: string[]; correct_index: number; explanation: string }[];
+    viva_questions?: { question: string; expected_answer: string }[];
+    _meta?: { model: string; is_fallback: boolean; source: string };
+  }> {
+    const { data } = await apiClient.post(`/instructor/experiments/${expId}/ai/generate`, payload);
     return data;
   },
 
@@ -179,14 +286,17 @@ export const instructorService = {
   async uploadSimulation(expId: string, file: File) {
     const form = new FormData();
     form.append('file', file);
-    const token = Cookies.get('access_token');
+    // Use dynamic import for SSR safety (same pattern as extractTextFromFile).
+    const token = (await import('js-cookie')).default.get('access_token');
     const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
     const res = await fetch(`${base}/instructor/experiments/${expId}/simulation/upload`, {
       method: 'POST',
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: form,
     });
-    return res.json();
+    const data = await res.json();
+    if (!res.ok) throw { response: { data } };
+    return data;
   },
 
   // DELETE /api/instructor/experiments/<exp_id>/simulation

@@ -1,0 +1,138 @@
+/* ── experiments.module.css ─────────────────────────────────────────────── */
+/* Subject-first navigation layer for the experiments page.                 */
+
+/* ── Subject card grid ──────────────────────────────────────────────────── */
+
+.subjectGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  gap: 14px;
+  margin-bottom: 4px;
+}
+
+.subjectCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  padding: 18px 16px;
+  background: var(--card-bg, #fff);
+  border: 1.5px solid rgba(124, 58, 237, 0.12);
+  border-radius: 14px;
+  cursor: pointer;
+  text-align: left;
+  transition: border-color 0.14s, box-shadow 0.14s, transform 0.1s;
+  width: 100%;
+}
+
+.subjectCard:hover {
+  border-color: rgba(124, 58, 237, 0.38);
+  box-shadow: 0 4px 18px rgba(124, 58, 237, 0.1);
+  transform: translateY(-1px);
+}
+
+.subjectCard:active {
+  transform: translateY(0);
+}
+
+.subjectCardIcon {
+  flex-shrink: 0;
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: rgba(124, 58, 237, 0.09);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.subjectCardBody {
+  flex: 1;
+  min-width: 0;
+}
+
+.subjectCardTitle {
+  font-family: 'Geist', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin: 0 0 3px;
+}
+
+.subjectCardMeta {
+  font-family: 'Geist', sans-serif;
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0 0 2px;
+}
+
+.subjectCardCount {
+  font-family: 'Geist', sans-serif;
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c3aed;
+  margin: 0;
+}
+
+.subjectCardArrow {
+  flex-shrink: 0;
+  color: #d1d5db;
+  transition: color 0.14s;
+}
+
+.subjectCard:hover .subjectCardArrow {
+  color: #7c3aed;
+}
+
+/* ── Selected subject header ────────────────────────────────────────────── */
+
+.subjectHeader {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 18px;
+  background: rgba(124, 58, 237, 0.04);
+  border: 1.5px solid rgba(124, 58, 237, 0.12);
+  border-radius: 12px;
+  margin-bottom: 14px;
+}
+
+.subjectHeaderIcon {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: rgba(124, 58, 237, 0.1);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.subjectHeaderTitle {
+  font-family: 'Geist', sans-serif;
+  font-size: 15px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 2px;
+}
+
+.subjectHeaderSub {
+  font-family: 'Geist', sans-serif;
+  font-size: 12px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.subjectHeaderCount {
+  margin-left: auto;
+  font-family: 'Geist', sans-serif;
+  font-size: 13px;
+  font-weight: 600;
+  color: #7c3aed;
+  background: rgba(124, 58, 237, 0.08);
+  padding: 4px 12px;
+  border-radius: 20px;
+  white-space: nowrap;
+}

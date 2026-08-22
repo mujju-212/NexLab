@@ -2,10 +2,11 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { ArrowLeft, FlaskConical, Save, AlertCircle } from 'lucide-react';
+import { ArrowLeft, FlaskConical, Save, AlertCircle, Layers, Sparkles } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import { experimentService } from '@/services/experiment.service';
 import { sessionService } from '@/services/session.service';
+import { executionService, type CompilerLanguage } from '@/services/execution.service';
 import styles from '../../shared.module.css';
 
 interface SectionSubject {
@@ -16,11 +17,19 @@ interface SectionSubject {
   section_name: string;
 }
 
-const ALL_LANGUAGES = ['python', 'cpp', 'c', 'java'];
+// Sensible default selection + fallback when the compiler catalog can't be reached.
+const DEFAULT_LANGS = ['python', 'cpp', 'c', 'java'];
 
+// Creating an experiment now only sets up the SHELL — subject, number, title,
+// classification, grading rules. All pre-lab content (theory, runnable code,
+// images, quizzes, graded coding tasks with their own test cases) is authored
+// afterwards in the block studio, which we open on the Content tab right after
+// create. That's why the old problem-statement / I-O-format / test-case fields
+// no longer live here.
 export default function NewExperimentPage() {
   const router = useRouter();
   const [sectionSubjects, setSectionSubjects] = useState<SectionSubject[]>([]);
+  const [languages, setLanguages] = useState<CompilerLanguage[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -29,27 +38,27 @@ export default function NewExperimentPage() {
     exp_number: 1,
     title: '',
     aim: '',
-    theory: '',
-    problem_statement: '',
-    input_format: '',
-    output_format: '',
     difficulty_level: 1,
     concept_tags: '',
-    allowed_languages: [...ALL_LANGUAGES],
-    rubric_test_cases: 60,
-    rubric_lab_report: 20,
-    rubric_code_quality: 10,
-    rubric_viva: 10,
+    allowed_languages: [...DEFAULT_LANGS],
     enable_viva: false,
     enable_lockdown: false,
     allow_ai_hints: true,
     time_limit_sec: 10,
+    weightage: 1,
+    grade_scale: 100,
   });
 
   useEffect(() => {
     sessionService.getSectionSubjects()
       .then(d => setSectionSubjects(d.section_subjects ?? []))
       .catch(() => setSectionSubjects([]));
+
+    // Only docker-executable languages can be graded against stdin/stdout, so
+    // those are what we offer for the experiment's allowed set.
+    executionService.listLanguages()
+      .then(d => setLanguages((d.languages ?? []).filter(l => l.engine === 'docker')))
+      .catch(() => setLanguages([]));
   }, []);
 
   // Deduplicate subjects (same subject may appear for multiple sections)
@@ -57,8 +66,10 @@ export default function NewExperimentPage() {
     (ss, i) => sectionSubjects.findIndex(x => x.subject_id === ss.subject_id) === i
   );
 
-  const rubricSum = form.rubric_test_cases + form.rubric_lab_report
-    + form.rubric_code_quality + form.rubric_viva;
+  // Catalog if loaded, else a minimal fallback so the page still works offline.
+  const langOptions: { id: string; label: string }[] = languages.length
+    ? languages.map(l => ({ id: l.id, label: l.label }))
+    : DEFAULT_LANGS.map(id => ({ id, label: id }));
 
   const toggleLanguage = (lang: string) =>
     setForm(f => ({
@@ -74,7 +85,6 @@ export default function NewExperimentPage() {
     if (!form.subject_id) { setError('Please select a subject.'); return; }
     if (!form.title.trim()) { setError('Title is required.'); return; }
     if (tags.length === 0) { setError('At least one concept tag is required (e.g. arrays, sorting).'); return; }
-    if (rubricSum !== 100) { setError(`Rubric weights must sum to 100 (currently ${rubricSum}).`); return; }
     if (form.allowed_languages.length === 0) { setError('Select at least one allowed language.'); return; }
 
     setSaving(true);
@@ -84,23 +94,20 @@ export default function NewExperimentPage() {
         exp_number: form.exp_number,
         title: form.title,
         aim: form.aim || undefined,
-        theory: form.theory || undefined,
-        problem_statement: form.problem_statement || undefined,
-        input_format: form.input_format || undefined,
-        output_format: form.output_format || undefined,
         difficulty_level: form.difficulty_level,
         concept_tags: tags,
         allowed_languages: form.allowed_languages,
-        rubric_test_cases: form.rubric_test_cases,
-        rubric_lab_report: form.rubric_lab_report,
-        rubric_code_quality: form.rubric_code_quality,
-        rubric_viva: form.rubric_viva,
         enable_viva: form.enable_viva,
         enable_lockdown: form.enable_lockdown,
         allow_ai_hints: form.allow_ai_hints,
         time_limit_sec: form.time_limit_sec,
+        weightage: form.weightage,
+        grade_scale: form.grade_scale,
       }) as { id?: string };
-      router.push(exp?.id ? `/instructor/experiments/${exp.id}/edit` : '/instructor/experiments');
+
+      // Hand off straight into the block studio (Content tab), where the rest of
+      // the experiment — notes, runnable code, images, quizzes, graded tasks — is built.
+      router.push(exp?.id ? `/instructor/experiments/${exp.id}/edit?tab=content` : '/instructor/experiments');
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };
       setError(e?.response?.data?.error ?? 'Failed to create experiment.');
@@ -110,7 +117,7 @@ export default function NewExperimentPage() {
 
   return (
     <InstructorShell activePage="Experiments" title="Create Experiment"
-      subtitle="Define the experiment, grading rubric and rules.">
+      subtitle="Set up the experiment shell — you'll author its content in the studio next.">
 
       <div className={styles.actionRow}>
         <button className={styles.ghostBtn} onClick={() => router.push('/instructor/experiments')}>
@@ -123,6 +130,16 @@ export default function NewExperimentPage() {
           <AlertCircle size={14} /> {error}
         </p>
       )}
+
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#f5f3ff', color: '#5b21b6', border: '1px solid #ddd6fe', padding: '12px 16px', borderRadius: 12, fontSize: 13, lineHeight: 1.55 }}>
+        <Layers size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+        <span>
+          This creates the experiment shell. After saving you land in the <strong>content studio</strong>, where the
+          pre-lab is built as stacked blocks — notes and theory, runnable code, images, HTML simulations, quizzes,
+          and graded coding tasks (each with its own test cases). Theory, problem statements and test cases are no
+          longer entered here; they are authored as blocks.
+        </span>
+      </div>
 
       <div className={styles.sectionCard}>
         <div className={styles.sectionHeader}>
@@ -157,34 +174,9 @@ export default function NewExperimentPage() {
         </div>
 
         <div className={styles.formGroup}>
-          <label className={styles.formLabel}>Aim</label>
-          <textarea className={styles.textarea} placeholder="What students should achieve…"
+          <label className={styles.formLabel}>Aim (optional)</label>
+          <textarea className={styles.textarea} placeholder="One-line purpose of the experiment. Full theory and tasks go in the studio."
             value={form.aim} onChange={e => setForm(f => ({ ...f, aim: e.target.value }))} />
-        </div>
-
-        <div className={styles.formGroup}>
-          <label className={styles.formLabel}>Theory (shown in pre-lab)</label>
-          <textarea className={styles.textarea} placeholder="Background theory for the experiment…"
-            value={form.theory} onChange={e => setForm(f => ({ ...f, theory: e.target.value }))} />
-        </div>
-
-        <div className={styles.formGroup}>
-          <label className={styles.formLabel}>Problem statement *</label>
-          <textarea className={styles.textarea} placeholder="The exact coding task students must complete…"
-            value={form.problem_statement} onChange={e => setForm(f => ({ ...f, problem_statement: e.target.value }))} />
-        </div>
-
-        <div className={styles.gridTwo}>
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Input format</label>
-            <textarea className={styles.textarea} placeholder="e.g. First line: N, then N integers"
-              value={form.input_format} onChange={e => setForm(f => ({ ...f, input_format: e.target.value }))} />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Output format</label>
-            <textarea className={styles.textarea} placeholder="e.g. Single integer per line"
-              value={form.output_format} onChange={e => setForm(f => ({ ...f, output_format: e.target.value }))} />
-          </div>
         </div>
       </div>
 
@@ -205,9 +197,32 @@ export default function NewExperimentPage() {
             </select>
           </div>
           <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Execution time limit (seconds)</label>
+            <label className={styles.formLabel}>Default execution time limit (seconds)</label>
             <input className={styles.input} type="number" min={1} max={60} value={form.time_limit_sec}
               onChange={e => setForm(f => ({ ...f, time_limit_sec: parseInt(e.target.value) || 10 }))} />
+          </div>
+        </div>
+
+        {/* Experiment grading weightage */}
+        <div className={styles.gridTwo}>
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel}>Weightage (marks toward subject total)</label>
+            <input className={styles.input} type="number" min={1} value={form.weightage}
+              onChange={e => setForm(f => ({ ...f, weightage: parseInt(e.target.value) || 1 }))} />
+            <p className={styles.sectionSub} style={{ marginTop: 4 }}>
+              How many marks this experiment contributes to the subject's total.
+            </p>
+          </div>
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel}>Grade scale</label>
+            <select className={styles.select} value={form.grade_scale}
+              onChange={e => setForm(f => ({ ...f, grade_scale: parseInt(e.target.value) }))}>
+              <option value={100}>100-point scale</option>
+              <option value={10}>10-point scale</option>
+            </select>
+            <p className={styles.sectionSub} style={{ marginTop: 4 }}>
+              The denominator for this experiment's score (100 or 10).
+            </p>
           </div>
         </div>
 
@@ -218,13 +233,15 @@ export default function NewExperimentPage() {
         </div>
 
         <div className={styles.formGroup}>
-          <label className={styles.formLabel}>Allowed languages</label>
+          <label className={styles.formLabel}>
+            Allowed languages{languages.length ? ` (${languages.length} available from the compiler)` : ''}
+          </label>
           <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-            {ALL_LANGUAGES.map(lang => (
-              <label key={lang} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.allowed_languages.includes(lang)}
-                  onChange={() => toggleLanguage(lang)} />
-                {lang}
+            {langOptions.map(lang => (
+              <label key={lang.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
+                <input type="checkbox" checked={form.allowed_languages.includes(lang.id)}
+                  onChange={() => toggleLanguage(lang.id)} />
+                {lang.label}
               </label>
             ))}
           </div>
@@ -249,41 +266,18 @@ export default function NewExperimentPage() {
         </div>
       </div>
 
-      <div className={styles.sectionCard}>
-        <div className={styles.sectionHeader}>
-          <h3 className={styles.sectionTitle}>Grading Rubric (must sum to 100)</h3>
-          <span className={`${styles.pill} ${rubricSum === 100 ? styles.pillGreen : styles.pillAmber}`}>
-            Sum: {rubricSum}
-          </span>
-        </div>
-        <div className={styles.gridTwo}>
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Test cases (%)</label>
-            <input className={styles.input} type="number" min={0} max={100} value={form.rubric_test_cases}
-              onChange={e => setForm(f => ({ ...f, rubric_test_cases: parseInt(e.target.value) || 0 }))} />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Lab report (%)</label>
-            <input className={styles.input} type="number" min={0} max={100} value={form.rubric_lab_report}
-              onChange={e => setForm(f => ({ ...f, rubric_lab_report: parseInt(e.target.value) || 0 }))} />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Code quality (%)</label>
-            <input className={styles.input} type="number" min={0} max={100} value={form.rubric_code_quality}
-              onChange={e => setForm(f => ({ ...f, rubric_code_quality: parseInt(e.target.value) || 0 }))} />
-          </div>
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Viva (%)</label>
-            <input className={styles.input} type="number" min={0} max={100} value={form.rubric_viva}
-              onChange={e => setForm(f => ({ ...f, rubric_viva: parseInt(e.target.value) || 0 }))} />
-          </div>
-        </div>
+      {/* Grading note — block weights are set in the studio, not here */}
+      <div style={{ display: 'flex', gap: 10, alignItems: 'flex-start', background: '#f0fdf4', color: '#065f46', border: '1px solid #bbf7d0', padding: '12px 16px', borderRadius: 12, fontSize: 13, lineHeight: 1.55 }}>
+        <Sparkles size={15} style={{ flexShrink: 0, marginTop: 1 }} />
+        <span>
+          <strong>Grading is block-based.</strong> After the experiment is created, open the studio&apos;s <strong>Details → Grading</strong> section to assign point weights to each assign/quiz/viva block you add. No rubric to fill out here.
+        </span>
       </div>
 
       <div className={styles.actionRow}>
         <span />
         <button className={styles.primaryBtn} disabled={saving} onClick={submit}>
-          <Save size={14} /> {saving ? 'Creating…' : 'Create Experiment'}
+          <Save size={14} /> {saving ? 'Creating…' : 'Create & Open Studio'}
         </button>
       </div>
     </InstructorShell>
