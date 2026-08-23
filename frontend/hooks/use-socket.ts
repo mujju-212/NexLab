@@ -53,6 +53,13 @@ export interface BehavioralSignals {
   window_focus_ratio?: number;
 }
 
+export interface StudentScreenshotPayload {
+  student_id: string;
+  full_name: string;
+  frame: string;       // base64 JPEG data-URL: 'data:image/jpeg;base64,...'
+  timestamp: string;   // ISO-8601 UTC
+}
+
 interface UseSocketOptions {
   sessionId: string;
   enabled?: boolean;
@@ -67,6 +74,7 @@ interface UseSocketOptions {
   onSessionStarted?:   (data: { session_id: string }) => void;
   onSessionEnded?:     (data: { session_id: string }) => void;
   onInstructorMessage?: (data: { message: string; from: string; timestamp: string }) => void;
+  onScreenshotFrame?:  (data: StudentScreenshotPayload) => void;
   onError?:            (msg: string) => void;
 }
 
@@ -90,6 +98,7 @@ export function useSocket({
   onSessionStarted,
   onSessionEnded,
   onInstructorMessage,
+  onScreenshotFrame,
   onError,
 }: UseSocketOptions) {
   const socketRef   = useRef<Socket | null>(null);
@@ -134,6 +143,7 @@ export function useSocket({
     if (onSessionStarted)    socket.on('session_started',       onSessionStarted);
     if (onSessionEnded)      socket.on('session_ended',         onSessionEnded);
     if (onInstructorMessage) socket.on('instructor_message',    onInstructorMessage);
+    if (onScreenshotFrame)   socket.on('student_screenshot',    onScreenshotFrame);
 
     return () => {
       socket.emit('leave_session', { session_id: sessionId });
@@ -197,6 +207,24 @@ export function useSocket({
     socketRef.current?.emit('force_submit', { session_id: sessionId, student_id: studentId, reason });
   }, [sessionId]);
 
+  /**
+   * Heartbeat — call every ~30s from the live-lab page.
+   * The server accumulates elapsed_seconds into SessionAttendance.total_time_seconds.
+   * Reaching 1800s (30 min) is required for _finalize_attendance to mark a student 'present'.
+   */
+  const emitHeartbeat = useCallback((elapsedSeconds = 30) => {
+    socketRef.current?.emit('heartbeat', { session_id: sessionId, elapsed_seconds: elapsedSeconds });
+  }, [sessionId]);
+
+  /**
+   * Send a JPEG screenshot frame to the instructor monitoring grid.
+   * @param dataUrl  base64 data-URL from canvas.toDataURL('image/jpeg', 0.6)
+   * Call every ~30s from the student live-lab page (see Task #37).
+   */
+  const emitScreenshot = useCallback((dataUrl: string) => {
+    socketRef.current?.emit('screenshot_frame', { session_id: sessionId, frame: dataUrl });
+  }, [sessionId]);
+
   return {
     isConnected,
     emitTabSwitch,
@@ -209,5 +237,7 @@ export function useSocket({
     emitMessageStudent,
     emitSessionExtended,
     emitForceSubmit,
+    emitHeartbeat,
+    emitScreenshot,
   };
 }
