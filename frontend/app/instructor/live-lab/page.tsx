@@ -3,12 +3,34 @@
 import { Suspense, useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  Radio, Play, Square, MonitorPlay, Video, RefreshCw, ExternalLink,
-  Users, AlertTriangle, Code, X,
+  Radio, Play, Square, MonitorPlay, Video, RefreshCw,
+  Users, AlertTriangle, Code, X, Maximize2, Minimize2, Monitor,
 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import { sessionService } from '@/services/session.service';
+import { useSocket } from '@/hooks/use-socket';
+import type { StudentScreenshotPayload } from '@/hooks/use-socket';
 import styles from '../shared.module.css';
+
+// Lazy-load LiveKit so the bundle isn't bloated when the module is absent
+// (npm install @livekit/components-react @livekit/components-styles livekit-client)
+let LiveKitRoom: React.ComponentType<{
+  serverUrl: string; token: string; connect: boolean;
+  audio: boolean; video: boolean; style?: React.CSSProperties;
+  children: React.ReactNode;
+}> | null = null;
+let VideoConference: React.ComponentType | null = null;
+
+try {
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  const lk = require('@livekit/components-react');
+  LiveKitRoom     = lk.LiveKitRoom;
+  VideoConference = lk.VideoConference;
+  // eslint-disable-next-line @typescript-eslint/no-require-imports
+  require('@livekit/components-styles');
+} catch {
+  // Package not yet installed — video room will show an install-prompt fallback
+}
 
 interface LiveStudent {
   student_id: string;
@@ -33,6 +55,12 @@ interface SessionMeta {
   scheduled_at: string;
 }
 
+interface ScreenshotEntry {
+  frame: string;    // base64 JPEG data-URL
+  name: string;
+  ts: string;       // ISO-8601
+}
+
 const errText = (err: unknown) =>
   (err as { response?: { data?: { error?: string } } })?.response?.data?.error
   || 'Something went wrong';
@@ -49,14 +77,40 @@ function LiveLabInner() {
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
+  const [videoOpen, setVideoOpen] = useState(false);
+  const [videoMaximized, setVideoMaximized] = useState(false);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+
+  // ── LiveKit state ────────────────────────────────────────────────────────────
+  const [livekitToken, setLivekitToken] = useState<string | null>(null);
+  const LIVEKIT_URL = process.env.NEXT_PUBLIC_LIVEKIT_URL || '';
+
+  // ── Student screenshot monitoring grid ──────────────────────────────────────
+  const [screenshots, setScreenshots] = useState<Record<string, ScreenshotEntry>>({});
 
   const toast3 = useCallback((msg: string) => {
     setToast(msg);
     setTimeout(() => setToast(null), 3000);
   }, []);
 
-  // ── Load all sessions once (for picker + session metadata) ─────────────────
+  // ── Socket — listen for student screenshots (instructor side) ───────────────
+  const isLiveForSocket = sessionStatus === 'active' || false;
+  useSocket({
+    sessionId: sessionId || '',
+    enabled: !!sessionId && isLiveForSocket,
+    onScreenshotFrame: useCallback((data: StudentScreenshotPayload) => {
+      setScreenshots(prev => ({
+        ...prev,
+        [data.student_id]: {
+          frame: data.frame,
+          name:  data.full_name,
+          ts:    data.timestamp,
+        },
+      }));
+    }, []),
+  });
+
+  // ── Load all sessions once ──────────────────────────────────────────────────
   useEffect(() => {
     let mounted = true;
     (async () => {
@@ -65,7 +119,6 @@ function LiveLabInner() {
         if (!mounted) return;
         const list = (res.sessions ?? []) as SessionMeta[];
         setSessions(list);
-        // No explicit session param → auto-select the first active session
         if (!sessionParam) {
           const active = list.find((s) => s.status === 'active');
           if (active) setSessionId(active.id);
@@ -81,7 +134,7 @@ function LiveLabInner() {
 
   const currentSession = sessions.find((s) => s.id === sessionId) ?? null;
 
-  // ── Poll the live dashboard while the session is not ended ─────────────────
+  // ── Poll the live dashboard ─────────────────────────────────────────────────
   useEffect(() => {
     if (!sessionId) return;
     let cancelled = false;
@@ -127,11 +180,13 @@ function LiveLabInner() {
   const handleStartSession = async (id: string) => {
     setBusy(true);
     try {
-      await sessionService.start(id);
+      const res = await sessionService.start(id) as { livekit_token?: string | null };
       setSessionId(id);
       setSessionStatus('active');
-      const res = await sessionService.list();
-      setSessions((res.sessions ?? []) as SessionMeta[]);
+      // Capture the LiveKit instructor token from the start response
+      if (res.livekit_token) setLivekitToken(res.livekit_token);
+      const listRes = await sessionService.list();
+      setSessions((listRes.sessions ?? []) as SessionMeta[]);
       toast3('Session started');
     } catch (err) {
       toast3(errText(err));
@@ -140,10 +195,18 @@ function LiveLabInner() {
     }
   };
 
-  const connected = students.filter((s) => s.joined_at).length;
-  const lowFocus = students.filter((s) => s.focus_score !== null && s.focus_score < 60).length;
+  const connected    = students.filter((s) => s.joined_at).length;
+  const lowFocus     = students.filter((s) => s.focus_score !== null && s.focus_score < 60).length;
   const totalAttempts = students.reduce((sum, s) => sum + (s.attempt_count || 0), 0);
-  const isLive = sessionStatus === 'active' || currentSession?.status === 'active';
+  const isLive       = sessionStatus === 'active' || currentSession?.status === 'active';
+
+  // Relative time helper for screenshot grid
+  const relTime = (iso: string) => {
+    const diffMs = Date.now() - new Date(iso).getTime();
+    const s = Math.floor(diffMs / 1000);
+    if (s < 60) return `${s}s ago`;
+    return `${Math.floor(s / 60)}m ago`;
+  };
 
   return (
     <InstructorShell
@@ -207,7 +270,7 @@ function LiveLabInner() {
         </section>
       )}
 
-      {/* ── Session selected ────────────────────────────────────────────────── */}
+      {/* ── Session selected ─────────────────────────────────────────────────── */}
       {sessionId && (
         <>
           {/* Session Header Banner */}
@@ -234,15 +297,16 @@ function LiveLabInner() {
                 <button type="button" className={styles.ghostBtn} onClick={() => { setSessionId(null); setStudents([]); }}>
                   <RefreshCw size={15} /> Switch Session
                 </button>
+                {/* Show "Open Video Room" when session has a room name — LiveKit or legacy */}
                 {currentSession?.jitsi_room_name && (
-                  <a
+                  <button
+                    type="button"
                     className={styles.secondaryBtn}
-                    href={`https://meet.jit.si/${currentSession.jitsi_room_name}`}
-                    target="_blank" rel="noreferrer"
-                    style={{ textDecoration: 'none', display: 'inline-flex', alignItems: 'center', gap: 6 }}
+                    onClick={() => setVideoOpen(true)}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}
                   >
                     <Video size={15} /> Open Video Room
-                  </a>
+                  </button>
                 )}
                 {isLive ? (
                   <button
@@ -352,10 +416,205 @@ function LiveLabInner() {
               )}
             </div>
           </section>
+
+          {/* ── Student Screen Monitoring Grid ─────────────────────────────────── */}
+          {isLive && (
+            <section className={styles.sectionCard} style={{ marginTop: 22 }}>
+              <div className={styles.sectionHeader}>
+                <div>
+                  <h2 className={styles.sectionTitle}>
+                    <Monitor size={17} style={{ display: 'inline', verticalAlign: '-3px', marginRight: 8 }} />
+                    Student Screen Monitor
+                  </h2>
+                  <p className={styles.sectionSub}>
+                    JPEG snapshots sent by each student every ~30 s via the screenshot capture loop.
+                    Frames are never stored — live in-memory only.
+                  </p>
+                </div>
+                <span style={{ fontSize: 12, color: '#9891a6', fontWeight: 500 }}>
+                  {Object.keys(screenshots).length} screen{Object.keys(screenshots).length !== 1 ? 's' : ''} received
+                </span>
+              </div>
+
+              {Object.keys(screenshots).length === 0 ? (
+                <p className={styles.sectionSub} style={{ padding: 16 }}>
+                  No screenshots yet — students must grant screen share permission and enter the video room.
+                  Thumbnails appear here within ~30 s of each student joining.
+                </p>
+              ) : (
+                <div style={{
+                  display: 'grid',
+                  gridTemplateColumns: 'repeat(auto-fill, minmax(200px, 1fr))',
+                  gap: 14,
+                  padding: '12px 0',
+                }}>
+                  {Object.entries(screenshots).map(([studentId, entry]) => (
+                    <div key={studentId} style={{
+                      background: 'rgba(15,10,30,0.6)',
+                      border: '1px solid rgba(124,58,237,0.2)',
+                      borderRadius: 12,
+                      overflow: 'hidden',
+                    }}>
+                      {/* Thumbnail */}
+                      {/* eslint-disable-next-line @next/next/no-img-element */}
+                      <img
+                        src={entry.frame}
+                        alt={`${entry.name} screen`}
+                        style={{ width: '100%', display: 'block', aspectRatio: '4/3', objectFit: 'cover' }}
+                      />
+                      {/* Label bar */}
+                      <div style={{ padding: '6px 10px' }}>
+                        <p style={{ fontSize: 12, fontWeight: 700, color: '#e2d9f3', margin: 0 }}>
+                          {entry.name}
+                        </p>
+                        <p style={{ fontSize: 11, color: '#6b5f7a', margin: 0 }}>
+                          Updated {relTime(entry.ts)}
+                        </p>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+          )}
         </>
       )}
 
       {loading && <p className={styles.sectionSub}>Loading sessions…</p>}
+
+      {/* ── Instructor LiveKit Video Room Modal ─────────────────────────────── */}
+      {videoOpen && currentSession?.jitsi_room_name && (
+        <div
+          className={styles.modalOverlay}
+          onClick={e => { if (e.target === e.currentTarget) setVideoOpen(false); }}
+        >
+          <div
+            className={styles.modalCard}
+            style={{
+              maxWidth: videoMaximized ? '100%' : 920,
+              width: videoMaximized ? '100%' : '90vw',
+              maxHeight: videoMaximized ? '95vh' : '88vh',
+              padding: 0,
+              overflow: 'hidden',
+              display: 'flex',
+              flexDirection: 'column',
+            }}
+          >
+            {/* Modal header */}
+            <div style={{
+              display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+              padding: '14px 18px', background: '#1a1528', borderRadius: '22px 22px 0 0',
+              borderBottom: '1px solid rgba(255,255,255,.07)',
+            }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{
+                  display: 'inline-flex', alignItems: 'center', gap: 5, padding: '3px 10px',
+                  background: 'rgba(34,197,94,.15)', border: '1px solid rgba(34,197,94,.25)',
+                  borderRadius: 9999, fontSize: 11, fontWeight: 700, color: '#86efac',
+                }}>
+                  <Radio size={11} /> LIVE VIDEO
+                </span>
+                <span style={{ fontSize: 13.5, fontWeight: 700, color: '#e2d9f3' }}>
+                  {currentSession.experiment_title} — Video Room
+                </span>
+                <span style={{ fontSize: 12, color: '#9891a6' }}>
+                  ({currentSession.section_name ?? '—'})
+                </span>
+              </div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button
+                  className={styles.closeBtn}
+                  style={{ background: 'rgba(255,255,255,.07)', color: '#c4b5fd' }}
+                  onClick={() => setVideoMaximized(m => !m)}
+                  title={videoMaximized ? 'Restore' : 'Maximize'}
+                >
+                  {videoMaximized ? <Minimize2 size={14} /> : <Maximize2 size={14} />}
+                </button>
+                <button
+                  className={styles.closeBtn}
+                  style={{ background: 'rgba(255,255,255,.07)', color: '#c4b5fd' }}
+                  onClick={() => setVideoOpen(false)}
+                  title="Close video room"
+                >
+                  <X size={14} />
+                </button>
+              </div>
+            </div>
+
+            {/* ── LiveKit video room body ────────────────────────────────────── */}
+            {LiveKitRoom && VideoConference && livekitToken && LIVEKIT_URL ? (
+              <LiveKitRoom
+                serverUrl={LIVEKIT_URL}
+                token={livekitToken}
+                connect={true}
+                audio={true}
+                video={true}
+                style={{
+                  flex: 1,
+                  minHeight: videoMaximized ? 'calc(95vh - 56px)' : 560,
+                }}
+              >
+                <VideoConference />
+              </LiveKitRoom>
+            ) : (
+              /* Fallback — covers three cases:
+                 1. LiveKit packages not yet installed (npm install pending)
+                 2. Session not yet started (no token)
+                 3. NEXT_PUBLIC_LIVEKIT_URL not configured */
+              <div style={{
+                flex: 1,
+                minHeight: videoMaximized ? 'calc(95vh - 56px)' : 560,
+                display: 'flex',
+                flexDirection: 'column',
+                alignItems: 'center',
+                justifyContent: 'center',
+                background: '#0f0d1a',
+                gap: 16,
+                padding: 32,
+              }}>
+                {!LiveKitRoom ? (
+                  <>
+                    <Video size={48} color="#6b5f7a" />
+                    <div style={{ textAlign: 'center' }}>
+                      <p style={{ color: '#e2d9f3', fontWeight: 700, marginBottom: 8 }}>
+                        LiveKit packages not installed
+                      </p>
+                      <p style={{ color: '#6b5f7a', fontSize: 13 }}>
+                        Run in the <code style={{ background: '#1a1528', padding: '2px 6px', borderRadius: 4 }}>frontend/</code> directory:
+                      </p>
+                      <pre style={{
+                        background: '#1a1528', color: '#86efac', padding: '10px 16px',
+                        borderRadius: 8, fontSize: 12, marginTop: 10, textAlign: 'left',
+                      }}>
+                        npm install @livekit/components-react @livekit/components-styles livekit-client
+                      </pre>
+                    </div>
+                  </>
+                ) : !livekitToken ? (
+                  <>
+                    <Video size={48} color="#6b5f7a" />
+                    <div style={{ textAlign: 'center' }}>
+                      <p style={{ color: '#e2d9f3', fontWeight: 700, marginBottom: 8 }}>
+                        No video token yet
+                      </p>
+                      <p style={{ color: '#6b5f7a', fontSize: 13 }}>
+                        Start the session first — the LiveKit token is issued when the session goes live.
+                      </p>
+                    </div>
+                  </>
+                ) : (
+                  <>
+                    <Video size={48} color="#6b5f7a" />
+                    <p style={{ color: '#6b5f7a', fontSize: 13 }}>
+                      NEXT_PUBLIC_LIVEKIT_URL not configured in <code>.env.local</code>
+                    </p>
+                  </>
+                )}
+              </div>
+            )}
+          </div>
+        </div>
+      )}
     </InstructorShell>
   );
 }
