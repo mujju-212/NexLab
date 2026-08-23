@@ -17,7 +17,6 @@ os.environ['DATABASE_URL']  = 'postgresql://postgres:vlabpass@127.0.0.1:5433/vir
 os.environ['FLASK_ENV']     = 'development'
 os.environ['JWT_SECRET_KEY']= 'test-secret-key-nexlab'
 os.environ['GROQ_API_KEY']  = 'test-key'
-os.environ['JUDGE0_URL']    = 'http://localhost:2358'
 os.environ['SECRET_KEY']    = 'test-secret'
 
 from app import create_app

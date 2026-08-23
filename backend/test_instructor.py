@@ -33,7 +33,6 @@ app.config.update(
     TESTING=True,
     JWT_SECRET_KEY='test-secret',
     GROQ_API_KEY='dummy-key',
-    JUDGE0_URL='http://localhost:2358',
 )
 
 client   = app.test_client()
@@ -165,6 +164,7 @@ def t_create_experiment():
         'input_format': 'First line N, then N integers.',
         'output_format': 'Sorted integers space-separated.',
         'allowed_languages': ['python', 'cpp'],
+        'concept_tags': ['arrays', 'sorting'],
         'difficulty_level': 2,
         'rubric_test_cases': 60, 'rubric_lab_report': 20,
         'rubric_code_quality': 10, 'rubric_viva': 10,

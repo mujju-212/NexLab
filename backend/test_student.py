@@ -456,7 +456,7 @@ with app.app_context():
         print(f'    -> execution status: {body["status"]}')
         if body.get('stdout'):
             print(f'    -> stdout: {body["stdout"].strip()[:50]}')
-    test('Run code via Judge0', t_run_code)
+    test('Run code via Docker', t_run_code)
 
     def t_run_code_invalid_language():
         r = client.post('/api/execution/run', headers=SH, json={
