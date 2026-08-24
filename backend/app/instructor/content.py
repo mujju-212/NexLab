@@ -152,7 +152,35 @@ def add_content_module(exp_id):
     )
     db.session.add(module)
     db.session.commit()
-    return jsonify({'module': _module_dict(module)}), 201
+
+    # If this is a quiz module and inline_questions were supplied, populate QuizQuestion rows
+    if module_type == 'quiz':
+        c_data = data.get('content_data') or {}
+        inline_qs = c_data.get('inline_questions') or c_data.get('questions') or []
+        if isinstance(inline_qs, list) and len(inline_qs) > 0:
+            letters = ['A', 'B', 'C', 'D']
+            for item in inline_qs:
+                if isinstance(item, dict):
+                    q_text = item.get('question') or item.get('question_text')
+                    opts = item.get('options')
+                    corr = item.get('correct_answer')
+                    if corr is None and 'correct_index' in item:
+                        idx = item['correct_index']
+                        if isinstance(idx, int) and 0 <= idx < len(letters):
+                            corr = letters[idx]
+                    if q_text and opts and len(opts) == 4 and corr in letters:
+                        qq = QuizQuestion(
+                            module_id=module.id,
+                            question_text=q_text,
+                            options=opts,
+                            correct_answer=corr,
+                            points=item.get('points', 1),
+                            explanation=item.get('explanation'),
+                        )
+                        db.session.add(qq)
+            db.session.commit()
+
+    return jsonify({'module': _with_question_count(_module_dict(module))}), 201
 
 
 @content_bp.route('/experiments/<exp_id>/content/<module_id>', methods=['PATCH'])
@@ -397,7 +425,7 @@ Do NOT include any reasoning or explanation — output ONLY the JSON array.
     ]
 
     try:
-        response, model, is_fallback = groq_chat(messages, pool='quality', max_tokens=800, temperature=0.2)
+        response, model, is_fallback, _ = groq_chat(messages, pool='quality', max_tokens=800, temperature=0.2)
     except Exception as e:
         return jsonify({'error': f'groq_chat failed: {str(e)[:200]}'}), 502
 
@@ -769,7 +797,7 @@ Rules:
     ]
 
     try:
-        response, model, is_fallback = groq_chat(messages, pool='quality', max_tokens=2000, temperature=0.3)
+        response, model, is_fallback, _ = groq_chat(messages, pool='quality', max_tokens=2000, temperature=0.3)
     except Exception as e:
         return jsonify({'error': f'AI service error: {str(e)[:200]}'}), 502
 
@@ -1014,10 +1042,12 @@ def _module_dict(m):
 
 
 def _with_question_count(d):
-    """Augment a module dict with its quiz question count, if it's a quiz."""
+    """Augment a module dict with its quiz questions and count, if it's a quiz."""
     if d.get('module_type') == 'quiz':
         from flask import current_app  # noqa: F401 (keep import local for clarity)
-        d['question_count'] = QuizQuestion.query.filter_by(module_id=d['id']).count()
+        qs = QuizQuestion.query.filter_by(module_id=d['id']).all()
+        d['question_count'] = len(qs)
+        d['questions'] = [_question_dict(q) for q in qs]
     return d
 
 

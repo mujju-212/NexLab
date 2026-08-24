@@ -34,6 +34,9 @@ def my_section_subjects():
     for ss in assignments:
         subject = Subject.query.get(ss.subject_id)
         section = Section.query.get(ss.section_id)
+        exp_count = Experiment.query.filter_by(
+            institution_id=g.institution_id, subject_id=ss.subject_id
+        ).count()
         result.append({
             'section_subject_id': ss.id,
             'subject_id': ss.subject_id,
@@ -42,6 +45,7 @@ def my_section_subjects():
             'section_id': ss.section_id,
             'section_name': section.name if section else '',
             'student_count': SectionStudent.query.filter_by(section_id=ss.section_id).count(),
+            'experiment_count': exp_count,
         })
     return jsonify({'section_subjects': result}), 200
 
@@ -360,7 +364,7 @@ Problem: {exp.problem_statement}
 Input format: {exp.input_format}
 Output format: {exp.output_format}"""
 
-    content, model_used, is_fallback = groq_single(
+    content, model_used, is_fallback, _ = groq_single(
         prompt, pool='quality', max_tokens=800, temperature=0.3
     )
     if is_fallback or content is None:
@@ -416,7 +420,7 @@ Problem: {problem}
 Input format: {data.get('input_format') or ''}
 Output format: {data.get('output_format') or ''}"""
 
-    content, model_used, is_fallback = groq_single(
+    content, model_used, is_fallback, _ = groq_single(
         prompt, pool='quality', max_tokens=800, temperature=0.3
     )
     if is_fallback or content is None:

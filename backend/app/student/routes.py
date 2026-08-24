@@ -674,11 +674,13 @@ def submit_assignment(module_id):
     total_weight = 0.0
     passed_count = 0
 
+    packages = data.get('packages') or cfg.get('packages')
+
     for i, tc in enumerate(test_cases):
         weight = tc.get('weight', 1) or 1
         total_weight += weight
         stdin = str(tc.get('input', '') or '')
-        result, error = _run_docker(code, spec['id'], stdin, g.user_id)
+        result, error = _run_docker(code, spec['id'], stdin, g.user_id, packages=packages)
         if error:
             # queue full (429) / engine down (503) — surface it, grade nothing
             return error
@@ -810,7 +812,7 @@ def submit_viva(module_id):
             {'role': 'user', 'content': user_msg},
         ]
         try:
-            response, _, _ = groq_chat(messages, pool='fast', max_tokens=80, temperature=0.1)
+            response, _, _, _ = groq_chat(messages, pool='fast', max_tokens=80, temperature=0.1)
             match = _re.search(r'\{.*\}', response or '', _re.DOTALL)
             parsed = _json.loads(match.group()) if match else {}
             q_score = int(parsed.get('score', 5))

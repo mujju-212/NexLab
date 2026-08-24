@@ -1,6 +1,12 @@
 """
 AI Blueprint — Groq API integration
 Handles: AI hints, help chat, viva question generation, viva answer evaluation
+
+All AI calls go through guarded_ai_call() (app.ai.gate) which enforces:
+  - Platform + institution on/off policy
+  - Daily/monthly token quotas
+  - Per-student fairness caps
+  - AIUsageLog row per call (tokens, cost, latency, model)
 """
 import time
 from flask import Blueprint, request, jsonify, current_app, g
@@ -8,6 +14,7 @@ from app.auth.utils import require_auth, require_role
 from app.extensions import db, limiter
 from app.models.grading import HintLog, VivaSession, VivaAnswer
 from app.models.experiment import Experiment
+from app.ai.gate import guarded_ai_call, AIDisabled, AIQuotaExceeded
 from datetime import datetime, timedelta
 import os
 
@@ -42,7 +49,7 @@ def get_hint():
     if hint_level not in (1, 2, 3):
         return jsonify({'error': 'hint_level must be 1, 2, or 3'}), 400
 
-    # ── Check Groq quota ──────────────────────────────────────────────────
+    # ── Check Groq quota (legacy request-count check — gate also enforces token quota) ──
     if not _check_quota(g.institution_id):
         return jsonify({'error': 'Daily AI assistance limit reached. Resets at midnight.'}), 429
 
@@ -74,10 +81,30 @@ STRICT RULES:
 
     user_message = f"Language: {language}\nError: {error or 'None'}\nCode:\n{code[-1500:]}"
 
-    # ── Call Groq (auto-rotates models on rate limits) ───────────────────
+    messages = [
+        {'role': 'system', 'content': system_prompt},
+        {'role': 'user',   'content': user_message},
+    ]
+
+    # ── Call via AI gate (enforces policy, quota, usage logging) ────────────
+    try:
+        hint_text, model_used, is_fallback, _ = guarded_ai_call(
+            'hint',
+            institution_id=g.institution_id,
+            user_id=g.user_id,
+            role=g.role,
+            messages=messages,
+            pool=POOL_HINTS,
+            max_tokens=120,
+            temperature=0.3,
+        )
+    except AIDisabled as e:
+        return jsonify({'error': str(e.reason)}), 403
+    except AIQuotaExceeded as e:
+        return jsonify({'error': e.reason, 'quota': e.quota, 'used': e.used}), 429
+
     start_time = time.time()
-    hint_text, model_used, is_fallback = _call_groq(system_prompt, user_message, POOL_HINTS, max_tokens=120)
-    latency_ms = int((time.time() - start_time) * 1000)
+    latency_ms = 0  # gate already measures latency internally; kept for HintLog compat
 
     # ── Log hint ──────────────────────────────────────────────────────────
     log = HintLog(
@@ -135,7 +162,22 @@ Be encouraging. Use simple language. Ask guiding questions."""
     groq_messages = [{'role': 'system', 'content': system_prompt}]
     groq_messages.extend(messages[-10:])   # last 10 messages for context
 
-    response, _, _ = _call_groq_messages(groq_messages, POOL_CHAT, max_tokens=400)
+    try:
+        response, _, _, _ = guarded_ai_call(
+            'chat',
+            institution_id=g.institution_id,
+            user_id=g.user_id,
+            role=g.role,
+            messages=groq_messages,
+            pool=POOL_CHAT,
+            max_tokens=400,
+            temperature=0.5,
+        )
+    except AIDisabled as e:
+        return jsonify({'error': str(e.reason)}), 403
+    except AIQuotaExceeded as e:
+        return jsonify({'error': e.reason}), 429
+
     _safe_increment_quota(g.institution_id)
 
     return jsonify({'response': response}), 200
@@ -161,7 +203,26 @@ Requirements:
 - Return a JSON array: [{"question": "...", "expected_topics": ["..."]}]"""
 
     user_message = f"Student's submitted code:\n{code[:3000]}"
-    response, _, is_fallback = _call_groq(system_prompt, user_message, POOL_VIVA, max_tokens=600)
+
+    viva_messages = [
+        {'role': 'system', 'content': system_prompt},
+        {'role': 'user',   'content': user_message},
+    ]
+    try:
+        response, _, is_fallback, _ = guarded_ai_call(
+            'viva_generate',
+            institution_id=g.institution_id,
+            user_id=g.user_id,
+            role=g.role,
+            messages=viva_messages,
+            pool=POOL_VIVA,
+            max_tokens=600,
+            temperature=0.3,
+        )
+    except AIDisabled as e:
+        return jsonify({'error': str(e.reason)}), 403
+    except AIQuotaExceeded as e:
+        return jsonify({'error': e.reason}), 429
 
     if is_fallback:
         return jsonify({'error': 'AI is temporarily unavailable (all models rate-limited). Try again in a minute.'}), 503
@@ -205,7 +266,24 @@ Return ONLY valid JSON: {"score": <0-10>, "feedback": "<one sentence>"}
 Score guidelines: 9-10=excellent, 7-8=good, 5-6=partial, 3-4=weak, 0-2=incorrect"""
 
     user_message = f"Code: {code[:1000]}\nQuestion: {question_text}\nAnswer: {answer_text}"
-    response, _, _ = _call_groq(system_prompt, user_message, POOL_HINTS, max_tokens=80)
+
+    eval_messages = [
+        {'role': 'system', 'content': system_prompt},
+        {'role': 'user',   'content': user_message},
+    ]
+    try:
+        response, _, _, _ = guarded_ai_call(
+            'viva_evaluate',
+            institution_id=g.institution_id,
+            user_id=g.user_id,
+            role=g.role,
+            messages=eval_messages,
+            pool=POOL_HINTS,
+            max_tokens=80,
+            temperature=0.3,
+        )
+    except (AIDisabled, AIQuotaExceeded):
+        response = None
 
     import json, re
     try:
@@ -407,11 +485,29 @@ def code_assist():
         parts.append(f"Program output:\n{stdout[-500:]}")
     parts.append(f"Code:\n{code[-4000:]}")
 
+    assist_messages = [
+        {'role': 'system', 'content': spec['prompt']},
+        {'role': 'user',   'content': '\n\n'.join(parts)},
+    ]
+
+    try:
+        answer, model_used, is_fallback, _ = guarded_ai_call(
+            'code_assist',
+            institution_id=g.institution_id,
+            user_id=g.user_id,
+            role=g.role,
+            messages=assist_messages,
+            pool=POOL_HINTS,
+            max_tokens=spec['max_tokens'],
+            temperature=0.3,
+        )
+    except AIDisabled as e:
+        return jsonify({'error': str(e.reason)}), 403
+    except AIQuotaExceeded as e:
+        return jsonify({'error': e.reason}), 429
+
     start = time.time()
-    answer, model_used, is_fallback = _call_groq(
-        spec['prompt'], '\n\n'.join(parts), POOL_HINTS, max_tokens=spec['max_tokens']
-    )
-    latency_ms = int((time.time() - start) * 1000)
+    latency_ms = 0  # gate measures internally
 
     _safe_increment_quota(g.institution_id)
 
@@ -441,7 +537,7 @@ def _safe_increment_quota(institution_id):
 def _call_groq(system_prompt: str, user_message: str, pool: str, max_tokens: int = 200):
     """Single-turn Groq call with automatic model rotation on rate limits."""
     from app.ai.groq_client import groq_single
-    text, model, is_fallback = groq_single(
+    text, model, is_fallback, _ = groq_single(
         user_message, pool=pool, system_prompt=system_prompt,
         max_tokens=max_tokens, temperature=0.3
     )
@@ -453,7 +549,7 @@ def _call_groq(system_prompt: str, user_message: str, pool: str, max_tokens: int
 def _call_groq_messages(messages: list, pool: str, max_tokens: int = 400):
     """Multi-turn Groq call with automatic model rotation on rate limits."""
     from app.ai.groq_client import groq_chat
-    text, model, is_fallback = groq_chat(
+    text, model, is_fallback, _ = groq_chat(
         messages, pool=pool, max_tokens=max_tokens, temperature=0.5
     )
     if text is None:
@@ -511,3 +607,182 @@ def _increment_quota(institution_id: str):
         DO UPDATE SET count = groq_usage.count + 1
     """), {'iid': institution_id, 'date': today})
     db.session.commit()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P4 — Agentic AI (WS-D)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route('/agent/query', methods=['POST'])
+@require_auth
+@require_role('institution_admin')
+@limiter.limit("6 per minute")
+def agent_query():
+    """
+    Natural-language agent for the Institution Admin dashboard.
+
+    Accepts a prompt, runs the agent loop (plan → call whitelisted tools →
+    synthesise), persists the AIAgentRun, and returns the result.
+    """
+    import json
+    data   = request.get_json(silent=True) or {}
+    prompt = (data.get('prompt') or '').strip()
+
+    if not prompt:
+        return jsonify({'error': 'prompt is required'}), 400
+    if len(prompt) > 2000:
+        return jsonify({'error': 'prompt must be 2000 characters or fewer'}), 400
+
+    from app.ai.agent import run_agent, AIDisabled as AgentAIDisabled, AIQuotaExceeded as AgentQuotaExceeded
+    from app.models.ai_usage import AIAgentRun
+
+    try:
+        result = run_agent(
+            prompt=prompt,
+            institution_id=g.institution_id,
+            user_id=g.user_id,
+            role=g.role,
+        )
+    except AgentAIDisabled as e:
+        return jsonify({'error': str(e.reason)}), 403
+    except AgentQuotaExceeded as e:
+        return jsonify({'error': e.reason}), 429
+
+    # Persist the run
+    run_row = AIAgentRun(
+        institution_id=g.institution_id,
+        user_id=g.user_id,
+        prompt=prompt,
+        tool_calls=json.dumps(result.get('tool_calls', []), default=str),
+        result=result.get('answer', ''),
+        total_tokens=result.get('total_tokens', 0),
+        status=result.get('status', 'completed'),
+    )
+    db.session.add(run_row)
+    db.session.commit()
+
+    from app.institution.audit import write_audit
+    write_audit(g.user_id, g.institution_id, 'agent_query', 'agent_run',
+                run_row.id, f'Agent run: {prompt[:80]}')
+
+    out = run_row.to_dict()
+    out['pending_action'] = result.get('pending_action')
+    return jsonify(out), 201
+
+
+@ai_bp.route('/agent/runs', methods=['GET'])
+@require_auth
+@require_role('institution_admin')
+def agent_runs():
+    """
+    List agent runs for this institution, newest first.
+    ?page=&per_page=  (default 1, 20)
+    """
+    from app.models.ai_usage import AIAgentRun
+
+    page     = int(request.args.get('page', 1))
+    per_page = min(int(request.args.get('per_page', 20)), 100)
+
+    q = AIAgentRun.query.filter_by(institution_id=g.institution_id)
+    total = q.count()
+    runs  = q.order_by(AIAgentRun.created_at.desc()).paginate(
+        page=page, per_page=per_page, error_out=False,
+    )
+    return jsonify({
+        'total':   total,
+        'page':    page,
+        'pages':   runs.pages,
+        'per_page': per_page,
+        'runs':    [r.to_dict() for r in runs.items],
+    }), 200
+
+
+@ai_bp.route('/agent/runs/<run_id>', methods=['GET'])
+@require_auth
+@require_role('institution_admin')
+def agent_run_detail(run_id):
+    """Get one agent run with full tool_calls + pending action hint."""
+    from app.models.ai_usage import AIAgentRun
+
+    run = AIAgentRun.query.filter_by(id=run_id, institution_id=g.institution_id).first()
+    if not run:
+        return jsonify({'error': 'Run not found'}), 404
+
+    out = run.to_dict()
+    # If the run is pending_confirm, reconstruct the pending action from tool_calls
+    if run.status == 'pending_confirm':
+        import json
+        calls = json.loads(run.tool_calls) if run.tool_calls else []
+        for c in calls:
+            if c.get('tool') == 'draft_announcement':
+                outer = c.get('result', {}) if isinstance(c.get('result'), dict) else {}
+                draft = outer.get('draft') if isinstance(outer, dict) else None
+                if draft:
+                    out['pending_action'] = {'tool': 'draft_announcement', 'payload': draft}
+                    break
+    return jsonify(out), 200
+
+
+@ai_bp.route('/agent/runs/<run_id>/apply', methods=['POST'])
+@require_auth
+@require_role('institution_admin')
+def agent_apply(run_id):
+    """
+    Confirm and apply a pending action from a previous agent run.
+
+    Currently only supports `draft_announcement` — the draft is forwarded to the
+    existing `POST /api/institution/announcements/targeted` endpoint using the
+    admin's own JWT, so the same permission, tenancy and audit logic applies.
+    """
+    import json
+    from app.models.ai_usage import AIAgentRun
+
+    run = AIAgentRun.query.filter_by(id=run_id, institution_id=g.institution_id).first()
+    if not run:
+        return jsonify({'error': 'Run not found'}), 404
+    if run.status != 'pending_confirm':
+        return jsonify({'error': 'Run is not pending confirmation'}), 400
+
+    # Reconstruct draft from tool_calls
+    calls = json.loads(run.tool_calls) if run.tool_calls else []
+    draft = None
+    for c in calls:
+        if c.get('tool') == 'draft_announcement':
+            outer = c.get('result', {}) if isinstance(c.get('result'), dict) else {}
+            if isinstance(outer, dict):
+                draft = outer.get('draft')
+            break
+    if not draft:
+        return jsonify({'error': 'No draft announcement found in this run'}), 400
+
+    # Forward to the existing targeted announcement endpoint using the admin's
+    # own JWT, so auth + tenancy + audit re-run exactly as for a direct call.
+    auth_header = request.headers.get('Authorization')
+    if not auth_header:
+        return jsonify({'error': 'No auth token available'}), 401
+
+    client = current_app.test_client()
+    resp = client.post(
+        '/api/institution/announcements/targeted',
+        headers={'Authorization': auth_header},
+        json=draft,
+    )
+
+    body = resp.get_json(silent=True) or {}
+    if resp.status_code >= 300:
+        return jsonify({'error': body.get('error') or 'Failed to send announcement'}), resp.status_code
+
+    # Mark run as completed
+    run.status = 'completed'
+    db.session.commit()
+
+    from app.institution.audit import write_audit
+    write_audit(g.user_id, g.institution_id, 'agent_apply', 'announcement',
+                run_id, f'Applied draft from run {run_id}')
+
+    return jsonify({
+        'success': True,
+        'sent_to': body.get('sent_to'),
+        'target':  body.get('target'),
+        'run_id':  run_id,
+    }), 200
