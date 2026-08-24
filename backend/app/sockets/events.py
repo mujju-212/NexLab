@@ -11,6 +11,32 @@ from app.models.session import SessionAttendance, LabSession
 from app.models.submission import CodeVersion
 from datetime import datetime
 import json
+import logging
+
+_log = logging.getLogger(__name__)
+
+
+def _persist_proctor_event(institution_id: str, session_id: str, student_id: str,
+                            event_type: str, payload: dict, severity: str) -> None:
+    """Write one ProctorEvent row.  Fail-open — logging failure never blocks the relay."""
+    try:
+        from app.models.proctor_event import ProctorEvent
+        row = ProctorEvent(
+            institution_id = institution_id,
+            session_id     = session_id,
+            student_id     = student_id,
+            event_type     = event_type,
+            payload        = payload,
+            severity       = severity,
+        )
+        db.session.add(row)
+        db.session.commit()
+    except Exception as exc:
+        _log.warning('[sockets] proctor_event persist failed (non-fatal): %s', exc)
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
 
 
 def get_user_from_token(token):
@@ -264,8 +290,19 @@ def handle_tab_switch(data):
     if not user or user['role'] != 'student':
         return
 
-    session_id  = data.get('session_id')
+    session_id   = data.get('session_id')
     switch_count = data.get('count', 1)
+    severity     = 'high' if switch_count >= 3 else 'medium'
+
+    # Persist event for analytics
+    _persist_proctor_event(
+        institution_id = user.get('institution_id', ''),
+        session_id     = session_id,
+        student_id     = user['user_id'],
+        event_type     = 'tab_switch',
+        payload        = {'count': switch_count},
+        severity       = severity,
+    )
 
     emit('proctor_alert', {
         'type':        'tab_switch',
@@ -273,7 +310,7 @@ def handle_tab_switch(data):
         'full_name':   user.get('full_name', ''),
         'detail':      f"Tab switched {switch_count} time(s)",
         'count':       switch_count,
-        'severity':    'high' if switch_count >= 3 else 'medium',
+        'severity':    severity,
         'timestamp':   datetime.utcnow().isoformat(),
     }, room=f"session_{session_id}_instructor")
 
@@ -289,6 +326,16 @@ def handle_fullscreen_exit(data):
         return
 
     session_id = data.get('session_id')
+
+    # Persist event for analytics
+    _persist_proctor_event(
+        institution_id = user.get('institution_id', ''),
+        session_id     = session_id,
+        student_id     = user['user_id'],
+        event_type     = 'fullscreen_exit',
+        payload        = {},
+        severity       = 'high',
+    )
 
     emit('proctor_alert', {
         'type':       'fullscreen_exit',
@@ -318,6 +365,16 @@ def handle_screen_share_stopped(data):
         return
 
     session_id = data.get('session_id')
+
+    # Persist event for analytics
+    _persist_proctor_event(
+        institution_id = user.get('institution_id', ''),
+        session_id     = session_id,
+        student_id     = user['user_id'],
+        event_type     = 'screen_share_stop',
+        payload        = {},
+        severity       = 'high',
+    )
 
     emit('proctor_alert', {
         'type':       'screen_share_stopped',
@@ -374,6 +431,16 @@ def handle_lockdown_violation(data):
 
     session_id = data.get('session_id')
     action     = data.get('action', 'unknown')
+
+    # Persist event for analytics
+    _persist_proctor_event(
+        institution_id = user.get('institution_id', ''),
+        session_id     = session_id,
+        student_id     = user['user_id'],
+        event_type     = 'lockdown_violation',
+        payload        = {'action': action},
+        severity       = 'medium',
+    )
 
     emit('proctor_alert', {
         'type':       'lockdown_violation',
