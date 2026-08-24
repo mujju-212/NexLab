@@ -156,13 +156,18 @@ def groq_chat(messages: list, pool: str = 'fast',
     """
     Chat completion with model rotation.
 
-    Returns (text, model_used, is_fallback):
-      - on success via Groq or Gemini: (content, model id, False)
-      - when every Groq AND Gemini attempt failed: (None, None, True)
+    Returns (text, model_used, is_fallback, usage_dict):
+      - on success via Groq: (content, model id, False, {prompt_tokens, completion_tokens, total_tokens})
+      - on success via Gemini: (content, gemini model id, False, None)  # Gemini REST has no usage field
+      - when every attempt failed: (None, None, True, None)
 
     A missing `groq` package or API key is treated as "the whole Groq pool is
     unavailable" and skips straight to Gemini — callers already handle that
     contract, and the AI panels must degrade rather than 500.
+
+    Note: existing callers that unpack only 3 values (text, model, flag = ...) will
+    raise ValueError. All call sites are updated to accept 4 values. groq_single()
+    already passes through whatever groq_chat() returns.
     """
     try:
         from groq import Groq, RateLimitError, APIStatusError
@@ -200,7 +205,14 @@ def groq_chat(messages: list, pool: str = 'fast',
             resp = client.chat.completions.create(**params)
             content = resp.choices[0].message.content
             if content is not None and content.strip():
-                return content, model, False
+                # Capture token usage from the provider response
+                usage = resp.usage
+                usage_dict = {
+                    'prompt_tokens':     getattr(usage, 'prompt_tokens', 0) or 0,
+                    'completion_tokens': getattr(usage, 'completion_tokens', 0) or 0,
+                    'total_tokens':      getattr(usage, 'total_tokens', 0) or 0,
+                } if usage is not None else None
+                return content, model, False, usage_dict
             # empty reply (e.g. reasoning tokens ate a tiny budget) →
             # treat as soft failure and try the next model
             current_app.logger.warning(
@@ -227,11 +239,11 @@ def groq_chat(messages: list, pool: str = 'fast',
 
 
 def _fallback_or_none(messages: list, max_tokens: int, temperature: float):
-    """Gemini last resort, normalised to groq_chat's 3-tuple contract."""
+    """Gemini last resort, normalised to groq_chat's 4-tuple contract."""
     text, gemini_model = _gemini_fallback(messages, max_tokens, temperature)
     if text is not None:
-        return text, f'gemini:{gemini_model}', False
-    return None, None, True
+        return text, f'gemini:{gemini_model}', False, None  # Gemini REST has no token usage field
+    return None, None, True, None
 
 
 def groq_single(user_message: str, pool: str = 'fast',
