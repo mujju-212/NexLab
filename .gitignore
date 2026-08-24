@@ -71,3 +71,22 @@ graphify_step_*.py
 nul
 *_colors.py
 
+# ── Exec-engine scratch & debug artifacts ───────────────────────────────
+# Throwaway Dockerfile/project probes used when bringing up a new language
+# image, plus the stderr dump and JSON scratch output from smoke runs.
+backend/_cs_probe/
+backend/_cs_test/
+backend/_verify_result.json
+backend/backend.err
+backend/test_out.txt
+
+# Generated per-run HTML simulation output (browser-engine languages)
+backend/simulations/
+
+# Ad-hoc manual test harness pages
+backend/static/test_ui.html
+backend/app/static/test_ui.html
+
+# Editor scratch files
+**/Untitled-*.txt
+

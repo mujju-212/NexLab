@@ -13,6 +13,8 @@ from app.models.knowledge import ConceptMastery, StudentRanking, FocusScore
 from app.models.feedback import SessionFeedback, PlagiarismFlag
 from app.models.free import FreeCourse, FreeExercise, FreeProgress
 from app.models.otp import EmailOTP
+from app.models.ai_usage import AIUsageLog, AIPolicy, AIAgentRun
+from app.models.proctor_event import ProctorEvent
 
 __all__ = [
     'User', 'Institution',
@@ -26,4 +28,6 @@ __all__ = [
     'SessionFeedback', 'PlagiarismFlag',
     'FreeCourse', 'FreeExercise', 'FreeProgress',
     'EmailOTP',
+    'AIUsageLog', 'AIPolicy', 'AIAgentRun',
+    'ProctorEvent',
 ]

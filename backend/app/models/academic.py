@@ -29,7 +29,7 @@ class Batch(db.Model):
     sections       = db.relationship('Section', backref='batch', lazy='dynamic')
 
     def to_dict(self):
-        return {'id': self.id, 'name': self.name, 'program': self.program}
+        return {'id': self.id, 'name': self.name, 'program': self.program, 'year_id': self.year_id}
 
 
 class Department(db.Model):
