@@ -10,7 +10,8 @@ without touching execution logic.
 
 def build_flags(image: str, memory_mb: int, env: dict,
                 tmpfs: list | None = None,
-                fsize_bytes: int = 8388608) -> list[str]:
+                fsize_bytes: int = 8388608,
+                allow_network: bool = False) -> list[str]:
     """
     Return the docker-run flag list (not including the image name or command).
 
@@ -29,11 +30,13 @@ def build_flags(image: str, memory_mb: int, env: dict,
                  more: .NET reserves its GC heap through a memory-mapped file it
                  ftruncates to a large size, and an 8 MB cap makes that fail as
                  a bogus "Out of memory" abort — so the C# spec raises this.
+    allow_network: if True, use bridge network for downloading packages during setup/compile.
     """
     mem = f"{memory_mb}m"
+    net_arg = "bridge" if allow_network else "none"
     flags = [
         # ── Network ─────────────────────────────────────────────────────────
-        "--network", "none",          # no outbound calls, no lateral movement
+        "--network", net_arg,
 
         # ── Memory ──────────────────────────────────────────────────────────
         "--memory", mem,              # hard RAM cap
