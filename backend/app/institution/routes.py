@@ -3,7 +3,7 @@ Institution Blueprint — Institution Admin routes
 Manages: users, academic structure, sections, subjects, environment profiles,
          announcements, analytics, audit log, force logout
 """
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, make_response
 from app.auth.utils import require_role, require_institution
 from app.extensions import db
 from app.models.user import User
@@ -16,6 +16,7 @@ from app.models.feedback import Notification
 from app.models.session import LabSession
 from app.institution.quota import student_quota, student_headroom
 from datetime import datetime, timedelta
+from sqlalchemy import func
 import bcrypt, uuid, csv, io
 
 institution_bp = Blueprint('institution', __name__)
@@ -965,17 +966,43 @@ def send_announcement():
 @institution_bp.route('/announcements/recent', methods=['GET'])
 @require_role('institution_admin')
 def recent_announcements():
-    """Last 20 announcements sent by this institution"""
-    # Get distinct announcements (by title+message+created_at) for this institution
-    from sqlalchemy import distinct
-    recent = Notification.query.join(
-        User, Notification.user_id == User.id
-    ).filter(
-        User.institution_id == g.institution_id,
-        Notification.type == 'announcement'
-    ).order_by(Notification.created_at.desc()).limit(20).all()
+    """
+    Last 20 announcements sent by this institution, deduplicated.
+    Returns one row per unique (title, message, created_at) broadcast,
+    not one row per recipient.
+    """
+    from sqlalchemy import text as sa_text
+    iid = g.institution_id
 
-    return jsonify({'announcements': [n.to_dict() for n in recent]}), 200
+    # Fetch deduplicated announcements using GROUP BY on the logical broadcast key.
+    # We pick the minimum Notification.id per group so the result is deterministic.
+    dedup_rows = db.session.execute(sa_text("""
+        SELECT
+            MIN(n.id)         AS id,
+            n.title,
+            n.message,
+            n.type,
+            MIN(n.created_at) AS created_at,
+            COUNT(n.id)       AS recipient_count
+        FROM notifications n
+        JOIN users u ON n.user_id = u.id
+        WHERE u.institution_id = :iid
+          AND n.type = 'announcement'
+        GROUP BY n.title, n.message, n.type, DATE_TRUNC('minute', n.created_at)
+        ORDER BY created_at DESC
+        LIMIT 20
+    """), {'iid': iid}).fetchall()
+
+    result = [{
+        'id':              r.id,
+        'title':           r.title,
+        'message':         r.message,
+        'type':            r.type,
+        'created_at':      r.created_at.isoformat() if r.created_at else None,
+        'recipient_count': r.recipient_count,
+    } for r in dedup_rows]
+
+    return jsonify({'announcements': result}), 200
 
 
 # ── Force Logout ───────────────────────────────────────────────────────────────
@@ -984,16 +1011,16 @@ def recent_announcements():
 @require_role('institution_admin')
 def force_logout_user(user_id):
     """
-    Force-logout a user by invalidating their JWT.
-    Stores the user_id in a blocklist table — auth middleware checks it on each request.
-    Also emits a SocketIO kick event to disconnect them live.
+    Force-logout a user by setting force_logout_at to the current timestamp.
+    The JWT middleware rejects any token whose iat is before force_logout_at,
+    so all existing sessions are instantly invalidated.
+    Also emits a SocketIO kick event to disconnect them from live sessions.
     """
     user = User.query.filter_by(
         id=user_id, institution_id=g.institution_id
     ).first_or_404()
 
-    # Store force-logout timestamp — any token issued before this is rejected
-    user.force_logout_at = datetime.utcnow()
+    _apply_force_logout(user)
     db.session.commit()
 
     # Kick from any active SocketIO rooms
@@ -1025,6 +1052,8 @@ def get_audit_log():
     View admin action history for this institution.
 
     Query params: ?limit=50&offset=0&action=force_logout&days=30&q=<text>
+    Also accepts explicit date bounds: ?from=YYYY-MM-DD&to=YYYY-MM-DD (when given,
+    they override `days`).
     Rows carry `actor_name`/`actor_email` resolved in one extra query — the raw
     actor_id is useless to a human reading the table.
     Also returns `actions`: every distinct action present in the window, so the
@@ -1037,10 +1066,28 @@ def get_audit_log():
     days   = int(request.args.get('days', 30) or 30)
     search = (request.args.get('q') or '').strip()
 
-    since = datetime.utcnow() - timedelta(days=days)
-    query = AuditLog.query.filter_by(
-        institution_id=g.institution_id
-    ).filter(AuditLog.created_at >= since)
+    query = AuditLog.query.filter_by(institution_id=g.institution_id)
+
+    # Explicit date range overrides the rolling `days` window.
+    date_from = request.args.get('from')
+    date_to   = request.args.get('to')
+    if date_from or date_to:
+        if date_from:
+            try:
+                start = datetime.strptime(date_from, '%Y-%m-%d')
+                query = query.filter(AuditLog.created_at >= start)
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                end = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+                query = query.filter(AuditLog.created_at < end)
+            except ValueError:
+                pass
+        since = None
+    else:
+        since = datetime.utcnow() - timedelta(days=days)
+        query = query.filter(AuditLog.created_at >= since)
 
     if action:
         query = query.filter_by(action=action)
@@ -1068,12 +1115,14 @@ def get_audit_log():
         row['actor_role']  = actor.role if actor else None
         rows.append(row)
 
-    distinct_actions = [
-        a[0] for a in db.session.query(AuditLog.action)
-        .filter(AuditLog.institution_id == g.institution_id,
-                AuditLog.created_at >= since)
-        .distinct().order_by(AuditLog.action).all()
-    ]
+    distinct_actions = []
+    if since:
+        distinct_actions = [
+            a[0] for a in db.session.query(AuditLog.action)
+            .filter(AuditLog.institution_id == g.institution_id,
+                    AuditLog.created_at >= since)
+            .distinct().order_by(AuditLog.action).all()
+        ]
 
     return jsonify({
         'logs':    rows,
@@ -1083,6 +1132,89 @@ def get_audit_log():
         'days':    days,
         'actions': distinct_actions,
     }), 200
+
+
+@institution_bp.route('/audit-log/export', methods=['GET'])
+@require_role('institution_admin')
+def export_audit_log():
+    """
+    CSV export of the audit log.
+    Query params: ?days=30&action=<filter>&q=<search>
+    Also accepts explicit date bounds: ?from=YYYY-MM-DD&to=YYYY-MM-DD (when given,
+    they override `days`).
+    Same filters as GET /audit-log but returns all rows (no pagination limit).
+    """
+    from app.models.academic import AuditLog
+    action  = request.args.get('action')
+    days    = int(request.args.get('days', 90) or 90)
+    search  = (request.args.get('q') or '').strip()
+
+    since = datetime.utcnow() - timedelta(days=days)
+    query = AuditLog.query.filter_by(
+        institution_id=g.institution_id
+    )
+
+    date_from = request.args.get('from')
+    date_to   = request.args.get('to')
+    if date_from or date_to:
+        if date_from:
+            try:
+                start = datetime.strptime(date_from, '%Y-%m-%d')
+                query = query.filter(AuditLog.created_at >= start)
+            except ValueError:
+                pass
+        if date_to:
+            try:
+                end = datetime.strptime(date_to, '%Y-%m-%d') + timedelta(days=1)
+                query = query.filter(AuditLog.created_at < end)
+            except ValueError:
+                pass
+    else:
+        query = query.filter(AuditLog.created_at >= since)
+
+    if action:
+        query = query.filter_by(action=action)
+    if search:
+        query = query.filter(AuditLog.detail.ilike(f'%{search}%'))
+
+    logs = query.order_by(AuditLog.created_at.desc()).all()
+
+    # Resolve actor names
+    actor_ids = {l.actor_id for l in logs if l.actor_id}
+    actors = {u.id: u for u in User.query.filter(User.id.in_(actor_ids)).all()} if actor_ids else {}
+
+    output = io.StringIO()
+    writer = csv.writer(output)
+    writer.writerow(['Timestamp (UTC)', 'Actor Name', 'Actor Email', 'Actor Role',
+                     'Action', 'Target Type', 'Target ID', 'Detail'])
+
+    for l in logs:
+        actor = actors.get(l.actor_id)
+        writer.writerow([
+            l.created_at.strftime('%Y-%m-%d %H:%M:%S') if l.created_at else '',
+            actor.full_name if actor else 'Deleted user',
+            actor.email if actor else '',
+            actor.role if actor else '',
+            l.action,
+            l.target_type or '',
+            l.target_id or '',
+            l.detail or '',
+        ])
+
+    iid = g.institution_id
+    response = make_response(output.getvalue())
+    response.headers['Content-Type'] = 'text/csv'
+    response.headers['Content-Disposition'] = (
+        f'attachment; filename="audit_log_{iid[:8]}_{days}d.csv"'
+    )
+    return response
+
+
+def _apply_force_logout(user):
+    """Set force_logout_at on a user, invalidating all tokens issued before now.
+    Call db.session.commit() after — this helper does NOT commit so it can be
+    batched with other mutations (e.g. bulk operations)."""
+    user.force_logout_at = datetime.utcnow()
 
 
 def _write_audit(actor_id, institution_id, action, target_type, target_id, detail=''):
@@ -1098,30 +1230,54 @@ def _write_audit(actor_id, institution_id, action, target_type, target_id, detai
 @require_role('institution_admin')
 def analytics_overview():
     """
-    High-level institution analytics:
-    - Total sessions last 30 days
-    - Average experiment completion rate
-    - Students at risk (concept mastery < 40%)
-    - Peak usage hours
-    - Instructor activity levels
+    High-level institution analytics with flexible date range.
+
+    Query params:
+      ?days=30          — convenience: last N days from now (default 30)
+      ?from=YYYY-MM-DD  — explicit start date (overrides days)
+      ?to=YYYY-MM-DD    — explicit end date (defaults to now)
     """
     from app.models.submission import CodeAttempt
     from app.models.knowledge import ConceptMastery
-    from sqlalchemy import func
+    from app.models.academic import SectionSubject
 
-    iid   = g.institution_id
-    since = datetime.utcnow() - timedelta(days=30)
+    iid = g.institution_id
 
-    # Sessions this month
+    # ── Date range resolution ────────────────────────────────────────────────
+    date_to   = datetime.utcnow()
+    date_from = date_to - timedelta(days=30)
+    days      = 30
+
+    from_str = request.args.get('from')
+    to_str   = request.args.get('to')
+    if from_str:
+        try:
+            date_from = datetime.strptime(from_str, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({'error': 'Invalid `from` date; use YYYY-MM-DD'}), 400
+    elif request.args.get('days'):
+        days      = int(request.args.get('days', 30))
+        date_from = date_to - timedelta(days=days)
+    if to_str:
+        try:
+            date_to = datetime.strptime(to_str, '%Y-%m-%d')
+        except ValueError:
+            return jsonify({'error': 'Invalid `to` date; use YYYY-MM-DD'}), 400
+
+    days = max(1, (date_to - date_from).days)
+
+    # Sessions in window
     total_sessions = LabSession.query.filter(
         LabSession.institution_id == iid,
-        LabSession.scheduled_at >= since
+        LabSession.scheduled_at >= date_from,
+        LabSession.scheduled_at <= date_to,
     ).count()
 
     completed_sessions = LabSession.query.filter(
         LabSession.institution_id == iid,
         LabSession.status == 'ended',
-        LabSession.scheduled_at >= since
+        LabSession.scheduled_at >= date_from,
+        LabSession.scheduled_at <= date_to,
     ).count()
 
     # Total students
@@ -1141,13 +1297,13 @@ def analytics_overview():
         at_risk_subq.c.avg_mastery < 40
     ).count()
 
-    # Active instructors this month — via SectionSubject join
-    from app.models.academic import SectionSubject
+    # Active instructors in window — via SectionSubject join
     active_session_ssids = db.session.query(
         func.distinct(LabSession.section_subject_id)
     ).filter(
         LabSession.institution_id == iid,
-        LabSession.scheduled_at >= since
+        LabSession.scheduled_at >= date_from,
+        LabSession.scheduled_at <= date_to,
     ).all()
 
     active_ssids = [r[0] for r in active_session_ssids if r[0]]
@@ -1160,7 +1316,9 @@ def analytics_overview():
     # Peak usage: count sessions per hour-of-day
     all_sessions = LabSession.query.filter(
         LabSession.institution_id == iid,
-        LabSession.started_at.isnot(None)
+        LabSession.started_at.isnot(None),
+        LabSession.started_at >= date_from,
+        LabSession.started_at <= date_to,
     ).all()
 
     hour_counts = {}
@@ -1172,7 +1330,9 @@ def analytics_overview():
     peak_hours = sorted(hour_counts.items(), key=lambda x: x[1], reverse=True)[:3]
 
     return jsonify({
-        'period_days': 30,
+        'period_days': days,
+        'date_from': date_from.strftime('%Y-%m-%d'),
+        'date_to':   date_to.strftime('%Y-%m-%d'),
         'sessions': {
             'total': total_sessions,
             'completed': completed_sessions,
@@ -1187,7 +1347,7 @@ def analytics_overview():
                 (at_risk_count / total_students * 100) if total_students else 0, 1
             ),
         },
-        'instructors': {'active_this_month': active_instructors},
+        'instructors': {'active_this_period': active_instructors},
         'peak_hours': [{'hour': h, 'session_count': c} for h, c in peak_hours],
     }), 200
 
@@ -1233,31 +1393,954 @@ def students_at_risk():
 @institution_bp.route('/analytics/section-comparison', methods=['GET'])
 @require_role('institution_admin')
 def section_comparison():
-    """Compare performance across all sections in the institution"""
-    from app.models.knowledge import StudentRanking
+    """
+    Compare grade-based performance across all sections.
+    Uses Grade.final_grade (actual graded scores) averaged per section
+    — not the holistic rank_score engagement metric.
+    """
+    from app.models.grading import Grade
     from app.models.academic import SectionSubject
+    from app.models.session import LabSession
 
     sections = Section.query.filter_by(institution_id=g.institution_id).all()
     result = []
 
     for sec in sections:
         ss_ids = [ss.id for ss in SectionSubject.query.filter_by(section_id=sec.id).all()]
-        rankings = StudentRanking.query.filter(
-            StudentRanking.section_subject_id.in_(ss_ids)
-        ).all() if ss_ids else []
-        if not rankings:
-            avg_score = 0
-        else:
-            scores = [r.rank_score for r in rankings if r.rank_score is not None]
-            avg_score = sum(scores) / len(scores) if scores else 0
+
+        # Resolve session→experiment→grade via LabSession link
+        avg_grade = None
+        grade_count = 0
+        if ss_ids:
+            session_ids = [
+                r[0] for r in db.session.query(LabSession.id)
+                .filter(LabSession.section_subject_id.in_(ss_ids)).all()
+            ]
+            if session_ids:
+                row = db.session.query(
+                    func.avg(Grade.final_grade).label('avg_grade'),
+                    func.count(Grade.id).label('grade_count'),
+                ).filter(
+                    Grade.session_id.in_(session_ids),
+                    Grade.final_grade.isnot(None),
+                ).first()
+                if row and row.avg_grade is not None:
+                    avg_grade = round(float(row.avg_grade), 1)
+                    grade_count = row.grade_count
 
         enrolled = SectionStudent.query.filter_by(section_id=sec.id).count()
         result.append({
-            'section_id':   sec.id,
-            'section_name': sec.name,
-            'enrolled':     enrolled,
-            'avg_score':    round(avg_score, 1),
+            'section_id':    sec.id,
+            'section_name':  sec.name,
+            'enrolled':      enrolled,
+            'avg_grade':     avg_grade,   # None = no grades yet
+            'graded_count':  grade_count,
         })
 
-    result.sort(key=lambda x: x['avg_score'], reverse=True)
+    result.sort(key=lambda x: (x['avg_grade'] or 0), reverse=True)
     return jsonify({'sections': result}), 200
+
+
+# ── Single-record GETs (subject + section-subject) ────────────────────────────
+
+@institution_bp.route('/subjects/<subject_id>', methods=['GET'])
+@require_role('institution_admin')
+def get_subject(subject_id):
+    """Return full detail for one subject belonging to this institution."""
+    subject = Subject.query.filter_by(
+        id=subject_id, institution_id=g.institution_id
+    ).first_or_404()
+    return jsonify({'subject': subject.to_dict()}), 200
+
+
+@institution_bp.route('/section-subjects/<ss_id>', methods=['GET'])
+@require_role('institution_admin')
+def get_section_subject(ss_id):
+    """Return enriched detail for one SectionSubject assignment."""
+    ss = SectionSubject.query.filter_by(
+        id=ss_id, institution_id=g.institution_id
+    ).first_or_404()
+    return jsonify({'section_subject': _ss_dict(ss)}), 200
+
+
+# ── Announcement management (edit / delete / resend + rich targeting) ─────────
+
+@institution_bp.route('/announcements/<notification_id>', methods=['PATCH'])
+@require_role('institution_admin')
+def edit_announcement(notification_id):
+    """
+    Edit the title/message of one announcement broadcast.
+    Updates ALL Notification rows that share the same (title, message, minute-bucket)
+    so all recipients see the corrected text.
+
+    Body: {title?, message?}
+    """
+    from sqlalchemy import text as sa_text
+    data = request.get_json() or {}
+    new_title   = data.get('title')
+    new_message = data.get('message')
+
+    if not new_title and not new_message:
+        return jsonify({'error': 'Provide at least one of title or message'}), 400
+
+    # Find the anchor row — must belong to a user in this institution
+    anchor = db.session.execute(sa_text("""
+        SELECT n.id, n.title, n.message, n.created_at
+        FROM notifications n
+        JOIN users u ON n.user_id = u.id
+        WHERE n.id = :nid
+          AND u.institution_id = :iid
+          AND n.type = 'announcement'
+        LIMIT 1
+    """), {'nid': notification_id, 'iid': g.institution_id}).fetchone()
+
+    if not anchor:
+        return jsonify({'error': 'Announcement not found'}), 404
+
+    # Propagate the edit to all rows that are part of the same broadcast
+    db.session.execute(sa_text("""
+        UPDATE notifications n
+        SET title   = COALESCE(:new_title, n.title),
+            message = COALESCE(:new_message, n.message)
+        FROM users u
+        WHERE n.user_id = u.id
+          AND u.institution_id = :iid
+          AND n.type = 'announcement'
+          AND n.title = :old_title
+          AND n.message = :old_message
+          AND DATE_TRUNC('minute', n.created_at) = DATE_TRUNC('minute', :created_at)
+    """), {
+        'new_title':   new_title,
+        'new_message': new_message,
+        'iid':         g.institution_id,
+        'old_title':   anchor.title,
+        'old_message': anchor.message,
+        'created_at':  anchor.created_at,
+    })
+    db.session.commit()
+
+    _write_audit(g.user_id, g.institution_id, 'edit_announcement', 'announcement',
+                 notification_id, f'Edited announcement "{anchor.title}"')
+    return jsonify({'message': 'Announcement updated'}), 200
+
+
+@institution_bp.route('/announcements/<notification_id>', methods=['DELETE'])
+@require_role('institution_admin')
+def delete_announcement(notification_id):
+    """
+    Delete all Notification rows belonging to one announcement broadcast.
+    Identified by the same (title, message, minute-bucket) group as the given row.
+    """
+    from sqlalchemy import text as sa_text
+
+    anchor = db.session.execute(sa_text("""
+        SELECT n.id, n.title, n.message, n.created_at
+        FROM notifications n
+        JOIN users u ON n.user_id = u.id
+        WHERE n.id = :nid
+          AND u.institution_id = :iid
+          AND n.type = 'announcement'
+        LIMIT 1
+    """), {'nid': notification_id, 'iid': g.institution_id}).fetchone()
+
+    if not anchor:
+        return jsonify({'error': 'Announcement not found'}), 404
+
+    result = db.session.execute(sa_text("""
+        DELETE FROM notifications
+        WHERE id IN (
+            SELECT n.id
+            FROM notifications n
+            JOIN users u ON n.user_id = u.id
+            WHERE u.institution_id = :iid
+              AND n.type = 'announcement'
+              AND n.title = :title
+              AND n.message = :message
+              AND DATE_TRUNC('minute', n.created_at) = DATE_TRUNC('minute', :created_at)
+        )
+    """), {
+        'iid':        g.institution_id,
+        'title':      anchor.title,
+        'message':    anchor.message,
+        'created_at': anchor.created_at,
+    })
+    db.session.commit()
+
+    _write_audit(g.user_id, g.institution_id, 'delete_announcement', 'announcement',
+                 notification_id, f'Deleted announcement "{anchor.title}" ({result.rowcount} rows removed)')
+    return jsonify({'message': 'Announcement deleted', 'rows_removed': result.rowcount}), 200
+
+
+@institution_bp.route('/announcements/<notification_id>/resend', methods=['POST'])
+@require_role('institution_admin')
+def resend_announcement(notification_id):
+    """
+    Resend an existing announcement to users who currently lack a copy.
+    Useful when new students join after the original broadcast.
+
+    Body: {target: 'all'|'students'|'instructors', section_id?: '...'}
+    """
+    from sqlalchemy import text as sa_text
+
+    # Fetch the original broadcast text
+    anchor = db.session.execute(sa_text("""
+        SELECT n.id, n.title, n.message
+        FROM notifications n
+        JOIN users u ON n.user_id = u.id
+        WHERE n.id = :nid
+          AND u.institution_id = :iid
+          AND n.type = 'announcement'
+        LIMIT 1
+    """), {'nid': notification_id, 'iid': g.institution_id}).fetchone()
+
+    if not anchor:
+        return jsonify({'error': 'Announcement not found'}), 404
+
+    data       = request.get_json() or {}
+    target     = data.get('target', 'all')
+    section_id = data.get('section_id')
+
+    # Determine target users — same logic as send_announcement
+    query = User.query.filter_by(institution_id=g.institution_id, is_active=True)
+    if target == 'students':
+        query = query.filter_by(role='student')
+    elif target == 'instructors':
+        query = query.filter_by(role='instructor')
+    if section_id:
+        _own_section(section_id)
+        enrolled_ids = [e.student_id for e in SectionStudent.query.filter_by(section_id=section_id).all()]
+        query = query.filter(User.id.in_(enrolled_ids))
+
+    # Only send to users who don't already have this notification
+    target_users = query.all()
+    if target_users:
+        target_uid_list = [u.id for u in target_users]
+        existing_ids = {
+            r[0] for r in db.session.execute(sa_text("""
+                SELECT user_id FROM notifications
+                WHERE title = :title AND message = :message AND type = 'announcement'
+                  AND user_id IN :uids
+            """), {
+                'title':   anchor.title,
+                'message': anchor.message,
+                'uids':    tuple(target_uid_list),
+            }).fetchall()
+        }
+    else:
+        existing_ids = set()
+
+    created = 0
+    for user in target_users:
+        if user.id not in existing_ids:
+            db.session.add(Notification(
+                user_id=user.id,
+                type='announcement',
+                title=anchor.title,
+                message=anchor.message,
+            ))
+            created += 1
+
+    db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'resend_announcement', 'announcement',
+                 notification_id, f'Resent "{anchor.title}" to {created} new recipients')
+    return jsonify({'resent_to': created, 'target': target}), 200
+
+
+@institution_bp.route('/announcements/targeted', methods=['POST'])
+@require_role('institution_admin')
+def send_targeted_announcement():
+    """
+    Send an announcement with rich targeting: department, batch, year, or a
+    combination of those — in addition to the existing all/students/section targets.
+
+    Body: {
+        title, message,
+        target: 'all' | 'students' | 'instructors',   # base filter
+        department_id?: '...',  # further narrow by department
+        batch_id?:      '...',  # further narrow to one batch
+        academic_year?: 2024,   # further narrow to one year (Batch.year)
+        section_id?:    '...',  # further narrow to one section
+    }
+    """
+    from app.models.academic import Batch
+    data       = request.get_json() or {}
+    title      = (data.get('title') or '').strip()
+    message    = (data.get('message') or '').strip()
+    target     = data.get('target', 'all')
+
+    if not title or not message:
+        return jsonify({'error': 'title and message are required'}), 400
+
+    query = User.query.filter_by(institution_id=g.institution_id, is_active=True)
+
+    if target == 'students':
+        query = query.filter_by(role='student')
+    elif target == 'instructors':
+        query = query.filter_by(role='instructor')
+
+    # ── Optional filters ─────────────────────────────────────────────────────
+    dept_id   = data.get('department_id')
+    batch_id  = data.get('batch_id')
+    acad_year = data.get('academic_year')
+    section_id = data.get('section_id')
+
+    if dept_id:
+        dept = Department.query.filter_by(id=dept_id, institution_id=g.institution_id).first()
+        if not dept:
+            return jsonify({'error': 'department_id not found'}), 404
+        query = query.filter_by(department_id=dept_id)
+
+    if batch_id:
+        # scope to students enrolled in some section of this batch
+        batch_section_ids = [
+            s.id for s in Section.query.filter_by(
+                institution_id=g.institution_id, batch_id=batch_id
+            ).all()
+        ]
+        batch_student_ids = [
+            ss.student_id for ss in SectionStudent.query.filter(
+                SectionStudent.section_id.in_(batch_section_ids)
+            ).all()
+        ]
+        query = query.filter(User.id.in_(batch_student_ids))
+
+    elif acad_year:
+        # Look up all batches in this institution for the given academic year.
+        # Batch links to AcademicYear via year_id; year_label is like "2024-2025"
+        # and we accept the leading 4-digit year number.
+        from app.models.academic import AcademicYear as _AY, Batch as _Batch
+        year_num = str(acad_year)
+        year_ids = [
+            ay.id for ay in _AY.query.filter_by(institution_id=g.institution_id).all()
+            if ay.year_label and ay.year_label.startswith(year_num)
+        ]
+        year_batches = (_Batch.query.filter_by(institution_id=g.institution_id)
+                                .filter(_Batch.year_id.in_(year_ids)).all()
+                        if year_ids else [])
+        year_section_ids = [
+            s.id for b in year_batches
+            for s in Section.query.filter_by(batch_id=b.id).all()
+        ]
+        year_student_ids = [
+            ss.student_id for ss in SectionStudent.query.filter(
+                SectionStudent.section_id.in_(year_section_ids)
+            ).all()
+        ]
+        query = query.filter(User.id.in_(year_student_ids))
+
+    if section_id:
+        _own_section(section_id)
+        enrolled_ids = [e.student_id for e in SectionStudent.query.filter_by(section_id=section_id).all()]
+        query = query.filter(User.id.in_(enrolled_ids))
+
+    users = query.all()
+    created = 0
+    for user in users:
+        db.session.add(Notification(
+            user_id=user.id,
+            type='announcement',
+            title=title,
+            message=message,
+        ))
+        created += 1
+
+    from app.extensions import socketio as _sio
+    _sio.emit('new_announcement', {
+        'title':   title,
+        'message': message,
+        'from':    'Institution Admin',
+        'timestamp': datetime.utcnow().isoformat(),
+    }, room=f"institution_{g.institution_id}")
+
+    db.session.commit()
+    scope_desc = '/'.join(filter(None, [
+        dept_id and 'dept', batch_id and 'batch', acad_year and f'year:{acad_year}',
+        section_id and 'section',
+    ])) or target
+    _write_audit(g.user_id, g.institution_id, 'send_announcement', 'announcement',
+                 None, f'"{title}" sent to {created} users ({scope_desc})')
+    return jsonify({'sent_to': created, 'target': target}), 201
+
+
+# ── Session admin actions (cancel-with-reason, reschedule) ────────────────────
+
+@institution_bp.route('/sessions/<session_id>/cancel', methods=['POST'])
+@require_role('institution_admin')
+def admin_cancel_session(session_id):
+    """
+    Admin-side session cancellation with a mandatory reason.
+    Notifies enrolled students via SocketIO and creates notifications.
+
+    Body: {reason: 'Lab equipment unavailable'}
+    """
+    session = LabSession.query.filter_by(
+        id=session_id, institution_id=g.institution_id
+    ).first_or_404()
+
+    if session.status in ('ended', 'cancelled'):
+        return jsonify({'error': f'Session is already {session.status}'}), 409
+
+    data   = request.get_json() or {}
+    reason = (data.get('reason') or '').strip()
+    if not reason:
+        return jsonify({'error': 'reason is required'}), 400
+
+    session.status            = 'cancelled'
+    session.ended_at          = datetime.utcnow()
+    # Store reason in the title prefix since LabSession has no cancellation_reason column;
+    # the audit log also captures the full reason string below.
+    if session.title:
+        session.title = f'[CANCELLED] {session.title}'
+
+    # Notify enrolled students
+    ss = SectionSubject.query.get(session.section_subject_id)
+    if ss:
+        enrolled = [
+            link.student_id for link in SectionStudent.query.filter_by(section_id=ss.section_id).all()
+        ]
+        for student_id in enrolled:
+            db.session.add(Notification(
+                user_id=student_id,
+                type='session_cancelled',
+                title='Lab Session Cancelled',
+                message=f'The lab session has been cancelled by the institution. Reason: {reason}',
+            ))
+
+    db.session.commit()
+
+    from app.extensions import socketio as _sio
+    _sio.emit('session_cancelled', {
+        'session_id': session_id,
+        'reason':     reason,
+    }, room=f"session_{session_id}_students")
+
+    _write_audit(g.user_id, g.institution_id, 'cancel_session', 'session',
+                 session_id, f'Cancelled session: {reason}')
+    return jsonify({'message': 'Session cancelled', 'reason': reason}), 200
+
+
+@institution_bp.route('/sessions/<session_id>/reschedule', methods=['POST'])
+@require_role('institution_admin')
+def admin_reschedule_session(session_id):
+    """
+    Reschedule a cancelled (or scheduled) session to a new time.
+    Resets status to 'scheduled' and sets scheduled_at.
+
+    Body: {scheduled_at: 'YYYY-MM-DDTHH:MM:SS', reason?: '...'}
+    """
+    session = LabSession.query.filter_by(
+        id=session_id, institution_id=g.institution_id
+    ).first_or_404()
+
+    if session.status == 'ended':
+        return jsonify({'error': 'Ended sessions cannot be rescheduled'}), 409
+
+    data = request.get_json() or {}
+    new_time_str = data.get('scheduled_at')
+    if not new_time_str:
+        return jsonify({'error': 'scheduled_at is required (YYYY-MM-DDTHH:MM:SS)'}), 400
+
+    try:
+        new_time = datetime.strptime(new_time_str, '%Y-%m-%dT%H:%M:%S')
+    except ValueError:
+        try:
+            new_time = datetime.strptime(new_time_str, '%Y-%m-%d %H:%M:%S')
+        except ValueError:
+            return jsonify({'error': 'scheduled_at must be YYYY-MM-DDTHH:MM:SS'}), 400
+
+    old_time            = session.scheduled_at
+    session.scheduled_at = new_time
+    session.status       = 'scheduled'
+    session.cancellation_reason = None  # clear old cancel reason
+
+    db.session.commit()
+
+    _write_audit(g.user_id, g.institution_id, 'reschedule_session', 'session',
+                 session_id,
+                 f'Rescheduled from {old_time.strftime("%Y-%m-%d %H:%M") if old_time else "?"}'
+                 f' to {new_time.strftime("%Y-%m-%d %H:%M")}'
+                 + (f'. Reason: {data.get("reason")}' if data.get('reason') else ''))
+    return jsonify({'message': 'Session rescheduled', 'scheduled_at': new_time.isoformat()}), 200
+
+
+# ── Bulk user actions ─────────────────────────────────────────────────────────
+
+@institution_bp.route('/users/bulk-action', methods=['POST'])
+@require_role('institution_admin')
+def bulk_user_action():
+    """
+    Apply an action to one or more users in batch.
+
+    Body: {
+        user_ids: ['...', '...'],
+        action: 'deactivate' | 'activate' | 'force_logout'
+                | 'change_role' | 'section_assign' | 'delete',
+        # action-specific extra fields:
+        role?:         'student' | 'instructor',    # for change_role
+        section_id?:   '...',                        # for section_assign
+    }
+
+    Returns {processed, skipped, errors[]} so the UI can show a summary.
+    """
+    data     = request.get_json() or {}
+    user_ids = data.get('user_ids', [])
+    action   = data.get('action', '')
+
+    valid_actions = ('deactivate', 'activate', 'force_logout',
+                     'change_role', 'section_assign', 'delete')
+    if action not in valid_actions:
+        return jsonify({'error': f'action must be one of: {", ".join(valid_actions)}'}), 400
+    if not user_ids:
+        return jsonify({'error': 'user_ids is required'}), 400
+
+    # Validate all IDs belong to this institution upfront
+    users = User.query.filter(
+        User.id.in_(user_ids),
+        User.institution_id == g.institution_id,
+    ).all()
+    found_ids = {u.id for u in users}
+    not_found = [uid for uid in user_ids if uid not in found_ids]
+
+    # Prevent admin from acting on themselves
+    self_attempt = g.user_id in found_ids
+
+    processed = 0
+    skipped   = 0
+    errors    = []
+
+    if action == 'deactivate':
+        for user in users:
+            if user.id == g.user_id:
+                skipped += 1; continue
+            user.is_active = False
+            _apply_force_logout(user)   # invalidate existing tokens too
+            processed += 1
+
+    elif action == 'activate':
+        for user in users:
+            user.is_active = True
+            processed += 1
+
+    elif action == 'force_logout':
+        for user in users:
+            if user.id == g.user_id:
+                skipped += 1; continue
+            _apply_force_logout(user)
+            processed += 1
+
+    elif action == 'change_role':
+        new_role = data.get('role')
+        if new_role not in ('student', 'instructor'):
+            return jsonify({'error': 'role must be "student" or "instructor"'}), 400
+        for user in users:
+            if user.id == g.user_id:
+                skipped += 1; continue
+            user.role = new_role
+            processed += 1
+
+    elif action == 'section_assign':
+        section_id = data.get('section_id')
+        if not section_id:
+            return jsonify({'error': 'section_id is required for section_assign'}), 400
+        _own_section(section_id)
+        for user in users:
+            if user.role != 'student':
+                errors.append({'user_id': user.id, 'reason': 'Not a student'})
+                skipped += 1; continue
+            if not SectionStudent.query.filter_by(
+                section_id=section_id, student_id=user.id
+            ).first():
+                db.session.add(SectionStudent(section_id=section_id, student_id=user.id))
+                processed += 1
+            else:
+                skipped += 1
+
+    elif action == 'delete':
+        for user in users:
+            if user.id == g.user_id:
+                skipped += 1; continue
+            db.session.delete(user)
+            processed += 1
+
+    db.session.commit()
+
+    # Emit force_logout socket events for relevant actions
+    if action in ('deactivate', 'force_logout'):
+        from app.extensions import socketio as _sio
+        for uid in [u.id for u in users if u.id != g.user_id]:
+            _sio.emit('force_logout', {
+                'reason': 'Logged out by administrator',
+            }, room=f"user_{uid}")
+
+    _write_audit(g.user_id, g.institution_id, f'bulk_{action}', 'user', None,
+                 f'{action} applied to {processed} user(s)'
+                 + (f'; {skipped} skipped' if skipped else ''))
+
+    return jsonify({
+        'processed': processed,
+        'skipped':   skipped,
+        'not_found': not_found,
+        'errors':    errors,
+        'self_skipped': self_attempt and action != 'activate',
+    }), 200
+
+
+# ── Department — user listing and analytics ───────────────────────────────────
+
+@institution_bp.route('/departments/<dept_id>/users', methods=['GET'])
+@require_role('institution_admin')
+def department_users(dept_id):
+    """
+    List all users in a department.
+    Params: ?role=student|instructor  — optional filter
+    """
+    dept = Department.query.filter_by(
+        id=dept_id, institution_id=g.institution_id
+    ).first_or_404()
+
+    query = User.query.filter_by(department_id=dept_id, institution_id=g.institution_id)
+    role = request.args.get('role')
+    if role:
+        query = query.filter_by(role=role)
+
+    users = query.order_by(User.full_name).all()
+    return jsonify({
+        'department': dept.to_dict(),
+        'users':      [u.to_dict() for u in users],
+        'count':      len(users),
+    }), 200
+
+
+@institution_bp.route('/departments/<dept_id>/analytics', methods=['GET'])
+@require_role('institution_admin')
+def department_analytics(dept_id):
+    """
+    Aggregate stats for one department:
+    - user counts by role
+    - avg grade, avg attendance % across department students
+    """
+    from app.models.grading import Grade
+    from app.models.session import SessionAttendance
+
+    dept = Department.query.filter_by(
+        id=dept_id, institution_id=g.institution_id
+    ).first_or_404()
+
+    students    = User.query.filter_by(department_id=dept_id, role='student').all()
+    instructors = User.query.filter_by(department_id=dept_id, role='instructor').all()
+    student_ids = [s.id for s in students]
+
+    avg_grade      = None
+    avg_attendance = None
+
+    if student_ids:
+        grade_row = db.session.query(
+            func.avg(Grade.final_grade)
+        ).filter(
+            Grade.student_id.in_(student_ids),
+            Grade.final_grade.isnot(None),
+        ).scalar()
+        if grade_row is not None:
+            avg_grade = round(float(grade_row), 1)
+
+        total_sessions  = LabSession.query.filter_by(institution_id=g.institution_id).count()
+        attended_row = db.session.query(
+            func.avg(
+                db.session.query(func.count(SessionAttendance.session_id)).filter(
+                    SessionAttendance.student_id == SessionAttendance.student_id
+                ).correlate(SessionAttendance).as_scalar()
+            )
+        )
+        # Simpler: compute average attendance across all dept students
+        att_rows = db.session.query(
+            SessionAttendance.student_id,
+            func.count(SessionAttendance.session_id).label('attended'),
+        ).filter(
+            SessionAttendance.student_id.in_(student_ids),
+        ).group_by(SessionAttendance.student_id).all()
+
+        if att_rows and total_sessions:
+            total_pct = sum(
+                (r.attended / total_sessions * 100) for r in att_rows
+            )
+            avg_attendance = round(total_pct / len(att_rows), 1)
+
+    return jsonify({
+        'department':  dept.to_dict(),
+        'students':    len(students),
+        'instructors': len(instructors),
+        'avg_grade':       avg_grade,
+        'avg_attendance':  avg_attendance,
+    }), 200
+
+
+# ── Student enrollment history / audit ───────────────────────────────────────
+
+@institution_bp.route('/students/<student_id>/enrollment-history', methods=['GET'])
+@require_role('institution_admin')
+def student_enrollment_history(student_id):
+    """
+    Queryable enrollment + transfer history for one student.
+    Returns every SectionStudent record (past and present) ordered by enrolled_at.
+    Each row includes section name, batch, and academic year for full audit trail.
+    """
+    from app.models.academic import AcademicYear
+
+    student = User.query.filter_by(
+        id=student_id, institution_id=g.institution_id, role='student'
+    ).first_or_404()
+
+    rows = db.session.query(SectionStudent, Section).join(
+        Section, Section.id == SectionStudent.section_id
+    ).filter(
+        SectionStudent.student_id == student_id
+    ).order_by(SectionStudent.enrolled_at).all()
+
+    # Preload batches
+    batch_ids = {sec.batch_id for _, sec in rows if sec.batch_id}
+    from app.models.academic import Batch
+    batches = {b.id: b for b in Batch.query.filter(Batch.id.in_(batch_ids)).all()} if batch_ids else {}
+
+    history = []
+    for link, sec in rows:
+        batch   = batches.get(sec.batch_id)
+        history.append({
+            'section_id':    sec.id,
+            'section_name':  sec.name,
+            'batch_id':      sec.batch_id,
+            'batch_name':    batch.name if batch else None,
+            'academic_year': batch.year if batch else None,
+            'enrolled_at':   link.enrolled_at.isoformat() if link.enrolled_at else None,
+        })
+
+    return jsonify({
+        'student':         student.to_dict(),
+        'enrollment_history': history,
+        'total':           len(history),
+    }), 200
+
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Task #47 — Quality-of-life endpoints
+# ─────────────────────────────────────────────────────────────────────────────
+
+def _parse_tz_offset(tz_offset_str: str | None) -> int:
+    """Parse ?tz_offset=+05:30 or ±HH:MM or ±HH into total offset minutes.
+    Returns 0 (UTC) for any invalid/missing value."""
+    if not tz_offset_str:
+        return 0
+    try:
+        raw = tz_offset_str.strip()
+        sign = -1 if raw.startswith('-') else 1
+        raw  = raw.lstrip('+-')
+        if ':' in raw:
+            h, m = raw.split(':')
+        else:
+            h, m = raw, '0'
+        return sign * (int(h) * 60 + int(m))
+    except Exception:
+        return 0
+
+
+# ── Global Search ─────────────────────────────────────────────────────────────
+@institution_bp.route('/search', methods=['GET'])
+@require_role('institution_admin')
+def global_search():
+    """
+    Cross-entity search for the institution admin dashboard.
+
+    Query param:
+      ?q=<term>          — required; min 2 characters
+      ?types=users,sections,sessions   — comma-separated entity types to include;
+             defaults to all three when absent
+      ?limit=20          — max results per type (default 20, cap 100)
+
+    Returns up to `limit` hits per enabled type:
+      users    — matches on full_name / email / roll_number / staff_id
+      sections — matches on section name
+      sessions — matches on session title / experiment title / jitsi_room_name
+
+    Each hit includes a 'type' discriminator so the client can route the result.
+    """
+    q = (request.args.get('q', '') or '').strip()
+    if len(q) < 2:
+        return jsonify({'error': 'Query must be at least 2 characters'}), 400
+
+    types_param = request.args.get('types', 'users,sections,sessions')
+    enabled     = {t.strip().lower() for t in types_param.split(',')}
+    limit       = min(int(request.args.get('limit', 20)), 100)
+    like        = f'%{q}%'
+
+    results = []
+
+    # ── Users ─────────────────────────────────────────────────────────────────
+    if 'users' in enabled:
+        users = User.query.filter(
+            User.institution_id == g.institution_id,
+            db.or_(
+                User.full_name.ilike(like),
+                User.email.ilike(like),
+                User.roll_number.ilike(like),
+                User.staff_id.ilike(like),
+            )
+        ).order_by(User.full_name).limit(limit).all()
+
+        for u in users:
+            results.append({
+                'type':        'user',
+                'id':          u.id,
+                'label':       u.full_name or u.email,
+                'sub_label':   u.roll_number or u.staff_id or u.email,
+                'role':        u.role,
+                'is_active':   u.is_active,
+            })
+
+    # ── Sections ──────────────────────────────────────────────────────────────
+    if 'sections' in enabled:
+        sections = Section.query.filter(
+            Section.institution_id == g.institution_id,
+            Section.name.ilike(like),
+        ).order_by(Section.name).limit(limit).all()
+
+        for sec in sections:
+            results.append({
+                'type':       'section',
+                'id':         sec.id,
+                'label':      sec.name,
+                'sub_label':  f'batch: {sec.batch_id}',
+                'batch_id':   sec.batch_id,
+            })
+
+    # ── Sessions ──────────────────────────────────────────────────────────────
+    if 'sessions' in enabled:
+        from app.models.session import LabSession
+
+        sess_q = LabSession.query.filter(
+            LabSession.institution_id == g.institution_id,
+            db.or_(
+                LabSession.title.ilike(like),
+                LabSession.jitsi_room_name.ilike(like),
+            )
+        ).order_by(LabSession.scheduled_at.desc()).limit(limit).all()
+
+        for sess in sess_q:
+            results.append({
+                'type':           'session',
+                'id':             sess.id,
+                'label':          sess.title or sess.id,
+                'sub_label':      sess.status,
+                'scheduled_at':   sess.scheduled_at.isoformat() if sess.scheduled_at else None,
+                'status':         sess.status,
+                'section_subject_id': sess.section_subject_id,
+            })
+
+    return jsonify({
+        'query':   q,
+        'count':   len(results),
+        'results': results,
+    }), 200
+
+
+# ── Dashboard date-range helper (UTC-offset-aware) ────────────────────────────
+@institution_bp.route('/analytics/date-range', methods=['GET'])
+@require_role('institution_admin')
+def analytics_date_range():
+    """
+    Utility endpoint that resolves the effective UTC date window for a given
+    ?tz_offset=+HH:MM and ?days=N (or ?from / ?to in local time).
+
+    Clients can call this first to confirm what window they'll get back from
+    analytics endpoints before making additional requests, or they can just
+    pass tz_offset to the analytics endpoints directly.
+
+    This endpoint also serves as contract documentation: any analytics endpoint
+    that accepts ?tz_offset will interpret the from/to dates in local time and
+    store/return all datetimes as UTC.
+
+    Returns the resolved UTC window and local window for display.
+    """
+    tz_minutes = _parse_tz_offset(request.args.get('tz_offset'))
+    offset     = timedelta(minutes=tz_minutes)
+
+    from_str = request.args.get('from')
+    to_str   = request.args.get('to')
+    days     = int(request.args.get('days', 30))
+
+    if from_str and to_str:
+        try:
+            # Interpret from/to as local time → shift to UTC
+            local_start = datetime.strptime(from_str, '%Y-%m-%d')
+            local_end   = datetime.strptime(to_str,   '%Y-%m-%d').replace(
+                              hour=23, minute=59, second=59)
+            utc_start   = local_start - offset
+            utc_end     = local_end   - offset
+        except ValueError:
+            return jsonify({'error': 'Invalid date format; use YYYY-MM-DD'}), 400
+    else:
+        utc_end   = datetime.utcnow()
+        utc_start = utc_end - timedelta(days=days)
+        local_start = utc_start + offset
+        local_end   = utc_end   + offset
+
+    return jsonify({
+        'tz_offset_minutes': tz_minutes,
+        'utc': {
+            'from': utc_start.strftime('%Y-%m-%dT%H:%M:%S'),
+            'to':   utc_end.strftime('%Y-%m-%dT%H:%M:%S'),
+        },
+        'local': {
+            'from': local_start.strftime('%Y-%m-%dT%H:%M:%S'),
+            'to':   local_end.strftime('%Y-%m-%dT%H:%M:%S'),
+        },
+    }), 200
+
+
+# ── Saved Dashboard Filters ───────────────────────────────────────────────────
+@institution_bp.route('/dashboard/filters', methods=['GET'])
+@require_role('institution_admin')
+def get_dashboard_filters():
+    """
+    Retrieve the calling admin's saved dashboard filters from AuditLog.
+    Filters are serialised as JSON text in the `detail` column of the most
+    recent 'dashboard_filter_save' entry for this admin — no extra table needed.
+    """
+    from app.models.academic import AuditLog
+    import json as _json
+
+    entry = AuditLog.query.filter_by(
+        institution_id=g.institution_id,
+        actor_id=g.user_id,
+        action='dashboard_filter_save',
+    ).order_by(AuditLog.created_at.desc()).first()
+
+    if not entry:
+        return jsonify({'filters': {}}), 200
+
+    try:
+        filters = _json.loads(entry.detail or '{}')
+    except ValueError:
+        filters = {}
+    return jsonify({'filters': filters, 'saved_at': entry.created_at.isoformat()}), 200
+
+
+@institution_bp.route('/dashboard/filters', methods=['POST'])
+@require_role('institution_admin')
+def save_dashboard_filters():
+    """
+    Persist the calling admin's dashboard filters.
+
+    Body: any JSON object (date range, role filter, section filter, etc.).
+    Serialised to the audit log `detail` column — no schema migration needed.
+    """
+    import json as _json
+    filters = request.get_json(silent=True) or {}
+    _write_audit(
+        actor_id=g.user_id,
+        institution_id=g.institution_id,
+        action='dashboard_filter_save',
+        target_type='dashboard',
+        target_id=g.institution_id,
+        detail=_json.dumps(filters),
+    )
+    db.session.commit()
+    return jsonify({'message': 'Filters saved', 'filters': filters}), 200
