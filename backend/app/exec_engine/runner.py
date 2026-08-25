@@ -10,6 +10,7 @@ Every run is one throwaway container (--rm).
 The reaper exists only for the edge case where the Python process is killed
 between `docker run` starting and the container exiting.
 """
+import base64
 import json
 import os
 import subprocess
@@ -43,7 +44,44 @@ def _get_output_cap() -> int:
     return _OUTPUT_CAP_BYTES
 
 
-def run(code: str, language: str, stdin: str = '') -> dict:
+import re
+
+AUTO_PACKAGE_MAP = {
+    r'\bmatplotlib\b': 'matplotlib',
+    r'\bpandas\b': 'pandas',
+    r'\bnumpy\b': 'numpy',
+    r'\bscipy\b': 'scipy',
+    r'\bseaborn\b': 'seaborn',
+    r'\brequests\b': 'requests',
+    r'\bsklearn\b': 'scikit-learn',
+    r'\bsympy\b': 'sympy',
+    r'\bbs4\b|\bbeautifulsoup4\b': 'beautifulsoup4',
+    r'\bPIL\b': 'Pillow',
+    r'\bcv2\b': 'opencv-python',
+}
+
+def detect_packages(code: str, language: str, explicit_packages: list | str | None = None) -> list[str]:
+    pkgs = []
+    if explicit_packages:
+        if isinstance(explicit_packages, str):
+            raw = [p.strip() for p in explicit_packages.replace(',', ' ').split() if p.strip()]
+        elif isinstance(explicit_packages, list):
+            raw = [str(p).strip() for p in explicit_packages if str(p).strip()]
+        else:
+            raw = []
+        for p in raw:
+            if p not in pkgs:
+                pkgs.append(p)
+
+    if language == 'python':
+        for pattern, pkg in AUTO_PACKAGE_MAP.items():
+            if pkg not in pkgs and re.search(pattern, code):
+                pkgs.append(pkg)
+
+    return pkgs
+
+
+def run(code: str, language: str, stdin: str = '', packages: list | str | None = None) -> dict:
     """
     Execute `code` in the language's Docker container.
 
@@ -75,6 +113,16 @@ def run(code: str, language: str, stdin: str = '') -> dict:
         compile_timeout = spec['compile_timeout'] or 10
         run_timeout     = 5
 
+    pkg_list = detect_packages(code, language, packages)
+    compile_cmd = spec['compile_cmd'] or ''
+    allow_network = False
+
+    if language == 'python' and pkg_list:
+        pip_cmd = f"pip install --prefer-binary --quiet --disable-pip-version-check {' '.join(pkg_list)}"
+        compile_cmd = f"{pip_cmd} && {compile_cmd}" if compile_cmd else pip_cmd
+        allow_network = True
+        compile_timeout = max(compile_timeout or 180, 180)
+
     # Hard deadline = compile + run + 3 s grace
     hard_deadline = compile_timeout + run_timeout + 3
 
@@ -100,14 +148,18 @@ def run(code: str, language: str, stdin: str = '') -> dict:
 
         # Build env vars for the wrapper (COMPILE_CMD, RUN_CMD, timeouts)
         env = {}
-        if spec['compile_cmd']:
-            env['COMPILE_CMD'] = spec['compile_cmd']
+        if language == 'python':
+            env['MPLBACKEND'] = 'Agg'
+        if compile_cmd:
+            env['COMPILE_CMD'] = compile_cmd
         env['RUN_CMD'] = spec['run_cmd']
         # Per-phase timeouts enforced INSIDE the container by wrapper.sh's
         # `timeout` calls, so EXEC_RUN_TIMEOUT_SEC is a real wall-clock cap
         # (not just the host-side backstop). Values are whole seconds.
         env['RUN_TIMEOUT'] = str(run_timeout)
         env['COMPILE_TIMEOUT'] = str(compile_timeout)
+        if allow_network or pkg_list:
+            env['PIP_CACHE_DIR'] = '/tmp/pip_cache'
         # Per-language env overrides (e.g. C# needs HOME=/tmp). Applied last so
         # a spec can override the sandbox default HOME=/work.
         env.update(spec.get('env_extra') or {})
@@ -115,15 +167,19 @@ def run(code: str, language: str, stdin: str = '') -> dict:
         # Get security flags. Some languages need a writable in-memory /tmp
         # (e.g. .NET) even though the rootfs is --read-only; specs opt in via
         # a 'tmpfs' list. A few also need a higher single-file write ceiling
-        # (e.g. .NET's mmap'd GC heap) via 'fsize_bytes'.
+        # (e.g. .NET's mmap'd GC heap or package downloads) via 'fsize_bytes'.
+        fsize_bytes = 67108864 if (allow_network or pkg_list) else spec.get('fsize_bytes', 8388608)
         flags = build_flags(spec['image'], memory_mb, env,
                              tmpfs=spec.get('tmpfs'),
-                             fsize_bytes=spec.get('fsize_bytes', 8388608))
+                             fsize_bytes=fsize_bytes,
+                             allow_network=allow_network)
 
         # Bind-mount the temp dir as /work (read-write so wrapper can write meta.json)
         # On Docker Desktop for Windows, forward slashes work in volume paths.
         host_path = str(tmpdir_path).replace('\\', '/')
         volume_flag = ['-v', f'{host_path}:/work']
+        if allow_network or pkg_list:
+            volume_flag.extend(['-v', 'nexlab_pip_cache:/tmp/pip_cache'])
 
         # Unique container name so we can kill THIS run on host-deadline without
         # touching another student's container (the old label lookup grabbed the
@@ -193,10 +249,24 @@ def run(code: str, language: str, stdin: str = '') -> dict:
             stderr    = _decode_truncate(stderr_buf, cap)
             truncated = (len(stdout_buf) > cap or len(stderr_buf) > cap)
 
+            # Collect any generated image files (plots/graphs from matplotlib, etc.)
+            images = []
+            try:
+                for img_path in sorted(tmpdir_path.glob('*')):
+                    if img_path.is_file() and img_path.suffix.lower() in ('.png', '.jpg', '.jpeg', '.svg', '.webp'):
+                        if img_path.stat().st_size <= 5 * 1024 * 1024:  # 5MB cap
+                            ext = img_path.suffix.lower().lstrip('.')
+                            mime = 'image/svg+xml' if ext == 'svg' else ('image/jpeg' if ext in ('jpg', 'jpeg') else f'image/{ext}')
+                            b64 = base64.b64encode(img_path.read_bytes()).decode('ascii')
+                            images.append(f"data:{mime};base64,{b64}")
+            except Exception as exc:
+                log.warning("Failed to collect generated images: %s", exc)
+
             return verdict | {
                 'stdout':          stdout,
                 'stderr':          stderr,
                 'compile_output':  compile_out,
+                'images':          images,
                 'time_ms':         int(meta.get('run_ms', 0)),
                 'compile_ms':      int(meta.get('compile_ms', 0)),
                 'memory_kb':       _peak_kb(meta.get('peak_bytes')),

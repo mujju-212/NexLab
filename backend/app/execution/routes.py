@@ -19,7 +19,7 @@ MAX_STDIN_CHARS = 20_000
 
 
 # ── Shared Docker execution path ──────────────────────────────────────────────
-def _run_docker(code: str, lang_id: str, stdin: str, user_id):
+def _run_docker(code: str, lang_id: str, stdin: str, user_id, packages=None):
     """
     Execute code in the Docker sandbox under admission control.
 
@@ -35,7 +35,7 @@ def _run_docker(code: str, lang_id: str, stdin: str, user_id):
     from app.exec_engine import admission as _adm
     try:
         with _adm.get().acquire(user_id):
-            result = _runner.run(code=code, language=lang_id, stdin=stdin)
+            result = _runner.run(code=code, language=lang_id, stdin=stdin, packages=packages)
     except _adm.AdmissionError as exc:
         resp = jsonify({'error': str(exc)})
         resp.headers['Retry-After'] = str(exc.retry_after)
@@ -57,6 +57,7 @@ def run_code():
     code_files    = data.get('files', {})       # {"main": "code..."} or multi-file
     language      = data.get('language', 'python')
     stdin         = data.get('stdin', '')
+    packages      = data.get('packages')
     experiment_id = data.get('experiment_id')
     session_id    = data.get('session_id')
     is_submit     = data.get('is_final_submission', False)
@@ -73,7 +74,7 @@ def run_code():
     primary_code = code_files.get('main', next(iter(code_files.values()), ''))
 
     # ── Execute in the Docker sandbox ─────────────────────────────────────
-    result, error = _run_docker(primary_code, spec['id'], stdin, g.user_id)
+    result, error = _run_docker(primary_code, spec['id'], stdin, g.user_id, packages=packages)
     if error:
         return error
 
@@ -190,6 +191,7 @@ def playground_run():
     code     = data.get('code') or ''
     stdin    = data.get('stdin') or ''
     language = data.get('language') or 'python'
+    packages = data.get('packages')
 
     spec = resolve_language(language)
     if not spec:
@@ -206,7 +208,7 @@ def playground_run():
     if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
         return jsonify({'error': 'Code execution engine is not enabled on this server.'}), 503
 
-    result, error = _run_docker(code, spec['id'], stdin, g.user_id)
+    result, error = _run_docker(code, spec['id'], stdin, g.user_id, packages=packages)
     if error:
         return error
 
