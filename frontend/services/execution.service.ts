@@ -37,6 +37,7 @@ export interface PlaygroundResult {
   memory_kb: number | null;       // null when cgroup peak is unreadable (cgroup v1 + WSL)
   truncated?: boolean;            // output was truncated
   image?: string;                 // image used
+  images?: string[];              // generated plot images (base64 data URIs)
 }
 
 /** Response from GET /api/execution/engine-health */
@@ -70,7 +71,7 @@ export const executionService = {
   // Request: { files: { main: '<code>' }, language, stdin?, experiment_id?, session_id?, is_final_submission? }
   // Response: { status, status_id, stdout, stderr, compile_output, time_ms, memory_kb, quality_metrics?, quality_score? }
   async runCode(payload: RunCodeRequest): Promise<RunCodeResponse> {
-    const { data } = await apiClient.post<RunCodeResponse>('/execution/run', payload);
+    const { data } = await apiClient.post<RunCodeResponse>('/execution/run', payload, { timeout: 120_000 });
     return data;
   },
 
@@ -104,9 +105,10 @@ export const executionService = {
     code: string;
     language: string;
     stdin?: string;
+    packages?: string[] | string;
   }): Promise<PlaygroundResult> {
     const { data } = await apiClient.post<PlaygroundResult>(
-      '/execution/playground', payload, { timeout: 45_000 },
+      '/execution/playground', payload, { timeout: 120_000 },
     );
     return data;
   },

@@ -119,6 +119,155 @@ export interface SectionComparison {
   avg_score: number;
 }
 
+// ── New analytics types (B1–B9 + Instructors + Proctoring) ─────────────────
+
+export interface AttendanceSummary {
+  total_sessions: number;
+  total_attendance_records: number;
+  present_count: number;
+  absent_count: number;
+  avg_attendance_rate: number;
+  by_status: Record<string, number>;
+  by_session: Array<{
+    session_id: string; session_title: string;
+    scheduled_at: string; total: number; present: number; rate: number;
+  }>;
+  period: { from: string; to: string };
+}
+
+export interface GradeDistribution {
+  total_grades: number;
+  avg_score: number;
+  median_score: number | null;
+  pass_rate: number;
+  distribution: { range: string; count: number; pct: number }[];
+  by_section: Array<{ section_id: string; section_name: string; avg_score: number; total: number }>;
+  period: { from: string; to: string };
+}
+
+export interface ExperimentUsage {
+  total_experiments: number;
+  experiments: Array<{
+    experiment_id: string; title: string; subject_name: string;
+    times_used: number; avg_score: number | null; avg_completion_pct: number | null;
+  }>;
+  period: { from: string; to: string };
+}
+
+export interface AnalyticsTrend {
+  grain: string;
+  series: Array<{ period: string; sessions: number; submissions: number; avg_score: number | null }>;
+  period: { from: string; to: string };
+}
+
+export interface InstructorPerf {
+  instructor_id: string;
+  full_name: string;
+  email: string;
+  sessions_run: number;
+  subjects_count: number;
+  sections_count: number;
+  avg_attendance: number | null;
+  avg_final_grade: number | null;
+  avg_focus_score: number | null;
+  avg_feedback: number | null;
+}
+
+export interface ProctoringReport {
+  total_records: number;
+  institution_avg: Record<string, number | null>;
+  proctor_event_totals: Record<string, number>;
+  at_risk_students: Array<{
+    student_id: string; full_name: string | null; roll_number: string | null;
+    samples: number; avg_focus_score: number | null;
+    signals: Record<string, number | null>;
+    proctor_events: Record<string, number>;
+  }>;
+  period: { from: string; to: string };
+}
+
+export interface EngagementReport {
+  total_students: number;
+  active_students: number;
+  dormant_students: number;
+  at_risk_count: number;
+  engagement_rate: number;
+  at_risk_students: Array<{
+    student_id: string; full_name: string | null; roll_number: string | null;
+    sessions_attended: number; total_time_minutes: number; avg_score: number | null;
+    concept_mastery: number | null; focus_score: number | null;
+  }>;
+  period: { from: string; to: string };
+}
+
+export interface AIUsageReport {
+  total_calls: number;
+  total_tokens: number;
+  by_feature: Record<string, { calls: number; tokens: number }>;
+  top_consumers: Array<{
+    user_id: string; full_name: string | null; role: string;
+    calls: number; tokens: number;
+  }>;
+  period: { from: string; to: string };
+}
+
+/** Feature keys toggleable via AIPolicy.features_enabled */
+export const AI_FEATURES: { key: string; label: string; desc: string }[] = [
+  { key: 'hint',          label: 'Progressive Hints',        desc: 'Step-by-step guidance when students get stuck' },
+  { key: 'chat',          label: 'Help Chat',                desc: 'Multi-turn assistant inside the lab' },
+  { key: 'code_assist',   label: 'Playground Assistant',     desc: 'Free-practice code hints & error explanations' },
+  { key: 'viva_generate', label: 'Viva Question Generation', desc: 'Auto-generated questions from submitted code' },
+  { key: 'viva_evaluate', label: 'Viva Answer Evaluation',   desc: 'AI scoring of viva answers' },
+  { key: 'agent',         label: 'Agentic Assistant (Beta)', desc: 'Autonomous tool-using assistant — off until launched' },
+];
+
+export interface AIPolicy {
+  institution_id: string;
+  ai_enabled_global: boolean;
+  ai_enabled_students: boolean;
+  ai_enabled_instructors: boolean;
+  features_enabled: Record<string, boolean>;
+  daily_token_quota: number | null;
+  monthly_token_quota: number | null;
+  per_student_daily_quota: number | null;
+  hard_stop: boolean;
+  updated_at: string | null;
+}
+
+export interface AIUsageSummary {
+  institution_id: string;
+  window_days: number;
+  summary: {
+    calls: number;
+    tokens: number;
+    cost_usd: number;
+    by_feature: Record<string, { calls: number; tokens: number }>;
+    by_model: Record<string, { calls: number; tokens: number }>;
+  };
+  logs: Array<{
+    id: string; user_id: string | null; role: string; feature: string;
+    model: string; provider: string; total_tokens: number;
+    estimated_cost_usd: number; success: boolean; created_at: string;
+  }>;
+  total: number;
+  limit: number;
+  offset: number;
+}
+
+export interface AgentRun {
+  id: string;
+  institution_id: string;
+  user_id: string;
+  prompt: string;
+  tool_calls: Array<{ tool: string; args: Record<string, unknown>; result?: unknown; error?: string }>;
+  result: string;
+  total_tokens: number;
+  status: 'completed' | 'pending_confirm' | 'error';
+  created_at: string;
+  pending_action?: { tool: string; payload: Record<string, unknown> } | null;
+  answer?: string;
+}
+
 export interface AuditLog {
   id: string;
   action: string;
@@ -442,6 +591,74 @@ export const institutionService = {
     return data.sections;
   },
 
+  async getAnalyticsAttendance(params?: { days?: number; from?: string; to?: string }): Promise<AttendanceSummary> {
+    const { data } = await apiClient.get<AttendanceSummary>('/institution/analytics/attendance', { params });
+    return data;
+  },
+
+  async getAnalyticsGrades(params?: { days?: number; from?: string; to?: string }): Promise<GradeDistribution> {
+    const { data } = await apiClient.get<GradeDistribution>('/institution/analytics/grades', { params });
+    return data;
+  },
+
+  async getAnalyticsExperiments(params?: { days?: number; from?: string; to?: string }): Promise<ExperimentUsage> {
+    const { data } = await apiClient.get<ExperimentUsage>('/institution/analytics/experiment-usage', { params });
+    return data;
+  },
+
+  async getAnalyticsTrends(params?: { grain?: string; days?: number; from?: string; to?: string }): Promise<AnalyticsTrend> {
+    const { data } = await apiClient.get<AnalyticsTrend>('/institution/analytics/trends', { params });
+    return data;
+  },
+
+  async getAnalyticsInstructors(params?: { days?: number; from?: string; to?: string }): Promise<{ instructors: InstructorPerf[]; period: { from: string; to: string } }> {
+    const { data } = await apiClient.get('/institution/analytics/instructors', { params });
+    return data;
+  },
+
+  async getAnalyticsProctoring(params?: { days?: number; session_id?: string; student_id?: string }): Promise<ProctoringReport> {
+    const { data } = await apiClient.get<ProctoringReport>('/institution/analytics/proctoring', { params });
+    return data;
+  },
+
+  async getAnalyticsEngagement(params?: { days?: number; from?: string; to?: string }): Promise<EngagementReport> {
+    const { data } = await apiClient.get<EngagementReport>('/institution/analytics/engagement', { params });
+    return data;
+  },
+
+  async getAnalyticsAIUsage(params?: { days?: number }): Promise<AIUsageReport> {
+    const { data } = await apiClient.get<AIUsageReport>('/institution/analytics/ai-usage', { params }).catch(() => ({
+      data: { total_calls: 0, total_tokens: 0, by_feature: {}, top_consumers: [], period: { from: '', to: '' } },
+    }));
+    return data as AIUsageReport;
+  },
+
+  // ── AI Governance (policy + usage) ──────────────────────────────────────────
+
+  async getAiPolicy(): Promise<AIPolicy> {
+    const { data } = await apiClient.get<{ policy: AIPolicy }>('/institution/ai-policy');
+    return data.policy;
+  },
+
+  async updateAiPolicy(patch: Partial<{
+    ai_enabled_global: boolean;
+    ai_enabled_students: boolean;
+    ai_enabled_instructors: boolean;
+    features_enabled: Record<string, boolean>;
+    daily_token_quota: number | null;
+    monthly_token_quota: number | null;
+    per_student_daily_quota: number | null;
+    hard_stop: boolean;
+  }>): Promise<AIPolicy> {
+    const { data } = await apiClient.patch<{ policy: AIPolicy }>('/institution/ai-policy', patch);
+    return data.policy;
+  },
+
+  async getAiUsageSummary(params?: { days?: number; feature?: string; limit?: number }): Promise<AIUsageSummary> {
+    const { data } = await apiClient.get<AIUsageSummary>('/institution/ai-usage', { params });
+    return data;
+  },
+
   // ── Announcements ─────────────────────────────────────────────────────────────
 
   async sendAnnouncement(dto: {
@@ -454,6 +671,21 @@ export const institutionService = {
     return data;
   },
 
+  // Rich targeting (A5): narrow by department / batch / academic year / section
+  // on top of the base all|students|instructors filter.
+  async sendTargetedAnnouncement(dto: {
+    title: string;
+    message: string;
+    target: 'all' | 'students' | 'instructors';
+    department_id?: string;
+    batch_id?: string;
+    section_id?: string;
+    academic_year?: number;
+  }): Promise<{ sent_to: number; target: string }> {
+    const { data } = await apiClient.post('/institution/announcements/targeted', dto);
+    return data;
+  },
+
   async getRecentAnnouncements() {
     const { data } = await apiClient.get('/institution/announcements/recent');
     return data.announcements;
@@ -461,8 +693,46 @@ export const institutionService = {
 
   // ── Audit Log ─────────────────────────────────────────────────────────────────
 
-  async getAuditLog(params?: { action?: string; days?: number; limit?: number; offset?: number; q?: string }): Promise<AuditLogPage> {
+  async getAuditLog(params?: { action?: string; days?: number; limit?: number; offset?: number; q?: string; from?: string; to?: string }): Promise<AuditLogPage> {
     const { data } = await apiClient.get<AuditLogPage>('/institution/audit-log', { params });
+    return data;
+  },
+
+  // Download the audit log as CSV (same filters as getAuditLog).
+  async exportAuditLog(params?: { action?: string; days?: number; q?: string; from?: string; to?: string }): Promise<void> {
+    const resp = await apiClient.get('/institution/audit-log/export', { params, responseType: 'blob' });
+    const url = window.URL.createObjectURL(resp.data);
+    const a = document.createElement('a');
+    a.href = url;
+    // Filename comes from Content-Disposition; fall back if not parseable.
+    const cd = resp.headers['content-disposition'] as string | undefined;
+    const match = cd?.match(/filename="?([^";]+)"?/);
+    a.download = match?.[1] ?? `audit_log_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    window.URL.revokeObjectURL(url);
+  },
+
+  // ── Agentic AI (WS-D) ────────────────────────────────────────────────────────
+
+  async agentQuery(prompt: string): Promise<AgentRun> {
+    const { data } = await apiClient.post<AgentRun>('/ai/agent/query', { prompt });
+    return data;
+  },
+
+  async agentRuns(params?: { page?: number; per_page?: number }): Promise<{ runs: AgentRun[]; total: number }> {
+    const { data } = await apiClient.get('/ai/agent/runs', { params });
+    return data;
+  },
+
+  async agentRun(runId: string): Promise<AgentRun> {
+    const { data } = await apiClient.get<AgentRun>(`/ai/agent/runs/${runId}`);
+    return data;
+  },
+
+  async agentApply(runId: string): Promise<{ success: boolean; sent_to: number; target: string; run_id: string }> {
+    const { data } = await apiClient.post(`/ai/agent/runs/${runId}/apply`);
     return data;
   },
 

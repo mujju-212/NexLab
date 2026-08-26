@@ -89,7 +89,7 @@ export const studentService = {
   // POST /api/student/prelab/<module_id>/assignment/submit  (graded coding task)
   async submitAssignment(
     moduleId: string,
-    payload: { code: string; language?: string },
+    payload: { code: string; language?: string; packages?: string[] | string },
   ): Promise<AssignmentSubmitResult> {
     const { data } = await apiClient.post<AssignmentSubmitResult>(
       `/student/prelab/${moduleId}/assignment/submit`, payload,
