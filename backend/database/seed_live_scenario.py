@@ -16,7 +16,6 @@ Run (see memory: run-backend-scripts):
         ./venv/Scripts/python.exe database/seed_live_scenario.py
 """
 import os, sys
-os.environ.setdefault('DATABASE_URL', 'postgresql://postgres:vlabpass@localhost:5433/virtuallab')
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from datetime import datetime, timedelta
@@ -29,11 +28,9 @@ from app.models.subject import Subject
 from app.models.experiment import Experiment, ContentModule, ContentPage, QuizQuestion, TestCase
 from app.models.session import LabSession, SessionAttendance
 
-# ── Anchors (verified live against Postgres:5433) ────────────────────────────────
+# ── Anchors ──────────────────────────────────────────────────────────────────
 INST             = 'inst-test-001'
 INSTRUCTOR_EMAIL = 'instructor@nexlab.demo'
-SS_DS_A          = 'c964b6f6-51cd-4e3a-95d4-ca8edc9b5303'   # Data Structures · Section A · Dr. Instructor
-SS_PYTHON_A      = 'cc6fcebd-f535-4d10-b65d-65115e5f0a11'   # Python Programming · Section A · Dr. Instructor
 
 now = datetime.utcnow()
 
@@ -60,13 +57,21 @@ def seed():
     if not instructor:
         raise SystemExit(f"FATAL: instructor {INSTRUCTOR_EMAIL} not found in {INST}")
 
-    ss_ds = SectionSubject.query.get(SS_DS_A)
-    ss_py = SectionSubject.query.get(SS_PYTHON_A)
-    if not ss_ds or not ss_py:
-        raise SystemExit("FATAL: expected section-subjects not found (DS-A / Python-A)")
+    subj_ds_obj = Subject.query.filter_by(institution_id=INST, code='CS3401').first()
+    subj_py_obj = Subject.query.filter_by(institution_id=INST, code='CS3111').first()
+    if not subj_ds_obj or not subj_py_obj:
+        raise SystemExit("FATAL: expected subjects CS3401/CS3111 not found in institution.")
 
-    subj_ds = ss_ds.subject_id       # ac39d45a… Data Structures
-    subj_py = ss_py.subject_id       # 515e8b4e… Python Programming
+    ss_ds = SectionSubject.query.filter_by(institution_id=INST, subject_id=subj_ds_obj.id).first()
+    ss_py = SectionSubject.query.filter_by(institution_id=INST, subject_id=subj_py_obj.id).first()
+    if not ss_ds or not ss_py:
+        raise SystemExit("FATAL: expected section-subjects not found for CS3401/CS3111")
+
+    SS_DS_A = ss_ds.id
+    SS_PYTHON_A = ss_py.id
+
+    subj_ds = ss_ds.subject_id       # Data Structures
+    subj_py = ss_py.subject_id       # Python Programming
 
     # Students enrolled in DS-A's *own* section (robust against duplicate 'A' sections).
     ds_section_students = [
@@ -273,6 +278,7 @@ def seed():
 
 if __name__ == '__main__':
     app = create_app('development')
-    app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
+    if 'DATABASE_URL' in os.environ:
+        app.config['SQLALCHEMY_DATABASE_URI'] = os.environ['DATABASE_URL']
     with app.app_context():
         seed()
