@@ -9,6 +9,7 @@ from app.models.institution import Institution, PlatformConfig
 from app.models.user import User
 from app.models.academic import AuditLog
 from app.models.session import LabSession
+from app.models.ai_usage import AIUsageLog
 from datetime import datetime, timedelta
 from sqlalchemy import func, text
 
@@ -333,6 +334,67 @@ def cross_institution_analytics():
         })
     results.sort(key=lambda x: x['sessions'], reverse=True)
     return jsonify({'institutions': results}), 200
+
+
+@platform_bp.route('/analytics/ai-usage/cross-institution', methods=['GET'])
+@require_role('platform_admin')
+def cross_institution_ai_usage():
+    """
+    C6 — Platform roll-up of AI consumption per institution.
+
+    Groups AIUsageLog by institution for the last `days` (default 30) and
+    reports total calls, tokens, estimated spend, and per-feature breakdown,
+    sorted by tokens desc. Institutions with no AI activity are included with
+    zeroed totals so the platform admin sees the whole tenant list at once.
+    """
+    days = int(request.args.get('days', 30) or 30)
+    days = max(1, min(days, 365))
+    since = datetime.utcnow() - timedelta(days=days)
+
+    rows = db.session.query(
+        AIUsageLog.institution_id,
+        func.count(AIUsageLog.id).label('calls'),
+        func.coalesce(func.sum(AIUsageLog.total_tokens), 0).label('tokens'),
+        func.coalesce(func.sum(AIUsageLog.estimated_cost_usd), 0).label('cost'),
+    ).filter(
+        AIUsageLog.institution_id.isnot(None),
+        AIUsageLog.created_at >= since,
+    ).group_by(AIUsageLog.institution_id).all()
+
+    feature_rows = db.session.query(
+        AIUsageLog.institution_id,
+        AIUsageLog.feature,
+        func.count(AIUsageLog.id).label('calls'),
+    ).filter(
+        AIUsageLog.institution_id.isnot(None),
+        AIUsageLog.created_at >= since,
+    ).group_by(AIUsageLog.institution_id, AIUsageLog.feature).all()
+
+    by_inst_feature = {}
+    for iid, feature, calls in feature_rows:
+        by_inst_feature.setdefault(iid, {})[feature] = calls
+
+    inst = {i.id: i for i in Institution.query.all()}
+    results = []
+    for iid, calls, tokens, cost in rows:
+        results.append({
+            'institution_id': iid,
+            'name':           inst[iid].name if iid in inst else 'Deleted institution',
+            'plan':           inst[iid].plan if iid in inst else '—',
+            'calls':          calls,
+            'tokens':         tokens,
+            'cost_usd':       round(float(cost), 4),
+            'by_feature':     by_inst_feature.get(iid, {}),
+        })
+    for iid, i in inst.items():
+        if iid not in {r['institution_id'] for r in results}:
+            results.append({
+                'institution_id': iid, 'name': i.name, 'plan': i.plan,
+                'calls': 0, 'tokens': 0, 'cost_usd': 0.0, 'by_feature': {},
+            })
+
+    results.sort(key=lambda x: x['tokens'], reverse=True)
+    return jsonify({'days': days, 'institutions': results}), 200
 
 
 # ══════════════════════════════════════════════════════════════════════════════
