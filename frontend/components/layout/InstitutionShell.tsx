@@ -10,6 +10,7 @@ import {
   Layers
 } from 'lucide-react';
 import styles from './InstitutionShell.module.css';
+import AgentChatPanel from './AgentChatPanel';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
 
@@ -198,6 +199,8 @@ export default function InstitutionShell({
           {children}
         </main>
       </div>
+
+      <AgentChatPanel />
     </div>
   );
 }
