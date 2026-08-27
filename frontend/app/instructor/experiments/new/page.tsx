@@ -1,7 +1,7 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
+import { Suspense, useEffect, useState } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
 import { ArrowLeft, FlaskConical, Save, AlertCircle, Layers, Sparkles } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import { experimentService } from '@/services/experiment.service';
@@ -17,24 +17,20 @@ interface SectionSubject {
   section_name: string;
 }
 
-// Sensible default selection + fallback when the compiler catalog can't be reached.
 const DEFAULT_LANGS = ['python', 'cpp', 'c', 'java'];
 
-// Creating an experiment now only sets up the SHELL — subject, number, title,
-// classification, grading rules. All pre-lab content (theory, runnable code,
-// images, quizzes, graded coding tasks with their own test cases) is authored
-// afterwards in the block studio, which we open on the Content tab right after
-// create. That's why the old problem-statement / I-O-format / test-case fields
-// no longer live here.
-export default function NewExperimentPage() {
+function NewExperimentForm() {
   const router = useRouter();
+  const searchParams = useSearchParams();
+  const preselectedSubjectId = searchParams.get('subject_id') || '';
+
   const [sectionSubjects, setSectionSubjects] = useState<SectionSubject[]>([]);
   const [languages, setLanguages] = useState<CompilerLanguage[]>([]);
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const [form, setForm] = useState({
-    subject_id: '',
+    subject_id: preselectedSubjectId,
     exp_number: 1,
     title: '',
     aim: '',
@@ -51,15 +47,19 @@ export default function NewExperimentPage() {
 
   useEffect(() => {
     sessionService.getSectionSubjects()
-      .then(d => setSectionSubjects(d.section_subjects ?? []))
+      .then(d => {
+        const list = d.section_subjects ?? [];
+        setSectionSubjects(list);
+        if (preselectedSubjectId) {
+          setForm(f => ({ ...f, subject_id: preselectedSubjectId }));
+        }
+      })
       .catch(() => setSectionSubjects([]));
 
-    // Only docker-executable languages can be graded against stdin/stdout, so
-    // those are what we offer for the experiment's allowed set.
     executionService.listLanguages()
       .then(d => setLanguages((d.languages ?? []).filter(l => l.engine === 'docker')))
       .catch(() => setLanguages([]));
-  }, []);
+  }, [preselectedSubjectId]);
 
   // Deduplicate subjects (same subject may appear for multiple sections)
   const subjects = sectionSubjects.filter(
@@ -281,5 +281,13 @@ export default function NewExperimentPage() {
         </button>
       </div>
     </InstructorShell>
+  );
+}
+
+export default function NewExperimentPage() {
+  return (
+    <Suspense fallback={<div style={{ padding: 24 }}>Loading...</div>}>
+      <NewExperimentForm />
+    </Suspense>
   );
 }

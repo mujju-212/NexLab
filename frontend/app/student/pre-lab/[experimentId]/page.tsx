@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
@@ -222,7 +222,8 @@ export default function PreLabDetailPage() {
     setAssignError('');
     try {
       const lang = String((active.content_data as { language?: string })?.language || 'python');
-      const res = await studentService.submitAssignment(active.id, { code: assignCode, language: lang });
+      const pkgs = (active.content_data as { packages?: string | string[] })?.packages;
+      const res = await studentService.submitAssignment(active.id, { code: assignCode, language: lang, packages: pkgs });
       setAssignResult(res);
       // Reflect the new best score / completion locally (module id is stable).
       setModules(ms => ms.map(m => m.id === active.id

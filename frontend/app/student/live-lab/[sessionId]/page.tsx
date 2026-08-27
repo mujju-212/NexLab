@@ -122,7 +122,9 @@ export default function LiveLabRoomPage() {
         // Prefer ImageCapture API (Chrome/Edge); fall back to hidden video element
         if (typeof ImageCapture !== 'undefined') {
           const cap = new ImageCapture(track);
-          const bitmap = await cap.grabFrame();
+          // grabFrame() isn't in every TS DOM lib version yet.
+          const grabFrame = (cap as unknown as { grabFrame(): Promise<ImageBitmap> }).grabFrame.bind(cap);
+          const bitmap = await grabFrame();
           const canvas = document.createElement('canvas');
           canvas.width  = 640;
           canvas.height = 480;

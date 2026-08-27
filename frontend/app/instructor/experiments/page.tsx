@@ -69,9 +69,9 @@ function SubjectGrid({
         </div>
       ) : (
         <div className={s.subjectGrid}>
-          {subjects.map(sub => (
+          {subjects.map((sub, idx) => (
             <button
-              key={sub.id}
+              key={sub.id ? `${sub.id}-${idx}` : `sub-${sub.subject_id}-${idx}`}
               className={s.subjectCard}
               onClick={() => onSelect(sub)}
             >
@@ -170,7 +170,7 @@ function ExperimentList({
         <button className={styles.ghostBtn} onClick={onBack}>
           <ArrowLeft size={13} /> Subjects
         </button>
-        <button className={styles.primaryBtn} onClick={() => router.push('/instructor/experiments/new')}>
+        <button className={styles.primaryBtn} onClick={() => router.push(`/instructor/experiments/new?subject_id=${subject.subject_id}`)}>
           <Plus size={14} /> New Experiment
         </button>
       </div>
@@ -200,27 +200,52 @@ function ExperimentList({
         ) : (
           <div className={styles.list}>
             {experiments.map(exp => (
-              <div key={exp.id} className={styles.listRow}>
+              <div key={exp.id} className={styles.listRow} style={{ padding: '16px 20px', justifyContent: 'space-between' }}>
                 <div className={styles.rowIcon} style={{ background: exp.is_published ? '#ecfdf5' : '#fef3c7' }}>
-                  <FlaskConical size={16} color={exp.is_published ? '#059669' : '#b45309'} />
+                  <FlaskConical size={18} color={exp.is_published ? '#059669' : '#b45309'} />
                 </div>
-                <div className={styles.rowBody}>
-                  <p className={styles.rowTitle}>#{exp.exp_number} — {exp.title}</p>
-                  <p className={styles.rowMeta}>
-                    <Gauge size={11} style={{ display: 'inline', marginRight: 3 }} />
-                    {DIFF_LABEL[exp.difficulty_level] ?? `Level ${exp.difficulty_level}`}
-                    {(exp.allowed_languages ?? []).length > 0 && <> · {exp.allowed_languages.join(', ')}</>}
-                    {exp.enable_viva && <> · <MessageSquare size={11} style={{ display: 'inline' }} /> viva</>}
-                    {exp.enable_lockdown && <> · <Lock size={11} style={{ display: 'inline' }} /> lockdown</>}
+                <div className={styles.rowBody} style={{ flex: 1, paddingRight: 16 }}>
+                  <p className={styles.rowTitle} style={{ fontSize: 15, fontWeight: 700, marginBottom: 4 }}>
+                    #{exp.exp_number} — {exp.title}
                   </p>
-                  {exp.concept_tags.length > 0 && (
-                    <p className={styles.rowSub}>
-                      <Tag size={11} style={{ display: 'inline', marginRight: 3 }} />
-                      {exp.concept_tags.join(', ')}
+                  {exp.aim && (
+                    <p className={styles.rowSub} style={{ fontSize: 13, color: '#4b5563', marginBottom: 6 }}>
+                      {exp.aim}
                     </p>
                   )}
+                  <div style={{ display: 'flex', gap: 12, alignItems: 'center', flexWrap: 'wrap', marginTop: 4 }}>
+                    <span className={styles.rowMeta} style={{ fontSize: 12, fontWeight: 600, color: '#6b7280' }}>
+                      <Gauge size={12} style={{ display: 'inline', marginRight: 4 }} />
+                      {DIFF_LABEL[exp.difficulty_level] ?? `Level ${exp.difficulty_level}`}
+                    </span>
+                    {(exp.allowed_languages ?? []).length > 0 && (
+                      <span className={styles.rowMeta} style={{ fontSize: 12, color: '#6b7280' }}>
+                        · {exp.allowed_languages.join(', ')}
+                      </span>
+                    )}
+                    {exp.enable_viva && (
+                      <span className={styles.rowMeta} style={{ fontSize: 12, color: '#6b7280' }}>
+                        · <MessageSquare size={12} style={{ display: 'inline', marginRight: 2 }} /> viva
+                      </span>
+                    )}
+                    {exp.enable_lockdown && (
+                      <span className={styles.rowMeta} style={{ fontSize: 12, color: '#6b7280' }}>
+                        · <Lock size={12} style={{ display: 'inline', marginRight: 2 }} /> lockdown
+                      </span>
+                    )}
+                  </div>
+                  {exp.concept_tags && exp.concept_tags.length > 0 && (
+                    <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginTop: 8 }}>
+                      {exp.concept_tags.map(tag => (
+                        <span key={tag} style={{ fontSize: 11, fontWeight: 600, background: '#f3e8ff', color: '#7c3aed', padding: '2px 8px', borderRadius: 6 }}>
+                          <Tag size={10} style={{ display: 'inline', marginRight: 3 }} />
+                          {tag}
+                        </span>
+                      ))}
+                    </div>
+                  )}
                 </div>
-                <div className={styles.rowSide}>
+                <div style={{ display: 'flex', flexDirection: 'row', alignItems: 'center', gap: 10, flexShrink: 0 }}>
                   <span className={`${styles.pill} ${exp.is_published ? styles.pillGreen : styles.pillAmber}`}>
                     {exp.is_published
                       ? <CheckCircle2 size={11} style={{ display: 'inline', marginRight: 4 }} />
@@ -272,9 +297,11 @@ export default function ExperimentsPage() {
     const sid = searchParams.get('subject_id');
     if (sid && subjects.length > 0) {
       const match = subjects.find(s => s.subject_id === sid || s.id === sid);
-      if (match) setSelectedSubject(match);
+      if (match && selectedSubject?.id !== match.id) {
+        setSelectedSubject(match);
+      }
     }
-  }, [searchParams, subjects]);
+  }, [searchParams, subjects, selectedSubject]);
 
   const handleSelectSubject = (sub: SectionSubject) => {
     setSelectedSubject(sub);
