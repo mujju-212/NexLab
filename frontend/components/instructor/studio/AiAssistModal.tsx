@@ -193,6 +193,19 @@ export default function AiAssistModal({ experimentId, onClose, onBlocksAdded, on
     finally { setAddingKey(null); }
   };
 
+  const detectPackagesFromCode = (c: string): string => {
+    const pkgs: string[] = [];
+    if (/\bmatplotlib\b/.test(c)) pkgs.push('matplotlib');
+    if (/\bpandas\b/.test(c)) pkgs.push('pandas');
+    if (/\bnumpy\b/.test(c)) pkgs.push('numpy');
+    if (/\bscipy\b/.test(c)) pkgs.push('scipy');
+    if (/\bseaborn\b/.test(c)) pkgs.push('seaborn');
+    if (/\brequests\b/.test(c)) pkgs.push('requests');
+    if (/\bsklearn\b/.test(c)) pkgs.push('scikit-learn');
+    if (/\bsympy\b/.test(c)) pkgs.push('sympy');
+    return pkgs.join(', ');
+  };
+
   const addCodeSnippet = async (idx: number) => {
     const snippets = result?.code_snippets;
     if (!snippets) return;
@@ -208,6 +221,7 @@ export default function AiAssistModal({ experimentId, onClose, onBlocksAdded, on
           code: snippet.code,
           runnable: true,
           stdin: '',
+          packages: detectPackagesFromCode(snippet.code || ''),
           description: snippet.description || '',
         },
         page_id: null,
@@ -219,6 +233,36 @@ export default function AiAssistModal({ experimentId, onClose, onBlocksAdded, on
     finally { setAddingKey(null); }
   };
 
+  const addAssignTask = async (idx: number) => {
+    const snippets = result?.code_snippets;
+    if (!snippets) return;
+    const snippet = snippets[idx];
+    const key = `assign-${idx}`;
+    setAddingKey(key);
+    try {
+      await instructorService.addContentModule(experimentId, {
+        module_type: 'assign',
+        title: snippet.title ? `Task: ${snippet.title}` : 'Graded Coding Task',
+        content_data: {
+          language: snippet.language || language || 'python',
+          instructions: snippet.description || `Implement the solution according to the requirements for ${snippet.title || 'this task'}.`,
+          starter_code: snippet.code || `# Write your ${snippet.language || 'python'} solution here\n`,
+          packages: detectPackagesFromCode(snippet.code || ''),
+          pass_threshold: 60,
+          time_limit_sec: 5,
+          test_cases: [
+            { input: '', expected: 'Hello, World!', hidden: false, weight: 1 },
+          ],
+        },
+        page_id: null,
+      });
+      setAdded(a => ({ ...a, [key]: true }));
+      onBlocksAdded();
+      onToast?.('Graded task block added ✓');
+    } catch { onToast?.('Failed to add graded task block.'); }
+    finally { setAddingKey(null); }
+  };
+
   const addQuizQuestion = async (idx: number) => {
     const qs = result?.quiz_questions;
     if (!qs) return;
@@ -226,12 +270,26 @@ export default function AiAssistModal({ experimentId, onClose, onBlocksAdded, on
     const key = `quiz-${idx}`;
     setAddingKey(key);
     try {
-      await instructorService.addContentModule(experimentId, {
+      const res = await instructorService.addContentModule(experimentId, {
         module_type: 'quiz',
         title: `Quiz — AI Q${idx + 1}`,
-        content_data: { inline_questions: [q] },
+        content_data: { pass_threshold: 70, max_attempts: 3, cooldown_minutes: 0, shuffle: true, inline_questions: [q] },
         page_id: null,
       });
+      const modId = res?.module?.id;
+      if (modId) {
+        const letters = ['A', 'B', 'C', 'D'];
+        const corr = letters[q.correct_index] || 'A';
+        try {
+          await instructorService.addQuestions(modId, {
+            question_text: q.question,
+            options: q.options,
+            correct_answer: corr,
+            points: 1,
+            explanation: q.explanation || '',
+          });
+        } catch {}
+      }
       setAdded(a => ({ ...a, [key]: true }));
       onBlocksAdded();
       onToast?.('Quiz block added ✓');
@@ -245,12 +303,26 @@ export default function AiAssistModal({ experimentId, onClose, onBlocksAdded, on
     const key = 'quiz-all';
     setAddingKey(key);
     try {
-      await instructorService.addContentModule(experimentId, {
+      const res = await instructorService.addContentModule(experimentId, {
         module_type: 'quiz',
         title: 'AI-generated quiz',
-        content_data: { inline_questions: qs },
+        content_data: { pass_threshold: 70, max_attempts: 3, cooldown_minutes: 0, shuffle: true, inline_questions: qs },
         page_id: null,
       });
+      const modId = res?.module?.id;
+      if (modId) {
+        const letters = ['A', 'B', 'C', 'D'];
+        const questionsToAdd = qs.map(q => ({
+          question_text: q.question,
+          options: q.options,
+          correct_answer: letters[q.correct_index] || 'A',
+          points: 1,
+          explanation: q.explanation || '',
+        }));
+        try {
+          await instructorService.addQuestions(modId, questionsToAdd);
+        } catch {}
+      }
       const newAdded: Record<string, boolean> = {};
       qs.forEach((_, i) => { newAdded[`quiz-${i}`] = true; });
       newAdded['quiz-all'] = true;
@@ -324,8 +396,8 @@ export default function AiAssistModal({ experimentId, onClose, onBlocksAdded, on
     </button>
   );
 
-  const AddBtn = ({ loading: l, done, onClick, small }: {
-    loading: boolean; done: boolean; onClick: () => void; small?: boolean;
+  const AddBtn = ({ loading: l, done, onClick, small, label }: {
+    loading: boolean; done: boolean; onClick: () => void; small?: boolean; label?: string;
   }) => (
     <button
       className={small ? s.aiAddBtnSm : s.aiAddBtn}
@@ -336,7 +408,7 @@ export default function AiAssistModal({ experimentId, onClose, onBlocksAdded, on
         ? <><Check size={12} /> Added</>
         : l
           ? <><Loader2 size={12} className={s.spin} /> Adding…</>
-          : <><Plus size={12} /> Add block</>}
+          : <><Plus size={12} /> {label || 'Add block'}</>}
     </button>
   );
 
@@ -616,12 +688,22 @@ export default function AiAssistModal({ experimentId, onClose, onBlocksAdded, on
                             <div className={s.aiResultItemHead}>
                               <span className={s.aiResultItemTitle}>{snippet.title}</span>
                               <span className={s.aiLangTag}>{snippet.language}</span>
-                              <AddBtn
-                                small
-                                loading={addingKey === `code-${i}`}
-                                done={!!added[`code-${i}`]}
-                                onClick={() => addCodeSnippet(i)}
-                              />
+                              <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
+                                <AddBtn
+                                  small
+                                  loading={addingKey === `code-${i}`}
+                                  done={!!added[`code-${i}`]}
+                                  onClick={() => addCodeSnippet(i)}
+                                  label="Add Code"
+                                />
+                                <AddBtn
+                                  small
+                                  loading={addingKey === `assign-${i}`}
+                                  done={!!added[`assign-${i}`]}
+                                  onClick={() => addAssignTask(i)}
+                                  label="Add Graded Task"
+                                />
+                              </div>
                             </div>
                             {snippet.description && <p className={s.aiResultItemDesc}>{snippet.description}</p>}
                             <pre className={`${s.aiPre} ${s.aiPreCode}`}>{snippet.code}</pre>

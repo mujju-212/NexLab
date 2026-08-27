@@ -149,7 +149,31 @@ export default function ContentStudio({ experimentId, languages, onToast, onCoun
     pageId: string | null,
     updates: { title?: string; is_live?: boolean; release_at?: string | null },
   ) => {
-    if (pageId == null) return;
+    if (pageId == null) {
+      if (updates.title || updates.is_live !== undefined || updates.release_at !== undefined) {
+        try {
+          const defaultPage = pages.find(p => p.id === null);
+          const defaultTitle = defaultPage?.title === 'Default' ? 'Page 1' : (defaultPage?.title || 'Page 1');
+          const { page } = await instructorService.addPage(experimentId, {
+            title: updates.title || defaultTitle,
+            display_order: 0,
+            is_live: updates.is_live ?? defaultPage?.is_live ?? false,
+            release_at: updates.release_at !== undefined ? updates.release_at : (defaultPage?.release_at ?? null),
+          });
+          if (defaultPage && defaultPage.modules.length > 0) {
+            for (const mod of defaultPage.modules) {
+              await instructorService.updateContentModule(experimentId, mod.id, { page_id: page.id }).catch(() => {});
+            }
+          }
+          await load();
+          setActivePageId(page.id);
+        } catch {
+          onToast?.('Failed to update page.');
+        }
+      }
+      setPageRenameId(null);
+      return;
+    }
     const { page } = await instructorService.updatePage(experimentId, pageId, updates);
     setPages(ps => ps.map(p => p.id === pageId ? { ...p, ...page } : p));
     if ('title' in updates) setPageRenameId(null);
@@ -328,38 +352,42 @@ export default function ContentStudio({ experimentId, languages, onToast, onCoun
     <div className={s.pageTabs}>
       {pages.map((p, i) => {
         const badge = schedBadge(p);
-        const isSchedOpen = schedulePageId === p.id;
+        const pageKey = p.id ?? '__default__';
+        const isSchedOpen = schedulePageId === pageKey;
+        const isEditing = pageRenameId !== null && pageRenameId === pageKey;
+        const displayTitle = (p.id === null && p.title === 'Default') ? 'Page 1' : p.title;
+
         return (
-          <div key={p.id ?? '__default__'} className={`${s.pageTab} ${p.id === activePageId ? s.pageTabActive : ''}`}>
-            {pageRenameId === p.id ? (
+          <div key={pageKey} className={`${s.pageTab} ${p.id === activePageId ? s.pageTabActive : ''}`}>
+            {isEditing ? (
               <input
                 className={s.pageTabInput}
                 value={pageRenameTitle} autoFocus
                 onChange={e => setPageRenameTitle(e.target.value)}
-                onBlur={() => renamePage(p.id, pageRenameTitle.trim() || p.title)}
-                onKeyDown={e => { if (e.key === 'Enter') renamePage(p.id, pageRenameTitle.trim() || p.title); if (e.key === 'Escape') setPageRenameId(null); }}
+                onBlur={() => renamePage(p.id, pageRenameTitle.trim() || displayTitle)}
+                onKeyDown={e => { if (e.key === 'Enter') renamePage(p.id, pageRenameTitle.trim() || displayTitle); if (e.key === 'Escape') setPageRenameId(null); }}
               />
             ) : (
               <>
-                <button className={s.pageTabBtn} onClick={() => setActivePageId(p.id)} title={p.title}>
+                <button className={s.pageTabBtn} onClick={() => setActivePageId(p.id)} title={displayTitle}>
                   {/* Schedule status dot */}
                   {badge && (
                     <span className={`${s.schedDot} ${badge === 'live' ? s.schedDotLive : badge === 'scheduled' ? s.schedDotSched : s.schedDotHidden}`} />
                   )}
-                  {p.title} <span className={s.pageTabCount}>{p.modules.length}</span>
+                  {displayTitle} <span className={s.pageTabCount}>{p.modules.length}</span>
                 </button>
-                {p.id === activePageId && p.id !== null && (
+                {p.id === activePageId && (
                   <span className={s.pageTabTools}>
                     <button className={s.pageTabIcon} disabled={i === 0}
                       onClick={() => reorderPages(swap(pages, i, i - 1))} title="Move page left"><ChevronLeft size={13} /></button>
                     <button className={s.pageTabIcon} disabled={i === pages.length - 1}
                       onClick={() => reorderPages(swap(pages, i, i + 1))} title="Move page right"><ChevronRight size={13} /></button>
-                    <button className={s.pageTabIcon} onClick={() => { setPageRenameId(p.id); setPageRenameTitle(p.title); }} title="Rename page"><Edit2 size={12} /></button>
+                    <button className={s.pageTabIcon} onClick={() => { setPageRenameId(pageKey); setPageRenameTitle(displayTitle); }} title="Rename page"><Edit2 size={12} /></button>
                     {/* Scheduling chip */}
                     <div className={s.schedPopoverWrap}>
                       <button
                         className={`${s.pageTabIcon} ${isSchedOpen ? s.pageTabIconActive : ''}`}
-                        onClick={() => setSchedulePageId(isSchedOpen ? null : (p.id as string))}
+                        onClick={() => setSchedulePageId(isSchedOpen ? null : pageKey)}
                         title="Schedule page release"
                       >
                         <CalendarClock size={12} />
@@ -418,7 +446,9 @@ export default function ContentStudio({ experimentId, languages, onToast, onCoun
                         </div>
                       )}
                     </div>
-                    <button className={`${s.pageTabIcon} ${s.iconBtnDanger}`} onClick={() => deletePage(p.id)} title="Delete page"><Trash2 size={12} /></button>
+                    {p.id !== null && (
+                      <button className={`${s.pageTabIcon} ${s.iconBtnDanger}`} onClick={() => deletePage(p.id)} title="Delete page"><Trash2 size={12} /></button>
+                    )}
                   </span>
                 )}
               </>
@@ -449,14 +479,36 @@ export default function ContentStudio({ experimentId, languages, onToast, onCoun
       {preview ? (
         <div>
           <div className={s.pvNote}><Eye size={14} /> This is how students see the pre-lab content. Runnable code &amp; quizzes are interactive in their view.</div>
-          {totalBlocks === 0
-            ? <p className={shared.sectionSub}>Nothing to preview yet.</p>
-            : pages.map(p => (
-                <div key={p.id ?? '__default__'} className={s.pvPage}>
-                  {pages.length > 1 && <h4 className={s.pvPageTitle}>{p.title}</h4>}
-                  {p.modules.map(m => <CellPreview key={m.id} block={m} />)}
-                </div>
+          {pages.length > 1 && (
+            <div className={s.pageTabs} style={{ marginBottom: 16 }}>
+              {pages.map((p) => {
+                const pageKey = p.id ?? '__default__';
+                const displayTitle = (p.id === null && p.title === 'Default') ? 'Page 1' : p.title;
+                return (
+                  <button
+                    key={pageKey}
+                    className={`${s.pageTabBtn} ${p.id === activePageId ? s.pageTabActive : ''}`}
+                    onClick={() => setActivePageId(p.id)}
+                    style={{ padding: '6px 14px', borderRadius: 8, fontSize: 13, fontWeight: 600 }}
+                  >
+                    {displayTitle} <span className={s.pageTabCount}>{p.modules.length}</span>
+                  </button>
+                );
+              })}
+            </div>
+          )}
+
+          {totalBlocks === 0 ? (
+            <p className={shared.sectionSub}>Nothing to preview yet.</p>
+          ) : modules.length === 0 ? (
+            <p className={shared.sectionSub} style={{ marginTop: 12 }}>This page has no content blocks yet.</p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+              {modules.map(m => (
+                <CellPreview key={m.id} block={m} />
               ))}
+            </div>
+          )}
         </div>
       ) : (
         <>

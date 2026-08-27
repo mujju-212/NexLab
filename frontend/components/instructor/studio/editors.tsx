@@ -134,11 +134,76 @@ export function TextEditor({ data, onData }: EditorProps) {
   );
 }
 
+const COMMON_PACKAGES = ['matplotlib', 'pandas', 'numpy', 'scipy', 'requests', 'seaborn', 'scikit-learn', 'sympy'];
+
+function PackageSelector({
+  value,
+  onChange,
+}: {
+  value: string;
+  onChange: (next: string) => void;
+}) {
+  const currentList = value.split(',').map(s => s.trim()).filter(Boolean);
+
+  const togglePackage = (pkg: string) => {
+    if (currentList.includes(pkg)) {
+      const next = currentList.filter(p => p !== pkg).join(', ');
+      onChange(next);
+    } else {
+      const next = [...currentList, pkg].join(', ');
+      onChange(next);
+    }
+  };
+
+  return (
+    <div className={s.field} style={{ marginTop: 10 }}>
+      <span className={s.fieldLabel}>
+        Required Packages / Modules (optional, e.g. matplotlib, pandas)
+      </span>
+      <input
+        className={shared.input}
+        value={value}
+        placeholder="e.g. matplotlib, pandas, numpy"
+        onChange={e => onChange(e.target.value)}
+      />
+      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginTop: 6 }}>
+        <span style={{ fontSize: 11.5, color: 'var(--fg-muted, #94a3b8)', alignSelf: 'center', marginRight: 4 }}>
+          Quick add:
+        </span>
+        {COMMON_PACKAGES.map(pkg => {
+          const active = currentList.includes(pkg);
+          return (
+            <button
+              key={pkg}
+              type="button"
+              onClick={() => togglePackage(pkg)}
+              style={{
+                fontSize: 11,
+                padding: '2px 8px',
+                borderRadius: 12,
+                border: active ? '1px solid #8b5cf6' : '1px solid var(--border-glass, #334155)',
+                background: active ? 'rgba(139, 92, 246, 0.25)' : 'rgba(255, 255, 255, 0.05)',
+                color: active ? '#a78bfa' : 'var(--fg-muted, #94a3b8)',
+                cursor: 'pointer',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {active ? '✓ ' : '+ '}
+              {pkg}
+            </button>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
 // ── Code (runnable) ───────────────────────────────────────────────────────────
 export function CodeEditor({ data, onData, languages }: EditorProps) {
   const code = asString(data.code);
   const language = asString(data.language) || 'python';
   const stdin = asString(data.stdin);
+  const packages = asString(data.packages);
   const runnable = asBool(data.runnable, true);
 
   const [running, setRunning] = useState(false);
@@ -152,7 +217,7 @@ export function CodeEditor({ data, onData, languages }: EditorProps) {
   const run = async () => {
     setRunning(true); setRunErr(null); setResult(null);
     try {
-      setResult(await executionService.runPlayground({ code, language, stdin }));
+      setResult(await executionService.runPlayground({ code, language, stdin, packages }));
     } catch {
       setRunErr('Run failed — is the execution engine up?');
     } finally { setRunning(false); }
@@ -191,6 +256,10 @@ export function CodeEditor({ data, onData, languages }: EditorProps) {
 
       {runnable && (
         <>
+          <PackageSelector
+            value={packages}
+            onChange={next => onData({ ...data, packages: next })}
+          />
           <div className={s.field} style={{ marginTop: 10 }}>
             <span className={s.fieldLabel}>Stdin (optional — fed to the program on Run)</span>
             <textarea className={s.codeArea} style={{ minHeight: 54 }} value={stdin}
@@ -225,6 +294,20 @@ function RunOutput({ r }: { r: PlaygroundResult }) {
         {r.memory_kb != null && <span>{Math.round(r.memory_kb / 1024)} MB</span>}
       </div>
       <pre className={s.runPre}>{body || '(no output)'}</pre>
+      {r.images && r.images.length > 0 && (
+        <div style={{ marginTop: 10, padding: '10px 12px', background: '#0d0b14', borderRadius: 8, border: '1px solid #282438' }}>
+          <div style={{ fontSize: 11, fontWeight: 600, color: '#a78bfa', marginBottom: 8, textTransform: 'uppercase', letterSpacing: '0.5px' }}>
+            📊 Generated Visual Output ({r.images.length} plot{r.images.length > 1 ? 's' : ''})
+          </div>
+          <div style={{ display: 'flex', flexWrap: 'wrap', gap: 10 }}>
+            {r.images.map((img, idx) => (
+              <div key={idx} style={{ background: '#ffffff', borderRadius: 6, padding: 6, border: '1px solid #374151', maxWidth: '100%' }}>
+                <img src={img} alt={`Plot ${idx + 1}`} style={{ maxWidth: '100%', maxHeight: 350, borderRadius: 4, display: 'block' }} />
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
     </div>
   );
 }
@@ -560,6 +643,11 @@ export function AssignEditor({ data, onData, languages, experimentId }: EditorPr
             onChange={e => onData({ ...data, time_limit_sec: Number(e.target.value) })} />
         </div>
       </div>
+
+      <PackageSelector
+        value={asString(data.packages)}
+        onChange={next => onData({ ...data, packages: next })}
+      />
 
       <div className={s.field}>
         <span className={s.fieldLabel}>Instructions (shown to students)</span>
