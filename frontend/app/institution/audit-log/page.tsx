@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { institutionService, type AuditLog } from '@/services/institution.service';
-import { ShieldCheck, Filter } from 'lucide-react';
+import { ShieldCheck, Filter, Download } from 'lucide-react';
 import styles from '../dashboard/page.module.css';
 
 const ACTION_COLORS: Record<string, string> = {
@@ -20,11 +20,23 @@ export default function AuditLogPage() {
   const [loading, setLoading] = useState(true);
   const [days,    setDays]    = useState(30);
   const [action,  setAction]  = useState('');
+  const [from,    setFrom]    = useState('');
+  const [to,      setTo]      = useState('');
+  const [exporting, setExporting] = useState(false);
+  // True once the user has touched the date range — switches the backend off the
+  // rolling `days` window and onto explicit from/to bounds.
+  const [customRange, setCustomRange] = useState(false);
 
   const load = async () => {
     setLoading(true);
     try {
-      const page = await institutionService.getAuditLog({ days, action: action || undefined, limit: 200 });
+      const page = await institutionService.getAuditLog({
+        days: customRange ? undefined : days,
+        action: action || undefined,
+        limit: 200,
+        from: customRange ? from || undefined : undefined,
+        to: customRange ? to || undefined : undefined,
+      });
       setLogs(page.logs);
       setTotal(page.total);
       // Only refresh the action dropdown from the unfiltered response so the
@@ -35,7 +47,21 @@ export default function AuditLogPage() {
       setTotal(0);
     } finally { setLoading(false); }
   };
-  useEffect(() => { load(); }, [days, action]);
+  useEffect(() => { load(); }, [days, action, from, to, customRange]);
+
+  const exportCsv = async () => {
+    setExporting(true);
+    try {
+      await institutionService.exportAuditLog({
+        days: customRange ? undefined : days,
+        action: action || undefined,
+        from: customRange ? from || undefined : undefined,
+        to: customRange ? to || undefined : undefined,
+      });
+    } catch (e: any) {
+      alert(e?.response?.data?.error || 'Export failed — try again.');
+    } finally { setExporting(false); }
+  };
 
   const color = (a: string) => ACTION_COLORS[a] ?? ACTION_COLORS.default;
   const fmtAction = (a: string) => a.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
@@ -43,24 +69,48 @@ export default function AuditLogPage() {
   return (
     <InstitutionShell activePage="Audit Log" title="Audit Log" subtitle="Full history of admin actions in your institution.">
 
-      <div className={styles.toolbar}>
+      <div className={styles.toolbar} style={{ flexWrap: 'wrap', gap: 8 }}>
         <div style={{ display:'flex', alignItems:'center', gap:6, color:'#726a85', fontSize:13.5, fontWeight:600 }}>
           <Filter size={14} /> Filter:
         </div>
-        <select className={styles.filterSelect} value={days} onChange={e => setDays(Number(e.target.value))}>
+        <select className={styles.filterSelect} value={days}
+          onChange={e => { setCustomRange(false); setDays(Number(e.target.value)); }}>
           <option value={7}>Last 7 days</option>
           <option value={30}>Last 30 days</option>
           <option value={90}>Last 90 days</option>
         </select>
+        <span style={{ fontSize: 12.5, color: '#9891a6', fontWeight: 600 }}>or</span>
+        <input type="date" value={from} max={to || undefined} aria-label="From date"
+          onChange={e => { setCustomRange(true); setFrom(e.target.value); }}
+          style={{ border:'1px solid #e9d5ff', borderRadius:10, padding:'6px 10px', fontSize:12.5, color:'#201b2e', background:'#fff', fontFamily:"'Manrope',sans-serif" }} />
+        <span style={{ fontSize: 12.5, color: '#9891a6', fontWeight: 600 }}>→</span>
+        <input type="date" value={to} min={from || undefined} aria-label="To date"
+          onChange={e => { setCustomRange(true); setTo(e.target.value); }}
+          style={{ border:'1px solid #e9d5ff', borderRadius:10, padding:'6px 10px', fontSize:12.5, color:'#201b2e', background:'#fff', fontFamily:"'Manrope',sans-serif" }} />
         <select className={styles.filterSelect} value={action} onChange={e => setAction(e.target.value)}>
           <option value="">All Actions</option>
           {actions.map(a => <option key={a} value={a}>{fmtAction(a)}</option>)}
         </select>
-        {!loading && (
-          <span style={{ marginLeft: 'auto', fontSize: 12.5, color: '#9891a6', fontWeight: 600 }}>
-            {total} event{total === 1 ? '' : 's'}
-          </span>
-        )}
+        <div style={{ marginLeft: 'auto', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <button
+            onClick={exportCsv}
+            disabled={exporting}
+            style={{
+              display: 'flex', alignItems: 'center', gap: 7,
+              padding: '8px 14px', borderRadius: 10, border: 'none', cursor: 'pointer',
+              background: 'linear-gradient(135deg, #7c3aed, #9333ea)', color: '#fff',
+              fontSize: 12.5, fontWeight: 700, fontFamily: "'Manrope', sans-serif",
+              opacity: exporting ? .6 : 1,
+            }}>
+            <Download size={14} strokeWidth={2} />
+            {exporting ? 'Preparing…' : 'Export CSV'}
+          </button>
+          {!loading && (
+            <span style={{ fontSize: 12.5, color: '#9891a6', fontWeight: 600 }}>
+              {total} event{total === 1 ? '' : 's'}
+            </span>
+          )}
+        </div>
       </div>
 
       {loading ? (

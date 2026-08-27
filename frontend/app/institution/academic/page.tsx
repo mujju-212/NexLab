@@ -57,6 +57,13 @@ export default function AcademicPage() {
   const [editSubject, setEditSubject] = useState<any>(null);
   const [editDept, setEditDept] = useState<Department|null>(null);
 
+  // Expand/collapse accordion state
+  const [collapsedYears, setCollapsedYears] = useState<Record<string, boolean>>({});
+  const [collapsedBatches, setCollapsedBatches] = useState<Record<string, boolean>>({});
+
+  const toggleYear = (id: string) => setCollapsedYears(prev => ({ ...prev, [id]: !prev[id] }));
+  const toggleBatch = (id: string) => setCollapsedBatches(prev => ({ ...prev, [id]: !prev[id] }));
+
   const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
   const deleteEntity = async (type: string, id: string) => {
@@ -242,68 +249,88 @@ export default function AcademicPage() {
               <p>No academic years yet. Start by adding an academic year.</p>
               <button className={styles.btnPrimary} onClick={()=>setShowYearModal(true)}><Plus size={14}/> Add First Year</button>
             </div>
-           ) : years.map(yr => (
+           ) : years.map(yr => {
+            const isYearCollapsed = !!collapsedYears[yr.id];
+            const yearBatches = batches.filter(b=>b.year_id===yr.id);
+            return (
             <div key={yr.id} className={styles.treeCard} style={{ marginBottom:14 }}>
               {/* Year header */}
-              <div className={styles.treeItem} style={{ background:'rgba(245,243,255,0.6)', borderRadius:10, marginBottom:8 }}>
-                <ChevronDown size={15} style={{ color:'#9333ea' }}/>
+              <div className={styles.treeItem} style={{ background:'rgba(245,243,255,0.6)', borderRadius:10, marginBottom:8, cursor:'pointer' }} onClick={() => toggleYear(yr.id)}>
+                <button style={{ background:'none', border:'none', cursor:'pointer', padding:2, display:'flex', alignItems:'center' }} onClick={(e) => { e.stopPropagation(); toggleYear(yr.id); }}>
+                  {isYearCollapsed ? <ChevronRight size={15} style={{ color:'#9333ea' }}/> : <ChevronDown size={15} style={{ color:'#9333ea' }}/>}
+                </button>
                 <span className={styles.treeLabel} style={{ fontSize:15 }}>{yr.year_label}</span>
                 {yr.is_active && <span className={styles.badgeActive} style={{ fontSize:10 }}>Active</span>}
-                <span className={styles.treeCount}>{batches.filter(b=>b.year_id===yr.id).length} batches</span>
-                <button onClick={()=>{setEditYearId(yr.id);setEditYearLabel(yr.year_label);}} style={{ background:'none',border:'none',cursor:'pointer',color:'#9333ea',padding:4 }} title="Edit"><Edit3 size={13}/></button>
-                <button onClick={()=>deleteEntity('academic-years',yr.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#ef4444',padding:4 }} title="Delete"><Trash2 size={13}/></button>
+                <span className={styles.treeCount}>{yearBatches.length} batches</span>
+                <div style={{ marginLeft:'auto', display:'flex', gap:4, alignItems:'center' }} onClick={e => e.stopPropagation()}>
+                  <button onClick={()=>{setEditYearId(yr.id);setEditYearLabel(yr.year_label);}} style={{ background:'none',border:'none',cursor:'pointer',color:'#9333ea',padding:4 }} title="Edit"><Edit3 size={13}/></button>
+                  <button onClick={()=>deleteEntity('academic-years',yr.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#ef4444',padding:4 }} title="Delete"><Trash2 size={13}/></button>
+                </div>
               </div>
 
               {/* Batches under this year */}
-              {batches.filter(b=>b.year_id===yr.id).length === 0 ? (
-                <p style={{ fontSize:13, color:'#9891a6', padding:'4px 12px' }}>No batches — <button onClick={()=>setShowBatchModal(true)} style={{ background:'none', border:'none', color:'#9333ea', cursor:'pointer', fontWeight:700, fontSize:13 }}>Add one</button></p>
-              ) : batches.filter(b=>b.year_id===yr.id).map(batch => (
-                <div key={batch.id} style={{ marginLeft:16, marginBottom:8 }}>
-                  {/* Batch header */}
-                  <div className={styles.treeItem} style={{ background:'rgba(245,243,255,0.35)', borderRadius:9 }}>
-                    <ChevronRight size={13} style={{ color:'#c084fc' }}/>
-                    <span className={styles.treeLabel}>{batch.name}</span>
-                    {batch.program && <span style={{ fontSize:12, color:'#9891a6', fontStyle:'italic' }}>{batch.program}</span>}
-                    <span className={styles.treeCount}>{sections.filter(s=>s.batch_id===batch.id).length} sections</span>
-                    <button onClick={()=>setEditBatch(batch)} style={{ background:'none',border:'none',cursor:'pointer',color:'#9333ea',padding:4 }} title="Edit"><Edit3 size={12}/></button>
-                    <button onClick={()=>deleteEntity('batches',batch.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#ef4444',padding:4 }} title="Delete"><Trash2 size={12}/></button>
-                    <button className={styles.btnSecondary} style={{ padding:'3px 10px', fontSize:12, marginLeft:'auto' }}
-                      onClick={() => { setSectionForm(f=>({...f, batch_id:batch.id})); setShowSectionModal(true); }}>
-                      <Plus size={11}/> Section
-                    </button>
-                  </div>
-
-                  {/* Sections under batch */}
-                  <div style={{ marginLeft:20, marginTop:4, display:'flex', flexDirection:'column', gap:4 }}>
-                    {sections.filter(s=>s.batch_id===batch.id).map(sec=>(
-                      <div key={sec.id} className={styles.treeItem} style={{ background:'rgba(255,255,255,0.6)', borderRadius:8, flexWrap:'wrap', gap:6 }}>
-                        <div style={{ width:6, height:6, borderRadius:'50%', background:'#d8b4fe', flexShrink:0 }}/>
-                        <span style={{ fontSize:13.5, fontWeight:600, color:'#463f57' }}>{sec.name}</span>
-                        {/* Subject chips — populated from the bulk sectionSubjectsMap loaded in loadAll() */}
-                        {(sectionSubjectsMap[sec.id] ?? []).map(ss => (
-                          <span key={ss.id} style={{
-                            fontSize:11, fontWeight:600,
-                            background:'rgba(124,58,237,0.08)', color:'#7c3aed',
-                            borderRadius:6, padding:'2px 7px', whiteSpace:'nowrap',
-                          }}>
-                            {ss.subject_name}{ss.subject_code ? ` (${ss.subject_code})` : ''}
-                          </span>
-                        ))}
-                        <div style={{ marginLeft:'auto', display:'flex', gap:4, alignItems:'center' }}>
-                          <button onClick={()=>setEditSection(sec)} style={{ background:'none',border:'none',cursor:'pointer',color:'#9333ea',padding:4 }} title="Edit"><Edit3 size={12}/></button>
-                          <button onClick={()=>deleteEntity('sections',sec.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#ef4444',padding:4 }} title="Delete"><Trash2 size={12}/></button>
-                          <button onClick={() => { setSelectedSection(sec.id); setTab('enroll'); }}
-                            style={{ background:'rgba(124,58,237,0.08)', border:'none', borderRadius:7, padding:'3px 10px', fontSize:12, color:'#7c3aed', fontWeight:700, cursor:'pointer' }}>
-                            Manage →
-                          </button>
-                        </div>
+              {!isYearCollapsed && (
+                yearBatches.length === 0 ? (
+                  <p style={{ fontSize:13, color:'#9891a6', padding:'4px 12px' }}>No batches — <button onClick={()=>setShowBatchModal(true)} style={{ background:'none', border:'none', color:'#9333ea', cursor:'pointer', fontWeight:700, fontSize:13 }}>Add one</button></p>
+                ) : yearBatches.map(batch => {
+                  const isBatchCollapsed = !!collapsedBatches[batch.id];
+                  const batchSections = sections.filter(s=>s.batch_id===batch.id);
+                  return (
+                  <div key={batch.id} style={{ marginLeft:16, marginBottom:8 }}>
+                    {/* Batch header */}
+                    <div className={styles.treeItem} style={{ background:'rgba(245,243,255,0.35)', borderRadius:9, cursor:'pointer' }} onClick={() => toggleBatch(batch.id)}>
+                      <button style={{ background:'none', border:'none', cursor:'pointer', padding:2, display:'flex', alignItems:'center' }} onClick={(e) => { e.stopPropagation(); toggleBatch(batch.id); }}>
+                        {isBatchCollapsed ? <ChevronRight size={13} style={{ color:'#c084fc' }}/> : <ChevronDown size={13} style={{ color:'#c084fc' }}/>}
+                      </button>
+                      <span className={styles.treeLabel}>{batch.name}</span>
+                      {batch.program && <span style={{ fontSize:12, color:'#9891a6', fontStyle:'italic' }}>{batch.program}</span>}
+                      <span className={styles.treeCount}>{batchSections.length} sections</span>
+                      <div style={{ marginLeft:'auto', display:'flex', gap:4, alignItems:'center' }} onClick={e => e.stopPropagation()}>
+                        <button onClick={()=>setEditBatch(batch)} style={{ background:'none',border:'none',cursor:'pointer',color:'#9333ea',padding:4 }} title="Edit"><Edit3 size={12}/></button>
+                        <button onClick={()=>deleteEntity('batches',batch.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#ef4444',padding:4 }} title="Delete"><Trash2 size={12}/></button>
+                        <button className={styles.btnSecondary} style={{ padding:'3px 10px', fontSize:12 }}
+                          onClick={() => { setSectionForm(f=>({...f, batch_id:batch.id})); setShowSectionModal(true); }}>
+                          <Plus size={11}/> Section
+                        </button>
                       </div>
-                    ))}
+                    </div>
+
+                    {/* Sections under batch */}
+                    {!isBatchCollapsed && (
+                      <div style={{ marginLeft:20, marginTop:4, display:'flex', flexDirection:'column', gap:4 }}>
+                        {batchSections.map(sec=>(
+                          <div key={sec.id} className={styles.treeItem} style={{ background:'rgba(255,255,255,0.6)', borderRadius:8, flexWrap:'wrap', gap:6 }}>
+                            <div style={{ width:6, height:6, borderRadius:'50%', background:'#d8b4fe', flexShrink:0 }}/>
+                            <span style={{ fontSize:13.5, fontWeight:600, color:'#463f57' }}>{sec.name}</span>
+                            {/* Subject chips — populated from the bulk sectionSubjectsMap loaded in loadAll() */}
+                            {(sectionSubjectsMap[sec.id] ?? []).map((ss, ssIdx) => (
+                              <span key={ss.id ? `${ss.id}-${ssIdx}` : `ss-${ssIdx}`} style={{
+                                fontSize:11, fontWeight:600,
+                                background:'rgba(124,58,237,0.08)', color:'#7c3aed',
+                                borderRadius:6, padding:'2px 7px', whiteSpace:'nowrap',
+                              }}>
+                                {ss.subject_name}{ss.subject_code ? ` (${ss.subject_code})` : ''}
+                              </span>
+                            ))}
+                            <div style={{ marginLeft:'auto', display:'flex', gap:4, alignItems:'center' }}>
+                              <button onClick={()=>setEditSection(sec)} style={{ background:'none',border:'none',cursor:'pointer',color:'#9333ea',padding:4 }} title="Edit"><Edit3 size={12}/></button>
+                              <button onClick={()=>deleteEntity('sections',sec.id)} style={{ background:'none',border:'none',cursor:'pointer',color:'#ef4444',padding:4 }} title="Delete"><Trash2 size={12}/></button>
+                              <button onClick={() => { setSelectedSection(sec.id); setTab('enroll'); }}
+                                style={{ background:'rgba(124,58,237,0.08)', border:'none', borderRadius:7, padding:'3px 10px', fontSize:12, color:'#7c3aed', fontWeight:700, cursor:'pointer' }}>
+                                Manage →
+                              </button>
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    )}
                   </div>
-                </div>
-              ))}
+                  );
+                })
+              )}
             </div>
-          ))}
+            );
+          })}
         </>
       )}
 

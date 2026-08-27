@@ -4,20 +4,21 @@ import { useState, useEffect } from 'react';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { useAuthStore } from '@/store/auth-store';
 import { apiClient } from '@/services/api-client';
-import { institutionService, type PlanUsage } from '@/services/institution.service';
+import { institutionService, AI_FEATURES, type PlanUsage, type AIPolicy, type AIUsageSummary } from '@/services/institution.service';
 import {
   User, Bell, CreditCard, HelpCircle, Mail, Phone, Building2, Save,
   KeyRound, ChevronRight, Shield, Zap, Check, MessageSquare, AlertTriangle,
-  BookOpen, ExternalLink
+  BookOpen, ExternalLink, Cpu, RefreshCw, Download
 } from 'lucide-react';
 import styles from '../dashboard/page.module.css';
 
-type Tab = 'profile' | 'notifications' | 'plan' | 'help';
+type Tab = 'profile' | 'notifications' | 'plan' | 'ai' | 'help';
 
 const TABS: { id: Tab; label: string; Icon: any }[] = [
   { id: 'profile',       label: 'Profile & Security', Icon: User },
   { id: 'notifications', label: 'Notifications',      Icon: Bell },
   { id: 'plan',          label: 'Plan & Billing',     Icon: CreditCard },
+  { id: 'ai',            label: 'AI & Usage',         Icon: Cpu },
   { id: 'help',          label: 'Help & FAQ',         Icon: HelpCircle },
 ];
 
@@ -40,6 +41,27 @@ const UPGRADE_PLANS = [
   { key: 'pro',        name: 'Pro',        price: '₹4,999/mo', features: ['500 students', '50 instructors', 'Priority support', 'Custom environments', 'Advanced analytics'], highlight: true },
   { key: 'enterprise', name: 'Enterprise', price: 'Custom',    features: ['Unlimited students', 'Unlimited instructors', 'Dedicated support', 'SSO / SAML', 'On-premise option'], highlight: false },
 ];
+
+// Pill toggle switch — matches the notification-prefs style used elsewhere on this page.
+function Toggle({ on, onClick, disabled }: { on: boolean; onClick: () => void; disabled?: boolean }) {
+  return (
+    <button onClick={onClick} disabled={disabled}
+      style={{
+        width: 44, height: 24, borderRadius: 12, border: 'none', flexShrink: 0,
+        cursor: disabled ? 'not-allowed' : 'pointer', position: 'relative',
+        opacity: disabled ? 0.4 : 1,
+        background: on ? '#9333ea' : '#e5e7eb', transition: 'background .2s ease',
+      }}>
+      <span style={{
+        position: 'absolute', top: 2, width: 20, height: 20, borderRadius: '50%', background: '#fff',
+        boxShadow: '0 1px 3px rgba(0,0,0,0.15)', transition: 'left .2s ease',
+        left: on ? 22 : 2,
+      }} />
+    </button>
+  );
+}
+
+const fmtNum = (n: number | null | undefined) => (n == null ? '—' : n.toLocaleString());
 
 export default function SettingsPage() {
   const { user, setUser } = useAuthStore();
@@ -73,6 +95,13 @@ export default function SettingsPage() {
   // Plan & billing
   const [plan, setPlan] = useState<PlanUsage | null>(null);
 
+  // AI governance
+  const [aiPolicy, setAiPolicy] = useState<AIPolicy | null>(null);
+  const [aiUsage, setAiUsage] = useState<AIUsageSummary | null>(null);
+  const [aiSaving, setAiSaving] = useState(false);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiDirty, setAiDirty] = useState(false);
+
   const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
   // Load current profile (incl. phone), notification prefs, and plan usage on mount.
@@ -87,6 +116,76 @@ export default function SettingsPage() {
       try { setPlan(await institutionService.getPlanUsage()); } catch { /* plan card hides live values */ }
     })();
   }, []);
+
+  // Load AI policy + usage when the AI tab is active
+  useEffect(() => {
+    if (tab !== 'ai') return;
+    let cancelled = false;
+    setAiLoading(true);
+    (async () => {
+      try {
+        const [policy, usage] = await Promise.all([
+          institutionService.getAiPolicy(),
+          institutionService.getAiUsageSummary({ days: 30, limit: 5 }),
+        ]);
+        if (!cancelled) { setAiPolicy(policy); setAiUsage(usage); }
+      } catch (e) { console.error('[ai] load error', e); }
+      if (!cancelled) setAiLoading(false);
+    })();
+    return () => { cancelled = true; };
+  }, [tab]);
+
+  const handleAiToggle = (field: string, value: boolean) => {
+    if (!aiPolicy) return;
+    setAiPolicy({ ...aiPolicy, [field]: value });
+    setAiDirty(true);
+  };
+
+  const handleFeatureToggle = (key: string, value: boolean) => {
+    if (!aiPolicy) return;
+    setAiPolicy({
+      ...aiPolicy,
+      features_enabled: { ...aiPolicy.features_enabled, [key]: value },
+    });
+    setAiDirty(true);
+  };
+
+  const handleAiQuotaChange = (field: 'daily_token_quota' | 'per_student_daily_quota', raw: string) => {
+    if (!aiPolicy) return;
+    const parsed = raw === '' ? null : parseInt(raw, 10);
+    setAiPolicy({ ...aiPolicy, [field]: (parsed !== null && isNaN(parsed)) ? null : parsed });
+    setAiDirty(true);
+  };
+
+  const saveAiPolicy = async () => {
+    if (!aiPolicy) return;
+    setAiSaving(true);
+    try {
+      const updated = await institutionService.updateAiPolicy({
+        ai_enabled_global: aiPolicy.ai_enabled_global,
+        ai_enabled_students: aiPolicy.ai_enabled_students,
+        ai_enabled_instructors: aiPolicy.ai_enabled_instructors,
+        features_enabled: aiPolicy.features_enabled,
+        daily_token_quota: aiPolicy.daily_token_quota,
+        per_student_daily_quota: aiPolicy.per_student_daily_quota,
+        hard_stop: aiPolicy.hard_stop,
+      });
+      setAiPolicy(updated);
+      setAiDirty(false);
+      toast3('AI governance policy saved!');
+    } catch (e: any) {
+      toast3(e?.response?.data?.error ?? 'Failed to save AI policy.');
+    } finally { setAiSaving(false); }
+  };
+
+  const refreshAiUsage = async () => {
+    setAiLoading(true);
+    try {
+      const usage = await institutionService.getAiUsageSummary({ days: 30, limit: 5 });
+      setAiUsage(usage);
+    } catch { /* ignore */ }
+    setAiLoading(false);
+  };
 
   const saveProfile = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -386,6 +485,170 @@ export default function SettingsPage() {
         </div>
         );
       })()}
+
+      {/* ═══ AI & USAGE ═══ */}
+      {tab === 'ai' && (
+        <div style={{ maxWidth: 780 }}>
+          {aiLoading && !aiPolicy ? (
+            <div style={{ padding: 48, textAlign: 'center', color: '#9891a6' }}>Loading AI governance…</div>
+          ) : aiPolicy ? (
+            <>
+              {/* Master + role switches */}
+              <div style={{ background: 'rgba(255,255,255,0.78)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.9)', padding: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.05)', marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 20 }}>
+                  <div style={{ width: 36, height: 36, borderRadius: 10, background: '#faf5ff', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#9333ea' }}>
+                    <Cpu size={17} strokeWidth={1.8} />
+                  </div>
+                  <div>
+                    <p style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>AI Governance</p>
+                    <p style={{ margin: 0, fontSize: 12, color: '#9891a6' }}>Control which AI features are available across your institution</p>
+                  </div>
+                </div>
+
+                {/* Master */}
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 16px', borderRadius: 12, background: aiPolicy.ai_enabled_global ? 'rgba(147,51,234,0.05)' : 'rgba(239,68,68,0.05)', border: `1px solid ${aiPolicy.ai_enabled_global ? 'rgba(147,51,234,0.15)' : 'rgba(239,68,68,0.15)'}`, marginBottom: 8 }}>
+                  <div>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#201b2e' }}>AI Master Switch</p>
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#726a85' }}>
+                      {aiPolicy.ai_enabled_global ? 'All AI features are available (subject to per-role and per-feature settings below)' : 'All AI features are disabled institution-wide'}
+                    </p>
+                  </div>
+                  <Toggle on={aiPolicy.ai_enabled_global} onClick={() => handleAiToggle('ai_enabled_global', !aiPolicy.ai_enabled_global)} />
+                </div>
+
+                {/* Role toggles */}
+                {[
+                  { field: 'ai_enabled_students',    label: 'Students',    desc: 'Allow students to use AI features' },
+                  { field: 'ai_enabled_instructors', label: 'Instructors', desc: 'Allow instructors to use AI features' },
+                ].map(r => (
+                  <div key={r.field} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderBottom: '1px solid #f1f5f9' }}>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#201b2e' }}>{r.label}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: 12, color: '#9891a6' }}>{r.desc}</p>
+                    </div>
+                    <Toggle on={(aiPolicy as any)[r.field]} disabled={!aiPolicy.ai_enabled_global}
+                      onClick={() => handleAiToggle(r.field, !(aiPolicy as any)[r.field])} />
+                  </div>
+                ))}
+              </div>
+
+              {/* Per-feature switches */}
+              <div style={{ background: 'rgba(255,255,255,0.78)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.9)', padding: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.05)', marginBottom: 20 }}>
+                <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>Feature Controls</h3>
+                <p style={{ margin: '0 0 16px', fontSize: 13, color: '#9891a6' }}>Toggle individual AI capabilities on or off.</p>
+                {AI_FEATURES.map((f, i) => (
+                  <div key={f.key} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0', borderBottom: i < AI_FEATURES.length - 1 ? '1px solid #f1f5f9' : 'none' }}>
+                    <div>
+                      <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#201b2e' }}>{f.label}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: 12, color: '#9891a6' }}>{f.desc}</p>
+                    </div>
+                    <Toggle on={aiPolicy.features_enabled[f.key] ?? false} disabled={!aiPolicy.ai_enabled_global}
+                      onClick={() => handleFeatureToggle(f.key, !(aiPolicy.features_enabled[f.key] ?? false))} />
+                  </div>
+                ))}
+              </div>
+
+              {/* Quotas */}
+              <div style={{ background: 'rgba(255,255,255,0.78)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.9)', padding: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.05)', marginBottom: 20 }}>
+                <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>Token Quotas</h3>
+                <p style={{ margin: '0 0 16px', fontSize: 13, color: '#9891a6' }}>Daily token limits. Leave blank to inherit the platform default.</p>
+                <div className={styles.grid2} style={{ gap: 16 }}>
+                  <div className={styles.field}>
+                    <label className={styles.fieldLabel}>Institution daily quota (tokens)</label>
+                    <input className={styles.input} type="number" min={0} placeholder="Platform default"
+                      value={aiPolicy.daily_token_quota ?? ''}
+                      onChange={e => handleAiQuotaChange('daily_token_quota', e.target.value)} />
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.fieldLabel}>Per-student daily quota (tokens)</label>
+                    <input className={styles.input} type="number" min={0} placeholder="No per-student cap"
+                      value={aiPolicy.per_student_daily_quota ?? ''}
+                      onChange={e => handleAiQuotaChange('per_student_daily_quota', e.target.value)} />
+                  </div>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 0 0' }}>
+                  <div>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 600, color: '#201b2e' }}>Hard stop at quota</p>
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#9891a6' }}>
+                      {aiPolicy.hard_stop ? 'Block AI calls once the quota is reached' : 'Warn only — allow calls to continue past the quota'}
+                    </p>
+                  </div>
+                  <Toggle on={aiPolicy.hard_stop} onClick={() => handleAiToggle('hard_stop', !aiPolicy.hard_stop)} />
+                </div>
+              </div>
+
+              {/* Save bar */}
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 24 }}>
+                <button className={styles.btnPrimary} onClick={saveAiPolicy} disabled={!aiDirty || aiSaving}>
+                  <Save size={14} /> {aiSaving ? 'Saving…' : 'Save AI Policy'}
+                </button>
+                {aiDirty && <span style={{ fontSize: 13, color: '#eab308', fontWeight: 600 }}>Unsaved changes</span>}
+                {aiPolicy.updated_at && !aiDirty && (
+                  <span style={{ fontSize: 12, color: '#9891a6' }}>Last updated {new Date(aiPolicy.updated_at).toLocaleString()}</span>
+                )}
+              </div>
+
+              {/* ── Usage snapshot ── */}
+              <div style={{ background: 'rgba(255,255,255,0.78)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.9)', padding: 28, boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 18 }}>
+                  <div>
+                    <h3 style={{ margin: '0 0 4px', fontSize: 15, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>Usage — Last 30 Days</h3>
+                    <p style={{ margin: 0, fontSize: 12, color: '#9891a6' }}>Deeper per-user analysis lives in Analytics → AI Usage.</p>
+                  </div>
+                  <button onClick={refreshAiUsage}
+                    style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 8, background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.2)', color: '#9333ea', fontSize: 13, fontWeight: 600, cursor: 'pointer' }}>
+                    <RefreshCw size={13} style={aiLoading ? { animation: 'spin 1s linear infinite' } : {}} /> Refresh
+                  </button>
+                </div>
+                <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
+
+                <div className={styles.grid3} style={{ marginBottom: 20 }}>
+                  <div style={{ background: 'rgba(147,51,234,0.05)', borderRadius: 12, padding: '14px 16px', border: '1px solid rgba(147,51,234,0.12)' }}>
+                    <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#9891a6', textTransform: 'uppercase', letterSpacing: '.04em' }}>Total Calls</p>
+                    <p style={{ margin: '4px 0 0', fontSize: 22, fontWeight: 800, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>{fmtNum(aiUsage?.summary.calls)}</p>
+                  </div>
+                  <div style={{ background: 'rgba(147,51,234,0.05)', borderRadius: 12, padding: '14px 16px', border: '1px solid rgba(147,51,234,0.12)' }}>
+                    <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#9891a6', textTransform: 'uppercase', letterSpacing: '.04em' }}>Total Tokens</p>
+                    <p style={{ margin: '4px 0 0', fontSize: 22, fontWeight: 800, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>{fmtNum(aiUsage?.summary.tokens)}</p>
+                  </div>
+                  <div style={{ background: 'rgba(147,51,234,0.05)', borderRadius: 12, padding: '14px 16px', border: '1px solid rgba(147,51,234,0.12)' }}>
+                    <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#9891a6', textTransform: 'uppercase', letterSpacing: '.04em' }}>Est. Cost</p>
+                    <p style={{ margin: '4px 0 0', fontSize: 22, fontWeight: 800, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>${(aiUsage?.summary.cost_usd ?? 0).toFixed(4)}</p>
+                  </div>
+                </div>
+
+                {/* Per-feature bars */}
+                {aiUsage && Object.keys(aiUsage.summary.by_feature).length > 0 ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+                    {Object.entries(aiUsage.summary.by_feature)
+                      .sort((a, b) => b[1].tokens - a[1].tokens)
+                      .map(([feat, d]) => {
+                        const maxTok = Math.max(...Object.values(aiUsage.summary.by_feature).map(x => x.tokens), 1);
+                        const w = Math.round((d.tokens / maxTok) * 100);
+                        return (
+                          <div key={feat} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                            <span style={{ width: 130, fontSize: 13, fontWeight: 600, color: '#201b2e', textTransform: 'capitalize' }}>{feat.replace(/_/g, ' ')}</span>
+                            <div style={{ flex: 1, height: 8, background: '#f1f5f9', borderRadius: 4, overflow: 'hidden' }}>
+                              <div style={{ width: `${w}%`, height: '100%', background: 'linear-gradient(90deg,#9333ea,#c084fc)', borderRadius: 4 }} />
+                            </div>
+                            <span style={{ width: 70, textAlign: 'right', fontSize: 12, color: '#726a85', fontWeight: 600 }}>{d.calls} calls</span>
+                            <span style={{ width: 90, textAlign: 'right', fontSize: 12, color: '#9891a6' }}>{fmtNum(d.tokens)} tok</span>
+                          </div>
+                        );
+                      })}
+                  </div>
+                ) : (
+                  <p style={{ fontSize: 13, color: '#9891a6', textAlign: 'center', padding: 24 }}>No AI usage recorded in the last 30 days.</p>
+                )}
+              </div>
+            </>
+          ) : (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 24, color: '#ef4444' }}>
+              <AlertTriangle size={18} /> Could not load AI governance settings.
+            </div>
+          )}
+        </div>
+      )}
 
       {/* ═══ HELP & FAQ ═══ */}
       {tab === 'help' && (
