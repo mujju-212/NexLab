@@ -20,6 +20,9 @@ class Grade(db.Model):
     # Code quality component (from radon analysis)
     code_quality_grade  = db.Column(db.Float)       # 0-10 score from quality metrics
 
+    # Quiz grade component (populated on session end — D3)
+    quiz_grade          = db.Column(db.Float)       # 0-100
+
     graded_by           = db.Column(db.String(36), db.ForeignKey('users.id'))
     graded_at           = db.Column(db.DateTime)
     is_locked           = db.Column(db.Boolean, default=False)  # locked after student views
@@ -28,17 +31,21 @@ class Grade(db.Model):
     inline_comments     = db.relationship('InlineComment', backref='grade', lazy='dynamic')
 
     def calculate_final(self, rubric):
-        """Calculate final grade from components based on rubric weights"""
-        tc_score   = (self.auto_grade or 0)
-        lab_score  = (self.manual_grade or 0)
-        code_score = (self.code_quality_grade or 0)
-        viva_score = (self.viva_grade or 0)
+        """Calculate final grade from components based on rubric weights.
+        Final = code*w_tc + quiz*w_quiz + viva*w_viva + quality*w_quality + lab*w_lab - hint_deduction
+        """
+        tc_score    = (self.auto_grade or 0)
+        lab_score   = (self.manual_grade or 0)
+        code_score  = (self.code_quality_grade or 0)
+        viva_score  = (self.viva_grade or 0)
+        quiz_score  = (self.quiz_grade or 0)
 
         final = (
-            tc_score   * (rubric['test_cases'] / 100) +
-            lab_score  * (rubric['lab_report'] / 100) +
-            code_score * (rubric['code_quality'] / 100) +
-            viva_score * (rubric['viva'] / 100)
+            tc_score   * (rubric.get('test_cases', 0) / 100) +
+            lab_score  * (rubric.get('lab_report', 0) / 100) +
+            code_score * (rubric.get('code_quality', 0) / 100) +
+            viva_score * (rubric.get('viva', 0) / 100) +
+            quiz_score * (rubric.get('quiz', 0) / 100)
         )
         self.final_grade = max(0, final - (self.hint_deduction or 0))
         return self.final_grade
@@ -50,6 +57,7 @@ class Grade(db.Model):
             'manual_grade': self.manual_grade,
             'manual_feedback': self.manual_feedback,
             'viva_grade': self.viva_grade,
+            'quiz_grade': self.quiz_grade,
             'code_quality_grade': self.code_quality_grade,
             'hint_deduction': self.hint_deduction,
             'final_grade': self.final_grade,

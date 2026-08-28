@@ -27,11 +27,12 @@ class Experiment(db.Model):
     file_structure      = db.Column(db.JSON)
     # e.g. [{"name": "main.py", "role": "entry"}, {"name": "utils.py", "role": "helper"}]
 
-    # Grading rubric weights (must sum to 100)
+    # Grading rubric weights (must sum to 100; quiz_only experiments use rubric_quiz)
     rubric_test_cases   = db.Column(db.Integer, default=60)
     rubric_lab_report   = db.Column(db.Integer, default=20)
     rubric_code_quality = db.Column(db.Integer, default=10)
     rubric_viva         = db.Column(db.Integer, default=10)
+    rubric_quiz         = db.Column(db.Integer, default=0)   # quiz component weight (P0 §2.6)
 
     enable_viva         = db.Column(db.Boolean, default=False)
     enable_lockdown     = db.Column(db.Boolean, default=False)  # full browser lockdown
@@ -46,6 +47,12 @@ class Experiment(db.Model):
     is_published        = db.Column(db.Boolean, default=False)
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at          = db.Column(db.DateTime, onupdate=datetime.utcnow)
+
+    # ── Experiment type (D6): coding | quiz_only | mixed | reading ─────────────
+    experiment_type     = db.Column(db.String(20), default='coding')
+
+    # ── Proctor defaults (JSON of 6 toggles matching ProctorPolicy columns) ────
+    proctor_defaults    = db.Column(db.JSON, default=dict)
 
     # Phase-2 grading rollup fields
     # weightage  — how many marks this experiment contributes toward Subject.total_marks
@@ -67,13 +74,17 @@ class Experiment(db.Model):
         # Rule 2: difficulty_level must be 1-4
         if self.difficulty_level not in (1, 2, 3, 4):
             errors.append(f'difficulty_level must be 1, 2, 3, or 4 — got {self.difficulty_level}')
-        # Rule 3: rubric weights must sum to 100
-        rubric_sum = (self.rubric_test_cases + self.rubric_lab_report +
-                      self.rubric_code_quality + self.rubric_viva)
+        # Rule 3: rubric weights (including quiz) must sum to 100
+        rubric_sum = (
+            (self.rubric_test_cases or 0) + (self.rubric_lab_report or 0) +
+            (self.rubric_code_quality or 0) + (self.rubric_viva or 0) + (self.rubric_quiz or 0)
+        )
         if rubric_sum != 100:
-            errors.append(f'Rubric weights must sum to 100 — got {rubric_sum} '
-                          f'(test_cases={self.rubric_test_cases}, lab_report={self.rubric_lab_report}, '
-                          f'code_quality={self.rubric_code_quality}, viva={self.rubric_viva})')
+            errors.append(
+                f'Rubric weights must sum to 100 — got {rubric_sum} '
+                f'(test_cases={self.rubric_test_cases}, lab_report={self.rubric_lab_report}, '
+                f'code_quality={self.rubric_code_quality}, viva={self.rubric_viva}, quiz={self.rubric_quiz or 0})'
+            )
         return errors
 
     def to_dict(self):
@@ -97,14 +108,20 @@ class Experiment(db.Model):
             'is_published': self.is_published,
             'weightage': self.weightage,
             'grade_scale': self.grade_scale,
+            'experiment_type': self.experiment_type or 'coding',
+            'proctor_defaults': self.proctor_defaults or {},
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'rubric': {
                 'test_cases':   self.rubric_test_cases,
                 'lab_report':   self.rubric_lab_report,
                 'code_quality': self.rubric_code_quality,
                 'viva':         self.rubric_viva,
-                'sum':          self.rubric_test_cases + self.rubric_lab_report +
-                                self.rubric_code_quality + self.rubric_viva,
+                'quiz':         self.rubric_quiz or 0,
+                'sum': (
+                    (self.rubric_test_cases or 0) + (self.rubric_lab_report or 0) +
+                    (self.rubric_code_quality or 0) + (self.rubric_viva or 0) +
+                    (self.rubric_quiz or 0)
+                ),
             },
         }
 

@@ -29,6 +29,11 @@ class LabSession(db.Model):
     status                  = db.Column(db.String(20), default='scheduled')
     # status: scheduled | active | ended | cancelled
 
+    # ── Session mode machine (D1) ──────────────────────────────────────────────
+    # briefing | working | quiz_active | paused | debrief | ended
+    current_mode            = db.Column(db.String(20), default='briefing')
+    live_page_state_id      = db.Column(db.String(36), nullable=True)  # FK set after LivePageState created
+
     jitsi_room_name         = db.Column(db.Text)
     started_at              = db.Column(db.DateTime)
     ended_at                = db.Column(db.DateTime)
@@ -50,6 +55,7 @@ class LabSession(db.Model):
             'catchup_enabled': self.catchup_enabled,
             'catchup_deadline': self.catchup_deadline.isoformat() if self.catchup_deadline else None,
             'status': self.status,
+            'current_mode': self.current_mode or 'briefing',
             'jitsi_room_name': self.jitsi_room_name,
             'started_at': self.started_at.isoformat() if self.started_at else None,
             'ended_at': self.ended_at.isoformat() if self.ended_at else None,
