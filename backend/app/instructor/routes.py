@@ -526,6 +526,15 @@ def start_session(session_id):
 
     session.status     = 'active'
     session.started_at = datetime.utcnow()
+    # Session mode machine (D1) — starts in briefing
+    session.current_mode = session.current_mode or 'briefing'
+    # Ensure LivePageState exists for pacing
+    from app.models.conductor import LivePageState
+    if not LivePageState.query.filter_by(session_id=session_id).first():
+        lps = LivePageState(session_id=session_id, updated_by=g.user_id)
+        db.session.add(lps)
+        db.session.flush()
+        session.live_page_state_id = lps.id
     db.session.commit()
 
     # Create LiveKit room and generate instructor JWT token
@@ -561,9 +570,16 @@ def end_session(session_id):
     ).first_or_404()
     session.status   = 'ended'
     session.ended_at = datetime.utcnow()
+    session.current_mode = 'ended'   # D1 terminal mode
 
     # Finalize attendance statuses
     _finalize_attendance(session_id)
+
+    # Finalize grades (D3) — best-attempt quiz grade + final blend
+    try:
+        _finalize_session_grades(session_id, session.experiment_id)
+    except Exception:
+        db.session.rollback()
 
     db.session.commit()
 
@@ -573,8 +589,80 @@ def end_session(session_id):
         'session_id': session_id,
         'message': 'Session has ended. Please submit if you have not already.'
     }, room=f"session_{session_id}_students")
+    socketio.emit('session_mode_changed', {
+        'mode': 'ended',
+        'rules': {'code': 'read_only', 'quiz': 'locked', 'submit': False, 'proctor': 'off', 'label': 'Ended'},
+    }, room=f"session_{session_id}_students")
 
     return jsonify({'status': 'ended'}), 200
+
+
+def _finalize_session_grades(session_id, experiment_id):
+    """Recompute grades for all students in a session (D3). Reuses the
+    conductor finalize logic without requiring a route request context."""
+    if not experiment_id:
+        return
+    from app.models.grading import Grade
+    from app.models.experiment import ContentModule, ContentProgress
+    from app.models.conductor import LivePageState
+
+    exp = Experiment.query.get(experiment_id)
+    if not exp:
+        return
+
+    rubric = {
+        'test_cases':   exp.rubric_test_cases or 0,
+        'lab_report':   exp.rubric_lab_report or 0,
+        'code_quality': exp.rubric_code_quality or 0,
+        'viva':         exp.rubric_viva or 0,
+        'quiz':         exp.rubric_quiz or 0,
+    }
+
+    attempts = CodeAttempt.query.filter(
+        CodeAttempt.session_id == session_id,
+        CodeAttempt.experiment_id == experiment_id,
+    ).all()
+    student_ids = {a.student_id for a in attempts}
+    att_rows = SessionAttendance.query.filter_by(session_id=session_id).all()
+    student_ids |= {a.student_id for a in att_rows if a.status != 'absent'}
+
+    quiz_modules = ContentModule.query.filter_by(
+        experiment_id=experiment_id, module_type='quiz').all()
+
+    for sid in student_ids:
+        finals = [a for a in attempts if a.student_id == sid and a.is_final_submission]
+        best_auto = None
+        if finals:
+            best_auto = max(
+                (a.test_cases_passed / a.test_cases_total * 100 if a.test_cases_total else 0)
+                for a in finals
+            )
+        quality_scores = [a.quality_grade for a in finals if a.quality_grade]
+        quality_score = None
+        if quality_scores:
+            grade_map = {'A': 10, 'B': 8, 'C': 6, 'D': 4, 'E': 2, 'F': 0}
+            quality_score = max(grade_map.get(q, 0) for q in quality_scores)
+
+        quiz_scores = []
+        for qm in quiz_modules:
+            cp = ContentProgress.query.filter_by(student_id=sid, module_id=qm.id).first()
+            if cp and cp.score is not None:
+                quiz_scores.append(cp.score)
+        quiz_grade = round(sum(quiz_scores) / len(quiz_scores), 2) if quiz_scores else None
+
+        grade = Grade.query.filter_by(
+            student_id=sid, experiment_id=experiment_id, session_id=session_id).first()
+        if not grade:
+            grade = Grade(student_id=sid, experiment_id=experiment_id, session_id=session_id)
+            db.session.add(grade)
+        if best_auto is not None:
+            grade.auto_grade = round(best_auto, 2)
+        if quality_score is not None:
+            grade.code_quality_grade = quality_score
+        grade.quiz_grade = quiz_grade
+        if not grade.graded_at:
+            grade.graded_at = datetime.utcnow()
+        grade.calculate_final(rubric)
 
 
 def _finalize_attendance(session_id):
