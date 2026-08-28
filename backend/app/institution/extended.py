@@ -2017,7 +2017,7 @@ def analytics_engagement():
         SectionSubject.id,
     ).join(
         SectionSubject,
-        SectionStudent.section_subject_id == SectionSubject.id,
+        SectionStudent.section_id == SectionSubject.section_id,
     ).filter(
         SectionSubject.institution_id == g.institution_id,
         SectionStudent.student_id.in_(list(all_ids)),
@@ -2082,7 +2082,7 @@ def analytics_instructors():
 
     Optional: ?days=N (default 60) / ?from=YYYY-MM-DD&to=YYYY-MM-DD
     """
-    from app.models.academic import SectionSubject, SessionAttendance as _SA
+    from app.models.academic import SectionSubject
     from app.models.session  import SessionAttendance
     from app.models.grading  import Grade
     from app.models.knowledge import FocusScore
@@ -2137,7 +2137,6 @@ def analytics_instructors():
             SessionAttendance.session_id.in_(sess_ids)).all()
         grade_rows    = Grade.query.filter(
             Grade.session_id.in_(sess_ids),
-            Grade.grade_type == 'final',
         ).all()
         focus_rows    = FocusScore.query.filter(
             FocusScore.session_id.in_(sess_ids)).all()
@@ -2179,12 +2178,12 @@ def analytics_instructors():
             present  = sum(1 for r in rows if r.status in PRESENT_STATUSES)
             att_rates.append(present / total * 100 if total else 0)
 
-        # Grades
+        # Grades (final_grade is the blended percentage)
         grade_scores = [
-            r.percentage
+            r.final_grade
             for sess in my_sessions
             for r in grade_by_sess[sess.id]
-            if r.percentage is not None
+            if r.final_grade is not None
         ]
 
         # Focus
@@ -2197,10 +2196,10 @@ def analytics_instructors():
 
         # Feedback ratings
         feedback_vals = [
-            r.rating
+            r.overall_rating
             for sess in my_sessions
             for r in feed_by_sess[sess.id]
-            if r.rating is not None
+            if r.overall_rating is not None
         ]
 
         result.append({
