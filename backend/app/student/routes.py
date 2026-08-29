@@ -84,12 +84,48 @@ def get_prelab_content(experiment_id):
 
     # Only expose pages that are currently visible to students
     visible_pages = [p for p in all_pages if p.is_visible_to_students()]
+
+    # ── C15 — launched-quiz whitelist (D-QuizFetch) ─────────────────────────
+    # If the instructor launched an unpublished quiz live for this experiment,
+    # that quiz module (and its page) is accessible to students even though
+    # is_live=False / release_at is in the future. Resolve the student's active
+    # session for this experiment, then check its LivePageState.
+    launched_quiz_module_id = None
+    launched_page_id = None
+    my_sections = [e.section_id for e in SectionStudent.query.filter_by(student_id=g.user_id).all()]
+    active_session = None
+    if my_sections:
+        active_session = LabSession.query.join(
+            SectionSubject, SectionSubject.id == LabSession.section_subject_id
+        ).filter(
+            SectionSubject.section_id.in_(my_sections),
+            LabSession.experiment_id == experiment_id,
+            LabSession.status == 'active',
+        ).order_by(LabSession.started_at.desc()).first()
+    if active_session:
+        from app.models.conductor import LivePageState
+        lps = LivePageState.query.filter_by(session_id=active_session.id).first()
+        if lps and lps.launched_quiz_module_id:
+            launched_quiz_module_id = lps.launched_quiz_module_id
+            quiz_mod = ContentModule.query.get(launched_quiz_module_id)
+            if quiz_mod and quiz_mod.experiment_id == experiment_id:
+                launched_page_id = quiz_mod.page_id
+
+    # Force-include the launched quiz's page (and any page holding it) so the
+    # whitelisted module is not hidden behind a not-yet-live page.
+    if launched_page_id:
+        lp = next((p for p in all_pages if p.id == launched_page_id), None)
+        if lp and lp.id not in [p.id for p in visible_pages]:
+            visible_pages.append(lp)
+
     visible_page_ids = {p.id for p in visible_pages}
 
     result = []
     for module in modules:
-        # Skip modules whose page is not yet released
-        if module.page_id is not None and module.page_id not in visible_page_ids:
+        # Skip modules whose page is not yet released (unless it's the launched quiz)
+        if module.id == launched_quiz_module_id:
+            pass   # whitelisted — always expose
+        elif module.page_id is not None and module.page_id not in visible_page_ids:
             continue
 
         # Get student's progress on this module
@@ -644,13 +680,38 @@ def submit_assignment(module_id):
     """
     from app.execution.routes import _run_docker
     from app.execution.languages import resolve as resolve_language
+    from app.models.experiment import TestCase
+    from app.models.conductor import TestCaseResult
 
     module = ContentModule.query.get_or_404(module_id)
     if module.module_type != 'assign':
         return jsonify({'error': 'This module is not a graded assignment.'}), 400
 
     cfg = module.content_data or {}
-    test_cases = cfg.get('test_cases') or []
+    # Prefer the experiment's official TestCase table rows (the SPARK/checkpoint
+    # source of truth — D4). Fall back to embedded content_data test cases when
+    # the experiment has none (pre-existing modules).
+    exp = Experiment.query.get(module.experiment_id)
+    official_cases = []
+    if exp:
+        official_cases = TestCase.query.filter_by(experiment_id=exp.id).all()
+
+    if official_cases:
+        # Build the test list from the test_cases table (has id, visible/hidden)
+        test_cases = []
+        for tc in official_cases:
+            if tc.is_hidden:
+                test_cases.append({'input': tc.input_data or '', 'expected': tc.expected_output or '',
+                                   'hidden': True, 'weight': tc.points_weight or 1, 'tc_id': tc.id})
+            else:
+                test_cases.append({'input': tc.input_data or '', 'expected': tc.expected_output or '',
+                                   'hidden': False, 'weight': tc.points_weight or 1, 'tc_id': tc.id, 'description': tc.description})
+    else:
+        # Fall back to embedded content_data test cases (no table rows)
+        test_cases = cfg.get('test_cases') or []
+        for tc in test_cases:
+            tc['tc_id'] = None
+
     if not test_cases:
         return jsonify({'error': 'This assignment has no test cases yet.'}), 400
 
@@ -690,7 +751,8 @@ def submit_assignment(module_id):
             earned += weight
             passed_count += 1
         hidden = bool(tc.get('hidden'))
-        row = {'index': i, 'passed': ok, 'hidden': hidden}
+        row = {'index': i, 'passed': ok, 'hidden': hidden, 'test_case_id': tc.get('tc_id'),
+               '_ms': int(result.get('time_ms') or 0)}
         if not hidden:
             row.update({
                 'input': stdin,
@@ -708,9 +770,9 @@ def submit_assignment(module_id):
         student_id=g.user_id, module_id=module_id
     ).first()
     if not progress:
-        progress = ContentProgress(student_id=g.user_id, module_id=module_id)
+        progress = ContentProgress(student_id=g.user_id, module_id=module_id, attempts=0, score=0.0)
         db.session.add(progress)
-    progress.attempts += 1
+    progress.attempts = (progress.attempts or 0) + 1
     progress.last_attempt_at = datetime.utcnow()
     best = max(progress.score or 0, score)
     progress.score = best
@@ -720,13 +782,27 @@ def submit_assignment(module_id):
         progress.completed_at = datetime.utcnow()
 
     # ── Record the attempt (analytics parity with /execution/run) ─────────
+    # Bind to the student's ACTIVE live session for this experiment (Fix 3) so
+    # the SPARK grid attempt count and session-end grade finalization can find
+    # it. Fall back to None when no live session is running (prelab solo work).
+    active_session = None
+    my_sections = [e.section_id for e in SectionStudent.query.filter_by(student_id=g.user_id).all()]
+    if my_sections:
+        active_session = LabSession.query.join(
+            SectionSubject, SectionSubject.id == LabSession.section_subject_id
+        ).filter(
+            SectionSubject.section_id.in_(my_sections),
+            LabSession.experiment_id == module.experiment_id,
+            LabSession.status == 'active',
+        ).order_by(LabSession.started_at.desc()).first()
+
     attempt_count = CodeAttempt.query.filter_by(
         student_id=g.user_id, experiment_id=module.experiment_id
     ).count()
-    db.session.add(CodeAttempt(
+    attempt = CodeAttempt(
         student_id=g.user_id,
         experiment_id=module.experiment_id,
-        session_id=None,                       # Phase 3 binds to the live session
+        session_id=active_session.id if active_session else None,
         attempt_number=attempt_count + 1,
         language=language,
         files={'main': code},
@@ -735,7 +811,40 @@ def submit_assignment(module_id):
         test_cases_passed=passed_count,
         test_cases_total=len(test_cases),
         is_final_submission=True,
-    ))
+    )
+    db.session.add(attempt)
+    db.session.flush()
+
+    # ── Per-test-case results (B12) — feeds the analytics failure heatmap ──
+    for row in results:
+        if row.get('test_case_id'):
+            db.session.add(TestCaseResult(
+                attempt_id=attempt.id,
+                test_case_id=row['test_case_id'],
+                passed=row['passed'],
+                execution_time_ms=int((row.get('_ms') or 0)),
+            ))
+
+    # ── Auto-verify checkpoints (C16 / Fix 3) — when a live session is bound ──
+    if active_session:
+        from app.models.conductor import CheckpointProgress, Checkpoint
+        passed_ids = {r['test_case_id'] for r in results if r.get('passed') and r.get('test_case_id')}
+        if passed_ids:
+            cps = Checkpoint.query.filter_by(experiment_id=module.experiment_id).all()
+            for cp in cps:
+                mapped = set(cp.test_case_ids or [])
+                if mapped and mapped.issubset(passed_ids):
+                    prog = CheckpointProgress.query.filter_by(
+                        session_id=active_session.id, student_id=g.user_id, checkpoint_id=cp.id).first()
+                    if not prog:
+                        prog = CheckpointProgress(
+                            session_id=active_session.id, student_id=g.user_id, checkpoint_id=cp.id)
+                        db.session.add(prog)
+                    if prog.status in ('pending', 'claimed', 'failed'):
+                        prog.status = 'verified'
+                        prog.passed_at = datetime.utcnow()
+                        prog.last_signal_at = datetime.utcnow()
+
     db.session.commit()
 
     return jsonify({
@@ -832,9 +941,9 @@ def submit_viva(module_id):
         student_id=g.user_id, module_id=module_id
     ).first()
     if not progress:
-        progress = ContentProgress(student_id=g.user_id, module_id=module_id)
+        progress = ContentProgress(student_id=g.user_id, module_id=module_id, attempts=0, score=0.0)
         db.session.add(progress)
-    progress.attempts += 1
+    progress.attempts = (progress.attempts or 0) + 1
     progress.last_attempt_at = datetime.utcnow()
     best = max(progress.score or 0, score)
     progress.score = best
