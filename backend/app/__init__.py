@@ -45,6 +45,9 @@ def create_app(config_name=None):
     from app.instructor.content import content_bp
     from app.instructor.simulation import simulation_bp
     from app.instructor.attendance import attendance_bp
+    from app.instructor.analytics import analytics_bp
+    from app.instructor.conductor import conductor_bp
+    from app.instructor.features import features_bp
     from app.student.routes import student_bp
     from app.execution.routes import execution_bp
     from app.ai.routes import ai_bp
@@ -62,6 +65,9 @@ def create_app(config_name=None):
     app.register_blueprint(content_bp,         url_prefix='/api/instructor')
     app.register_blueprint(simulation_bp,      url_prefix='/api/instructor')
     app.register_blueprint(attendance_bp,      url_prefix='/api/instructor')
+    app.register_blueprint(analytics_bp,       url_prefix='/api/instructor/analytics')
+    app.register_blueprint(conductor_bp,       url_prefix='/api/instructor')
+    app.register_blueprint(features_bp,        url_prefix='/api/instructor')
     app.register_blueprint(student_bp,         url_prefix='/api/student')
     app.register_blueprint(execution_bp,       url_prefix='/api/execution')
     app.register_blueprint(ai_bp,              url_prefix='/api/ai')

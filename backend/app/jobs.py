@@ -38,6 +38,15 @@ def start():
         replace_existing=True
     )
 
+    # Job 2b: Fire timer_expired for LivePageState page timers (C20)
+    scheduler.add_job(
+        func=_fire_expired_page_timers,
+        trigger='interval',
+        seconds=15,
+        id='expired_page_timers',
+        replace_existing=True
+    )
+
     # Job 3: Daily cleanup of temp files older than 24h
     scheduler.add_job(
         func=_cleanup_temp_files,
@@ -114,6 +123,70 @@ def _auto_end_expired_sessions():
                     _trigger_post_session_jobs(session)
 
         db.session.commit()
+
+
+def _fire_expired_page_timers():
+    """C20 — when a LivePageState page timer expires, emit `timer_expired` to
+    the instructor room with checkpoint stats (D15: instructor-only signal,
+    no automatic student-side action). Clears the timer so it fires once."""
+    from datetime import datetime
+    with scheduler.app.app_context():
+        from app.models.conductor import LivePageState, CheckpointProgress
+        from app.models.session import LabSession
+        from app.extensions import db, socketio
+
+        now = datetime.utcnow()
+        expired = LivePageState.query.filter(
+            LivePageState.page_timer_ends_at.isnot(None),
+            LivePageState.page_timer_ends_at <= now,
+        ).all()
+
+        for lps in expired:
+            sess = LabSession.query.get(lps.session_id)
+            if not sess or sess.status != 'active':
+                # session not live — just clear the stale timer
+                lps.page_timer_ends_at = None
+                continue
+
+            page_id = lps.current_page_id
+            # Stats: how many students have passed the current page's checkpoint(s)
+            try:
+                from app.models.conductor import Checkpoint
+                cps = Checkpoint.query.filter_by(page_id=page_id).all() if page_id else []
+                passed = 0
+                total = 0
+                if cps:
+                    cp_ids = [c.id for c in cps]
+                    rows = (db.session.query(CheckpointProgress.status)
+                            .filter(
+                                CheckpointProgress.session_id == sess.id,
+                                CheckpointProgress.checkpoint_id.in_(cp_ids),
+                                CheckpointProgress.status.in_(['verified', 'manual_pass']),
+                            ).all())
+                    passed = len(rows)
+                    from app.models.academic import SectionStudent, SectionSubject
+                    ss = SectionSubject.query.get(sess.section_subject_id)
+                    total = SectionStudent.query.filter_by(section_id=ss.section_id).count() if ss else 0
+            except Exception:
+                passed, total = 0, 0
+
+            try:
+                socketio.emit('timer_expired', {
+                    'session_id': sess.id,
+                    'page_id': page_id,
+                    'page_title': 'Current page',
+                    'passed_count': passed,
+                    'total_count': total,
+                    'timestamp': now.isoformat(),
+                }, room=f"session_{sess.id}_instructor")
+            except Exception:
+                pass
+
+            # Clear the fired timer (one-shot)
+            lps.page_timer_ends_at = None
+
+        if expired:
+            db.session.commit()
 
 
 def _trigger_post_session_jobs(session):
