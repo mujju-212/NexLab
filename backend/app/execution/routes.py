@@ -19,7 +19,7 @@ MAX_STDIN_CHARS = 20_000
 
 
 # ── Shared Docker execution path ──────────────────────────────────────────────
-def _run_docker(code: str, lang_id: str, stdin: str, user_id, packages=None):
+def _run_docker(code: str, lang_id: str, stdin: str, user_id, packages=None, extra_files=None):
     """
     Execute code in the Docker sandbox under admission control.
 
@@ -35,7 +35,7 @@ def _run_docker(code: str, lang_id: str, stdin: str, user_id, packages=None):
     from app.exec_engine import admission as _adm
     try:
         with _adm.get().acquire(user_id):
-            result = _runner.run(code=code, language=lang_id, stdin=stdin, packages=packages)
+            result = _runner.run(code=code, language=lang_id, stdin=stdin, packages=packages, extra_files=extra_files)
     except _adm.AdmissionError as exc:
         resp = jsonify({'error': str(exc)})
         resp.headers['Retry-After'] = str(exc.retry_after)
@@ -74,7 +74,7 @@ def run_code():
     primary_code = code_files.get('main', next(iter(code_files.values()), ''))
 
     # ── Execute in the Docker sandbox ─────────────────────────────────────
-    result, error = _run_docker(primary_code, spec['id'], stdin, g.user_id, packages=packages)
+    result, error = _run_docker(primary_code, spec['id'], stdin, g.user_id, packages=packages, extra_files=code_files)
     if error:
         return error
 
@@ -143,6 +143,113 @@ def auto_save():
     return jsonify({'status': 'saved'}), 200
 
 
+def grade_against_test_cases(code, language, experiment_id, student_id, session_id=None,
+                             packages=None, persist_attempt=True):
+    """
+    Run `code` against the experiment's `test_cases` table rows (the SPARK source
+    of truth — D4), writing one `TestCaseResult` row per case, updating the
+    aggregate CodeAttempt counters, and auto-verifying checkpoints whose mapped
+    test cases all pass (C16).
+
+    Returns (passed, total) on success, or None on hard engine failure.
+
+    Falls back to no-op when the experiment has no TestCase rows (embedded
+    content_data cases are handled by the caller).
+    """
+    from app.models.experiment import TestCase
+    from app.models.submission import CodeAttempt as _CA
+    from app.models.conductor import CheckpointProgress, Checkpoint, TestCaseResult
+
+    cases = TestCase.query.filter_by(experiment_id=experiment_id).all()
+    if not cases:
+        return None
+
+    try:
+        from app.execution.languages import resolve as _resolve
+        spec = _resolve(language)
+        if not spec or spec['engine'] != 'docker':
+            return None
+    except Exception:
+        return None
+
+    passed = 0
+    per_case = []
+    for tc in cases:
+        stdin = tc.input_data or ''
+        result, error = _run_docker(code, spec['id'], stdin, student_id, packages=packages)
+        if error:
+            # queue full / engine down — surface, grade nothing
+            return None
+        ok = (result.get('status_id') == 3
+              and _norm_stdout(result.get('stdout')) == _norm_stdout(tc.expected_output))
+        if ok:
+            passed += 1
+        per_case.append({'test_case_id': tc.id, 'passed': ok,
+                         'execution_time_ms': int(result.get('time_ms') or 0)})
+
+    total = len(cases)
+
+    attempt = None
+    if persist_attempt:
+        attempt_count = _CA.query.filter_by(
+            student_id=student_id, experiment_id=experiment_id).count()
+        attempt = _CA(
+            student_id=student_id,
+            experiment_id=experiment_id,
+            session_id=session_id,
+            attempt_number=attempt_count + 1,
+            language=language,
+            files={'main': code},
+            stdin='',
+            compile_status='graded',
+            test_cases_passed=passed,
+            test_cases_total=total,
+            is_final_submission=True,
+        )
+        from app.extensions import db
+        db.session.add(attempt)
+        db.session.flush()
+
+    # ── TestCaseResult rows (B12) ───────────────────────────────────────────
+    from app.extensions import db
+    for row in per_case:
+        db.session.add(TestCaseResult(
+            attempt_id=attempt.id if attempt else None,
+            test_case_id=row['test_case_id'],
+            passed=row['passed'],
+            execution_time_ms=row['execution_time_ms'],
+        ))
+
+    # ── Auto-verify checkpoints (C16): verified iff ALL mapped cases passed ──
+    if session_id and attempt:
+        passed_ids = {r['test_case_id'] for r in per_case if r['passed']}
+        checkpoints = Checkpoint.query.filter_by(experiment_id=experiment_id).all()
+        for cp in checkpoints:
+            mapped = set(cp.test_case_ids or [])
+            if mapped and mapped.issubset(passed_ids):
+                prog = CheckpointProgress.query.filter_by(
+                    session_id=session_id, student_id=student_id, checkpoint_id=cp.id).first()
+                if not prog:
+                    prog = CheckpointProgress(
+                        session_id=session_id, student_id=student_id, checkpoint_id=cp.id)
+                    db.session.add(prog)
+                from datetime import datetime as _dt
+                if prog.status in ('pending', 'claimed', 'failed'):
+                    prog.status = 'verified'
+                    prog.passed_at = _dt.utcnow()
+                    prog.last_signal_at = _dt.utcnow()
+
+    from app.extensions import db
+    db.session.commit()
+    return passed, total
+
+
+def _norm_stdout(s):
+    """Trailing-space + trailing-newline tolerant comparison key."""
+    text = (s or '').replace('\r\n', '\n').rstrip('\n')
+    return '\n'.join(line.rstrip() for line in text.split('\n'))
+
+
 def _save_code_version(student_id, experiment_id, session_id, files, save_type):
     if not experiment_id:
         return
@@ -187,11 +294,12 @@ def playground_run():
     terminal picture: stdout, stderr, compiler diagnostics, exit code,
     wall time and peak memory — all from the Docker sandbox.
     """
-    data     = request.get_json(silent=True) or {}
-    code     = data.get('code') or ''
-    stdin    = data.get('stdin') or ''
-    language = data.get('language') or 'python'
-    packages = data.get('packages')
+    data        = request.get_json(silent=True) or {}
+    code        = data.get('code') or ''
+    stdin       = data.get('stdin') or ''
+    language    = data.get('language') or 'python'
+    packages    = data.get('packages')
+    extra_files = data.get('files') or data.get('extra_files')
 
     spec = resolve_language(language)
     if not spec:
@@ -208,7 +316,7 @@ def playground_run():
     if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
         return jsonify({'error': 'Code execution engine is not enabled on this server.'}), 503
 
-    result, error = _run_docker(code, spec['id'], stdin, g.user_id, packages=packages)
+    result, error = _run_docker(code, spec['id'], stdin, g.user_id, packages=packages, extra_files=extra_files)
     if error:
         return error
 

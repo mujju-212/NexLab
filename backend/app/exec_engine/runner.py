@@ -81,7 +81,7 @@ def detect_packages(code: str, language: str, explicit_packages: list | str | No
     return pkgs
 
 
-def run(code: str, language: str, stdin: str = '', packages: list | str | None = None) -> dict:
+def run(code: str, language: str, stdin: str = '', packages: list | str | None = None, extra_files: dict | None = None) -> dict:
     """
     Execute `code` in the language's Docker container.
 
@@ -117,14 +117,27 @@ def run(code: str, language: str, stdin: str = '', packages: list | str | None =
     compile_cmd = spec['compile_cmd'] or ''
     allow_network = False
 
+    PREINSTALLED_PKGS = {'matplotlib', 'numpy', 'pandas', 'scipy', 'requests', 'pillow', 'w1thermsensor'}
     if language == 'python' and pkg_list:
-        pip_cmd = f"pip install --prefer-binary --quiet --disable-pip-version-check {' '.join(pkg_list)}"
-        compile_cmd = f"{pip_cmd} && {compile_cmd}" if compile_cmd else pip_cmd
-        allow_network = True
-        compile_timeout = max(compile_timeout or 180, 180)
+        needed_pkgs = [p for p in pkg_list if p.lower() not in PREINSTALLED_PKGS]
+        if needed_pkgs:
+            pip_cmd = f"pip install --cache-dir /pip_cache --prefer-binary --quiet --disable-pip-version-check --no-warn-script-location {' '.join(needed_pkgs)}"
+            compile_cmd = f"{pip_cmd} && {compile_cmd}" if compile_cmd else pip_cmd
+            allow_network = True
+            compile_timeout = max(compile_timeout or 180, 180)
+        else:
+            pkg_list = []
 
     # Hard deadline = compile + run + 3 s grace
     hard_deadline = compile_timeout + run_timeout + 3
+
+    # Ensure host persistent pip cache dir exists
+    host_pip_cache_dir = (Path(__file__).parent.parent.parent / '.pip_cache').resolve()
+    try:
+        host_pip_cache_dir.mkdir(parents=True, exist_ok=True)
+        os.chmod(host_pip_cache_dir, 0o777)
+    except Exception:
+        pass
 
     with tempfile.TemporaryDirectory(prefix='nexlab_run_') as tmpdir:
         tmpdir_path = Path(tmpdir)
@@ -138,8 +151,36 @@ def run(code: str, language: str, stdin: str = '', packages: list | str | None =
         except OSError:
             pass  # Windows — NTFS doesn't map Unix modes, but Docker handles it
 
+        # Write extra dataset/workspace files (e.g. CSVs, JSON, helper scripts) into /work
+        if extra_files and isinstance(extra_files, dict):
+            for fname, content in extra_files.items():
+                if fname not in ('main', spec['filename']):
+                    extra_path = tmpdir_path / fname
+                    extra_path.parent.mkdir(parents=True, exist_ok=True)
+                    if isinstance(content, bytes):
+                        extra_path.write_bytes(content)
+                    else:
+                        extra_path.write_text(str(content or ''), encoding='utf-8')
+
         # Write source, stdin, wrapper into the temp dir
-        (tmpdir_path / spec['filename']).write_text(code, encoding='utf-8')
+        code_to_write = code
+        if language == 'python' and ('matplotlib' in code or 'matplotlib' in pkg_list):
+            mpl_hook = (
+                "import matplotlib\n"
+                "matplotlib.use('Agg')\n"
+                "import matplotlib.pyplot as plt\n"
+                "_orig_show = plt.show\n"
+                "def _auto_show(*args, **kwargs):\n"
+                "    try:\n"
+                "        plt.savefig('matplotlib_auto_plot.png', bbox_inches='tight')\n"
+                "    except Exception:\n"
+                "        pass\n"
+                "    return _orig_show(*args, **kwargs)\n"
+                "plt.show = _auto_show\n"
+            )
+            code_to_write = mpl_hook + "\n" + code
+
+        (tmpdir_path / spec['filename']).write_text(code_to_write, encoding='utf-8')
         (tmpdir_path / 'stdin.txt').write_text(stdin or '', encoding='utf-8')
 
         # wrapper.sh — normalise to Unix line endings
@@ -159,7 +200,7 @@ def run(code: str, language: str, stdin: str = '', packages: list | str | None =
         env['RUN_TIMEOUT'] = str(run_timeout)
         env['COMPILE_TIMEOUT'] = str(compile_timeout)
         if allow_network or pkg_list:
-            env['PIP_CACHE_DIR'] = '/tmp/pip_cache'
+            env['PIP_CACHE_DIR'] = '/pip_cache'
         # Per-language env overrides (e.g. C# needs HOME=/tmp). Applied last so
         # a spec can override the sandbox default HOME=/work.
         env.update(spec.get('env_extra') or {})
@@ -174,12 +215,11 @@ def run(code: str, language: str, stdin: str = '', packages: list | str | None =
                              fsize_bytes=fsize_bytes,
                              allow_network=allow_network)
 
-        # Bind-mount the temp dir as /work (read-write so wrapper can write meta.json)
+        # Bind-mount the temp dir as /work and host .pip_cache as /pip_cache
         # On Docker Desktop for Windows, forward slashes work in volume paths.
         host_path = str(tmpdir_path).replace('\\', '/')
-        volume_flag = ['-v', f'{host_path}:/work']
-        if allow_network or pkg_list:
-            volume_flag.extend(['-v', 'nexlab_pip_cache:/tmp/pip_cache'])
+        host_pip_path = str(host_pip_cache_dir).replace('\\', '/')
+        volume_flag = ['-v', f'{host_path}:/work', '-v', f'{host_pip_path}:/pip_cache']
 
         # Unique container name so we can kill THIS run on host-deadline without
         # touching another student's container (the old label lookup grabbed the

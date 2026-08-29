@@ -177,7 +177,7 @@ def handle_heartbeat(data):
 
 @socketio.on('checkpoint_passed')
 def handle_checkpoint(data):
-    """Student passed a checkpoint — relay to instructor dashboard"""
+    """Student passed a checkpoint — persist to CheckpointProgress and relay to instructor"""
     from flask import session as sock_session
     user = sock_session.get('user')
     if not user:
@@ -186,12 +186,39 @@ def handle_checkpoint(data):
     session_id      = data.get('session_id')
     checkpoint_num  = data.get('checkpoint_number')
     test_cases_done = data.get('test_cases_passed', 0)
+    checkpoint_id   = data.get('checkpoint_id')   # optional — direct CP id
+
+    # Persist to CheckpointProgress (D-S1 Hybrid model)
+    if checkpoint_id and session_id:
+        try:
+            from app.models.conductor import CheckpointProgress
+            cp = CheckpointProgress.query.filter_by(
+                session_id=session_id,
+                student_id=user['user_id'],
+                checkpoint_id=checkpoint_id,
+            ).first()
+            if not cp:
+                cp = CheckpointProgress(
+                    session_id=session_id,
+                    student_id=user['user_id'],
+                    checkpoint_id=checkpoint_id,
+                )
+                db.session.add(cp)
+            # Only upgrade: pending -> claimed (don't downgrade verified)
+            if cp.status in ('pending', 'claimed'):
+                cp.status = 'claimed'
+                cp.last_signal_at = datetime.utcnow()
+                cp.attempts = (cp.attempts or 0) + 1
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
 
     emit('student_checkpoint_update', {
         'student_id':       user['user_id'],
-        'full_name':        user['full_name'],
+        'full_name':        user.get('full_name', ''),
         'checkpoint_number': checkpoint_num,
         'test_cases_passed': test_cases_done,
+        'checkpoint_id':    checkpoint_id,
         'timestamp':        datetime.utcnow().isoformat(),
     }, room=f"session_{session_id}_instructor")
 
@@ -351,6 +378,58 @@ def handle_fullscreen_exit(data):
         'message':   'Please return to fullscreen. Repeated violations will be flagged.',
         'timestamp': datetime.utcnow().isoformat(),
     }, room=f"student_{user['user_id']}")
+
+
+@socketio.on('instructor_request_screenshare')
+def handle_request_screenshare(data):
+    """Instructor requests an on-demand live screen-share from a student.
+
+    D14 — consent required: the request is forwarded to the student's private
+    room, the student client prompts [Allow]/[Decline], and the student's reply
+    is relayed back to the instructor (screen-share_stopped / screenshot grid
+    remain the fallback if declined).
+    Frontend sends: {session_id, student_id}
+    """
+    from flask import session as sock_session
+    user = sock_session.get('user')
+    if not user or user['role'] not in ('instructor', 'institution_admin'):
+        return
+
+    session_id = data.get('session_id')
+    student_id = data.get('student_id')
+    if not student_id:
+        return
+
+    emit('screenshare_request', {
+        'session_id': session_id,
+        'instructor_id': user['user_id'],
+        'instructor_name': user.get('full_name', 'Instructor'),
+        'timestamp': datetime.utcnow().isoformat(),
+    }, room=f"student_{student_id}")
+
+
+@socketio.on('screenshare_response')
+def handle_screenshare_response(data):
+    """Student's consent reply to an instructor screen-share request.
+    Frontend sends: {session_id, accepted: bool}
+    Relayed to the instructor room — the instructor client then starts the
+    LiveKit screen-share session (accepted) or stays on the screenshot grid.
+    """
+    from flask import session as sock_session
+    user = sock_session.get('user')
+    if not user or user['role'] != 'student':
+        return
+
+    session_id = data.get('session_id')
+    accepted = bool(data.get('accepted'))
+
+    emit('screenshare_response_relay', {
+        'session_id': session_id,
+        'student_id': user['user_id'],
+        'full_name': user.get('full_name', ''),
+        'accepted': accepted,
+        'timestamp': datetime.utcnow().isoformat(),
+    }, room=f"session_{session_id}_instructor")
 
 
 @socketio.on('screen_share_stopped')

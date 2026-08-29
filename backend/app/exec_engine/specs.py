@@ -21,12 +21,12 @@ SPECS: list[dict] = [
     {
         'id': 'python',
         'engine': 'docker',
-        'image': 'python:3.14-slim',
+        'image': 'nexlab/python:3.12',
         'filename': 'main.py',
         'compile_cmd': '',
         'run_cmd': 'python -u main.py',
         'compile_timeout': None,   # interpreted — no compile step
-        'version_label': 'Python 3.14',
+        'version_label': 'Python 3.12 (SciPy/Matplotlib)',
     },
     # ── JavaScript ───────────────────────────────────────────────────────────
     {
