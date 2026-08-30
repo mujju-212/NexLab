@@ -1,297 +1,391 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { useRouter } from 'next/navigation';
-import {
-  BarChart3, Users, BrainCircuit, Eye, X, RefreshCw,
-} from 'lucide-react';
+import { useCallback, useEffect, useState } from 'react';
+import { Loader2 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
+import { experienceService } from '@/services/experience.service';
 import { sessionService } from '@/services/session.service';
-import { instructorService } from '@/services/instructor.service';
 import styles from '../shared.module.css';
 
-interface SectionSubjectLite {
-  section_subject_id: string;
-  subject_name: string;
-  section_name: string;
-  student_count: number;
-}
+import {
+  BarChart, Bar, LineChart, Line, XAxis, YAxis, Tooltip, Legend,
+  ResponsiveContainer, CartesianGrid, Cell, PieChart, Pie,
+} from 'recharts';
 
-interface RankingRow {
-  student_id: string;
-  full_name: string;
-  roll_number: string;
-  rank_position: number | null;
-  rank_score: number;
-  components: {
-    mastery: number;
-    engagement: number;
-    effort: number;
-    efficiency: number;
-    consistency: number;
-  };
-}
+interface SectionLite { section_subject_id: string; subject_name: string; section_name: string; student_count: number; }
 
-interface MasteryItem {
-  concept: string;
-  mastery_score: number;
-  experiment_count: number;
-}
+const TABS = [
+  { key: 'experiments', label: 'Experiments', icon: '📊' },
+  { key: 'trajectory',  label: 'Trajectory',  icon: '📈' },
+  { key: 'trends',      label: 'Trends',      icon: '📉' },
+  { key: 'engagement',  label: 'Engagement',  icon: '⚡' },
+  { key: 'integrity',   label: 'Integrity',   icon: '🛡' },
+  { key: 'ai-usage',    label: 'AI Usage',    icon: '🤖' },
+];
 
 const errText = (err: unknown) =>
-  (err as { response?: { data?: { error?: string } } })?.response?.data?.error
-  || 'Something went wrong';
+  (err as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Something went wrong';
 
-const readiness = (score: number) =>
-  score >= 75 ? { label: 'Strong', pill: styles.pillGreen }
-  : score >= 50 ? { label: 'Moderate', pill: styles.pillAmber }
-  : { label: 'At Risk', pill: styles.pillBlue };
-
-export default function AnalyticsPage() {
-  const router = useRouter();
-  const [sections, setSections] = useState<SectionSubjectLite[]>([]);
+export default function InstructorAnalyticsPage() {
+  const [tab, setTab] = useState('experiments');
+  const [sections, setSections] = useState<SectionLite[]>([]);
   const [ssId, setSsId] = useState('');
-  const [rankings, setRankings] = useState<RankingRow[]>([]);
+
+  const [exps, setExps] = useState<any[]>([]);
+  const [trends, setTrends] = useState<any[]>([]);
+  const [engagement, setEngagement] = useState<any[]>([]);
+  const [integrity, setIntegrity] = useState<any[]>([]);
+  const [aiUsage, setAiUsage] = useState<any[]>([]);
+  const [byFeature, setByFeature] = useState<{ feature: string; count: number }[]>([]);
+
+  const [trajectory, setTrajectory] = useState<any | null>(null);
+  const [trajectoryStudent, setTrajectoryStudent] = useState('');
+  const [roster, setRoster] = useState<{ student_id: string; full_name: string }[]>([]);
+
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
-  const [masteryTarget, setMasteryTarget] = useState<RankingRow | null>(null);
-  const [mastery, setMastery] = useState<MasteryItem[]>([]);
-  const [masteryLoading, setMasteryLoading] = useState(false);
 
-  const toast3 = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
-  };
+  const toast3 = useCallback((m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); }, []);
 
-  // ── Load teaching assignments once ───────────────────────────────────────────
+  // Load sections for filter
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await sessionService.getSectionSubjects();
-        const list = (res.section_subjects ?? []) as SectionSubjectLite[];
-        setSections(list);
-        if (list.length > 0) setSsId(list[0].section_subject_id);
-      } catch (err) {
-        toast3(errText(err));
-      }
-    })();
+    sessionService.getSectionSubjects().then(res => {
+      const list = (res.section_subjects ?? []) as SectionLite[];
+      setSections(list);
+      if (list.length === 1) setSsId(list[0].section_subject_id);
+    }).catch(() => {});
   }, []);
 
-  // ── Load rankings when a section-subject is selected ─────────────────────────
-  useEffect(() => {
-    if (!ssId) return;
-    let mounted = true;
-    setLoading(true);
-    (async () => {
-      try {
-        const res = await instructorService.getSectionRankings(ssId);
-        if (mounted) setRankings(res.rankings ?? []);
-      } catch (err) {
-        if (mounted) toast3(errText(err));
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, [ssId]);
+  const params = () => (ssId ? { section_subject_id: ssId } : {});
 
-  const openMastery = async (row: RankingRow) => {
-    setMasteryTarget(row);
-    setMastery([]);
-    setMasteryLoading(true);
+  // Load per-tab data
+  const loadExperiments = useCallback(async () => {
+    setLoading(true);
+    try { setExps(await experienceService.analyticsExperiments()); }
+    catch (e: any) { toast3(errText(e)); } finally { setLoading(false); }
+  }, [toast3]);
+
+  const loadTrends = useCallback(async () => {
+    setLoading(true);
+    try { setTrends(await experienceService.analyticsTrends(params())); }
+    catch (e: any) { toast3(errText(e)); } finally { setLoading(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ssId, toast3]);
+
+  const loadEngagement = useCallback(async () => {
+    setLoading(true);
+    try { setEngagement(await experienceService.analyticsEngagement(params())); }
+    catch (e: any) { toast3(errText(e)); } finally { setLoading(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ssId, toast3]);
+
+  const loadIntegrity = useCallback(async () => {
+    setLoading(true);
+    try { const d = await experienceService.analyticsIntegrity(params()); setIntegrity(d.integrity); }
+    catch (e: any) { toast3(errText(e)); } finally { setLoading(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ssId, toast3]);
+
+  const loadAiUsage = useCallback(async () => {
+    setLoading(true);
+    try { const d = await experienceService.analyticsAiUsage(params()); setAiUsage(d.ai_usage); setByFeature(d.by_feature); }
+    catch (e: any) { toast3(errText(e)); } finally { setLoading(false); }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [ssId, toast3]);
+
+  useEffect(() => {
+    if (tab === 'experiments') loadExperiments();
+    if (tab === 'trends') loadTrends();
+    if (tab === 'engagement') loadEngagement();
+    if (tab === 'integrity') loadIntegrity();
+    if (tab === 'ai-usage') loadAiUsage();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [tab, ssId]);
+
+  // Trajectory: load roster for the student picker
+  const loadRoster = async () => {
     try {
-      const res = await instructorService.getStudentMastery(row.student_id);
-      setMastery(res.mastery ?? []);
-    } catch (err) {
-      toast3(errText(err));
-    } finally {
-      setMasteryLoading(false);
-    }
+      const data = await experienceService.analyticsIntegrity({});
+      setRoster((data.integrity || []).map(r => ({ student_id: r.student_id, full_name: r.full_name })));
+    } catch { /* ignore */ }
   };
 
-  const current = sections.find((s) => s.section_subject_id === ssId);
-  const avgScore = rankings.length
-    ? Math.round(rankings.reduce((sum, r) => sum + r.rank_score, 0) / rankings.length)
-    : 0;
-  const atRisk = rankings.filter((r) => r.rank_score < 50).length;
+  const pickTrajectoryStudent = async (sid: string) => {
+    setTrajectoryStudent(sid);
+    if (!sid) { setTrajectory(null); return; }
+    setLoading(true);
+    try { setTrajectory(await experienceService.analyticsTrajectory(sid)); }
+    catch (e: any) { toast3(errText(e)); } finally { setLoading(false); }
+  };
+
+  // Quality donut data
+  const qualityDonut = (() => {
+    const q: Record<string, number> = {};
+    exps.forEach(e => Object.entries(e.quality_distribution || {}).forEach(([k, v]) => { q[k] = (q[k] || 0) + (v as number); }));
+    return Object.entries(q).map(([name, value]) => ({ name, value }));
+  })();
+
+  const COLORS = ['#7c3aed', '#9333ea', '#f59e0b', '#10b981', '#ef4444', '#3b82f6'];
 
   return (
-    <InstructorShell
-      activePage="Analytics"
-      title="Class Analytics & Knowledge Insights"
-      subtitle="Holistic student ranking (mastery, engagement, effort, efficiency, consistency) plus per-concept mastery tracing"
-    >
-      {toast && (
-        <div style={{
-          position: 'fixed', bottom: 24, right: 24, zIndex: 1000, background: '#201b2e',
-          color: '#fff', padding: '12px 18px', borderRadius: 10, fontSize: 13, fontWeight: 600,
-        }}>
-          {toast}
-        </div>
-      )}
+    <InstructorShell activePage="Analytics">
+      {toast && <div style={{ position: 'fixed', top: 18, right: 18, zIndex: 999, background: '#111827', color: '#fff', padding: '10px 18px', borderRadius: 10, fontSize: 13 }}>{toast}</div>}
 
-      {/* Top Action Bar */}
       <div className={styles.actionRow}>
-        <select className={styles.select} style={{ maxWidth: 380 }}
-          value={ssId} onChange={(e) => setSsId(e.target.value)}>
-          <option value="">Select a section & subject…</option>
-          {sections.map((s) => (
+        <h2 style={{ margin: 0, fontFamily: "'Geist',sans-serif", fontSize: 18, fontWeight: 700, color: '#111827', flex: 1 }}>Analytics</h2>
+        <select className={styles.select} value={ssId} onChange={e => setSsId(e.target.value)}
+          style={{ width: 'auto', minWidth: 200 }}>
+          <option value="">All my sections</option>
+          {sections.map(s => (
             <option key={s.section_subject_id} value={s.section_subject_id}>
-              {s.subject_name} — {s.section_name} ({s.student_count} students)
+              {s.subject_name} · {s.section_name}
             </option>
           ))}
         </select>
-        <button type="button" className={styles.secondaryBtn} onClick={() => router.push('/instructor/live-lab')}>
-          <Users size={16} strokeWidth={1.9} /> Open Live Lab Control
-        </button>
-        <button type="button" className={styles.ghostBtn} onClick={() => router.push('/instructor/grading')}>
-          <BarChart3 size={16} strokeWidth={1.9} /> Review Grading
-        </button>
       </div>
 
-      {/* KPI Row */}
-      <div className={styles.kpiRow}>
-        <div className={styles.kpiCard}>
-          <p className={styles.kpiLabel}>Ranked Students</p>
-          <p className={styles.kpiValue} style={{ color: '#7c3aed' }}>{loading ? '…' : rankings.length}</p>
-          <p className={styles.kpiSub}>{current ? `${current.subject_name} · ${current.section_name}` : 'Select a section'}</p>
-        </div>
-        <div className={styles.kpiCard}>
-          <p className={styles.kpiLabel}>Average Rank Score</p>
-          <p className={styles.kpiValue} style={{ color: '#0f766e' }}>{loading ? '…' : avgScore}</p>
-          <p className={styles.kpiSub}>Weighted across 5 signals</p>
-        </div>
-        <div className={styles.kpiCard}>
-          <p className={styles.kpiLabel}>At-Risk Students</p>
-          <p className={styles.kpiValue} style={{ color: atRisk > 0 ? '#b45309' : '#16a34a' }}>
-            {loading ? '…' : atRisk}
-          </p>
-          <p className={styles.kpiSub}>Rank score below 50</p>
-        </div>
-        <div className={styles.kpiCard}>
-          <p className={styles.kpiLabel}>Knowledge Tracing</p>
-          <p className={styles.kpiValue} style={{ color: '#7c3aed', fontSize: 18 }}>
-            <BrainCircuit size={18} style={{ verticalAlign: '-3px', marginRight: 6 }} /> Active
-          </p>
-          <p className={styles.kpiSub}>Updated after each grading</p>
-        </div>
+      {/* Tab row */}
+      <div className={styles.tabRow}>
+        {TABS.map(t => (
+          <button key={t.key} onClick={() => setTab(t.key)} className={`${styles.tabChip} ${tab === t.key ? styles.tabChipActive : ''}`}>
+            {t.icon} {t.label}
+          </button>
+        ))}
       </div>
 
-      {/* Ranking Table */}
-      <section className={styles.tableCard}>
-        <div className={styles.sectionHeader}>
-          <div>
-            <h2 className={styles.sectionTitle}>Holistic Student Ranking</h2>
-            <p className={styles.sectionSub}>
-              {loading ? 'Loading…'
-                : rankings.length
-                  ? 'Weights: mastery 30% · engagement 20% · effort 20% · efficiency 15% · consistency 15%'
-                  : 'No ranking data yet — rankings are computed after graded submissions'}
-            </p>
+      {loading && <div style={{ textAlign: 'center', color: '#9891a6', padding: 30 }}><Loader2 size={20} className="animate-spin" /></div>}
+
+      {/* ══ TAB A — Experiments ═══════════════════════════════════════════════ */}
+      {tab === 'experiments' && !loading && (
+        <div className={styles.gridTwo}>
+          <div className={styles.sectionCard}>
+            <h3 className={styles.sectionTitle}>Average Score by Experiment</h3>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={exps}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0edf7" />
+                <XAxis dataKey="exp_number" label={{ value: 'Experiment', position: 'insideBottom', fontSize: 11 }} />
+                <YAxis domain={[0, 100]} width={32} />
+                <Tooltip />
+                <Bar dataKey="avg_score" name="Avg Score" fill="#7c3aed" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className={styles.sectionCard}>
+            <h3 className={styles.sectionTitle}>Quality Distribution</h3>
+            <ResponsiveContainer width="100%" height={220}>
+              <PieChart>
+                <Pie data={qualityDonut} dataKey="value" nameKey="name" cx="50%" cy="50%" outerRadius={80}>
+                  {qualityDonut.map((_, i) => <Cell key={i} fill={COLORS[i % COLORS.length]} />)}
+                </Pie>
+                <Tooltip />
+                <Legend />
+              </PieChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className={styles.tableCard} style={{ gridColumn: '1 / -1' }}>
+            <table className={styles.table}>
+              <thead>
+                <tr>
+                  <th>#</th><th>Title</th><th>Difficulty</th><th>Avg Score</th>
+                  <th>Test Pass</th><th>Completion</th><th>Avg Attempts</th><th>Hint/Student</th>
+                </tr>
+              </thead>
+              <tbody>
+                {exps.map(e => (
+                  <tr key={e.experiment_id}>
+                    <td className={styles.tdStrong}>{e.exp_number}</td>
+                    <td>{e.title}</td>
+                    <td>{'⭐'.repeat(e.difficulty || 1)}</td>
+                    <td className={styles.tdStrong}>{e.avg_score ?? '—'}</td>
+                    <td>{e.avg_tc_score ?? '—'}%</td>
+                    <td>{e.completion_pct ?? '—'}%</td>
+                    <td>{e.avg_attempts}</td>
+                    <td>{e.hint_usage_per_student}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
+      )}
 
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th>Rank</th>
-              <th>Student</th>
-              <th>Score</th>
-              <th>Mastery</th>
-              <th>Engagement</th>
-              <th>Effort</th>
-              <th>Efficiency</th>
-              <th>Consistency</th>
-              <th>Readiness</th>
-              <th>Action</th>
-            </tr>
-          </thead>
-          <tbody>
-            {rankings.map((r) => {
-              const rd = readiness(r.rank_score);
-              return (
-                <tr key={r.student_id}>
-                  <td className={styles.tdStrong}>#{r.rank_position ?? '—'}</td>
-                  <td className={styles.tdStrong}>
-                    {r.full_name} <span style={{ color: '#9891a6', fontWeight: 400, fontSize: 12 }}>{r.roll_number}</span>
-                  </td>
-                  <td className={styles.tdStrong} style={{ color: '#0f62fe' }}>{r.rank_score}</td>
-                  <td>{r.components.mastery}</td>
-                  <td>{r.components.engagement}</td>
-                  <td>{r.components.effort}</td>
-                  <td>{r.components.efficiency}</td>
-                  <td>{r.components.consistency}</td>
-                  <td><span className={`${styles.pill} ${rd.pill}`}>{rd.label}</span></td>
-                  <td>
-                    <button type="button" className={styles.ghostBtn}
-                      style={{ minHeight: 30, padding: '0 10px', fontSize: 11.5 }}
-                      onClick={() => openMastery(r)}>
-                      <Eye size={12} /> Concepts
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-            {!loading && rankings.length === 0 && ssId && (
-              <tr>
-                <td colSpan={10} style={{ textAlign: 'center', color: '#9891a6', padding: 20 }}>
-                  No ranking rows for this section yet.
-                </td>
-              </tr>
-            )}
-          </tbody>
-        </table>
-      </section>
+      {/* ══ TAB B — Trajectory ═══════════════════════════════════════════════ */}
+      {tab === 'trajectory' && !loading && (
+        <div className={styles.sectionCard}>
+          <div className={styles.actionRow}>
+            <h3 className={styles.sectionTitle} style={{ flex: 1 }}>Student Trajectory</h3>
+            <button className={styles.ghostBtn} onClick={loadRoster}>Load students</button>
+            <select className={styles.select} value={trajectoryStudent} onChange={e => pickTrajectoryStudent(e.target.value)}
+              style={{ width: 'auto', minWidth: 220 }}>
+              <option value="">Select a student…</option>
+              {roster.map(r => <option key={r.student_id} value={r.student_id}>{r.full_name}</option>)}
+            </select>
+          </div>
 
-      {/* CONCEPT MASTERY MODAL */}
-      {masteryTarget && (
-        <div className={styles.modalOverlay} onClick={() => setMasteryTarget(null)}>
-          <div className={styles.modalCard} onClick={(e) => e.stopPropagation()}>
-            <div className={styles.modalHeader}>
-              <div>
-                <h3 className={styles.modalTitle}>Concept Mastery — {masteryTarget.full_name}</h3>
-                <p className={styles.sectionSub}>
-                  {masteryTarget.roll_number} · Rank #{masteryTarget.rank_position ?? '—'} · Score {masteryTarget.rank_score}
-                </p>
+          {!trajectory && <div style={{ color: '#9891a6', padding: 30, textAlign: 'center' }}>Select a student to view their trajectory.</div>}
+
+          {trajectory && (
+            <div className={styles.gridTwo}>
+              <div className={styles.sectionCard}>
+                <h3 className={styles.sectionTitle}>Grade Over Time</h3>
+                <ResponsiveContainer width="100%" height={240}>
+                  <LineChart data={trajectory.grade_timeline}>
+                    <CartesianGrid strokeDasharray="3 3" stroke="#f0edf7" />
+                    <XAxis dataKey="scheduled_at" tickFormatter={(v: string) => v ? v.slice(5, 10) : ''} fontSize={10} />
+                    <YAxis domain={[0, 100]} width={32} />
+                    <Tooltip />
+                    <Legend />
+                    <Line type="monotone" dataKey="final_grade" name="Student" stroke="#7c3aed" strokeWidth={2} />
+                    <Line type="monotone" dataKey="class_avg" name="Class avg" stroke="#f59e0b" strokeWidth={2} strokeDasharray="5 5" />
+                  </LineChart>
+                </ResponsiveContainer>
               </div>
-              <button type="button" className={styles.closeBtn} onClick={() => setMasteryTarget(null)}>
-                <X size={18} />
-              </button>
-            </div>
 
-            {masteryLoading ? (
-              <p className={styles.sectionSub}><RefreshCw size={13} style={{ verticalAlign: '-2px' }} /> Loading mastery data…</p>
-            ) : mastery.length === 0 ? (
-              <p className={styles.sectionSub}>
-                No concept mastery records yet — records build up as the student completes graded experiments.
-              </p>
-            ) : (
-              <div className={styles.list}>
-                {mastery.map((m) => (
-                  <div key={m.concept} className={styles.listRow}>
-                    <div className={styles.rowBody}>
-                      <p className={styles.rowTitle}>{m.concept}</p>
-                      <p className={styles.rowSub}>{m.experiment_count} experiment(s) touched</p>
-                    </div>
-                    <div className={styles.rowSide}>
-                      <span className={`${styles.pill} ${
-                        m.mastery_score >= 75 ? styles.pillGreen
-                        : m.mastery_score >= 50 ? styles.pillAmber
-                        : styles.pillBlue
-                      }`}>
-                        {m.mastery_score}%
-                      </span>
-                    </div>
+              <div className={styles.sectionCard}>
+                <h3 className={styles.sectionTitle}>Concept Mastery</h3>
+                {trajectory.concepts.length === 0 ? (
+                  <div style={{ color: '#9891a6', padding: 20, textAlign: 'center' }}>No concept mastery data yet.</div>
+                ) : (
+                  <div className={styles.list}>
+                    {trajectory.concepts.map((c: any) => (
+                      <div key={c.concept} className={styles.listRow}>
+                        <div className={styles.rowBody}>
+                          <div className={styles.rowTitle}>{c.concept}</div>
+                          <div style={{ height: 6, background: '#f3f4f6', borderRadius: 3, marginTop: 6 }}>
+                            <div style={{ width: `${c.mastery_score}%`, height: '100%', borderRadius: 3,
+                              background: c.mastery_score >= 75 ? '#22c55e' : c.mastery_score >= 50 ? '#f59e0b' : '#ef4444' }} />
+                          </div>
+                        </div>
+                        <div className={styles.rowSide}><span className={styles.tdStrong}>{c.mastery_score}%</span></div>
+                      </div>
+                    ))}
                   </div>
-                ))}
+                )}
               </div>
-            )}
-
-            <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 16 }}>
-              <button type="button" className={styles.primaryBtn} onClick={() => setMasteryTarget(null)}>
-                Close
-              </button>
             </div>
+          )}
+        </div>
+      )}
+
+      {/* ══ TAB C — Trends ═══════════════════════════════════════════════════ */}
+      {tab === 'trends' && !loading && (
+        <div className={styles.sectionCard}>
+          <h3 className={styles.sectionTitle}>Class Trends Over Time</h3>
+          <ResponsiveContainer width="100%" height={280}>
+            <LineChart data={trends}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0edf7" />
+              <XAxis dataKey="week" fontSize={10} />
+              <YAxis domain={[0, 100]} width={32} />
+              <Tooltip />
+              <Legend />
+              <Line type="monotone" dataKey="avg_score" name="Avg Score" stroke="#7c3aed" strokeWidth={2} />
+              <Line type="monotone" dataKey="avg_attendance" name="Attendance" stroke="#10b981" strokeWidth={2} />
+              <Line type="monotone" dataKey="avg_focus" name="Focus" stroke="#f59e0b" strokeWidth={2} />
+              <Line type="monotone" dataKey="avg_completion" name="Completion" stroke="#3b82f6" strokeWidth={2} />
+            </LineChart>
+          </ResponsiveContainer>
+          {trends.length === 0 && <div style={{ color: '#9891a6', textAlign: 'center', padding: 20 }}>No sessions in range yet.</div>}
+        </div>
+      )}
+
+      {/* ══ TAB D — Engagement ═══════════════════════════════════════════════ */}
+      {tab === 'engagement' && !loading && (
+        <div className={styles.tableCard}>
+          <table className={styles.table}>
+            <thead>
+              <tr>
+                <th>Student</th><th>Avg Focus</th><th>Attempts</th><th>Time on task (s)</th>
+                <th>Hint Reliance</th><th>Auto-save ratio</th>
+              </tr>
+            </thead>
+            <tbody>
+              {engagement.map(r => (
+                <tr key={r.student_id}>
+                  <td className={styles.tdStrong}>{r.full_name}</td>
+                  <td><span className={r.avg_focus_score !== null && r.avg_focus_score < 40 ? styles.redBadge : styles.greenBadge}>{r.avg_focus_score ?? '—'}%</span></td>
+                  <td>{r.attempt_count}</td>
+                  <td>{r.time_on_task_sec}</td>
+                  <td>{r.hint_reliance}</td>
+                  <td>{r.auto_save_ratio}</td>
+                </tr>
+              ))}
+              {engagement.length === 0 && <tr><td colSpan={6} style={{ textAlign: 'center', color: '#9891a6', padding: 24 }}>No engagement data yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ══ TAB E — Integrity ════════════════════════════════════════════════ */}
+      {tab === 'integrity' && !loading && (
+        <div className={styles.sectionCard}>
+          <h3 className={styles.sectionTitle}>Integrity Overview</h3>
+          <ResponsiveContainer width="100%" height={200}>
+            <BarChart data={integrity}>
+              <CartesianGrid strokeDasharray="3 3" stroke="#f0edf7" />
+              <XAxis dataKey="full_name" fontSize={9} />
+              <YAxis domain={[0, 100]} width={32} />
+              <Tooltip />
+              <Bar dataKey="integrity_score" name="Integrity" radius={[6, 6, 0, 0]}>
+                {integrity.map((r, i) => <Cell key={i} fill={r.integrity_score >= 80 ? '#22c55e' : r.integrity_score >= 60 ? '#f59e0b' : '#ef4444'} />)}
+              </Bar>
+            </BarChart>
+          </ResponsiveContainer>
+
+          <table className={styles.table} style={{ marginTop: 16 }}>
+            <thead>
+              <tr><th>Student</th><th>Score</th><th>Tab</th><th>Fullscreen</th><th>Copy</th><th>Lockdown</th><th>Plagiarism</th></tr>
+            </thead>
+            <tbody>
+              {integrity.map(r => (
+                <tr key={r.student_id}>
+                  <td className={styles.tdStrong}>{r.full_name}</td>
+                  <td><span className={r.integrity_score >= 80 ? styles.greenBadge : r.integrity_score >= 60 ? styles.amberBadge : styles.redBadge}>{r.integrity_score}</span></td>
+                  <td>{r.proctor_events.tab_switch}</td>
+                  <td>{r.proctor_events.fullscreen_exit}</td>
+                  <td>{r.proctor_events.copy_paste}</td>
+                  <td>{r.proctor_events.lockdown_violation}</td>
+                  <td>{r.plagiarism_flags.length > 0 ? <span className={styles.redBadge}>{r.plagiarism_flags.length}</span> : <span className={styles.slateBadge}>0</span>}</td>
+                </tr>
+              ))}
+              {integrity.length === 0 && <tr><td colSpan={7} style={{ textAlign: 'center', color: '#9891a6', padding: 24 }}>No integrity data yet.</td></tr>}
+            </tbody>
+          </table>
+        </div>
+      )}
+
+      {/* ══ TAB F — AI Usage ═════════════════════════════════════════════════ */}
+      {tab === 'ai-usage' && !loading && (
+        <div className={styles.gridTwo}>
+          <div className={styles.sectionCard}>
+            <h3 className={styles.sectionTitle}>AI Calls by Feature</h3>
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={byFeature}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#f0edf7" />
+                <XAxis dataKey="feature" fontSize={10} />
+                <YAxis width={32} />
+                <Tooltip />
+                <Bar dataKey="count" name="Calls" fill="#9333ea" radius={[6, 6, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          </div>
+
+          <div className={styles.sectionCard}>
+            <h3 className={styles.sectionTitle}>Top AI Consumers</h3>
+            <table className={styles.table}>
+              <thead><tr><th>Student</th><th>Tokens</th><th>Cost (USD)</th><th>Feature Calls</th></tr></thead>
+              <tbody>
+                {aiUsage.slice(0, 15).map(r => (
+                  <tr key={r.student_id}>
+                    <td className={styles.tdStrong}>{r.full_name || 'Unknown'}</td>
+                    <td>{r.total_tokens.toLocaleString()}</td>
+                    <td>{r.estimated_cost_usd.toFixed(4)}</td>
+                    <td>{r.total_calls}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
