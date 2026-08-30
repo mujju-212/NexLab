@@ -105,8 +105,8 @@ export default function StudioCell(p: Props) {
           {p.canMoveToPage && p.otherPages && p.otherPages.length > 0 && p.onMoveToPage && (
             <div className={s.moveToPageWrap}>
               <button className={s.iconBtn} onClick={() => {}} title="Move to page…"><MoreHorizontal size={14} /></button>
-              <select className={s.moveToPageSelect} onChange={e => { if (e.target.value) p.onMoveToPage!(e.target.value); e.target.value = ''; }}>
-                <option value="" disabled selected>Move to…</option>
+              <select className={s.moveToPageSelect} defaultValue="" onChange={e => { if (e.target.value) p.onMoveToPage!(e.target.value); e.target.value = ''; }}>
+                <option value="" disabled>Move to…</option>
                 {p.otherPages.map(op => <option key={op.id} value={op.id}>{op.title}</option>)}
               </select>
             </div>
