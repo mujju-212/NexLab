@@ -144,6 +144,9 @@ export interface RunCodeResponse {
   memory_kb: number | null;          // peak memory in KB (null when unreadable)
   quality_metrics?: Record<string, unknown>;  // only on is_final_submission
   quality_score?: number;
+  test_cases_passed?: number;        // aggregate tests passed (from run result)
+  test_cases_total?: number;         // aggregate tests run
+  is_final_submission?: boolean;
 }
 
 // ─── Grading ──────────────────────────────────────────────────────────────────

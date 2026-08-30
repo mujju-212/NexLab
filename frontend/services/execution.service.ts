@@ -71,7 +71,7 @@ export const executionService = {
   // Request: { files: { main: '<code>' }, language, stdin?, experiment_id?, session_id?, is_final_submission? }
   // Response: { status, status_id, stdout, stderr, compile_output, time_ms, memory_kb, quality_metrics?, quality_score? }
   async runCode(payload: RunCodeRequest): Promise<RunCodeResponse> {
-    const { data } = await apiClient.post<RunCodeResponse>('/execution/run', payload, { timeout: 120_000 });
+    const { data } = await apiClient.post<RunCodeResponse>('/execution/run', payload, { timeout: 180_000 });
     return data;
   },
 
@@ -108,7 +108,7 @@ export const executionService = {
     packages?: string[] | string;
   }): Promise<PlaygroundResult> {
     const { data } = await apiClient.post<PlaygroundResult>(
-      '/execution/playground', payload, { timeout: 120_000 },
+      '/execution/playground', payload, { timeout: 180_000 },
     );
     return data;
   },
