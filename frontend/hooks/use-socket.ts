@@ -60,6 +60,54 @@ export interface StudentScreenshotPayload {
   timestamp: string;   // ISO-8601 UTC
 }
 
+export interface ModeChangedPayload {
+  mode: string;
+  rules: { code: string; quiz: string; submit: boolean | string; proctor: string; label: string };
+  from?: string;
+  reason?: string;
+}
+
+export interface DirectCheckpointPayload {
+  checkpoint_id: string;
+  student_id: string;
+  status: string;   // verified | failed | manual_pass | manual_fail | claimed
+}
+
+export interface ChatMessagePayload {
+  id: string;
+  session_id: string;
+  from_id: string;
+  to_id: string | null;
+  text: string;
+  at: string;
+  from_name?: string;
+}
+
+export interface ProctorPolicyPayload {
+  policy: {
+    lockdown_fullscreen: boolean; block_copy_paste: boolean; block_tab_switch: boolean;
+    plagiarism_scan: boolean; focus_ml: boolean; webcam_required: boolean;
+  };
+  page_id: string | null;
+}
+
+export interface ForceSubmitPayload {
+  reason: string;
+  timestamp: string;
+}
+
+export interface PageLaunchedPayload {
+  page_id: string;
+  page_title: string;
+  mode: string;
+  timer_ends_at: string | null;
+}
+
+export interface QuizLaunchedPayload {
+  module_id: string;
+  module_title: string;
+}
+
 interface UseSocketOptions {
   sessionId: string;
   enabled?: boolean;
@@ -75,6 +123,15 @@ interface UseSocketOptions {
   onSessionEnded?:     (data: { session_id: string }) => void;
   onInstructorMessage?: (data: { message: string; from: string; timestamp: string }) => void;
   onScreenshotFrame?:  (data: StudentScreenshotPayload) => void;
+  // Conductor events
+  onModeChanged?:      (data: ModeChangedPayload) => void;
+  onDirectCheckpoint?: (data: DirectCheckpointPayload) => void;
+  onChatMessage?:      (data: ChatMessagePayload) => void;
+  onProctorPolicy?:    (data: ProctorPolicyPayload) => void;
+  onPageLaunched?:     (data: PageLaunchedPayload) => void;
+  onQuizLaunched?:     (data: QuizLaunchedPayload) => void;
+  onForceSubmit?:      (data: ForceSubmitPayload) => void;
+  onMyCheckpoint?:     (data: DirectCheckpointPayload) => void;
   onError?:            (msg: string) => void;
 }
 
@@ -99,6 +156,14 @@ export function useSocket({
   onSessionEnded,
   onInstructorMessage,
   onScreenshotFrame,
+  onModeChanged,
+  onDirectCheckpoint,
+  onChatMessage,
+  onProctorPolicy,
+  onPageLaunched,
+  onQuizLaunched,
+  onForceSubmit,
+  onMyCheckpoint,
   onError,
 }: UseSocketOptions) {
   const socketRef   = useRef<Socket | null>(null);
@@ -144,6 +209,23 @@ export function useSocket({
     if (onSessionEnded)      socket.on('session_ended',         onSessionEnded);
     if (onInstructorMessage) socket.on('instructor_message',    onInstructorMessage);
     if (onScreenshotFrame)   socket.on('student_screenshot',    onScreenshotFrame);
+    if (onModeChanged)       socket.on('session_mode_changed',  onModeChanged);
+    if (onDirectCheckpoint)  socket.on('checkpoint_update',     onDirectCheckpoint);
+    if (onChatMessage)       socket.on('chat_message',          onChatMessage);
+    if (onProctorPolicy)     socket.on('proctor_policy_updated', onProctorPolicy);
+    // Page / quiz launch: the instructor Conductor emits `conductor_*` into the
+    // instructor room and `student_*` into the students room — listen to both so
+    // either side can wire onPageLaunched / onQuizLaunched.
+    if (onPageLaunched) {
+      socket.on('conductor_page_launched', onPageLaunched);
+      socket.on('student_page_launched',   onPageLaunched);
+    }
+    if (onQuizLaunched) {
+      socket.on('conductor_quiz_launched', onQuizLaunched);
+      socket.on('student_quiz_launched',   onQuizLaunched);
+    }
+    if (onForceSubmit)       socket.on('force_submission',      onForceSubmit);
+    if (onMyCheckpoint)      socket.on('my_checkpoint_update',  onMyCheckpoint);
 
     return () => {
       socket.emit('leave_session', { session_id: sessionId });

@@ -4,11 +4,12 @@ import { Fragment, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useParams, useRouter } from 'next/navigation';
 import DOMPurify from 'dompurify';
 import StudentShell from '@/components/layout/StudentShell';
+import { useSocket } from '@/hooks/use-socket';
 import { studentService } from '@/services/student.service';
 import type { AssignmentSubmitResult, VivaSubmitResult, ContentPage } from '@/services/student.service';
 import { executionService, type PlaygroundResult } from '@/services/execution.service';
 import { renderMarkdown } from '@/lib/markdown';
-import type { ContentModule, QuizQuestion } from '@/types';
+import type { ContentModule, QuizQuestion, LabSession } from '@/types';
 import { Loader2, ArrowLeft, CheckCircle2, FileText, PlayCircle, HelpCircle, BookOpen, Code2, Image as ImageIcon, FileCode, Play, Globe, Link2, Download, ExternalLink, ClipboardCheck, Mic2 } from 'lucide-react';
 import styles from '../page.module.css';
 
@@ -102,6 +103,29 @@ export default function PreLabDetailPage() {
   }, [experimentId]);
 
   useEffect(() => { loadModules(); }, [loadModules]);
+
+  // ── Fix 4: live launched-quiz push (C15) ──────────────────────────────────
+  // The instructor can push an unpublished quiz live mid-session. The backend
+  // whitelist already exposes it on fetch; this socket listener makes it appear
+  // WITHOUT a manual reload — reload modules the moment the quiz is launched.
+  const [liveSessionId, setLiveSessionId] = useState<string | null>(null);
+  useEffect(() => {
+    let mounted = true;
+    studentService.getSessions()
+      .then((list: LabSession[]) => {
+        const active = list.find(s => s.experiment_id === experimentId && s.status === 'active');
+        if (mounted && active) setLiveSessionId(active.id);
+      })
+      .catch(() => undefined);
+    return () => { mounted = false; };
+  }, [experimentId]);
+
+  const { emitScreenshot } = useSocket({
+    sessionId: liveSessionId || '',
+    enabled: !!liveSessionId,
+    onQuizLaunched: useCallback(() => { loadModules(); }, [loadModules]),
+    onPageLaunched: useCallback(() => { loadModules(); }, [loadModules]),
+  });
 
   const active = modules.find(m => m.id === activeId) || null;
   const doneCount = modules.filter(m => m.completed).length;
