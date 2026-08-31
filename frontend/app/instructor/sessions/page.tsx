@@ -9,6 +9,7 @@ import {
 import InstructorShell from '@/components/layout/InstructorShell';
 import { sessionService } from '@/services/session.service';
 import { experimentService } from '@/services/experiment.service';
+import { experienceService } from '@/services/experience.service';
 import styles from '../shared.module.css';
 
 interface EnrichedSession {
@@ -89,7 +90,34 @@ export default function SessionsPage() {
   });
   const [saving, setSaving] = useState(false);
 
+  // Attach-experiment state (P0 fix: admin-created session, attach later)
+  const [attachSession, setAttachSession] = useState<EnrichedSession | null>(null);
+  const [attachExpId, setAttachExpId] = useState('');
+  const [attaching, setAttaching] = useState(false);
+
   const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+
+  const openAttach = (s: EnrichedSession) => {
+    setAttachSession(s);
+    setAttachExpId(s.experiment_id || '');
+    // Ensure the experiment dropdown has options
+    experimentService.listMine().then(res => setExperiments((res as InstructorExperiment[]) ?? []))
+      .catch(() => {});
+  };
+
+  const attachExperiment = async () => {
+    if (!attachSession || !attachExpId) { toast3('Select an experiment.'); return; }
+    setAttaching(true);
+    try {
+      await experienceService.patchSession(attachSession.id, { experiment_id: attachExpId });
+      toast3('Experiment attached.');
+      setAttachSession(null);
+      load();
+    } catch (e: unknown) {
+      const err = e as { response?: { data?: { error?: string } } };
+      toast3(err?.response?.data?.error ?? 'Attach failed.');
+    } finally { setAttaching(false); }
+  };
 
   const load = useCallback(async () => {
     try {
@@ -249,10 +277,16 @@ export default function SessionsPage() {
                     {s.status === 'active' ? 'Live' : s.status === 'scheduled' ? 'Upcoming' : 'Ended'}
                   </span>
                   {s.status === 'scheduled' && (
-                    <button className={styles.primaryBtn} disabled={busyId === s.id}
-                      onClick={() => startSession(s.id)}>
-                      <PlayCircle size={13} /> {busyId === s.id ? 'Starting…' : 'Start'}
-                    </button>
+                    <>
+                      <button className={styles.ghostBtn} onClick={() => openAttach(s)}
+                        style={{ fontSize: 11.5, padding: '4px 10px', minHeight: 0 }}>
+                        {s.experiment_id ? 'Swap' : 'Attach'} Exp
+                      </button>
+                      <button className={styles.primaryBtn} disabled={busyId === s.id}
+                        onClick={() => startSession(s.id)}>
+                        <PlayCircle size={13} /> {busyId === s.id ? 'Starting…' : 'Start'}
+                      </button>
+                    </>
                   )}
                   {s.status === 'active' && (
                     <>
@@ -402,6 +436,46 @@ export default function SessionsPage() {
                 <AlertCircle size={13} /> No experiments yet for this subject — create one under Experiments first.
               </p>
             )}
+          </div>
+        </div>
+      )}
+
+      {/* ══ Attach Experiment Modal (P0 fix) ══ */}
+      {attachSession && (
+        <div className={styles.modalOverlay} onClick={() => setAttachSession(null)}>
+          <div className={styles.modalCard} onClick={e => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>
+                {attachSession.experiment_id ? 'Swap Experiment' : 'Attach Experiment'}
+              </h2>
+              <button className={styles.closeBtn} onClick={() => setAttachSession(null)}><X size={16} /></button>
+            </div>
+            <p style={{ fontSize: 13, color: '#6b7280', marginBottom: 14 }}>
+              {attachSession.experiment_title || 'This session'} · {attachSession.section_name} · {fmt(attachSession.scheduled_at)}
+            </p>
+            <div className={styles.formGroup}>
+              <label className={styles.formLabel}>Experiment</label>
+              <select className={styles.select} value={attachExpId}
+                onChange={e => setAttachExpId(e.target.value)}>
+                <option value="">Select an experiment…</option>
+                {experiments.map(e => (
+                  <option key={e.id} value={e.id}>
+                    {e.title}{e.is_published ? '' : ' (draft)'}
+                  </option>
+                ))}
+              </select>
+            </div>
+            <div className={styles.actionRow} style={{ marginBottom: 0 }}>
+              <span style={{ fontSize: 12, color: '#6b7280', flex: 1 }}>
+                Attach before starting — cannot change once live.
+              </span>
+              <div style={{ display: 'flex', gap: 10 }}>
+                <button className={styles.secondaryBtn} onClick={() => setAttachSession(null)}>Cancel</button>
+                <button className={styles.primaryBtn} disabled={attaching || !attachExpId} onClick={attachExperiment}>
+                  {attaching ? 'Attaching…' : 'Attach Experiment'}
+                </button>
+              </div>
+            </div>
           </div>
         </div>
       )}

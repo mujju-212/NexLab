@@ -8,13 +8,14 @@ import {
 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import ContentStudio from '@/components/instructor/studio/ContentStudio';
+import ExperimentDesign from '@/components/instructor/ExperimentDesign';
 import { experimentService } from '@/services/experiment.service';
 import { instructorService } from '@/services/instructor.service';
 import { executionService, type CompilerLanguage } from '@/services/execution.service';
 import styles from '../../../shared.module.css';
 
-// Only two tabs remain: Details and Pre-lab Content.
-type Tab = 'details' | 'content';
+// Details, Pre-lab Content and Design (checkpoints/rubric/proctoring/type).
+type Tab = 'details' | 'content' | 'design';
 
 interface Exp {
   id: string;
@@ -341,6 +342,7 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
           {([
             { id: 'details', label: 'Details' },
             { id: 'content', label: `Pre-lab Content${contentCount != null ? ` (${contentCount})` : ''}` },
+            { id: 'design',  label: 'Design' },
           ] as { id: Tab; label: string }[]).map(t => (
             <button
               key={t.id}
@@ -495,6 +497,11 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
           onToast={toast3}
           onCount={setContentCount}
         />
+      )}
+
+      {/* ══ DESIGN — checkpoints / rubric / proctoring / type ══ */}
+      {tab === 'design' && (
+        <ExperimentDesign experimentId={experimentId} onToast={toast3} />
       )}
     </InstructorShell>
   );
