@@ -47,6 +47,10 @@ backend/instance/
 backend/docker/postgres_data/
 backend/docker/redis_data/
 
+# ── Runtime output directories ──────────────────────────────────────────
+backend/app/reports_out/
+backend/.pip_cache/
+
 # ── Logs ────────────────────────────────────────────────────────────────
 *.log
 logs/
