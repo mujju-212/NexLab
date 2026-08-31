@@ -1,10 +1,22 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { Download, Table, Loader2 } from 'lucide-react';
+import { Download, Table, Loader2, FileText, RefreshCw } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import styles from '../shared.module.css';
 import { sessionService } from '@/services/session.service';
+import { experienceService, type ReportRow } from '@/services/experience.service';
+
+const REPORT_KINDS = [
+  { value: 'gradebook',              label: 'Gradebook',              desc: 'All students × experiments, weighted finals + letter grade' },
+  { value: 'session_summary',        label: 'Session Summary',        desc: 'Attendance, performance, focus & integrity per session' },
+  { value: 'student_progress',       label: 'Student Progress',       desc: 'Per-student completion, grades & mastery' },
+  { value: 'experiment_performance', label: 'Experiment Performance', desc: 'Avg final, attempts, completion per experiment' },
+  { value: 'at_risk',                label: 'At-Risk',                desc: 'Students projected below the pass threshold' },
+  { value: 'cross_section',          label: 'Cross-Section',          desc: 'Same experiment compared across your sections' },
+  { value: 'viva_consolidated',      label: 'Viva Consolidated',      desc: 'Per-student viva grades + AI feedback' },
+  { value: 'catch_up',               label: 'Catch-Up',               desc: 'Who used catch-up and their grade delta' },
+];
 
 interface SessionOption {
   id: string;
@@ -55,6 +67,44 @@ export default function ReportsPage() {
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+
+  // Async report generation (R2)
+  const [reportKind, setReportKind] = useState('gradebook');
+  const [reports, setReports] = useState<ReportRow[]>([]);
+  const [generating, setGenerating] = useState(false);
+  const [reportsLoading, setReportsLoading] = useState(true);
+
+  const loadReports = useCallback(async () => {
+    try { setReports(await experienceService.listReports()); }
+    catch { /* ignore */ }
+    finally { setReportsLoading(false); }
+  }, []);
+
+  useEffect(() => { loadReports(); }, [loadReports]);
+
+  const generateReport = async () => {
+    setGenerating(true);
+    try {
+      await experienceService.requestReport(reportKind, { session_id: sessionId || undefined });
+      flash('Report generated.');
+      await loadReports();
+    } catch (e: any) {
+      setError(e?.response?.data?.error || 'Report generation failed.');
+    } finally {
+      setGenerating(false);
+    }
+  };
+
+  const downloadReport = async (id: string) => {
+    try { await experienceService.downloadReport(id); }
+    catch { setError('Download failed.'); }
+  };
+
+  const reportStatusBadge = (status: string) => {
+    if (status === 'ready') return styles.greenBadge;
+    if (status === 'failed') return styles.redBadge;
+    return styles.amberBadge;
+  };
 
   const flash = (msg: string) => {
     setNotice(msg);
@@ -142,6 +192,60 @@ export default function ReportsPage() {
       title="Class Reports & Gradebook Export"
       subtitle="Session attendance reports with server-side CSV export for department audits"
     >
+      {/* ══ Analytics Reports (R1-R6) ════════════════════════════════════════ */}
+      <div className={styles.sectionCard} style={{ marginBottom: 20 }}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <h2 className={styles.sectionTitle}>Generate Analytics Reports</h2>
+            <p className={styles.sectionSub}>Async CSV generation — status updates in the list below</p>
+          </div>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <select className={styles.select} value={reportKind} onChange={e => setReportKind(e.target.value)}
+              style={{ width: 'auto', minWidth: 200 }}>
+              {REPORT_KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
+            </select>
+            <button className={styles.primaryBtn} onClick={generateReport} disabled={generating}>
+              {generating ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+              Generate
+            </button>
+          </div>
+        </div>
+        <p style={{ fontSize: 12.5, color: '#6b7280', marginBottom: 14 }}>
+          {REPORT_KINDS.find(k => k.value === reportKind)?.desc}
+        </p>
+
+        {/* Recent reports */}
+        {reportsLoading ? (
+          <div style={{ textAlign: 'center', color: '#9891a6', padding: 16 }}>
+            <Loader2 size={16} className="animate-spin" />
+          </div>
+        ) : reports.length > 0 ? (
+          <div className={styles.list}>
+            {reports.slice(0, 10).map(r => (
+              <div key={r.id} className={styles.listRow}>
+                <div className={styles.rowBody}>
+                  <div className={styles.rowTitle}>{r.kind}</div>
+                  <div className={styles.rowMeta}>{r.created_at ?? '—'} · {r.status}</div>
+                </div>
+                <div className={styles.rowSide}>
+                  <span className={`${styles.badge} ${reportStatusBadge(r.status)}`}>{r.status}</span>
+                  {r.status === 'ready' && r.id && (
+                    <button className={styles.secondaryBtn} onClick={() => downloadReport(r.id)}
+                      style={{ padding: '6px 12px', minHeight: 0, fontSize: 12 }}>
+                      <Download size={12} /> CSV
+                    </button>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div style={{ color: '#9891a6', fontSize: 13, padding: 8 }}>
+            No reports yet. Pick a kind and click Generate.
+          </div>
+        )}
+      </div>
+
       {/* Session Picker + Export */}
       <div className={styles.actionRow}>
         <div className={styles.formGroup} style={{ marginBottom: 0, minWidth: 'min(380px, 100%)', flex: 1 }}>

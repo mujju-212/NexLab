@@ -3,6 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import InstructorShell from '@/components/layout/InstructorShell';
+import AttentionPanel from '@/components/instructor/AttentionPanel';
 import { useAuthStore } from '@/store/auth-store';
 import { sessionService } from '@/services/session.service';
 import {
@@ -148,6 +149,9 @@ export default function InstructorDashboard() {
           </div>
         ))}
       </div>
+
+      {/* ── Attention Needed (DB1-DB4) ─────────────────────────────────── */}
+      <AttentionPanel />
 
       {/* ── Activity Board ─────────────────────────────────────────────── */}
       <div className={styles.boardSection}>
