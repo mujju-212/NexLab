@@ -1,17 +1,20 @@
 'use client';
 
-import { useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import {
   LayoutDashboard, Users, BookOpen, GraduationCap,
   BarChart3, Megaphone, ShieldCheck, Settings,
   Bell, ChevronRight, LogOut, Menu, Search, User,
-  Layers
+  Layers, Clock
 } from 'lucide-react';
 import styles from './InstitutionShell.module.css';
+import PasswordGate from './PasswordGate';
 import AgentChatPanel from './AgentChatPanel';
+import { ShellNotifications } from './shell-widgets';
 import { authService } from '@/services/auth.service';
+import { institutionService, type GlobalSearchHit } from '@/services/institution.service';
 import { useAuthStore } from '@/store/auth-store';
 
 const NAV_MAIN = [
@@ -45,8 +48,23 @@ export default function InstitutionShell({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+  // Live global search — hits the /institution/search endpoint (users,
+  // sections, sessions) instead of only forwarding to the users page.
+  const [searchHits, setSearchHits] = useState<GlobalSearchHit[]>([]);
+  const searchTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const go = async (id: string, route: string) => {
+  useEffect(() => {
+    if (searchTimer.current) clearTimeout(searchTimer.current);
+    const q = searchQuery.trim();
+    if (q.length < 2) { setSearchHits([]); return; }
+    searchTimer.current = setTimeout(async () => {
+      const hits = await institutionService.globalSearch(q);
+      setSearchHits(hits);
+    }, 300);
+    return () => { if (searchTimer.current) clearTimeout(searchTimer.current); };
+  }, [searchQuery]);
+
+  const go = useCallback(async (id: string, route: string) => {
     setMobileOpen(false);
     if (id === 'Logout') {
       await authService.logout();
@@ -55,20 +73,35 @@ export default function InstitutionShell({
       return;
     }
     router.push(route);
-  };
+  }, [router, clearAuth]);
 
-  const handleSearch = (e: React.KeyboardEvent) => {
-    if (e.key === 'Enter' && searchQuery.trim()) {
-      router.push(`/institution/users?search=${encodeURIComponent(searchQuery.trim())}`);
-      setSearchQuery('');
-    }
-  };
-
-  const navCls = (id: string, isLogout = false) =>
+  const navCls = useCallback((id: string, isLogout = false) =>
     [styles.navItem, id === activePage ? styles.navItemActive : '', isLogout ? styles.navItemLogout : '']
-      .filter(Boolean).join(' ');
+      .filter(Boolean).join(' '),
+  [activePage]);
 
-  const initials = user?.full_name?.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() ?? 'IA';
+  const initials = useMemo(
+    () => user?.full_name?.split(' ').map((w: string) => w[0]).join('').slice(0, 2).toUpperCase() ?? 'IA',
+    [user?.full_name],
+  );
+
+  const SEARCH_ICONS: Record<GlobalSearchHit['type'], React.ReactNode> = useMemo(() => ({
+    user: <User size={13} />,
+    section: <Layers size={13} />,
+    session: <Clock size={13} />,
+  }), []);
+
+  const goSearchHit = useCallback((hit: GlobalSearchHit) => {
+    setSearchQuery(''); setSearchHits([]); setMobileOpen(false);
+    if (hit.type === 'user') router.push(`/institution/users/${hit.id}`);
+    else if (hit.type === 'section') router.push('/institution/academic?tab=sections');
+    else router.push('/institution/sessions?tab=history');
+  }, [router]);
+
+  // Admin-issued temp password → block the entire shell until replaced.
+  if (user?.must_change_password) {
+    return <PasswordGate>{null}</PasswordGate>;
+  }
 
   return (
     <div className={styles.stage}>
@@ -146,20 +179,64 @@ export default function InstitutionShell({
               </div>
             </div>
             <div className={styles.headerRight}>
-              <div className={styles.searchBar} style={searchFocused ? { borderColor: '#7c3aed', boxShadow: '0 0 0 3px rgba(124,58,237,0.1)' } : {}}>
+              <div className={styles.searchBar} style={{ ...(searchFocused ? { borderColor: '#7c3aed', boxShadow: '0 0 0 3px rgba(124,58,237,0.1)' } : {}), position: 'relative' }}>
                 <Search size={14} strokeWidth={2} className={styles.searchIcon} />
                 <input type="text" placeholder="Search users, batches…" value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)} onKeyDown={handleSearch}
+                  onChange={e => setSearchQuery(e.target.value)}
+                  onKeyDown={e => {
+                    if (e.key === 'Escape') { setSearchQuery(''); setSearchHits([]); }
+                    if (e.key === 'Enter' && searchQuery.trim()) {
+                      // Fallback: full user list filtered by the query.
+                      router.push(`/institution/users?search=${encodeURIComponent(searchQuery.trim())}`);
+                      setSearchQuery(''); setSearchHits([]);
+                    }
+                  }}
                   onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)}
                   style={{ border:'none', outline:'none', background:'transparent', fontSize:13, color:'#1e293b', fontFamily:"'Manrope',sans-serif", width:'100%', padding:0 }} />
                 <kbd className={styles.searchKbd}>↵</kbd>
+
+                {/* Live results dropdown */}
+                {searchFocused && searchQuery.trim().length >= 2 && (
+                  <div style={{
+                    position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 120,
+                    background: '#fff', borderRadius: 12, border: '1px solid #ede9fe',
+                    boxShadow: '0 14px 38px -10px rgba(30,20,60,.25)', overflow: 'hidden',
+                    maxHeight: 320, overflowY: 'auto',
+                  }}>
+                    {searchHits.length === 0 ? (
+                      <p style={{ margin: 0, padding: '12px 14px', fontSize: 12.5, color: '#9891a6' }}>
+                        No matches — press ↵ to search the full user list.
+                      </p>
+                    ) : searchHits.map(hit => (
+                      <button key={`${hit.type}-${hit.id}`}
+                        onMouseDown={e => { e.preventDefault(); goSearchHit(hit); }}
+                        style={{
+                          display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                          padding: '10px 14px', background: 'none', border: 'none',
+                          borderBottom: '1px solid #f5f3ff', cursor: 'pointer', textAlign: 'left',
+                        }}>
+                        <span style={{
+                          width: 26, height: 26, borderRadius: 8, flexShrink: 0,
+                          display: 'flex', alignItems: 'center', justifyContent: 'center',
+                          background: 'rgba(147,51,234,0.09)', color: '#7c3aed',
+                        }}>
+                          {SEARCH_ICONS[hit.type] ?? <Search size={13} />}
+                        </span>
+                        <span style={{ flex: 1, minWidth: 0 }}>
+                          <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#201b2e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {hit.label}
+                          </span>
+                          <span style={{ display: 'block', fontSize: 11, color: '#9891a6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                            {hit.sub_label || hit.type}
+                          </span>
+                        </span>
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#7c3aed', textTransform: 'capitalize' }}>{hit.type}</span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
-              <div style={{ position: 'relative' }}>
-                <button className={styles.iconBtn} onClick={() => router.push('/institution/announcements')}>
-                  <Bell size={16} strokeWidth={1.9} />
-                  <span className={styles.notifDot} />
-                </button>
-              </div>
+              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
               <div style={{ position: 'relative' }}>
                 <div className={styles.profileChip} onClick={() => setShowProfileMenu(p => !p)}>
                   <div className={styles.avatarLg} style={{ background: '#7c3aed' }}>{initials}</div>

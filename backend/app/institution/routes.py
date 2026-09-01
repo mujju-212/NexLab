@@ -22,6 +22,26 @@ import bcrypt, uuid, csv, io
 institution_bp = Blueprint('institution', __name__)
 
 
+def _int_arg(name, default, lo=None, hi=None):
+    """
+    Parse an integer query param without ever 500-ing on garbage input.
+    Bad values fall back to `default` (clamped to [lo, hi] when given);
+    a query-param typo must not take down the endpoint.
+    """
+    raw = request.args.get(name)
+    if raw is None or raw == '':
+        return default
+    try:
+        val = int(raw)
+    except (TypeError, ValueError):
+        return default
+    if lo is not None:
+        val = max(lo, val)
+    if hi is not None:
+        val = min(hi, val)
+    return val
+
+
 # ── User Management ────────────────────────────────────────────────────────────
 
 @institution_bp.route('/users', methods=['GET'])
@@ -50,8 +70,8 @@ def list_users():
     total = query.count()
 
     if request.args.get('page'):
-        page     = max(int(request.args.get('page', 1)), 1)
-        per_page = min(int(request.args.get('per_page', 50)), 200)
+        page     = _int_arg('page', 1, lo=1)
+        per_page = _int_arg('per_page', 50, lo=1, hi=200)
         paged    = query.paginate(page=page, per_page=per_page, error_out=False)
         return jsonify({
             'users': [u.to_dict() for u in paged.items],
@@ -116,27 +136,50 @@ def create_user():
     }
     Never requires OTP — this is a trusted, admin-initiated creation.
     """
-    data = request.get_json()
-    if User.query.filter_by(email=data['email'].lower()).first():
+    data = request.get_json() or {}
+    email      = (data.get('email') or '').lower().strip()
+    full_name  = (data.get('full_name') or '').strip()
+    role       = (data.get('role') or '').strip()
+
+    if not email or not full_name or not role:
+        return jsonify({'error': 'email, full_name and role are required'}), 400
+    if role not in ('student', 'instructor', 'institution_admin'):
+        return jsonify({'error': "role must be 'student', 'instructor' or 'institution_admin'"}), 400
+
+    # department_id must belong to this institution when supplied.
+    department_id = data.get('department_id')
+    if department_id:
+        if not Department.query.filter_by(
+                id=department_id, institution_id=g.institution_id).first():
+            return jsonify({'error': 'department_id not found in your institution'}), 404
+
+    if User.query.filter_by(email=email).first():
         return jsonify({'error': 'Email already exists'}), 409
 
-    if data.get('role') == 'student':
+    if role == 'student':
         blocked = student_headroom(g.institution_id, adding=1)
         if blocked:
             return jsonify(blocked), 409
 
+    # Never fall back to a shared, hardcoded password — generate a random
+    # one-time credential the admin distributes, instead.
+    admin_password = (data.get('password') or '').strip()
+    temp_password_generated = not admin_password
+    temp_password = admin_password or uuid.uuid4().hex[:10]
+
     user = User(
         institution_id=g.institution_id,
-        email=data['email'].lower().strip(),
-        password_hash=bcrypt.hashpw(data.get('password', 'Welcome@123').encode(),
-                                    bcrypt.gensalt()).decode(),
-        full_name=data['full_name'],
+        email=email,
+        # Admin-issued credential — the user must replace it on first login.
+        password_hash=bcrypt.hashpw(temp_password.encode(), bcrypt.gensalt()).decode(),
+        must_change_password=True,
+        full_name=full_name,
         first_name=data.get('first_name'),
         last_name=data.get('last_name'),
-        role=data['role'],
+        role=role,
         roll_number=data.get('roll_number'),
         staff_id=data.get('staff_id'),
-        department_id=data.get('department_id'),
+        department_id=department_id,
         year_of_study=data.get('year_of_study'),
         semester=data.get('semester'),
         phone=data.get('phone'),
@@ -144,8 +187,13 @@ def create_user():
     db.session.add(user)
     db.session.commit()
     _write_audit(g.user_id, g.institution_id, 'create_user', 'user', user.id,
-                 f"Created {user.role} {user.full_name} ({user.email})")
-    return jsonify({'user': user.to_dict()}), 201
+                 f"Created {user.role} {user.full_name} ({user.email})"
+                 + (" (temp password generated)" if temp_password_generated else ""))
+    resp = {'user': user.to_dict()}
+    # Hand the one-time credential back only when the admin didn't choose it.
+    if temp_password_generated:
+        resp['temp_password'] = temp_password
+    return jsonify(resp), 201
 
 
 @institution_bp.route('/users/<user_id>', methods=['PATCH'])
@@ -254,9 +302,9 @@ def bulk_upload_users():
         d.code: d.id for d in Department.query.filter_by(institution_id=g.institution_id).all() if d.code
     }
 
-    content = file.read().decode('utf-8')
+    content = file.read().decode('utf-8', errors='replace')
     reader = csv.DictReader(io.StringIO(content))
-    created, skipped, rejected = [], [], []
+    created, skipped, rejected, failed, created_creds = [], [], [], [], []
 
     # Plan cap is checked per row so a 500-row CSV fills the remaining seats
     # instead of being rejected wholesale.
@@ -264,8 +312,8 @@ def bulk_upload_users():
     seats     = quota['remaining']          # None => uncapped
     new_students = 0
 
-    for row in reader:
-        email = row.get('email', '').lower().strip()
+    for idx, row in enumerate(reader, start=2):   # start=2 → row 1 is the header
+        email = (row.get('email') or '').lower().strip()
         if not email:
             continue
         if User.query.filter_by(email=email).first():
@@ -284,23 +332,37 @@ def bulk_upload_users():
         year_raw  = (row.get('year_of_study', '') or '').strip()
         sem_raw   = (row.get('semester', '') or '').strip()
 
-        user = User(
-            institution_id=g.institution_id,
-            email=email,
-            password_hash=bcrypt.hashpw('Welcome@123'.encode(), bcrypt.gensalt()).decode(),
-            full_name=row.get('full_name', '').strip(),
-            role=role,
-            roll_number=row.get('roll_number', '').strip() or None,
-            staff_id=row.get('staff_id', '').strip() or None,
-            department_id=dept_by_code.get(dept_code),
-            year_of_study=int(year_raw) if year_raw.isdigit() else None,
-            semester=int(sem_raw) if sem_raw.isdigit() else None,
-            phone=row.get('phone', '').strip(),
-        )
-        db.session.add(user)
-        created.append(email)
-        if role == 'student':
-            new_students += 1
+        try:
+            # Random per-user temp credential, not a shared default. Returned
+            # once in the response so the admin can distribute it (and reset
+            # any that leak via the per-user reset-password endpoint).
+            temp_password = uuid.uuid4().hex[:10]
+            user = User(
+                institution_id=g.institution_id,
+                email=email,
+                password_hash=bcrypt.hashpw(temp_password.encode(),
+                                            bcrypt.gensalt()).decode(),
+                must_change_password=True,
+                full_name=(row.get('full_name') or '').strip(),
+                role=role,
+                roll_number=(row.get('roll_number') or '').strip() or None,
+                staff_id=(row.get('staff_id') or '').strip() or None,
+                department_id=dept_by_code.get(dept_code),
+                year_of_study=int(year_raw) if year_raw.isdigit() else None,
+                semester=int(sem_raw) if sem_raw.isdigit() else None,
+                phone=(row.get('phone') or '').strip(),
+            )
+            with db.session.begin_nested():   # SAVEPOINT — one bad row can't
+                db.session.add(user)          # sink the rest of the batch
+                db.session.flush()
+            created.append(email)
+            created_creds.append({'email': email, 'temp_password': temp_password})
+            if role == 'student':
+                new_students += 1
+        except Exception as exc:
+            # One malformed row (duplicate roll_number, too-long field, …)
+            # must not 500 the whole upload — reject that row and continue.
+            failed.append({'email': email, 'row': idx, 'reason': str(exc)[:200]})
 
     db.session.commit()
     if created:
@@ -309,11 +371,16 @@ def bulk_upload_users():
                      f"{len(rejected)} over plan limit")
     payload = {
         'created': len(created), 'skipped': len(skipped), 'skipped_emails': skipped,
+        # One-time credentials — hand these out, they are never shown again.
+        'credentials': created_creds,
     }
+    if failed:
+        payload['failed_rows'] = failed
+        payload['message'] = f"{len(failed)} row(s) failed (see failed_rows)."
     if rejected:
         payload['rejected_over_limit'] = rejected
-        payload['message'] = (f"{len(rejected)} student row(s) skipped — the "
-                              f"{quota['plan']} plan allows {quota['limit']} students.")
+        payload['message'] = (payload.get('message', '') + f" {len(rejected)} student row(s) "
+                              f"skipped — the {quota['plan']} plan allows {quota['limit']} students.").strip()
     return jsonify(payload), 201
 
 
@@ -604,6 +671,7 @@ def subjects():
         name=data['name'],
         code=data.get('code'),
         description=data.get('description'),
+        icon=data.get('icon', 'datastruct'),
         env_profile_id=data.get('env_profile_id'),
         total_marks=data.get('total_marks', 100),
     )
@@ -621,7 +689,7 @@ def update_subject(subject_id):
     subject = Subject.query.filter_by(id=subject_id, institution_id=g.institution_id).first_or_404()
     data = request.get_json() or {}
     changed = []
-    for field in ('name', 'code', 'description', 'env_profile_id', 'total_marks'):
+    for field in ('name', 'code', 'description', 'icon', 'env_profile_id', 'total_marks'):
         if field in data:
             setattr(subject, field, data[field])
             changed.append(field)
@@ -725,6 +793,135 @@ def assign_subject():
                  f"Assigned {subject.name} to section {section.name} "
                  f"under {lead.full_name if lead else 'unknown'}")
     return jsonify({'section_subject': _ss_dict(ss, section, subject)}), 201
+
+
+@institution_bp.route('/section-subjects/bulk', methods=['POST'])
+@require_role('institution_admin')
+def bulk_assign_subjects():
+    """
+    Grid assignment: assign one instructor to every (section, subject) combo
+    that doesn't exist yet. Turns "40 subjects × 8 sections" from an afternoon
+    of clicks into one request.
+
+    Body: {section_ids: [...], subject_ids: [...], instructor_id: '...'}
+    Existing (section, subject) pairs are skipped, not overwritten.
+    """
+    data = request.get_json() or {}
+    section_ids = data.get('section_ids') or []
+    subject_ids = data.get('subject_ids') or []
+    if not section_ids or not subject_ids:
+        return jsonify({'error': 'section_ids and subject_ids are required'}), 400
+    if len(section_ids) * len(subject_ids) > 1000:
+        return jsonify({'error': 'That combination would create over 1000 rows — split it up'}), 400
+
+    try:
+        instructor = _own_instructor(data.get('instructor_id'), 'instructor_id')
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    # Validate every section and subject in one query each.
+    valid_sections = {s.id: s for s in Section.query.filter(
+        Section.id.in_(section_ids), Section.institution_id == g.institution_id).all()}
+    if len(valid_sections) != len(set(section_ids)):
+        return jsonify({'error': 'One or more section_ids do not belong to your institution'}), 404
+
+    valid_subjects = {s.id: s for s in Subject.query.filter(
+        Subject.id.in_(subject_ids), Subject.institution_id == g.institution_id).all()}
+    if len(valid_subjects) != len(set(subject_ids)):
+        return jsonify({'error': 'One or more subject_ids do not belong to your institution'}), 404
+
+    existing = {(ss.section_id, ss.subject_id) for ss in SectionSubject.query.filter(
+        SectionSubject.section_id.in_(section_ids),
+        SectionSubject.subject_id.in_(subject_ids),
+        SectionSubject.institution_id == g.institution_id).all()}
+
+    created_rows, skipped = [], 0
+    for sec_id in set(section_ids):
+        for sub_id in set(subject_ids):
+            if (sec_id, sub_id) in existing:
+                skipped += 1
+                continue
+            ss = SectionSubject(
+                institution_id=g.institution_id,
+                section_id=sec_id,
+                subject_id=sub_id,
+                instructor_id=instructor.id,
+            )
+            db.session.add(ss)
+            created_rows.append((sec_id, sub_id))
+
+    db.session.commit()
+    if created_rows:
+        _write_audit(g.user_id, g.institution_id, 'bulk_assign_subjects', 'section_subject',
+                     None, f"Assigned {len(created_rows)} (section, subject) combos "
+                           f"to {instructor.full_name} ({skipped} already existed)")
+
+    return jsonify({
+        'created':    len(created_rows),
+        'skipped':    skipped,
+        'instructor': instructor.full_name,
+    }), 201
+
+
+@institution_bp.route('/section-subjects/copy', methods=['POST'])
+@require_role('institution_admin')
+def copy_section_assignments():
+    """
+    Clone every subject assignment of a source section onto one or more target
+    sections — the "copy from last semester's section" workflow. Existing
+    (target, subject) pairs are skipped.
+
+    Body: {source_section_id: '...', target_section_ids: [...]}
+    """
+    data = request.get_json() or {}
+    source_id      = data.get('source_section_id')
+    target_ids     = data.get('target_section_ids') or []
+    if not source_id or not target_ids:
+        return jsonify({'error': 'source_section_id and target_section_ids are required'}), 400
+    if source_id in target_ids:
+        return jsonify({'error': 'target_section_ids must not include the source section'}), 400
+
+    _own_section(source_id)
+    targets = {s.id: s for s in Section.query.filter(
+        Section.id.in_(target_ids), Section.institution_id == g.institution_id).all()}
+    if len(targets) != len(set(target_ids)):
+        return jsonify({'error': 'One or more target sections do not belong to your institution'}), 404
+
+    source_ss = SectionSubject.query.filter_by(
+        institution_id=g.institution_id, section_id=source_id).all()
+    if not source_ss:
+        return jsonify({'error': 'The source section has no subject assignments to copy'}), 400
+
+    target_existing = {(ss.section_id, ss.subject_id) for ss in SectionSubject.query.filter(
+        SectionSubject.section_id.in_(target_ids),
+        SectionSubject.institution_id == g.institution_id).all()}
+
+    created_rows, skipped = [], 0
+    for tgt_id in targets:
+        for ss in source_ss:
+            if (tgt_id, ss.subject_id) in target_existing:
+                skipped += 1
+                continue
+            db.session.add(SectionSubject(
+                institution_id=g.institution_id,
+                section_id=tgt_id,
+                subject_id=ss.subject_id,
+                instructor_id=ss.instructor_id,
+                co_instructor_id=ss.co_instructor_id,
+            ))
+            created_rows.append((tgt_id, ss.subject_id))
+
+    db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'copy_section_assignments', 'section_subject',
+                 source_id, f"Copied {len(created_rows)} assignments to {len(targets)} section(s) "
+                            f"({skipped} already existed)")
+
+    return jsonify({
+        'created': len(created_rows),
+        'skipped': skipped,
+        'copied_subjects': len(source_ss),
+        'targets': len(targets),
+    }), 201
 
 
 @institution_bp.route('/section-subjects', methods=['GET'])
@@ -947,7 +1144,10 @@ def send_announcement():
         db.session.add(notif)
         created += 1
 
-    # Push via SocketIO to online users
+    # Persist first, then push via SocketIO — users must never get a toast for
+    # an announcement whose rows failed to commit.
+    db.session.commit()
+
     from app.extensions import socketio
     socketio.emit('new_announcement', {
         'title': title,
@@ -956,7 +1156,6 @@ def send_announcement():
         'timestamp': datetime.utcnow().isoformat(),
     }, room=f"institution_{g.institution_id}")
 
-    db.session.commit()
     _write_audit(g.user_id, g.institution_id, 'send_announcement', 'announcement', None,
                  f"\"{title}\" sent to {created} {target}"
                  + (f" in one section" if section_id else ""))
@@ -1060,10 +1259,10 @@ def get_audit_log():
     UI can build its filter dropdown without a second round trip.
     """
     from app.models.academic import AuditLog
-    limit  = min(max(int(request.args.get('limit', 50) or 50), 1), 500)
-    offset = max(int(request.args.get('offset', 0) or 0), 0)
-    action = request.args.get('action')
-    days   = int(request.args.get('days', 30) or 30)
+    limit  = _int_arg('limit', 50, lo=1, hi=500)
+    offset = _int_arg('offset', 0, lo=0)
+
+    days   = _int_arg('days', 30, lo=1, hi=365)
     search = (request.args.get('q') or '').strip()
 
     query = AuditLog.query.filter_by(institution_id=g.institution_id)
@@ -1146,7 +1345,7 @@ def export_audit_log():
     """
     from app.models.academic import AuditLog
     action  = request.args.get('action')
-    days    = int(request.args.get('days', 90) or 90)
+    days    = _int_arg('days', 90, lo=1, hi=365)
     search  = (request.args.get('q') or '').strip()
 
     since = datetime.utcnow() - timedelta(days=days)
@@ -1256,7 +1455,7 @@ def analytics_overview():
         except ValueError:
             return jsonify({'error': 'Invalid `from` date; use YYYY-MM-DD'}), 400
     elif request.args.get('days'):
-        days      = int(request.args.get('days', 30))
+        days      = _int_arg('days', 30, lo=1, hi=365)
         date_from = date_to - timedelta(days=days)
     if to_str:
         try:
@@ -1313,19 +1512,18 @@ def analytics_overview():
         SectionSubject.id.in_(active_ssids)
     ).scalar() or 0
 
-    # Peak usage: count sessions per hour-of-day
-    all_sessions = LabSession.query.filter(
+    # Peak usage: count sessions per hour-of-day in SQL (was a full-table Python loop).
+    hour_rows = (db.session.query(
+        func.extract('hour', LabSession.started_at).label('h'),
+        func.count(LabSession.id).label('c'),
+    ).filter(
         LabSession.institution_id == iid,
         LabSession.started_at.isnot(None),
         LabSession.started_at >= date_from,
         LabSession.started_at <= date_to,
-    ).all()
+    ).group_by('h').all())
 
-    hour_counts = {}
-    for s in all_sessions:
-        if s.started_at:
-            h = s.started_at.hour
-            hour_counts[h] = hour_counts.get(h, 0) + 1
+    hour_counts = {int(r.h): int(r.c) for r in hour_rows if r.h is not None}
 
     peak_hours = sorted(hour_counts.items(), key=lambda x: x[1], reverse=True)[:3]
 
@@ -1364,27 +1562,31 @@ def students_at_risk():
     at_risk = db.session.query(
         ConceptMastery.student_id,
         func.avg(ConceptMastery.mastery_score).label('avg_mastery'),
-        func.count(ConceptMastery.concept).label('concepts_tracked')
-    ).filter_by(
-        institution_id=g.institution_id
+        func.count(ConceptMastery.concept).label('concepts_tracked'),
+        User.id.label('user_pk'),
+        User.full_name.label('full_name'),
+        User.email.label('email'),
+        User.roll_number.label('roll_number'),
+    ).join(
+        User, ConceptMastery.student_id == User.id
+    ).filter(
+        ConceptMastery.institution_id == g.institution_id,
+        User.role == 'student',
     ).group_by(
-        ConceptMastery.student_id
+        ConceptMastery.student_id, User.id
     ).having(
         func.avg(ConceptMastery.mastery_score) < threshold
     ).all()
 
-    result = []
-    for row in at_risk:
-        user = User.query.get(row.student_id)
-        if user:
-            result.append({
-                'student_id':       row.student_id,
-                'full_name':        user.full_name,
-                'email':            user.email,
-                'roll_number':      user.roll_number,
-                'avg_mastery':      round(float(row.avg_mastery), 1),
-                'concepts_tracked': row.concepts_tracked,
-            })
+    # Single query — the per-row User.query.get() N+1 is gone.
+    result = [{
+        'student_id':       row.student_id,
+        'full_name':        row.full_name,
+        'email':            row.email,
+        'roll_number':      row.roll_number,
+        'avg_mastery':      round(float(row.avg_mastery), 1),
+        'concepts_tracked': row.concepts_tracked,
+    } for row in at_risk]
 
     result.sort(key=lambda x: x['avg_mastery'])
     return jsonify({'at_risk_students': result, 'threshold': threshold}), 200
@@ -1403,36 +1605,35 @@ def section_comparison():
     from app.models.session import LabSession
 
     sections = Section.query.filter_by(institution_id=g.institution_id).all()
+
+    # Three aggregate queries total (was: 3–4 queries PER section).
+    grade_rows = (db.session.query(
+        SectionSubject.section_id,
+        func.avg(Grade.final_grade).label('avg_grade'),
+        func.count(Grade.id).label('grade_count'),
+    ).join(LabSession, Grade.session_id == LabSession.id)
+     .join(SectionSubject, LabSession.section_subject_id == SectionSubject.id)
+     .filter(
+         SectionSubject.institution_id == g.institution_id,
+         Grade.final_grade.isnot(None),
+     ).group_by(SectionSubject.section_id).all())
+    grade_map = {r.section_id: (round(float(r.avg_grade), 1), r.grade_count)
+                 for r in grade_rows if r.avg_grade is not None}
+
+    enrolled_rows = (db.session.query(
+        SectionStudent.section_id,
+        func.count(SectionStudent.student_id),
+    ).filter(SectionStudent.section_id.in_([s.id for s in sections]))
+     .group_by(SectionStudent.section_id).all())
+    enrolled_map = dict(enrolled_rows)
+
     result = []
-
     for sec in sections:
-        ss_ids = [ss.id for ss in SectionSubject.query.filter_by(section_id=sec.id).all()]
-
-        # Resolve session→experiment→grade via LabSession link
-        avg_grade = None
-        grade_count = 0
-        if ss_ids:
-            session_ids = [
-                r[0] for r in db.session.query(LabSession.id)
-                .filter(LabSession.section_subject_id.in_(ss_ids)).all()
-            ]
-            if session_ids:
-                row = db.session.query(
-                    func.avg(Grade.final_grade).label('avg_grade'),
-                    func.count(Grade.id).label('grade_count'),
-                ).filter(
-                    Grade.session_id.in_(session_ids),
-                    Grade.final_grade.isnot(None),
-                ).first()
-                if row and row.avg_grade is not None:
-                    avg_grade = round(float(row.avg_grade), 1)
-                    grade_count = row.grade_count
-
-        enrolled = SectionStudent.query.filter_by(section_id=sec.id).count()
+        avg_grade, grade_count = grade_map.get(sec.id, (None, 0))
         result.append({
             'section_id':    sec.id,
             'section_name':  sec.name,
-            'enrolled':      enrolled,
+            'enrolled':      enrolled_map.get(sec.id, 0),
             'avg_grade':     avg_grade,   # None = no grades yet
             'graded_count':  grade_count,
         })
@@ -1646,32 +1847,31 @@ def resend_announcement(notification_id):
     return jsonify({'resent_to': created, 'target': target}), 200
 
 
-@institution_bp.route('/announcements/targeted', methods=['POST'])
-@require_role('institution_admin')
-def send_targeted_announcement():
+def _send_targeted_announcement(data: dict, institution_id: str = None, actor_id: str = None):
     """
-    Send an announcement with rich targeting: department, batch, year, or a
-    combination of those — in addition to the existing all/students/section targets.
+    Core of POST /announcements/targeted. Takes the payload dict (not the raw
+    request) and returns (payload, status) so three callers reuse the exact
+    same code path — same tenancy filters, notification fan-out, socket
+    emission and audit row:
+      * the HTTP view (passes g),
+      * the agentic-AI apply flow (passes g),
+      * the scheduler dispatching due ScheduledAnnouncements (passes the
+        stored institution/actor — no request context exists there).
+    When institution_id/actor_id are omitted, falls back to g (request context).
+    Raises werkzeug HTTPException (e.g. 404 from _own_section) for invalid
+    section scope.
+    """
+    iid      = institution_id or g.institution_id
+    actor_id = actor_id or g.user_id
 
-    Body: {
-        title, message,
-        target: 'all' | 'students' | 'instructors',   # base filter
-        department_id?: '...',  # further narrow by department
-        batch_id?:      '...',  # further narrow to one batch
-        academic_year?: 2024,   # further narrow to one year (Batch.year)
-        section_id?:    '...',  # further narrow to one section
-    }
-    """
-    from app.models.academic import Batch
-    data       = request.get_json() or {}
     title      = (data.get('title') or '').strip()
     message    = (data.get('message') or '').strip()
     target     = data.get('target', 'all')
 
     if not title or not message:
-        return jsonify({'error': 'title and message are required'}), 400
+        return {'error': 'title and message are required'}, 400
 
-    query = User.query.filter_by(institution_id=g.institution_id, is_active=True)
+    query = User.query.filter_by(institution_id=iid, is_active=True)
 
     if target == 'students':
         query = query.filter_by(role='student')
@@ -1685,16 +1885,16 @@ def send_targeted_announcement():
     section_id = data.get('section_id')
 
     if dept_id:
-        dept = Department.query.filter_by(id=dept_id, institution_id=g.institution_id).first()
+        dept = Department.query.filter_by(id=dept_id, institution_id=iid).first()
         if not dept:
-            return jsonify({'error': 'department_id not found'}), 404
+            return {'error': 'department_id not found'}, 404
         query = query.filter_by(department_id=dept_id)
 
     if batch_id:
         # scope to students enrolled in some section of this batch
         batch_section_ids = [
             s.id for s in Section.query.filter_by(
-                institution_id=g.institution_id, batch_id=batch_id
+                institution_id=iid, batch_id=batch_id
             ).all()
         ]
         batch_student_ids = [
@@ -1711,11 +1911,11 @@ def send_targeted_announcement():
         from app.models.academic import AcademicYear as _AY, Batch as _Batch
         year_num = str(acad_year)
         year_ids = [
-            ay.id for ay in _AY.query.filter_by(institution_id=g.institution_id).all()
+            ay.id for ay in _AY.query.filter_by(institution_id=iid).all()
             if ay.year_label and ay.year_label.startswith(year_num)
         ]
-        year_batches = (_Batch.query.filter_by(institution_id=g.institution_id)
-                                .filter(_Batch.year_id.in_(year_ids)).all()
+        year_batches = (_Batch.query.filter_by(institution_id=iid)
+                        .filter(_Batch.year_id.in_(year_ids)).all()
                         if year_ids else [])
         year_section_ids = [
             s.id for b in year_batches
@@ -1729,7 +1929,7 @@ def send_targeted_announcement():
         query = query.filter(User.id.in_(year_student_ids))
 
     if section_id:
-        _own_section(section_id)
+        Section.query.filter_by(id=section_id, institution_id=iid).first_or_404()
         enrolled_ids = [e.student_id for e in SectionStudent.query.filter_by(section_id=section_id).all()]
         query = query.filter(User.id.in_(enrolled_ids))
 
@@ -1744,22 +1944,142 @@ def send_targeted_announcement():
         ))
         created += 1
 
+    db.session.commit()
+
+    # Socket push after the commit — the announcement is durable before the toast.
     from app.extensions import socketio as _sio
     _sio.emit('new_announcement', {
         'title':   title,
         'message': message,
         'from':    'Institution Admin',
         'timestamp': datetime.utcnow().isoformat(),
-    }, room=f"institution_{g.institution_id}")
+    }, room=f"institution_{iid}")
 
-    db.session.commit()
     scope_desc = '/'.join(filter(None, [
         dept_id and 'dept', batch_id and 'batch', acad_year and f'year:{acad_year}',
         section_id and 'section',
     ])) or target
-    _write_audit(g.user_id, g.institution_id, 'send_announcement', 'announcement',
+    _write_audit(actor_id, iid, 'send_announcement', 'announcement',
                  None, f'"{title}" sent to {created} users ({scope_desc})')
-    return jsonify({'sent_to': created, 'target': target}), 201
+    return {'sent_to': created, 'target': target}, 201
+
+
+@institution_bp.route('/announcements/targeted', methods=['POST'])
+@require_role('institution_admin')
+def send_targeted_announcement():
+    """
+    Send an announcement with rich targeting: department, batch, year, or a
+    combination of those — in addition to the existing all/students/section targets.
+
+    Body: {
+        title, message,
+        target: 'all' | 'students' | 'instructors',   # base filter
+        department_id?: '...',  # further narrow by department
+        batch_id?:      '...',  # further narrow to one batch
+        academic_year?: 2024,   # further narrow to one year (Batch.year)
+        section_id?:    '...',  # further narrow to one section
+    }
+    """
+    payload, status = _send_targeted_announcement(request.get_json() or {})
+    return jsonify(payload), status
+
+
+# ── Scheduled announcements (P5) ──────────────────────────────────────────────
+
+@institution_bp.route('/announcements/schedule', methods=['POST'])
+@require_role('institution_admin')
+def schedule_announcement():
+    """
+    Draft an announcement for delivery at a future time (e.g. exam notice
+    written Friday, delivered Monday 08:00). Dispatched by the scheduler
+    through the same core as the immediate-send endpoint.
+
+    Body: same as POST /announcements/targeted, plus:
+        send_at: ISO datetime (future) — required
+    """
+    from app.models.scheduled_announcement import ScheduledAnnouncement
+    data = request.get_json() or {}
+
+    title   = (data.get('title') or '').strip()
+    message = (data.get('message') or '').strip()
+    if not title or not message:
+        return jsonify({'error': 'title and message are required'}), 400
+    if len(title) > 500 or len(message) > 20_000:
+        return jsonify({'error': 'title or message too long'}), 400
+
+    send_at_raw = data.get('send_at')
+    if not send_at_raw:
+        return jsonify({'error': 'send_at is required (ISO datetime, future)'}), 400
+    try:
+        send_at = datetime.fromisoformat(str(send_at_raw).replace('Z', ''))
+    except ValueError:
+        return jsonify({'error': 'Invalid send_at; use an ISO datetime'}), 400
+    if send_at <= datetime.utcnow():
+        return jsonify({'error': 'send_at must be in the future — use POST /announcements/targeted to send now'}), 400
+
+    target = data.get('target', 'all')
+    if target not in ('all', 'students', 'instructors'):
+        return jsonify({'error': "target must be 'all', 'students' or 'instructors'"}), 400
+
+    # Validate optional scope refs NOW so a typo doesn't silently send to 'all'
+    if data.get('department_id'):
+        if not Department.query.filter_by(
+                id=data['department_id'], institution_id=g.institution_id).first():
+            return jsonify({'error': 'department_id not found'}), 404
+    if data.get('section_id'):
+        _own_section(data['section_id'])
+
+    row = ScheduledAnnouncement(
+        institution_id=g.institution_id,
+        created_by=g.user_id,
+        title=title,
+        message=message,
+        target=target,
+        department_id=data.get('department_id'),
+        batch_id=data.get('batch_id'),
+        section_id=data.get('section_id'),
+        academic_year=data.get('academic_year'),
+        send_at=send_at,
+        status='pending',
+    )
+    db.session.add(row)
+    db.session.commit()
+
+    _write_audit(g.user_id, g.institution_id, 'schedule_announcement', 'announcement',
+                 row.id, f'Scheduled "{title}" for {send_at.isoformat()}')
+    return jsonify({'scheduled': row.to_dict()}), 201
+
+
+@institution_bp.route('/announcements/scheduled', methods=['GET'])
+@require_role('institution_admin')
+def list_scheduled_announcements():
+    """Pending (+ recently sent) scheduled announcements for this institution."""
+    from app.models.scheduled_announcement import ScheduledAnnouncement
+    rows = (ScheduledAnnouncement.query
+            .filter_by(institution_id=g.institution_id)
+            .filter(ScheduledAnnouncement.status.in_(('pending', 'sent')))
+            .order_by(ScheduledAnnouncement.send_at.asc())
+            .limit(100).all())
+    return jsonify({'scheduled': [r.to_dict() for r in rows]}), 200
+
+
+@institution_bp.route('/announcements/scheduled/<row_id>', methods=['DELETE'])
+@require_role('institution_admin')
+def cancel_scheduled_announcement(row_id):
+    """Cancel a pending scheduled announcement before it fires."""
+    from app.models.scheduled_announcement import ScheduledAnnouncement
+    row = ScheduledAnnouncement.query.filter_by(
+        id=row_id, institution_id=g.institution_id).first()
+    if not row:
+        return jsonify({'error': 'Scheduled announcement not found'}), 404
+    if row.status != 'pending':
+        return jsonify({'error': f'Cannot cancel — already {row.status}'}), 409
+
+    row.status = 'cancelled'
+    db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'cancel_scheduled_announcement',
+                 'announcement', row.id, f'Cancelled scheduled "{row.title}"')
+    return jsonify({'message': 'Scheduled announcement cancelled'}), 200
 
 
 # ── Session admin actions (cancel-with-reason, reschedule) ────────────────────
@@ -2026,8 +2346,10 @@ def department_analytics(dept_id):
         id=dept_id, institution_id=g.institution_id
     ).first_or_404()
 
-    students    = User.query.filter_by(department_id=dept_id, role='student').all()
-    instructors = User.query.filter_by(department_id=dept_id, role='instructor').all()
+    students    = User.query.filter_by(
+        department_id=dept_id, role='student', institution_id=g.institution_id).all()
+    instructors = User.query.filter_by(
+        department_id=dept_id, role='instructor', institution_id=g.institution_id).all()
     student_ids = [s.id for s in students]
 
     avg_grade      = None
@@ -2168,7 +2490,7 @@ def global_search():
 
     types_param = request.args.get('types', 'users,sections,sessions')
     enabled     = {t.strip().lower() for t in types_param.split(',')}
-    limit       = min(int(request.args.get('limit', 20)), 100)
+    limit       = _int_arg('limit', 20, lo=1, hi=100)
     like        = f'%{q}%'
 
     results = []
@@ -2264,7 +2586,7 @@ def analytics_date_range():
 
     from_str = request.args.get('from')
     to_str   = request.args.get('to')
-    days     = int(request.args.get('days', 30))
+    days     = _int_arg('days', 30, lo=1, hi=365)
 
     if from_str and to_str:
         try:

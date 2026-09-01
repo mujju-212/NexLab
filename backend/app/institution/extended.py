@@ -23,9 +23,98 @@ import bcrypt, csv, io
 institution_ext_bp = Blueprint('institution_ext', __name__)
 
 
+def _int_arg(name, default, lo=None, hi=None):
+    """
+    Parse an integer query param without ever 500-ing on garbage input.
+    Bad values fall back to `default` (clamped to [lo, hi] when given);
+    a query-param typo must not take down the endpoint.
+    """
+    raw = request.args.get(name)
+    if raw is None or raw == '':
+        return default
+    try:
+        val = int(raw)
+    except (TypeError, ValueError):
+        return default
+    if lo is not None:
+        val = max(lo, val)
+    if hi is not None:
+        val = min(hi, val)
+    return val
+
+
+def _csv_safe(value):
+    """
+    Neutralise Excel formula injection: a CSV cell starting with = + - @ could
+    execute as a formula when the admin opens the export in Excel/Sheets.
+    Prefixing a tab forces text interpretation.
+    """
+    if isinstance(value, str) and value[:1] in ('=', '+', '-', '@'):
+        return "'" + value
+    return value
+
+
 # ══════════════════════════════════════════════════════════════════════════════
 # SHARED — session enrichment
 # ══════════════════════════════════════════════════════════════════════════════
+
+def _notify_session_instructors(created_sessions, created_by):
+    """
+    Tell each affected instructor that new lab sessions were scheduled for
+    them (the #1 real-world gap: admins schedule 40 labs, instructors find
+    out from students). One grouped Notification per instructor per call, so
+    bulk-scheduling never spams one row per lab. Times are deliberately kept
+    out of the message — the instructor's own Sessions page renders them in
+    local time.
+    """
+    from app.models.academic import SectionSubject
+    from app.models.feedback import Notification as _Notification
+
+    ss_ids = {s.section_subject_id for s in created_sessions if s.section_subject_id}
+    if not ss_ids:
+        return
+
+    # Batched lookups — no N+1 even for a 40-session bulk schedule.
+    ss_map = {x.id: x for x in SectionSubject.query.filter(
+        SectionSubject.id.in_(ss_ids)).all()}
+
+    per_instr = {}   # instructor_id → {'count': n, 'ss_ids': set()}
+    for s in created_sessions:
+        ss = ss_map.get(s.section_subject_id)
+        if not ss or not ss.instructor_id or ss.instructor_id == created_by:
+            continue
+        agg = per_instr.setdefault(ss.instructor_id, {'count': 0, 'ss_ids': set()})
+        agg['count'] += 1
+        agg['ss_ids'].add(ss.id)
+
+    if not per_instr:
+        return
+
+    rows = []
+    for instr_id, agg in per_instr.items():
+        msg = (f"The institution admin scheduled {agg['count']} new lab "
+               f"session(s) for your subject(s). Open Sessions → Upcoming "
+               f"for dates and times.")
+        rows.append(_Notification(
+            user_id=instr_id,
+            type='session_scheduled',
+            title='New lab sessions scheduled',
+            message=msg,
+        ))
+    db.session.add_all(rows)
+    db.session.commit()
+
+    # Best-effort live push so online instructors see it immediately.
+    try:
+        from app.extensions import socketio as _sio
+        _sio.emit('session_scheduled', {
+            'count': sum(a['count'] for a in per_instr.values()),
+            'message': 'New lab sessions have been scheduled for you.',
+            'timestamp': datetime.utcnow().isoformat(),
+        }, room=f"institution_{created_sessions[0].institution_id}")
+    except Exception:
+        pass
+
 
 def _enrich_sessions(sessions):
     """
@@ -93,7 +182,9 @@ def reset_user_password(user_id):
     ).first_or_404()
 
     data = request.get_json() or {}
-    new_password = data.get('new_password', 'Welcome@123')
+    new_password = (data.get('new_password') or '').strip()
+    if not new_password:
+        return jsonify({'error': 'new_password is required'}), 400
 
     if len(new_password) < 6:
         return jsonify({'error': 'Password must be at least 6 characters'}), 400
@@ -101,8 +192,9 @@ def reset_user_password(user_id):
     user.password_hash = bcrypt.hashpw(
         new_password.encode(), bcrypt.gensalt()
     ).decode()
-    # Invalidate existing sessions
+    # Invalidate existing sessions + force a self-chosen password next login
     user.force_logout_at = datetime.utcnow()
+    user.must_change_password = True
     db.session.commit()
 
     write_audit(g.user_id, g.institution_id, 'reset_password', 'user', user_id,
@@ -128,7 +220,7 @@ def experiment_usage():
     """
     from app.models.grading import Grade
     iid   = g.institution_id
-    days  = int(request.args.get('days', 30))
+    days  = _int_arg('days', 30, lo=1, hi=365)
     since = datetime.utcnow() - timedelta(days=days)
 
     # Session count per experiment
@@ -200,7 +292,7 @@ def export_student_progress():
     """
     from app.models.session import SessionAttendance
     from app.models.grading import Grade
-    from app.models.academic import Department
+    from app.models.academic import Department, SectionStudent, SectionSubject
     iid = g.institution_id
 
     students = User.query.filter_by(
@@ -222,8 +314,21 @@ def export_student_progress():
         for r in attendance_rows
     }
 
-    # ── Total sessions scheduled in this institution ─────────────────────────
-    total_sessions = LabSession.query.filter_by(institution_id=iid).count()
+    # ── Sessions AVAILABLE to each student (their sections only) ─────────────
+    # Was: one institution-wide total, which deflated everyone's attendance %
+    # with sessions from sections they were never enrolled in.
+    total_rows = (db.session.query(
+        SectionStudent.student_id,
+        func.count(func.distinct(LabSession.id)).label('sessions_total'),
+    ).join(
+        SectionSubject, SectionSubject.section_id == SectionStudent.section_id,
+    ).join(
+        LabSession, LabSession.section_subject_id == SectionSubject.id,
+    ).filter(
+        SectionStudent.student_id.in_(student_ids),
+        SectionSubject.institution_id == iid,
+    ).group_by(SectionStudent.student_id).all())
+    total_map = {r.student_id: int(r.sessions_total) for r in total_rows}
 
     # ── Average final grade per student ─────────────────────────────────────
     grade_rows = db.session.query(
@@ -243,6 +348,7 @@ def export_student_progress():
             Department.id.in_(dept_ids)).all()}
 
     output = io.StringIO()
+    output.write('\ufeff')   # UTF-8 BOM so Excel opens non-ASCII names correctly
     writer = csv.writer(output)
     writer.writerow([
         'Roll Number', 'Full Name', 'Email', 'Active', 'Department',
@@ -254,25 +360,26 @@ def export_student_progress():
         att  = attendance_map.get(s.id, {})
         attended     = att.get('attended', 0)
         last_active  = att.get('last_active')
+        sessions_total = total_map.get(s.id, 0)
         att_pct = (
-            round(attended / total_sessions * 100, 1)
-            if total_sessions else 0.0
+            round(attended / sessions_total * 100, 1)
+            if sessions_total else 0.0
         )
         writer.writerow([
-            s.roll_number or '',
-            s.full_name,
-            s.email,
+            _csv_safe(s.roll_number or ''),
+            _csv_safe(s.full_name),
+            _csv_safe(s.email),
             'Yes' if s.is_active else 'No',
-            dept_map.get(s.department_id, '') if s.department_id else '',
+            _csv_safe(dept_map.get(s.department_id, '') if s.department_id else ''),
             attended,
-            total_sessions,
+            sessions_total,
             att_pct,
             grade_map.get(s.id, ''),
             last_active.strftime('%Y-%m-%d %H:%M') if last_active else '',
         ])
 
     response = make_response(output.getvalue())
-    response.headers['Content-Type'] = 'text/csv'
+    response.headers['Content-Type'] = 'text/csv; charset=utf-8'
     response.headers['Content-Disposition'] = (
         f'attachment; filename="student_progress_{iid[:8]}.csv"'
     )
@@ -291,18 +398,19 @@ def export_users():
     users = q.order_by(User.role, User.full_name).all()
 
     output = io.StringIO()
+    output.write('\ufeff')   # UTF-8 BOM so Excel opens non-ASCII names correctly
     writer = csv.writer(output)
     writer.writerow(['Role', 'Full Name', 'Email', 'Roll Number', 'Phone', 'Active', 'Created At'])
     for u in users:
         writer.writerow([
-            u.role, u.full_name, u.email,
-            u.roll_number or '', u.phone or '',
+            u.role, _csv_safe(u.full_name), _csv_safe(u.email),
+            _csv_safe(u.roll_number or ''), _csv_safe(u.phone or ''),
             'Yes' if u.is_active else 'No',
             u.created_at.strftime('%Y-%m-%d') if u.created_at else '',
         ])
 
     response = make_response(output.getvalue())
-    response.headers['Content-Type'] = 'text/csv'
+    response.headers['Content-Type'] = 'text/csv; charset=utf-8'
     response.headers['Content-Disposition'] = 'attachment; filename="users.csv"'
     return response
 
@@ -343,6 +451,20 @@ def update_settings():
     # Fields institution admin is allowed to update
     allowed = ['logo_url', 'address', 'contact_email', 'billing_email', 'email_domain']
     changed = []
+
+    # Light validation — bad values here flow into signup matching and emails.
+    if 'logo_url' in data and data['logo_url']:
+        if not str(data['logo_url']).lower().startswith(('http://', 'https://')):
+            return jsonify({'error': 'logo_url must start with http:// or https://'}), 400
+    for email_field in ('contact_email', 'billing_email'):
+        if email_field in data and data[email_field] and '@' not in str(data[email_field]):
+            return jsonify({'error': f'{email_field} is not a valid email'}), 400
+    if 'email_domain' in data and data['email_domain']:
+        domain = str(data['email_domain']).strip().lstrip('@')
+        if ' ' in domain or '.' not in domain:
+            return jsonify({'error': "email_domain must look like 'college.edu' (no spaces)"}), 400
+        data['email_domain'] = domain.lower()
+
     for field in allowed:
         if field in data:
             setattr(inst, field, data[field])
@@ -499,9 +621,9 @@ def session_history():
     Filters: ?status=ended&days=30&page=1&per_page=50
     """
     status   = request.args.get('status')
-    days     = int(request.args.get('days', 30))
-    page     = int(request.args.get('page', 1))
-    per_page = min(int(request.args.get('per_page', 50)), 200)
+    days     = _int_arg('days', 30, lo=1, hi=365)
+    page     = _int_arg('page', 1, lo=1)
+    per_page = _int_arg('per_page', 50, lo=1, hi=200)
 
     since = datetime.utcnow() - timedelta(days=days)
     q = LabSession.query.filter(
@@ -538,10 +660,24 @@ def list_sessions():
     subject_id    = request.args.get('subject_id')
     status        = request.args.get('status')
     days          = request.args.get('days')
-    page          = int(request.args.get('page', 1))
-    per_page      = min(int(request.args.get('per_page', 50)), 200)
+    page          = _int_arg('page', 1, lo=1)
+    per_page      = _int_arg('per_page', 50, lo=1, hi=200)
 
     q = LabSession.query.filter_by(institution_id=g.institution_id)
+
+    # Explicit absolute window (used by the calendar week view); overrides days.
+    from_str = request.args.get('from')
+    to_str   = request.args.get('to')
+    if from_str:
+        try:
+            q = q.filter(LabSession.scheduled_at >= datetime.fromisoformat(from_str.replace('Z', '')))
+        except ValueError:
+            return jsonify({'error': 'Invalid `from`; use ISO datetime'}), 400
+    if to_str:
+        try:
+            q = q.filter(LabSession.scheduled_at <= datetime.fromisoformat(to_str.replace('Z', '')))
+        except ValueError:
+            return jsonify({'error': 'Invalid `to`; use ISO datetime'}), 400
 
     # Narrow by any section_subject attribute via a subquery of matching ids.
     ss_filters = []
@@ -695,6 +831,9 @@ def schedule_session():
                 session.id,
                 f"Scheduled \"{title}\" — {subject.name} / section {section.name} "
                 f"@ {scheduled_at.isoformat()}")
+
+    # Tell the instructor — admins schedule it, instructors live by it.
+    _notify_session_instructors([session], g.user_id)
 
     return jsonify({'session': _enrich_sessions([session])[0], 'warnings': warnings}), 201
 
@@ -967,6 +1106,10 @@ def bulk_schedule_sessions():
 
     enriched = _enrich_sessions(created) if created else []
 
+    # Tell every affected instructor what just landed on their timetable.
+    if created:
+        _notify_session_instructors(created, g.user_id)
+
     write_audit(
         g.user_id, g.institution_id,
         'bulk_schedule_sessions', 'session', ss.id,
@@ -1078,9 +1221,13 @@ def groq_budget():
         limit  = inst.groq_limit_override * 2_000   # convert request count → tokens
         source = 'institution_override'
     else:
-        plan_limits = {'free': 50, 'pro': 200, 'enterprise': 500}
-        limit  = plan_limits.get(inst.plan, 200) * 2_000
-        source = 'plan_default'
+        # Same source the AI gate enforces (PlatformConfig groq_daily_limit with
+        # its own internal default) so the UI bar can never disagree with what
+        # actually blocks calls. Was: a hardcoded plan map that drifted from
+        # the gate.
+        from app.ai.gate import _platform_daily_tokens
+        limit  = _platform_daily_tokens()
+        source = 'platform_config'
 
     # ── Today's token usage from AIUsageLog ───────────────────────────────────
     today_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
@@ -1192,10 +1339,25 @@ def update_ai_policy():
         if field in data:
             setattr(policy, field, bool(data[field]))
 
+    MAX_TOKEN_QUOTA = 100_000_000   # 100M tokens — sanity ceiling
     for field in int_fields:
         if field in data:
             val = data[field]
-            setattr(policy, field, int(val) if val is not None else None)
+            if val is None or val == '':
+                setattr(policy, field, None)
+                continue
+            if isinstance(val, bool):   # bool is an int subclass — reject explicitly
+                return jsonify({'error': f'{field} must be a positive integer or null'}), 400
+            try:
+                val = int(val)
+            except (TypeError, ValueError):
+                return jsonify({'error': f'{field} must be a positive integer or null'}), 400
+            if val <= 0:
+                return jsonify({'error': f'{field} must be a positive integer or null — '
+                                         f'zero/negative quotas would block AI permanently'}), 400
+            if val > MAX_TOKEN_QUOTA:
+                return jsonify({'error': f'{field} may not exceed {MAX_TOKEN_QUOTA:,}'}), 400
+            setattr(policy, field, val)
 
     if 'features_enabled' in data:
         incoming = data['features_enabled']
@@ -1226,10 +1388,10 @@ def get_ai_usage():
     """
     from app.models.ai_usage import AIUsageLog, _estimate_cost
     iid     = g.institution_id
-    days    = min(int(request.args.get('days', 7)), 90)
+    days    = _int_arg('days', 7, lo=1, hi=90)
     feature = request.args.get('feature')
-    limit   = min(int(request.args.get('limit', 100)), 500)
-    offset  = int(request.args.get('offset', 0))
+    limit   = _int_arg('limit', 100, lo=1, hi=500)
+    offset  = _int_arg('offset', 0, lo=0)
 
     since = datetime.utcnow() - timedelta(days=days)
 
@@ -1452,7 +1614,7 @@ def _date_window(default_days: int = 30):
             return start, end
         except ValueError:
             pass
-    days  = int(request.args.get('days', default_days))
+    days  = _int_arg('days', default_days, lo=1, hi=365)
     end   = datetime.utcnow()
     start = end - timedelta(days=days)
     return start, end
@@ -1841,7 +2003,7 @@ def analytics_trends():
     from app.models.grading  import Grade
     from app.models.knowledge import FocusScore
 
-    weeks = min(int(request.args.get('weeks', 12)), 52)
+    weeks = _int_arg('weeks', 12, lo=1, hi=52)
     end   = datetime.utcnow()
     start = end - timedelta(weeks=weeks)
 
@@ -2254,8 +2416,8 @@ def analytics_proctoring_events():
     session_filter    = request.args.get('session_id')
     student_filter    = request.args.get('student_id')
     event_type_filter = request.args.get('event_type')
-    limit             = min(int(request.args.get('limit', 200)), 1000)
-    offset            = int(request.args.get('offset', 0))
+    limit             = _int_arg('limit', 200, lo=1, hi=1000)
+    offset            = _int_arg('offset', 0, lo=0)
 
     q = ProctorEvent.query.filter(
         ProctorEvent.institution_id == g.institution_id,

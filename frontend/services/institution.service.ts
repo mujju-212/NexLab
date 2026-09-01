@@ -76,6 +76,7 @@ export interface Subject {
   name: string;
   code?: string;
   description?: string;
+  icon?: string;
   env_profile_id?: string;
   total_marks?: number;
 }
@@ -97,9 +98,11 @@ export interface InstitutionDashboard {
 
 export interface AnalyticsOverview {
   period_days: number;
+  date_from: string;
+  date_to: string;
   sessions: { total: number; completed: number; completion_rate_pct: number };
   students: { total: number; at_risk: number; at_risk_pct: number };
-  instructors: { active_this_month: number };
+  instructors: { active_this_period: number };   // backend key (was wrongly read as active_this_month)
   peak_hours: Array<{ hour: number; session_count: number }>;
 }
 
@@ -116,7 +119,8 @@ export interface SectionComparison {
   section_id: string;
   section_name: string;
   enrolled: number;
-  avg_score: number;
+  avg_grade: number | null;    // real Grade.final_grade average (was wrongly read as avg_score)
+  graded_count: number;
 }
 
 // ── New analytics types (B1–B9 + Instructors + Proctoring) ─────────────────
@@ -232,6 +236,38 @@ export interface AIPolicy {
   per_student_daily_quota: number | null;
   hard_stop: boolean;
   updated_at: string | null;
+}
+
+export interface ScheduledAnnouncementDto {
+  title: string;
+  message: string;
+  target: 'all' | 'students' | 'instructors';
+  send_at: string;   // ISO datetime in the future
+  department_id?: string;
+  batch_id?: string;
+  section_id?: string;
+  academic_year?: number;
+}
+
+export interface GlobalSearchHit {
+  type: 'user' | 'section' | 'session';
+  id: string;
+  label: string;
+  sub_label?: string | null;
+  role?: string;
+  is_active?: boolean;
+  status?: string;
+  scheduled_at?: string;
+}
+
+export interface GroqBudget {
+  used_tokens: number;
+  limit_tokens: number;
+  remaining_tokens: number;
+  exhausted: boolean;
+  limit_source: string;
+  cost_usd_today: number;
+  trend_7d: Array<{ date: string; tokens: number; calls: number }>;
 }
 
 export interface AIUsageSummary {
@@ -350,6 +386,7 @@ export interface BulkScheduleResult {
   conflicts: BulkScheduleConflict[];
   created_count: number;
   skipped_count: number;
+  warnings?: string[];
   message?: string;
 }
 
@@ -556,7 +593,7 @@ export const institutionService = {
     return data.subjects;
   },
 
-  async createSubject(dto: { name: string; code?: string; description?: string; total_marks?: number }): Promise<Subject> {
+  async createSubject(dto: { name: string; code?: string; description?: string; total_marks?: number; icon?: string }): Promise<Subject> {
     const { data } = await apiClient.post<{ subject: Subject }>('/institution/subjects', dto);
     return data.subject;
   },
@@ -571,8 +608,8 @@ export const institutionService = {
 
   // ── Analytics ─────────────────────────────────────────────────────────────────
 
-  async getAnalyticsOverview(): Promise<AnalyticsOverview> {
-    const resp = await apiClient.get('/institution/analytics/overview');
+  async getAnalyticsOverview(days = 30): Promise<AnalyticsOverview> {
+    const resp = await apiClient.get('/institution/analytics/overview', { params: { days } });
     return resp.data as AnalyticsOverview;
   },
 
@@ -691,6 +728,26 @@ export const institutionService = {
     return data.announcements;
   },
 
+  // ── Scheduled announcements (P5) ─────────────────────────────────────────────
+
+  async scheduleAnnouncement(dto: ScheduledAnnouncementDto): Promise<{ scheduled: { id: string; send_at: string; status: string } }> {
+    const { data } = await apiClient.post('/institution/announcements/schedule', dto);
+    return data;
+  },
+
+  async getScheduledAnnouncements(): Promise<Array<{
+    id: string; title: string; message: string; target: string;
+    send_at: string; status: string; sent_at: string | null; recipients_sent: number | null;
+  }>> {
+    const { data } = await apiClient.get('/institution/announcements/scheduled');
+    return data.scheduled;
+  },
+
+  async cancelScheduledAnnouncement(id: string): Promise<{ message: string }> {
+    const { data } = await apiClient.delete(`/institution/announcements/scheduled/${id}`);
+    return data;
+  },
+
   // ── Audit Log ─────────────────────────────────────────────────────────────────
 
   async getAuditLog(params?: { action?: string; days?: number; limit?: number; offset?: number; q?: string; from?: string; to?: string }): Promise<AuditLogPage> {
@@ -777,6 +834,18 @@ export const institutionService = {
     return data;
   },
 
+  /** Grid assignment: one instructor → every (section, subject) combo missing yet. */
+  async bulkAssignSubjects(dto: { section_ids: string[]; subject_ids: string[]; instructor_id: string }): Promise<{ created: number; skipped: number; instructor: string }> {
+    const { data } = await apiClient.post('/institution/section-subjects/bulk', dto);
+    return data;
+  },
+
+  /** Clone a source section's subject assignments onto target sections. */
+  async copySectionAssignments(dto: { source_section_id: string; target_section_ids: string[] }): Promise<{ created: number; skipped: number; copied_subjects: number; targets: number }> {
+    const { data } = await apiClient.post('/institution/section-subjects/copy', dto);
+    return data;
+  },
+
   async getInstructorSessions(instructorId: string) {
     const resp = await apiClient.get('/institution/sessions', {
       params: { instructor_id: instructorId },
@@ -785,6 +854,14 @@ export const institutionService = {
   },
 
   // ── Sessions ──────────────────────────────────────────────────────────────────
+
+  /** Absolute date window — used by the calendar week view. */
+  async getSessionsRange(fromISO: string, toISO: string): Promise<SessionEnriched[]> {
+    const resp = await apiClient.get('/institution/sessions', {
+      params: { from: fromISO, to: toISO, per_page: 200 },
+    }).catch(() => ({ data: { sessions: [] } }));
+    return ((resp.data as any).sessions ?? []) as SessionEnriched[];
+  },
 
   async scheduleSession(dto: ScheduleSessionDto): Promise<any> {
     const { data } = await apiClient.post('/institution/sessions', dto);
@@ -841,8 +918,7 @@ export const institutionService = {
 
   // ── Plan usage / settings / health ──────────────────────────────────────────
 
-  async getPlanUsage(): Promise<PlanUsage> {
-    const { data } = await apiClient.get<PlanUsage>('/institution/plan-usage');
+  async getPlanUsage(): Promise<PlanUsage> {    const { data } = await apiClient.get<PlanUsage>('/institution/plan-usage');
     return data;
   },
 
@@ -865,4 +941,56 @@ export const institutionService = {
     const { data } = await apiClient.get<SystemHealth>('/institution/system-health');
     return data;
   },
+
+  // ── Global search (shell search bar) ───────────────────────────────────────
+
+  async globalSearch(q: string, types = 'users,sections,sessions', limit = 8): Promise<GlobalSearchHit[]> {
+    const { data } = await apiClient.get<{ results: GlobalSearchHit[] }>(
+      '/institution/search',
+      { params: { q, types, limit } },
+    ).catch(() => ({ data: { results: [] as GlobalSearchHit[] } }));
+    return data.results ?? [];
+  },
+
+  // ── AI budget (dashboard widget) ───────────────────────────────────────────
+
+  async getGroqBudget(): Promise<GroqBudget> {
+    const { data } = await apiClient.get<GroqBudget>('/institution/groq-budget');
+    return data;
+  },
+
+  // ── Backend CSV exports (real attendance/grade columns) ────────────────────
+
+  async exportUsersCsv(role?: string): Promise<void> {
+    const resp = await apiClient.get('/institution/export/users', {
+      params: role ? { role } : undefined,
+      responseType: 'blob',
+    });
+    downloadBlob(resp.data as Blob, 'users.csv');
+  },
+
+  async exportStudentProgressCsv(): Promise<void> {
+    const resp = await apiClient.get('/institution/export/student-progress', { responseType: 'blob' });
+    downloadBlob(resp.data as Blob, 'student_progress.csv');
+  },
+
+  // ── Bulk user actions (users page checkbox mode) ───────────────────────────
+
+  async bulkUserAction(dto: {
+    user_ids: string[];
+    action: 'activate' | 'deactivate' | 'force_logout' | 'delete';
+  }): Promise<{ results?: Array<{ user_id: string; ok: boolean; detail?: string }>; [k: string]: unknown }> {
+    const { data } = await apiClient.post('/institution/users/bulk-action', dto);
+    return data;
+  },
 };
+
+/** Trigger a browser download for an already-fetched blob. */
+function downloadBlob(blob: Blob, filename: string) {
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
+}

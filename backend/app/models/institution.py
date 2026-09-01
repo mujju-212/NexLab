@@ -116,6 +116,9 @@ class PlatformConfig(db.Model):
         'max_students_pro':         '500',
         'max_students_enterprise':  '99999',
         'allow_self_registration':  'true',
+        # Free-tier AI meter (platform-direct users, no institution):
+        # daily AI calls per user, enforced by _check_quota in ai/routes.py.
+        'free_user_daily_ai_calls': '10',
     }
 
     def to_dict(self):
