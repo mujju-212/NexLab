@@ -199,9 +199,30 @@ export const adminService = {
   // ── Groq Usage ───────────────────────────────────────────────────────────────
 
   // GET /api/admin/groq-usage
-  async getGroqUsage() {
-    const { data } = await apiClient.get<{ date: string; usage: { institution_id: string; count: number }[] }>('/admin/groq-usage');
+  async getGroqUsage() {    const { data } = await apiClient.get<{ date: string; usage: { institution_id: string; count: number }[] }>('/admin/groq-usage');
     return data;
+  },
+
+  // GET /api/platform/analytics/ai-usage/cross-institution (C6 roll-up)
+  async getAiUsageCrossInstitution(days = 30): Promise<{
+    days: number;
+    institutions: Array<{
+      institution_id: string;
+      name: string;
+      plan: string;
+      calls: number;
+      tokens: number;
+      cost_usd: number;
+      by_feature: Record<string, number>;
+    }>;
+  }> {
+    const { data } = await apiClient.get('/platform/analytics/ai-usage/cross-institution', { params: { days } });
+    return data;
+  },
+
+  // PATCH /api/platform/institutions/<iid>/billing/groq-limit
+  async updateGroqLimit(iid: string, limit: number | null): Promise<void> {
+    await apiClient.patch(`/platform/institutions/${iid}/billing/groq-limit`, { limit });
   },
 
   // GET /api/platform/institutions/<iid>/billing

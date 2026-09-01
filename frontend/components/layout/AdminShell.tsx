@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './AdminShell.module.css';
+import { ShellNotifications, ShellSearchBox, type SearchHit } from './shell-widgets';
+import { adminService } from '@/services/admin.service';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
 
@@ -133,15 +135,20 @@ export default function AdminShell({ activePage, children, title, subtitle }: Ad
               Admin <ChevronRight size={14} className={styles.breadSep} /> <strong>{activePage}</strong>
             </div>
             <div className={styles.headerRight}>
-              <div className={styles.searchBar}>
-                <Search size={14} strokeWidth={2} className={styles.searchIcon} />
-                <span>Search</span>
-                <kbd className={styles.searchKbd}>⌘ /</kbd>
-              </div>
-              <button className={styles.iconBtn}>
-                <Bell size={16} strokeWidth={1.9} />
-                <span className={styles.notifDot} />
-              </button>
+              <ShellSearchBox
+                className={styles.searchBar}
+                placeholder="Search users…"
+                fetcher={async (q) => {
+                  const res = await adminService.searchUsers({ q }) as { users?: Array<{ id: string; full_name: string; role: string; email: string }> };
+                  return (res.users ?? []).map(u => ({
+                    type: 'user', id: u.id, label: u.full_name,
+                    sub_label: `${u.role} · ${u.email}`,
+                    link: '/admin/users',
+                  }));
+                }}
+                onSelect={(hit: SearchHit) => router.push(hit.link ?? '/admin/users')}
+              />
+              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
               <div className={styles.profileChip} onClick={() => router.push('/admin/settings')}>
                 <div className={styles.avatarLg} style={{ background: '#7c3aed' }}>
                   {user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? 'AD'}

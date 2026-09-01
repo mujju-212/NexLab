@@ -1,13 +1,12 @@
-﻿import type { Metadata } from 'next';
+﻿'use client';
 
-export const metadata: Metadata = { title: 'Students | AI Virtual Lab' };
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-export default function Page() {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Manage Students</h1>
-      <p className="text-gray-500 mb-6">View, create, and manage student accounts.</p>
-    </div>
-  );
+// User management is search-driven on /admin/users (role + institution
+// filters). These sub-routes were stubs — send admins there directly.
+export default function UsersSubpageRedirect() {
+  const router = useRouter();
+  useEffect(() => { router.replace('/admin/users'); }, [router]);
+  return null;
 }
-
