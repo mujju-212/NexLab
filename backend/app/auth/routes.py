@@ -118,9 +118,22 @@ def change_password():
     if not bcrypt.checkpw(current_pw.encode(), user.password_hash.encode()):
         return jsonify({'error': 'Current password incorrect'}), 401
 
+    if bcrypt.checkpw(new_pw.encode(), user.password_hash.encode()):
+        return jsonify({'error': 'New password must be different from the current one'}), 400
+
     user.password_hash = bcrypt.hashpw(new_pw.encode(), bcrypt.gensalt()).decode()
+    user.must_change_password = False   # admin-issued credential replaced
     db.session.commit()
-    return jsonify({'message': 'Password updated successfully'}), 200
+
+    # Issue a fresh token: the old one carries must_change_password=True and
+    # every gated endpoint would keep rejecting it until re-login.
+    from flask_jwt_extended import create_access_token
+    token = create_access_token(identity=user.id, additional_claims=build_jwt_claims(user))
+    return jsonify({
+        'message': 'Password updated successfully',
+        'token': token,
+        'user': user.to_dict(),
+    }), 200
 
 
 def _generate_institution_code(name: str) -> str:

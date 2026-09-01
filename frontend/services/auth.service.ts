@@ -36,6 +36,7 @@ export interface AuthUser {
   institution_id: string | null;
   roll_number?: string | null;
   profile_pic_url?: string | null;
+  must_change_password?: boolean;
 }
 
 export interface AuthResponse {
@@ -61,19 +62,28 @@ export const authService = {
 
   async login(dto: LoginDto): Promise<AuthResponse> {
     const { data } = await apiClient.post<AuthResponse>('/auth/login', dto);
-    Cookies.set('access_token', data.token, { expires: 1 });
+    Cookies.set('access_token', data.token, { expires: 7, path: '/', sameSite: 'lax' });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('access_token', data.token);
+    }
     return data;
   },
 
   async register(dto: RegisterDto): Promise<AuthResponse> {
     const { data } = await apiClient.post<AuthResponse>('/auth/register', dto);
-    Cookies.set('access_token', data.token, { expires: 1 });
+    Cookies.set('access_token', data.token, { expires: 7, path: '/', sameSite: 'lax' });
+    if (typeof window !== 'undefined') {
+      localStorage.setItem('access_token', data.token);
+    }
     return data;
   },
 
   async logout(): Promise<void> {
     try { await apiClient.post('/auth/logout'); } catch { /* stateless logout ok */ }
-    Cookies.remove('access_token');
+    Cookies.remove('access_token', { path: '/' });
+    if (typeof window !== 'undefined') {
+      localStorage.removeItem('access_token');
+    }
   },
 
   async getMe(): Promise<AuthUser> {
@@ -81,10 +91,19 @@ export const authService = {
     return data.user;
   },
 
-  async changePassword(currentPassword: string, newPassword: string): Promise<void> {
-    await apiClient.post('/auth/change-password', {
+  async changePassword(currentPassword: string, newPassword: string): Promise<{ token?: string; user?: AuthUser }> {
+    const { data } = await apiClient.post('/auth/change-password', {
       current_password: currentPassword,
       new_password: newPassword,
     });
+    // A fresh token is returned when the old one carried the
+    // must_change_password claim — swap it in so the session continues.
+    if (data.token) {
+      Cookies.set('access_token', data.token, { expires: 7, path: '/', sameSite: 'lax' });
+      if (typeof window !== 'undefined') {
+        localStorage.setItem('access_token', data.token);
+      }
+    }
+    return data;
   },
 };

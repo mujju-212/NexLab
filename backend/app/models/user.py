@@ -30,6 +30,7 @@ class User(db.Model):
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)
     last_login      = db.Column(db.DateTime)
     force_logout_at = db.Column(db.DateTime)   # set by admin — invalidates all older tokens
+    must_change_password = db.Column(db.Boolean, default=False)   # set on temp credentials
 
     def to_dict(self, include_sensitive=False):
         data = {
@@ -48,6 +49,7 @@ class User(db.Model):
             'phone': self.phone,
             'profile_pic_url': self.profile_pic_url,
             'is_active': self.is_active,
-            'created_at': self.created_at.isoformat() if self.created_at else None,
+            'must_change_password': bool(self.must_change_password),
+            'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
         }
         return data

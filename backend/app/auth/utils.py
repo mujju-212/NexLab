@@ -3,6 +3,31 @@ from functools import wraps
 from flask import g, jsonify, request
 from flask_jwt_extended import verify_jwt_in_request, get_jwt
 
+# Endpoints a user may still call while their password is forced-expired —
+# enough to change the password and read their own identity. Everything else
+# returns 403 PASSWORD_CHANGE_REQUIRED.
+_PASSWORD_GATE_EXEMPT = (
+    '/auth/change-password',
+    '/auth/me',
+    '/auth/logout',
+)
+
+
+def _password_change_block(claims: dict):
+    """
+    403 response when the user's credentials are admin-issued temp passwords
+    they have not replaced yet. Returns None when the request may proceed.
+    """
+    if not claims.get('must_change_password'):
+        return None
+    path = (request.path or '').rstrip('/')
+    if any(path.endswith(exempt) for exempt in _PASSWORD_GATE_EXEMPT):
+        return None
+    return jsonify({
+        'error': 'You must change your password before continuing.',
+        'code': 'PASSWORD_CHANGE_REQUIRED',
+    }), 403
+
 
 def _is_force_logged_out(claims: dict) -> bool:
     """
@@ -37,6 +62,9 @@ def require_auth(f):
         claims = get_jwt()
         if _is_force_logged_out(claims):
             return _force_logout_response()
+        blocked = _password_change_block(claims)
+        if blocked:
+            return blocked
         g.user_id        = claims['sub']
         g.institution_id = claims.get('institution_id')
         g.role           = claims.get('role')
@@ -55,6 +83,9 @@ def require_role(*roles):
             claims = get_jwt()
             if _is_force_logged_out(claims):
                 return _force_logout_response()
+            blocked = _password_change_block(claims)
+            if blocked:
+                return blocked
             if claims.get('role') not in roles:
                 return jsonify({'error': 'Insufficient permissions'}), 403
             g.user_id        = claims['sub']
@@ -75,6 +106,9 @@ def require_institution(f):
         claims = get_jwt()
         if _is_force_logged_out(claims):
             return _force_logout_response()
+        blocked = _password_change_block(claims)
+        if blocked:
+            return blocked
         if not claims.get('institution_id'):
             return jsonify({'error': 'Institution context required'}), 403
         g.user_id        = claims['sub']
@@ -91,4 +125,5 @@ def build_jwt_claims(user):
         'institution_id': user.institution_id,
         'role': user.role,
         'full_name': user.full_name,
+        'must_change_password': bool(user.must_change_password),
     }
