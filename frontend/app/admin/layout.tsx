@@ -1,7 +1,8 @@
 'use client';
 
-import { useEffect } from 'react';
+import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import Cookies from 'js-cookie';
 import { useAuthStore } from '@/store/auth-store';
 
 /**
@@ -9,11 +10,22 @@ import { useAuthStore } from '@/store/auth-store';
  * Only platform_admin is allowed; all other roles redirected to their dashboards.
  */
 export default function AdminLayout({ children }: { children: React.ReactNode }) {
-  const { user, isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated, hasHydrated } = useAuthStore();
   const router = useRouter();
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated) {
+    setMounted(true);
+  }, []);
+
+  const isReady = mounted && (hasHydrated || typeof window !== 'undefined');
+
+  useEffect(() => {
+    if (!isReady) return;
+
+    const token = Cookies.get('access_token') || (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null);
+
+    if (!isAuthenticated && !token) {
       router.replace('/login');
       return;
     }
@@ -27,9 +39,10 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       router.replace('/practice/dashboard');
     }
     // only platform_admin is allowed through
-  }, [isAuthenticated, user, router]);
+  }, [isReady, isAuthenticated, user, router]);
 
-  if (!isAuthenticated) return null;
+  if (!isReady) return null;
+  if (!isAuthenticated && !Cookies.get('access_token')) return null;
   if (user?.role !== 'platform_admin') return null;
 
   return <>{children}</>;

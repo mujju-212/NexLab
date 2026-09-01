@@ -215,6 +215,93 @@ function CredentialsModal({ data, onClose }: {
   );
 }
 
+// ── Details modal — billing info + Groq limit override ───────────────────────
+
+function DetailsModal({ inst, onClose, onSaved }: {
+  inst: Institution;
+  onClose: () => void;
+  onSaved: () => void;
+}) {
+  const [billing, setBilling] = useState<Record<string, unknown> | null>(null);
+  const [groqLimit, setGroqLimit] = useState<string>('');
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+
+  useEffect(() => {
+    adminService.getBilling(inst.id)
+      .then((b) => {
+        setBilling(b as Record<string, unknown>);
+        const cur = (b as { groq_limit_override?: number | null })?.groq_limit_override;
+        setGroqLimit(cur == null ? '' : String(cur));
+      })
+      .catch(() => setBilling(null));
+  }, [inst.id]);
+
+  const saveLimit = async () => {
+    setBusy(true); setError(null);
+    try {
+      const parsed = groqLimit.trim() === '' ? null : Number(groqLimit);
+      if (parsed !== null && (!Number.isFinite(parsed) || parsed < 0)) {
+        setError('Limit must be a non-negative number, or blank for plan default.');
+        return;
+      }
+      await adminService.updateGroqLimit(inst.id, parsed);
+      onSaved();
+      onClose();
+    } catch (e) {
+      setError((e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to update limit.');
+    } finally { setBusy(false); }
+  };
+
+  const planMeta = PLAN_META[inst.plan] ?? PLAN_META.free;
+  return (
+    <div className={styles.overlay} onClick={e => e.target === e.currentTarget && onClose()}>
+      <div className={styles.modal} style={{ maxWidth: 460 }}>
+        <div className={styles.modalHeader}>
+          <div className={styles.modalIcon} style={{ background: planMeta.bg }}>
+            <Building2 size={20} color={planMeta.color} />
+          </div>
+          <div>
+            <h2 className={styles.modalTitle}>{inst.name}</h2>
+            <p className={styles.modalSub}>Code {inst.code} · {planMeta.label} plan · {inst.onboarding_status}</p>
+          </div>
+          <button className={styles.modalClose} onClick={onClose}>✕</button>
+        </div>
+
+        <div style={{ padding: '4px 22px 18px' }}>
+          <div className={styles.credRow}><span className={styles.credKey}>Contact</span><span className={styles.credVal}>{inst.contact_email}</span></div>
+          {billing && 'students_used' in (billing as object) && (
+            <div className={styles.credRow}>
+              <span className={styles.credKey}>Seats</span>
+              <span className={styles.credVal}>
+                {String((billing as { students_used?: number }).students_used)} / {String((billing as { student_limit?: number }).student_limit ?? '∞')}
+              </span>
+            </div>
+          )}
+          <div style={{ marginTop: 14 }}>
+            <label className={styles.label} htmlFor="groq-limit">Daily Groq request override</label>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+              <input
+                id="groq-limit"
+                className={styles.input}
+                inputMode="numeric"
+                placeholder="Plan default"
+                value={groqLimit}
+                onChange={e => setGroqLimit(e.target.value)}
+              />
+              <button className={styles.btnCreate} onClick={saveLimit} disabled={busy}>
+                {busy ? 'Saving…' : 'Save'}
+              </button>
+            </div>
+            <span className={styles.hint}>Blank = use the plan default. 0 blocks AI for this institution.</span>
+          </div>
+          {error && <div className={styles.errorBox} style={{ marginTop: 10 }}><AlertTriangle size={14} />{error}</div>}
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function InstitutionsClient() {
@@ -229,6 +316,7 @@ export default function InstitutionsClient() {
   } | null>(null);
   const [actionMenu, setActionMenu] = useState<string | null>(null);
   const [actionLoading, setActionLoading] = useState<string | null>(null);
+  const [detailsInst, setDetailsInst] = useState<Institution | null>(null);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -437,7 +525,7 @@ export default function InstitutionsClient() {
                               }
                               {inst.is_active ? 'Suspend' : 'Activate'}
                             </button>
-                            <button className={styles.actionItem}>
+                            <button className={styles.actionItem} onClick={() => setDetailsInst(inst)}>
                               <ChevronRight size={13} /> View Details
                             </button>
                           </div>
@@ -458,6 +546,9 @@ export default function InstitutionsClient() {
       )}
       {credResult && (
         <CredentialsModal data={credResult} onClose={() => setCredResult(null)} />
+      )}
+      {detailsInst && (
+        <DetailsModal inst={detailsInst} onClose={() => setDetailsInst(null)} onSaved={load} />
       )}
     </AdminShell>
   );

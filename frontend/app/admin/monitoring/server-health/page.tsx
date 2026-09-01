@@ -1,13 +1,11 @@
-﻿import type { Metadata } from 'next';
+﻿'use client';
 
-export const metadata: Metadata = { title: 'Server Health | AI Virtual Lab' };
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-export default function Page() {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Server Health</h1>
-      <p className="text-gray-500 mb-6">Real-time server health metrics.</p>
-    </div>
-  );
+// Server health is consolidated on /admin/monitoring (health, engine, config).
+export default function ServerHealthRedirect() {
+  const router = useRouter();
+  useEffect(() => { router.replace('/admin/monitoring'); }, [router]);
+  return null;
 }
-
