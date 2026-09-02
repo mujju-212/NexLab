@@ -35,7 +35,9 @@ export default function UsersPage() {
 
   const [form, setForm] = useState<CreateUserDto>({
     full_name: '', email: '', role: searchParams.get('create') === 'instructor' ? 'instructor' : 'student',
-    password: 'Welcome@123', roll_number: '', phone: '', staff_id: '', department_id: '',
+    // Blank = backend generates a random one-time credential (returned in the
+    // response). We never pre-fill a shared default password.
+    password: '', roll_number: '', phone: '', staff_id: '', department_id: '',
     year_of_study: undefined, semester: undefined,
   });
 
@@ -67,11 +69,13 @@ export default function UsersPage() {
     e.preventDefault();
     setSaving(true);
     try {
-      await institutionService.createUser(form);
-      showToast('User created successfully!');
+      const res = await institutionService.createUser(form);
+      showToast('temp_password' in (res as any)
+        ? `User created. Temp password (show once): ${(res as any).temp_password}`
+        : 'User created successfully!');
       setShowModal(false);
       setForm({
-        full_name: '', email: '', role: 'student', password: 'Welcome@123', roll_number: '', phone: '',
+        full_name: '', email: '', role: 'student', password: '', roll_number: '', phone: '',
         staff_id: '', department_id: '', year_of_study: undefined, semester: undefined,
       });
       load();
@@ -108,11 +112,17 @@ export default function UsersPage() {
   };
 
   const resetPassword = async (u: InstitutionUser) => {
+    // Generate the temp credential here and hand it to the backend — the
+    // returned value is the ONLY time it's visible, and the user is forced
+    // to replace it on their next login (must_change_password).
+    const tempPw = `Nx-${Math.random().toString(36).slice(2, 10)}${Math.floor(Math.random() * 90 + 10)}!A`;
     try {
       const { apiClient } = await import('@/services/api-client');
-      await apiClient.post(`/institution/users/${u.id}/reset-password`);
-      showToast(`Password reset for ${u.full_name}. Temp password: Welcome@123`);
-    } catch { showToast('Password reset failed.'); }
+      await apiClient.post(`/institution/users/${u.id}/reset-password`, { new_password: tempPw });
+      showToast(`Password reset for ${u.full_name}. Temp password (show once): ${tempPw}`);
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Password reset failed.');
+    }
   };
 
   const deleteUser = async (u: InstitutionUser) => {
@@ -164,7 +174,8 @@ export default function UsersPage() {
   const exportCsv = () => {
     if (filtered.length === 0) { showToast('Nothing to export.'); return; }
     const esc = (v: any) => {
-      const s = String(v ?? '');
+      let s = String(v ?? '');
+      if (/^[=+\-@]/.test(s)) s = `'${s}`;   // Excel formula injection guard
       return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
     };
     const headers = ['Name', 'Email', 'Role', 'Roll Number', 'Staff ID', 'Department', 'Status', 'Joined'];
@@ -182,6 +193,37 @@ export default function UsersPage() {
     a.click();
     URL.revokeObjectURL(url);
     showToast(`Exported ${filtered.length} user${filtered.length === 1 ? '' : 's'}.`);
+  };
+
+  // ── Selection + bulk actions (backend /users/bulk-action) ──────────────────
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  const toggleSelect = (id: string) =>
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  const toggleSelectAll = () =>
+    setSelectedIds(selectedIds.length === paged.length ? [] : paged.map(u => u.id));
+
+  const runBulk = async (action: 'activate' | 'deactivate' | 'force_logout') => {
+    if (selectedIds.length === 0) return;
+    const verb = { activate: 'reactivate', deactivate: 'deactivate', force_logout: 'force-logout' }[action];
+    if (!confirm(`${verb.charAt(0).toUpperCase() + verb.slice(1)} ${selectedIds.length} user(s)?`)) return;
+    setBulkBusy(true);
+    try {
+      await institutionService.bulkUserAction({ user_ids: selectedIds, action });
+      showToast(`${selectedIds.length} user(s) processed.`);
+      setSelectedIds([]);
+      load();
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Bulk action failed.');
+    } finally { setBulkBusy(false); }
+  };
+
+  const exportBackendCsv = async () => {
+    try {
+      await institutionService.exportUsersCsv(roleFilter !== 'all' ? roleFilter : undefined);
+      showToast('Full export downloaded.');
+    } catch { showToast('Export failed — try again.'); }
   };
 
   const initials = (name: string) => name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
@@ -237,29 +279,51 @@ export default function UsersPage() {
           <Upload size={14} /> Bulk Upload
         </button>
         <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={bulkUpload} />
-        <button className={styles.btnSecondary} onClick={exportCsv} title="Export current list to CSV">
-          <Download size={14} /> Export
+        <button className={styles.btnSecondary} onClick={exportBackendCsv} title="Full backend export with all columns">
+          <Download size={14} /> Export CSV
+        </button>
+        <button className={styles.btnSecondary} onClick={exportCsv} title="Export current filtered view">
+          <Download size={14} /> Export View
         </button>
         <button className={styles.btnPrimary} onClick={() => setShowModal(true)}>
           <Plus size={14} /> Add User
         </button>
       </div>
 
+      {/* Bulk action bar — appears when rows are selected */}
+      {selectedIds.length > 0 && (
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 16px', marginBottom: 14, background: 'rgba(147,51,234,0.06)', border: '1px solid rgba(147,51,234,0.2)', borderRadius: 12 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#7c3aed' }}>{selectedIds.length} selected</span>
+          <button className={styles.btnSecondary} disabled={bulkBusy} onClick={() => runBulk('activate')}>Reactivate</button>
+          <button className={styles.btnSecondary} disabled={bulkBusy} onClick={() => runBulk('deactivate')}>Deactivate</button>
+          <button className={styles.btnSecondary} disabled={bulkBusy} onClick={() => runBulk('force_logout')}>Force Logout</button>
+          <button className={styles.btnSecondary} disabled={bulkBusy} onClick={() => setSelectedIds([])}>Clear</button>
+        </div>
+      )}
+
       {/* Table */}
       <div className={styles.tableWrap}>
         <table className={styles.table}>
           <thead>
             <tr>
+              <th style={{ width: 36 }}>
+                <input type="checkbox" checked={paged.length > 0 && selectedIds.length === paged.length}
+                  onChange={toggleSelectAll} style={{ accentColor: '#9333ea' }} title="Select page" />
+              </th>
               <th>User</th><th>Roll No.</th><th>Role</th><th>Status</th><th>Joined</th><th style={{ textAlign: 'right' }}>Actions</th>
             </tr>
           </thead>
           <tbody>
             {loading ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', color: '#9891a6', padding: 32 }}>Loading…</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', color: '#9891a6', padding: 32 }}>Loading…</td></tr>
             ) : filtered.length === 0 ? (
-              <tr><td colSpan={6} style={{ textAlign: 'center', color: '#9891a6', padding: 32 }}>No users found.</td></tr>
+              <tr><td colSpan={7} style={{ textAlign: 'center', color: '#9891a6', padding: 32 }}>No users found.</td></tr>
             ) : paged.map(u => (
               <tr key={u.id}>
+                <td>
+                  <input type="checkbox" checked={selectedIds.includes(u.id)}
+                    onChange={() => toggleSelect(u.id)} style={{ accentColor: '#9333ea' }} />
+                </td>
                 <td>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
                     <div style={{

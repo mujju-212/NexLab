@@ -77,11 +77,14 @@ function exportCSV(rows: Record<string, unknown>[], filename: string) {
   const body = rows.map(r =>
     keys.map(k => {
       const v = r[k];
-      const s = v == null ? '' : String(v);
+      let s = v == null ? '' : String(v);
+      // Neutralise Excel formula injection + quote commas/quotes
+      if (/^[=+\-@]/.test(s)) s = `'${s}`;
       return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
     }).join(',')
   ).join('\n');
-  const blob = new Blob([header + '\n' + body], { type: 'text/csv' });
+  // UTF-8 BOM so non-ASCII names survive Excel
+  const blob = new Blob(['\ufeff' + header + '\n' + body], { type: 'text/csv;charset=utf-8' });
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url; a.download = filename; a.click();
@@ -160,7 +163,7 @@ export default function AnalyticsPage() {
     try {
       if (t === 'overview') {
         const [ov, ar, sc] = await Promise.allSettled([
-          institutionService.getAnalyticsOverview(),
+          institutionService.getAnalyticsOverview(d),
           institutionService.getAtRiskStudents(),
           institutionService.getSectionComparison(),
         ]);
@@ -208,8 +211,6 @@ export default function AnalyticsPage() {
 
   // Load when tab or days changes
   useEffect(() => { load(tab, days); }, [tab, days, load]);
-
-  const maxSectionScore = sections.length ? Math.max(...sections.map(s => s.avg_score), 1) : 100;
 
   // ── Toolbar ──────────────────────────────────────────────────────────────────
 
@@ -292,7 +293,7 @@ export default function AnalyticsPage() {
               note={`${overview?.students.at_risk_pct ?? 0}% of total`}
               color={(overview?.students.at_risk ?? 0) > 0 ? '#ef4444' : '#22c55e'}
             />
-            <StatCard label="Active Instructors" value={loading ? '—' : overview?.instructors.active_this_month ?? 0} />
+            <StatCard label="Active Instructors" value={loading ? '—' : overview?.instructors.active_this_period ?? 0} />
           </div>
 
           {/* Section comparison mini-bars */}
@@ -302,7 +303,7 @@ export default function AnalyticsPage() {
                 <h2 className={styles.sectionTitle}>Section Performance</h2>
                 <button
                   onClick={() => exportCSV(
-                    sections.map(s => ({ section: s.section_name, enrolled: s.enrolled, avg_score: s.avg_score })),
+                    sections.map(s => ({ section: s.section_name, enrolled: s.enrolled, avg_grade: s.avg_grade, graded_count: s.graded_count })),
                     'section-comparison.csv',
                   )}
                   style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7, background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.2)', color: '#9333ea', fontSize: 12, cursor: 'pointer' }}
@@ -311,38 +312,54 @@ export default function AnalyticsPage() {
                 </button>
               </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {sections.map((sec, i) => (
+                {sections.map((sec, i) => {
+                  const graded = sections.filter(s => s.avg_grade != null);
+                  const maxGrade = Math.max(...graded.map(s => s.avg_grade!), 1);
+                  const rank = graded.length
+                    ? graded.slice().sort((a, b) => b.avg_grade! - a.avg_grade!).findIndex(s => s.section_id === sec.section_id) + 1
+                    : 0;
+                  return (
                   <div key={sec.section_id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: 'rgba(255,255,255,0.75)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.9)' }}>
-                    <span style={{ width: 22, textAlign: 'center', fontSize: 13, fontWeight: 700, color: i === 0 ? '#9333ea' : '#9891a6' }}>#{i + 1}</span>
+                    <span style={{ width: 22, textAlign: 'center', fontSize: 13, fontWeight: 700, color: rank === 1 ? '#9333ea' : '#9891a6' }}>{sec.avg_grade != null ? `#${rank}` : '·'}</span>
                     <div style={{ flex: 1 }}>
                       <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
                         <span style={{ fontSize: 14, fontWeight: 700, color: '#201b2e' }}>{sec.section_name}</span>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: '#9333ea' }}>{sec.avg_score} pts</span>
+                        <span style={{ fontSize: 14, fontWeight: 700, color: sec.avg_grade != null ? '#9333ea' : '#9891a6' }}>
+                          {sec.avg_grade != null ? `${sec.avg_grade} avg` : 'No grades yet'}
+                        </span>
                       </div>
-                      <MiniBar value={sec.avg_score} max={maxSectionScore} color={i === 0 ? 'linear-gradient(90deg,#9333ea,#c084fc)' : 'linear-gradient(90deg,#d8b4fe,#e9d5ff)'} />
-                      <div style={{ fontSize: 12, color: '#9891a6', marginTop: 3 }}>{sec.enrolled} enrolled</div>
+                      {sec.avg_grade != null && (
+                        <MiniBar value={sec.avg_grade} max={maxGrade} color={rank === 1 ? 'linear-gradient(90deg,#9333ea,#c084fc)' : 'linear-gradient(90deg,#d8b4fe,#e9d5ff)'} />
+                      )}
+                      <div style={{ fontSize: 12, color: '#9891a6', marginTop: 3 }}>
+                        {sec.enrolled} enrolled · {sec.graded_count} graded
+                      </div>
                     </div>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           )}
 
-          {/* Peak hours */}
+          {/* Peak hours — backend stores UTC hours; convert to local for display */}
           {!loading && (overview?.peak_hours?.length ?? 0) > 0 && (
             <section className={styles.section}>
-              <div className={styles.sectionHead}><h2 className={styles.sectionTitle}>Peak Usage Hours</h2></div>
+              <div className={styles.sectionHead}><h2 className={styles.sectionTitle}>Peak Usage Hours (your local time)</h2></div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {overview!.peak_hours.map(ph => (
+                {overview!.peak_hours.map(ph => {
+                  const utcHour = (ph.hour - Math.round(new Date().getTimezoneOffset() / 60 * -1) + 24) % 24;
+                  return (
                   <div key={ph.hour} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: 'rgba(255,255,255,0.7)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.9)' }}>
                     <Clock size={16} style={{ color: '#9333ea', flexShrink: 0 }}/>
                     <span style={{ fontSize: 14, fontWeight: 700, color: '#201b2e', width: 100 }}>
-                      {String(ph.hour).padStart(2, '0')}:00 – {String(ph.hour + 1).padStart(2, '0')}:00
+                      {String(utcHour).padStart(2, '0')}:00 – {String((utcHour + 1) % 24).padStart(2, '0')}:00
                     </span>
                     <MiniBar value={ph.session_count} max={overview!.peak_hours[0].session_count}/>
                     <span style={{ fontSize: 13, color: '#726a85', fontWeight: 600 }}>{ph.session_count} sessions</span>
                   </div>
-                ))}
+                  );
+                })}
               </div>
             </section>
           )}
@@ -667,12 +684,25 @@ export default function AnalyticsPage() {
           <div className={styles.analyticsGrid}>
             <StatCard label="Total AI Calls"     value={loading ? '—' : aiUsage?.total_calls ?? 0} />
             <StatCard label="Total Tokens Used"  value={loading ? '—' : (aiUsage?.total_tokens ?? 0).toLocaleString()} />
+            <StatCard label="Student Tokens"     value={loading ? '—' : (aiUsage?.top_consumers ?? []).filter(u => u.role === 'student').reduce((a, u) => a + u.tokens, 0).toLocaleString()} note="students' share of usage" />
+            <StatCard label="Instructor Tokens"  value={loading ? '—' : (aiUsage?.top_consumers ?? []).filter(u => u.role !== 'student').reduce((a, u) => a + u.tokens, 0).toLocaleString()} note="staff share of usage" />
             <StatCard label="Features Active"    value={loading ? '—' : Object.keys(aiUsage?.by_feature ?? {}).length} />
           </div>
 
           {!loading && aiUsage && Object.keys(aiUsage.by_feature).length > 0 && (
             <section className={styles.section}>
-              <div className={styles.sectionHead}><h2 className={styles.sectionTitle}>Usage by Feature</h2></div>
+              <div className={styles.sectionHead}>
+                <h2 className={styles.sectionTitle}>Usage by Feature</h2>
+                <button
+                  onClick={() => exportCSV(
+                    Object.entries(aiUsage.by_feature).map(([feat, d]) => ({ feature: feat, calls: d.calls, tokens: d.tokens })),
+                    'ai-usage-features.csv',
+                  )}
+                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7, background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.2)', color: '#9333ea', fontSize: 12, cursor: 'pointer' }}
+                >
+                  <Download size={12}/> CSV
+                </button>
+              </div>
               <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                 {Object.entries(aiUsage.by_feature)
                   .sort((a, b) => b[1].calls - a[1].calls)

@@ -2,9 +2,12 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import Image from 'next/image';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { institutionService, type AcademicYear, type Batch, type Section, type Subject, type InstitutionUser, type Department, type SectionSubjectDetail } from '@/services/institution.service';
-import { ChevronRight, Plus, X, ChevronDown, Users, BookOpen, UserCheck, GraduationCap, Edit3, Trash2, Building2 } from 'lucide-react';
+import { ChevronRight, Plus, X, ChevronDown, Users, BookOpen, UserCheck, GraduationCap, Edit3, Trash2, Building2, Layers, Copy, ArrowRightLeft } from 'lucide-react';
+import SubjectIconPicker from '@/components/ui/SubjectIconPicker';
+import { getSubjectIconDef } from '@/lib/subject-icons';
 import styles from '../dashboard/page.module.css';
 
 type Tab = 'structure' | 'departments' | 'sections' | 'subjects' | 'enroll';
@@ -46,7 +49,7 @@ export default function AcademicPage() {
   const [yearLabel,   setYearLabel]   = useState('');
   const [batchForm,   setBatchForm]   = useState({ year_id:'', name:'', program:'' });
   const [sectionForm, setSectionForm] = useState({ batch_id:'', name:'' });
-  const [subjectForm, setSubjectForm] = useState({ name:'', code:'', description:'', total_marks: 100 });
+  const [subjectForm, setSubjectForm] = useState({ name:'', code:'', description:'', total_marks: 100, icon: 'datastruct' });
   const [deptForm,    setDeptForm]    = useState({ name:'', code:'' });
 
   // Edit state
@@ -130,6 +133,40 @@ export default function AcademicPage() {
     try { setSectionSubjects(await institutionService.getSectionSubjects(selectedSection)); } catch { /* keep prior list */ }
   };
 
+  // ── Enrolled members of the selected section + transfers ───────────────────
+  const [enrolledList, setEnrolledList] = useState<InstitutionUser[]>([]);
+  const [enrolledLoading, setEnrolledLoading] = useState(false);
+  const [transferTargets, setTransferTargets] = useState<string[]>([]);   // student ids to move
+  const [transferTo, setTransferTo] = useState('');
+  const [transferring, setTransferring] = useState(false);
+
+  const loadEnrolled = async (sectionId: string) => {
+    if (!sectionId) { setEnrolledList([]); return; }
+    setEnrolledLoading(true);
+    try { setEnrolledList(await institutionService.getSectionStudents(sectionId)); }
+    catch { setEnrolledList([]); }
+    finally { setEnrolledLoading(false); }
+  };
+  useEffect(() => { loadEnrolled(selectedSection); setTransferTargets([]); setTransferTo(''); }, [selectedSection]);
+
+  const toggleTransferTarget = (id: string) =>
+    setTransferTargets(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+
+  const doTransfer = async () => {
+    if (!selectedSection || !transferTo || transferTargets.length === 0) { toast3('Pick students, a target section, then Transfer.'); return; }
+    if (!confirm(`Move ${transferTargets.length} student(s) to ${sections.find(s => s.id === transferTo)?.name}?`)) return;
+    setTransferring(true);
+    try {
+      const res = await institutionService.transferStudents(selectedSection, {
+        to_section_id: transferTo, student_ids: transferTargets,
+      });
+      toast3(`Moved ${res.moved} student(s).`);
+      setTransferTargets([]); setTransferTo('');
+      loadEnrolled(selectedSection);
+    } catch (e: any) { toast3(e?.response?.data?.error ?? 'Transfer failed.'); }
+    finally { setTransferring(false); }
+  };
+
   const createDepartment = async (e: React.FormEvent) => {
     e.preventDefault();
     try {
@@ -184,6 +221,43 @@ export default function AcademicPage() {
       refreshSectionSubjects();
     } catch { toast3('Assignment failed.'); }
     finally { setAssigning(false); }
+  };
+
+  // ── Semester bulk tools: grid assign + copy (turns 320 clicks into 1) ──────
+  const [bulkAssigning, setBulkAssigning] = useState(false);
+  const [copySource, setCopySource] = useState('');
+  const [copying, setCopying] = useState(false);
+
+  const bulkAssignAll = async () => {
+    if (!selectedSection || !selectedInstructor) { toast3('Select a section and instructor first.'); return; }
+    if (!confirm(`Assign ALL ${subjects.length} subjects to this section under the chosen instructor? Existing pairs are skipped.`)) return;
+    setBulkAssigning(true);
+    try {
+      const res = await institutionService.bulkAssignSubjects({
+        section_ids: [selectedSection],
+        subject_ids: subjects.map(s => s.id),
+        instructor_id: selectedInstructor,
+      });
+      toast3(`${res.created} assignment(s) created, ${res.skipped} already existed.`);
+      refreshSectionSubjects();
+      loadAll();
+    } catch (e: any) { toast3(e?.response?.data?.error ?? 'Bulk assignment failed.'); }
+    finally { setBulkAssigning(false); }
+  };
+
+  const copyAssignments = async () => {
+    if (!copySource || !selectedSection) { toast3('Pick a source section and a target section first.'); return; }
+    setCopying(true);
+    try {
+      const res = await institutionService.copySectionAssignments({
+        source_section_id: copySource,
+        target_section_ids: [selectedSection],
+      });
+      toast3(`Copied ${res.created} assignment(s) (${res.skipped} already existed).`);
+      refreshSectionSubjects();
+      loadAll();
+    } catch (e: any) { toast3(e?.response?.data?.error ?? 'Copy failed.'); }
+    finally { setCopying(false); }
   };
 
   const changeSSInstructor = async (ssId: string, instructorId: string) => {
@@ -416,21 +490,34 @@ export default function AcademicPage() {
           </div>
           <div className={styles.tableWrap}>
             <table className={styles.table}>
-              <thead><tr><th>Subject Name</th><th>Code</th><th>Description</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
+              <thead><tr><th>Subject</th><th>Code</th><th>Description</th><th style={{textAlign:'right'}}>Actions</th></tr></thead>
               <tbody>
-                {loading?<tr><td colSpan={3} style={{ textAlign:'center', color:'#9891a6', padding:32 }}>Loading…</td></tr>:
-                 subjects.length===0?<tr><td colSpan={3} style={{ textAlign:'center', color:'#9891a6', padding:32 }}>No subjects yet.</td></tr>:
-                 subjects.map(sub=>(
-                  <tr key={sub.id}>
-                    <td style={{ fontWeight:700, color:'#201b2e' }}>{sub.name}</td>
-                    <td><code style={{ background:'#faf5ff', color:'#7c3aed', padding:'2px 8px', borderRadius:6, fontSize:12 }}>{sub.code??'—'}</code></td>
-                    <td style={{ color:'#726a85' }}>{sub.description??'—'}</td>
-                    <td style={{ textAlign:'right' }}>
-                      <button onClick={()=>setEditSubject(sub)} className={styles.btnSecondary} style={{ padding:'4px 8px', fontSize:12, marginRight:4 }}><Edit3 size={12}/></button>
-                      <button onClick={()=>deleteEntity('subjects',sub.id)} style={{ background:'none',border:'1px solid #fecaca',borderRadius:8,padding:'4px 8px',cursor:'pointer',color:'#ef4444' }}><Trash2 size={12}/></button>
-                    </td>
-                  </tr>
-                ))}
+                {loading?<tr><td colSpan={4} style={{ textAlign:'center', color:'#9891a6', padding:32 }}>Loading…</td></tr>:
+                 subjects.length===0?<tr><td colSpan={4} style={{ textAlign:'center', color:'#9891a6', padding:32 }}>No subjects yet.</td></tr>:
+                 subjects.map(sub=>{
+                   const iconDef = getSubjectIconDef(sub.icon, sub.code, sub.name);
+                   return (
+                   <tr key={sub.id}>
+                     <td>
+                       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                         <div style={{ position: 'relative', width: 40, height: 40, borderRadius: 10, overflow: 'hidden', flexShrink: 0, boxShadow: '0 2px 8px rgba(0,0,0,0.12)', background: '#0f172a', border: '1px solid rgba(255,255,255,0.8)' }}>
+                           <Image src={iconDef.src} alt={sub.name} fill style={{ objectFit: 'cover' }} sizes="40px" />
+                         </div>
+                         <div>
+                           <div style={{ fontWeight: 700, color: '#201b2e', fontSize: 14 }}>{sub.name}</div>
+                           <div style={{ fontSize: 11, color: '#7c3aed', fontWeight: 600 }}>{iconDef.name}</div>
+                         </div>
+                       </div>
+                     </td>
+                     <td><code style={{ background:'#faf5ff', color:'#7c3aed', padding:'2px 8px', borderRadius:6, fontSize:12 }}>{sub.code??'—'}</code></td>
+                     <td style={{ color:'#726a85' }}>{sub.description??'—'}</td>
+                     <td style={{ textAlign:'right' }}>
+                       <button onClick={()=>setEditSubject(sub)} className={styles.btnSecondary} style={{ padding:'4px 8px', fontSize:12, marginRight:4 }}><Edit3 size={12}/></button>
+                       <button onClick={()=>deleteEntity('subjects',sub.id)} style={{ background:'none',border:'1px solid #fecaca',borderRadius:8,padding:'4px 8px',cursor:'pointer',color:'#ef4444' }}><Trash2 size={12}/></button>
+                     </td>
+                   </tr>
+                  );
+                 })}
               </tbody>
             </table>
           </div>
@@ -515,6 +602,30 @@ export default function AcademicPage() {
                 <button className={styles.btnPrimary} onClick={assignSubject} disabled={assigning||!selectedSubject||!selectedInstructor} style={{ width:'100%', justifyContent:'center', marginTop:8, background:'linear-gradient(135deg,#10b981,#059669)' }}>
                   {assigning?'Assigning…':'Assign Subject & Instructor'}
                 </button>
+
+                {/* Semester-saving bulk tools (grid assign / copy) */}
+                <div style={{ marginTop:18, borderTop:'1px dashed rgba(124,58,237,0.18)', paddingTop:16 }}>
+                  <p style={{ margin:'0 0 10px', fontSize:12.5, fontWeight:700, color:'#7c3aed', textTransform:'uppercase', letterSpacing:'.05em' }}>Bulk tools</p>
+
+                  <button onClick={bulkAssignAll} disabled={bulkAssigning||!selectedInstructor||subjects.length===0}
+                    style={{ width:'100%', justifyContent:'center', display:'flex', alignItems:'center', gap:7, padding:'9px 12px', borderRadius:10, border:'1px solid rgba(124,58,237,0.25)', background:'rgba(147,51,234,0.06)', color:'#7c3aed', fontSize:13, fontWeight:600, cursor:'pointer', marginBottom:8 }}>
+                    <Layers size={14} /> {bulkAssigning ? 'Assigning…' : `Assign ALL subjects to ${sections.find(s=>s.id===selectedSection)?.name ?? 'this section'} under ${instructors.find(i=>i.id===selectedInstructor)?.full_name?.split(' ')[0] ?? 'chosen instructor'}`}
+                  </button>
+
+                  <div style={{ display:'flex', alignItems:'center', gap:8 }}>
+                    <select className={styles.select} value={copySource} onChange={e=>setCopySource(e.target.value)} style={{ flex:1 }}>
+                      <option value="">Copy assignments from…</option>
+                      {sections.filter(s=>s.id!==selectedSection).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                    <button onClick={copyAssignments} disabled={copying||!copySource||!selectedSection}
+                      style={{ display:'flex', alignItems:'center', gap:6, padding:'9px 14px', borderRadius:10, border:'none', background:'linear-gradient(135deg,#10b981,#059669)', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', opacity: copying||!copySource||!selectedSection?0.6:1 }}>
+                      <Copy size={14} /> {copying?'Copying…':'Copy here'}
+                    </button>
+                  </div>
+                  <p style={{ margin:'8px 0 0', fontSize:11.5, color:'#9891a6' }}>
+                    Existing assignments are never overwritten — only missing ones are added.
+                  </p>
+                </div>
               </div>
             </div>
           )}
@@ -562,6 +673,56 @@ export default function AcademicPage() {
                       </button>
                     </div>
                   ))}
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Enrolled students + transfers */}
+          {selectedSection && (
+            <div style={{ background:'rgba(255,255,255,0.78)', borderRadius:18, border:'1px solid rgba(255,255,255,0.9)', padding:24, boxShadow:'0 2px 10px rgba(0,0,0,0.05)', marginTop:20 }}>
+              <div style={{ display:'flex', alignItems:'center', justifyContent:'space-between', gap:10, marginBottom:16, flexWrap:'wrap' }}>
+                <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+                  <div style={{ width:34, height:34, borderRadius:10, background:'#eff6ff', display:'flex', alignItems:'center', justifyContent:'center', color:'#3b82f6' }}>
+                    <Users size={17} strokeWidth={1.8}/>
+                  </div>
+                  <div>
+                    <p style={{ margin:0, fontFamily:'Space Grotesk,sans-serif', fontSize:15, fontWeight:700, color:'#201b2e' }}>Enrolled Students</p>
+                    <p style={{ margin:0, fontSize:12, color:'#9891a6' }}>{enrolledList.length} in {sections.find(s=>s.id===selectedSection)?.name}</p>
+                  </div>
+                </div>
+                {enrolledList.length > 0 && (
+                  <div style={{ display:'flex', alignItems:'center', gap:8, flexWrap:'wrap' }}>
+                    <select className={styles.select} value={transferTo} onChange={e=>setTransferTo(e.target.value)} style={{ maxWidth:200 }}>
+                      <option value="">Move to section…</option>
+                      {sections.filter(s=>s.id!==selectedSection).map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+                    </select>
+                    <button onClick={doTransfer} disabled={transferring||!transferTo||transferTargets.length===0}
+                      style={{ display:'flex', alignItems:'center', gap:6, padding:'8px 14px', borderRadius:10, border:'none', background:'linear-gradient(135deg,#3b82f6,#2563eb)', color:'#fff', fontSize:13, fontWeight:600, cursor:'pointer', opacity: transferring||!transferTo||transferTargets.length===0?0.6:1 }}>
+                      <ArrowRightLeft size={14}/> {transferring?'Moving…':`Transfer (${transferTargets.length})`}
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {enrolledLoading ? (
+                <p style={{ color:'#9891a6', fontSize:13, padding:'8px 0' }}>Loading…</p>
+              ) : enrolledList.length===0 ? (
+                <p style={{ color:'#9891a6', fontSize:13, padding:'8px 0' }}>No students enrolled yet — use the Enroll panel above.</p>
+              ) : (
+                <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fill, minmax(230px, 1fr))', gap:8 }}>
+                  {enrolledList.map(s => {
+                    const picked = transferTargets.includes(s.id);
+                    return (
+                      <label key={s.id} style={{ display:'flex', alignItems:'center', gap:9, padding:'9px 12px', borderRadius:10, cursor:'pointer', background: picked?'rgba(59,130,246,0.07)':'rgba(245,243,255,0.5)', border:'1px solid', borderColor: picked?'rgba(59,130,246,0.35)':'transparent' }}>
+                        <input type="checkbox" checked={picked} onChange={()=>toggleTransferTarget(s.id)} style={{ accentColor:'#3b82f6' }}/>
+                        <div style={{ minWidth:0 }}>
+                          <p style={{ margin:0, fontSize:13, fontWeight:700, color:'#201b2e', whiteSpace:'nowrap', overflow:'hidden', textOverflow:'ellipsis' }}>{s.full_name}</p>
+                          <p style={{ margin:0, fontSize:11, color:'#9891a6' }}>{s.roll_number ?? s.email}</p>
+                        </div>
+                      </label>
+                    );
+                  })}
                 </div>
               )}
             </div>
@@ -653,6 +814,10 @@ export default function AcademicPage() {
               <button onClick={()=>setShowSubjectModal(false)} style={{ background:'none', border:'none', cursor:'pointer', color:'#9891a6' }}><X size={20}/></button>
             </div>
             <form onSubmit={wrap(()=>institutionService.createSubject(subjectForm),()=>setShowSubjectModal(false),'Subject created!')}>
+              <SubjectIconPicker
+                value={subjectForm.icon || 'datastruct'}
+                onChange={icon => setSubjectForm(f => ({ ...f, icon }))}
+              />
               <div className={styles.field}><label className={styles.fieldLabel}>Subject Name *</label>
                 <input className={styles.input} placeholder="e.g. Data Structures" required value={subjectForm.name} onChange={e=>setSubjectForm(f=>({...f,name:e.target.value}))}/></div>
               <div className={styles.field}><label className={styles.fieldLabel}>Subject Code</label>
@@ -747,7 +912,11 @@ export default function AcademicPage() {
               <h2 className={styles.modalTitle}>Edit Subject</h2>
               <button onClick={()=>setEditSubject(null)} style={{ background:'none', border:'none', cursor:'pointer', color:'#9891a6' }}><X size={20}/></button>
             </div>
-            <form onSubmit={e=>{e.preventDefault();updateEntity('subjects',editSubject.id,{name:editSubject.name,code:editSubject.code,description:editSubject.description,total_marks:editSubject.total_marks},()=>setEditSubject(null));}}>
+            <form onSubmit={e=>{e.preventDefault();updateEntity('subjects',editSubject.id,{name:editSubject.name,code:editSubject.code,description:editSubject.description,icon:editSubject.icon||'datastruct',total_marks:editSubject.total_marks},()=>setEditSubject(null));}}>
+              <SubjectIconPicker
+                value={editSubject.icon || 'datastruct'}
+                onChange={icon => setEditSubject((s:any) => ({ ...s, icon }))}
+              />
               <div className={styles.field}><label className={styles.fieldLabel}>Name</label>
                 <input className={styles.input} required value={editSubject.name} onChange={e=>setEditSubject((s:any)=>({...s,name:e.target.value}))}/></div>
               <div className={styles.field}><label className={styles.fieldLabel}>Code</label>

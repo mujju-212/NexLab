@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { institutionService } from '@/services/institution.service';
-import { Send, Bell } from 'lucide-react';
+import { Send, Bell, Clock, X, CalendarClock } from 'lucide-react';
 import styles from '../dashboard/page.module.css';
 
 export default function AnnouncementsPage() {
@@ -20,12 +20,20 @@ export default function AnnouncementsPage() {
   const [sending, setSending] = useState(false);
   const [toast, setToast]     = useState<string|null>(null);
 
+  // P5 — scheduled delivery: send now, or queue for a future moment.
+  const [deliverAt, setDeliverAt] = useState<'now' | 'later'>('now');
+  const [sendAtLocal, setSendAtLocal] = useState('');
+  const [scheduledList, setScheduledList] = useState<any[]>([]);
+
   const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3200); };
 
   const loadRecent = async () => {
     try { setRecent(await institutionService.getRecentAnnouncements()); } catch {}
   };
-  useEffect(() => { loadRecent(); }, []);
+  const loadScheduled = async () => {
+    try { setScheduledList(await institutionService.getScheduledAnnouncements()); } catch {}
+  };
+  useEffect(() => { loadRecent(); loadScheduled(); }, []);
 
   // Academic structure for rich targeting (A5).
   useEffect(() => {
@@ -60,24 +68,53 @@ export default function AnnouncementsPage() {
     setSending(true);
     try {
       const hasFilters = form.department_id || form.batch_id || form.section_id || form.academic_year;
-      const res = hasFilters
-        ? await institutionService.sendTargetedAnnouncement({
-            title: form.title, message: form.message, target: form.target,
-            department_id: form.department_id || undefined,
-            batch_id: form.batch_id || undefined,
-            section_id: form.section_id || undefined,
-            academic_year: form.academic_year ? Number(form.academic_year) : undefined,
-          })
-        : await institutionService.sendAnnouncement({
-            title: form.title, message: form.message, target: form.target,
-          });
-      const scope = hasFilters ? 'targeted audience' : (form.target === 'all' ? 'users' : form.target);
-      toast3(`Announcement sent to ${res.sent_to} ${scope}.`);
+      const scopeExtras = {
+        department_id: form.department_id || undefined,
+        batch_id: form.batch_id || undefined,
+        section_id: form.section_id || undefined,
+        academic_year: form.academic_year ? Number(form.academic_year) : undefined,
+      };
+
+      if (deliverAt === 'later') {
+        // datetime-local → UTC ISO. The scheduler dispatches it via the same
+        // core as the immediate-send endpoint.
+        if (!sendAtLocal) { toast3('Pick a delivery date & time.'); setSending(false); return; }
+        const when = new Date(sendAtLocal);
+        if (isNaN(when.getTime()) || when.getTime() <= Date.now()) {
+          toast3('Delivery time must be in the future.'); setSending(false); return;
+        }
+        await institutionService.scheduleAnnouncement({
+          title: form.title, message: form.message, target: form.target,
+          send_at: when.toISOString(), ...scopeExtras,
+        });
+        toast3(`Announcement scheduled for ${when.toLocaleString('en-IN')}.`);
+      } else {
+        const res = hasFilters
+          ? await institutionService.sendTargetedAnnouncement({
+              title: form.title, message: form.message, target: form.target, ...scopeExtras,
+            })
+          : await institutionService.sendAnnouncement({
+              title: form.title, message: form.message, target: form.target,
+            });
+        const scope = hasFilters ? 'targeted audience' : (form.target === 'all' ? 'users' : form.target);
+        toast3(`Announcement sent to ${res.sent_to} ${scope}.`);
+      }
+
       setForm({ title:'', message:'', target:'all' });
+      setSendAtLocal('');
       setBatches([]); setSections([]);
-      loadRecent();
+      loadRecent(); loadScheduled();
     } catch { toast3('Failed to send.'); }
     finally { setSending(false); }
+  };
+
+  const cancelScheduled = async (id: string) => {
+    if (!confirm('Cancel this scheduled announcement?')) return;
+    try {
+      await institutionService.cancelScheduledAnnouncement(id);
+      toast3('Scheduled announcement cancelled.');
+      loadScheduled();
+    } catch { toast3('Could not cancel — it may have already been sent.'); }
   };
 
   return (
@@ -157,12 +194,66 @@ export default function AnnouncementsPage() {
             value={form.message} onChange={e => setForm(f => ({ ...f, message:e.target.value }))} />
         </div>
 
-        <div style={{ display:'flex', justifyContent:'flex-end' }}>
+        <div style={{ display:'flex', justifyContent:'flex-end', alignItems:'center', gap:16, flexWrap:'wrap' }}>
+          {/* Delivery timing — send now or queue for later (P5) */}
+          <div style={{ display:'flex', alignItems:'center', gap:10 }}>
+            <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, fontWeight:600, color:'#201b2e', cursor:'pointer' }}>
+              <input type="radio" checked={deliverAt==='now'} onChange={() => setDeliverAt('now')} /> Send now
+            </label>
+            <label style={{ display:'flex', alignItems:'center', gap:6, fontSize:13, fontWeight:600, color:'#201b2e', cursor:'pointer' }}>
+              <input type="radio" checked={deliverAt==='later'} onChange={() => setDeliverAt('later')} /> Schedule
+            </label>
+            {deliverAt === 'later' && (
+              <input className={styles.input} type="datetime-local" value={sendAtLocal}
+                onChange={e => setSendAtLocal(e.target.value)}
+                style={{ width: 230 }} />
+            )}
+          </div>
           <button type="submit" className={styles.btnPrimary} disabled={sending || !form.title || !form.message}>
-            <Send size={14} /> {sending ? 'Sending…' : 'Send Announcement'}
+            {deliverAt === 'later' ? <><Clock size={14} /> {sending ? 'Scheduling…' : 'Schedule Announcement'}</> : <><Send size={14} /> {sending ? 'Sending…' : 'Send Announcement'}</>}
           </button>
         </div>
       </form>
+
+      {/* Scheduled queue */}
+      {scheduledList.length > 0 && (
+        <section className={styles.section}>
+          <div className={styles.sectionHead}>
+            <h2 className={styles.sectionTitle} style={{ display:'flex', alignItems:'center', gap:8 }}>
+              <CalendarClock size={17} color="#7c3aed" /> Scheduled Queue
+            </h2>
+          </div>
+          {scheduledList.filter(s => s.status === 'pending').map(s => (
+            <div key={s.id} className={styles.auditRow} style={{ borderLeft: '3px solid #f59e0b' }}>
+              <div className={styles.auditIcon}><Clock size={15} /></div>
+              <div style={{ flex:1 }}>
+                <p className={styles.auditAction}>{s.title}</p>
+                <p className={styles.auditDetail}>
+                  Delivers {new Date(s.send_at).toLocaleString('en-IN')} · to {s.target}
+                  {s.message?.length > 100 ? ` · ${s.message.slice(0, 100)}…` : ''}
+                </p>
+              </div>
+              <button onClick={() => cancelScheduled(s.id)} title="Cancel scheduled announcement"
+                style={{ display:'flex', alignItems:'center', gap:5, background:'none', border:'1px solid #fecaca', color:'#dc2626', borderRadius:8, padding:'5px 10px', fontSize:12, fontWeight:600, cursor:'pointer' }}>
+                <X size={12} /> Cancel
+              </button>
+            </div>
+          ))}
+          {scheduledList.filter(s => s.status !== 'pending').slice(0, 5).map(s => (
+            <div key={s.id} className={styles.auditRow} style={{ opacity: 0.65 }}>
+              <div className={styles.auditIcon}><Bell size={15} /></div>
+              <div style={{ flex:1 }}>
+                <p className={styles.auditAction}>{s.title}</p>
+                <p className={styles.auditDetail}>
+                  {s.status === 'sent' ? `Delivered ${new Date(s.sent_at || s.send_at).toLocaleString('en-IN')}` : `Status: ${s.status}`}
+                  {s.recipients_sent != null ? ` · ${s.recipients_sent} recipients` : ''}
+                </p>
+              </div>
+              <span className={styles.auditTime}>{s.status}</span>
+            </div>
+          ))}
+        </section>
+      )}
 
       {/* Recent */}
       <section className={styles.section}>

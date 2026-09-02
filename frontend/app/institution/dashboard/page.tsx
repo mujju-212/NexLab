@@ -3,11 +3,11 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import InstitutionShell from '@/components/layout/InstitutionShell';
-import { institutionService, type InstitutionDashboard, type DashboardActivity, type SystemHealth } from '@/services/institution.service';
+import { institutionService, type InstitutionDashboard, type DashboardActivity, type SystemHealth, type PlanUsage, type GroqBudget } from '@/services/institution.service';
 import { useAuthStore } from '@/store/auth-store';
 import {
   Users, GraduationCap, BookOpen, Radio, Calendar, RefreshCw, Plus, ArrowRight,
-  TrendingUp, TrendingDown, Clock, Activity, AlertTriangle, CheckCircle
+  TrendingUp, TrendingDown, Clock, Activity, AlertTriangle, CheckCircle, Cpu, Armchair
 } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -17,6 +17,8 @@ export default function InstitutionDashboardPage() {
   const [data, setData] = useState<InstitutionDashboard | null>(null);
   const [activity, setActivity] = useState<DashboardActivity | null>(null);
   const [health, setHealth] = useState<SystemHealth | null>(null);
+  const [plan, setPlan] = useState<PlanUsage | null>(null);
+  const [budget, setBudget] = useState<GroqBudget | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,6 +34,8 @@ export default function InstitutionDashboardPage() {
     // Secondary widgets — independent, never block the main dashboard.
     try { setActivity(await institutionService.getDashboardActivity()); } catch { /* chart shows fallback */ }
     try { setHealth(await institutionService.getSystemHealth()); } catch { /* health shows fallback */ }
+    try { setPlan(await institutionService.getPlanUsage()); } catch { /* seat card hidden */ }
+    try { setBudget(await institutionService.getGroqBudget()); } catch { /* budget card hidden */ }
   };
 
   useEffect(() => { load(); }, []);
@@ -76,6 +80,73 @@ export default function InstitutionDashboardPage() {
           </div>
         ))}
       </div>
+
+      {/* Plan seats + AI budget — the two things that silently block the campus */}
+      {(plan || budget) && (
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20, marginBottom: 20 }}>
+          {/* Student seats */}
+          {plan && (
+            <div style={{ background: 'rgba(255,255,255,0.78)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.9)', padding: '20px 26px', boxShadow: '0 2px 12px rgba(0,0,0,0.05)', cursor: 'pointer' }} onClick={() => router.push('/institution/settings?tab=plan')}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Armchair size={16} style={{ color: '#9333ea' }} />
+                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>Student Seats</h3>
+                </div>
+                <span style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '.05em', background: 'rgba(147,51,234,0.08)', padding: '3px 10px', borderRadius: 20 }}>
+                  {plan.plan} plan
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                <span style={{ fontSize: 22, fontWeight: 800, color: '#201b2e' }}>
+                  {plan.students.used}<span style={{ fontSize: 13, fontWeight: 600, color: '#9891a6' }}> / {plan.students.limit ?? '∞'} seats</span>
+                </span>
+                <span style={{ fontSize: 12.5, fontWeight: 700, color: plan.students.remaining === 0 ? '#dc2626' : '#16a34a' }}>
+                  {plan.students.remaining === 0 ? 'Full — upgrade to add more' : `${plan.students.remaining} remaining`}
+                </span>
+              </div>
+              <div style={{ height: 8, borderRadius: 6, background: 'rgba(147,51,234,0.08)', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: 6, transition: 'width .4s ease',
+                  width: `${Math.min(plan.students.percent ?? 0, 100)}%`,
+                  background: (plan.students.percent ?? 0) >= 100 ? '#ef4444'
+                    : (plan.students.percent ?? 0) >= 85 ? 'linear-gradient(90deg,#f59e0b,#f97316)'
+                    : 'linear-gradient(90deg,#9333ea,#c084fc)',
+                }} />
+              </div>
+            </div>
+          )}
+
+          {/* AI budget today */}
+          {budget && (
+            <div style={{ background: 'rgba(255,255,255,0.78)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.9)', padding: '20px 26px', boxShadow: '0 2px 12px rgba(0,0,0,0.05)', cursor: 'pointer' }} onClick={() => router.push('/institution/analytics')}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <Cpu size={16} style={{ color: '#0ea5e9' }} />
+                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>AI Budget — Today</h3>
+                </div>
+                <span style={{ fontSize: 12, fontWeight: 700, color: budget.exhausted ? '#dc2626' : '#16a34a' }}>
+                  {budget.exhausted ? 'Exhausted' : `${Math.round((budget.remaining_tokens / Math.max(budget.limit_tokens, 1)) * 100)}% left`}
+                </span>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                <span style={{ fontSize: 22, fontWeight: 800, color: '#201b2e' }}>
+                  {budget.used_tokens.toLocaleString()}<span style={{ fontSize: 13, fontWeight: 600, color: '#9891a6' }}> / {budget.limit_tokens.toLocaleString()} tokens</span>
+                </span>
+                <span style={{ fontSize: 12.5, fontWeight: 600, color: '#9891a6' }}>≈ ${budget.cost_usd_today.toFixed(4)}</span>
+              </div>
+              <div style={{ height: 8, borderRadius: 6, background: 'rgba(14,165,233,0.08)', overflow: 'hidden' }}>
+                <div style={{
+                  height: '100%', borderRadius: 6, transition: 'width .4s ease',
+                  width: `${Math.min((budget.used_tokens / Math.max(budget.limit_tokens, 1)) * 100, 100)}%`,
+                  background: budget.exhausted ? '#ef4444'
+                    : (budget.used_tokens / Math.max(budget.limit_tokens, 1)) > 0.85 ? 'linear-gradient(90deg,#f59e0b,#f97316)'
+                    : 'linear-gradient(90deg,#0ea5e9,#38bdf8)',
+                }} />
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
       {/* Analytics overview row */}
       <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20, marginBottom: 20 }}>

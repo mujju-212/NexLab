@@ -150,10 +150,12 @@ export default function SettingsPage() {
     setAiDirty(true);
   };
 
-  const handleAiQuotaChange = (field: 'daily_token_quota' | 'per_student_daily_quota', raw: string) => {
+  const handleAiQuotaChange = (field: 'daily_token_quota' | 'monthly_token_quota' | 'per_student_daily_quota', raw: string) => {
     if (!aiPolicy) return;
     const parsed = raw === '' ? null : parseInt(raw, 10);
-    setAiPolicy({ ...aiPolicy, [field]: (parsed !== null && isNaN(parsed)) ? null : parsed });
+    // NaN / negative quotas would silently block AI — normalise to null.
+    const clean = (parsed === null || isNaN(parsed) || parsed <= 0) ? null : parsed;
+    setAiPolicy({ ...aiPolicy, [field]: clean });
     setAiDirty(true);
   };
 
@@ -167,6 +169,7 @@ export default function SettingsPage() {
         ai_enabled_instructors: aiPolicy.ai_enabled_instructors,
         features_enabled: aiPolicy.features_enabled,
         daily_token_quota: aiPolicy.daily_token_quota,
+        monthly_token_quota: aiPolicy.monthly_token_quota,
         per_student_daily_quota: aiPolicy.per_student_daily_quota,
         hard_stop: aiPolicy.hard_stop,
       });
@@ -558,6 +561,12 @@ export default function SettingsPage() {
                     <input className={styles.input} type="number" min={0} placeholder="Platform default"
                       value={aiPolicy.daily_token_quota ?? ''}
                       onChange={e => handleAiQuotaChange('daily_token_quota', e.target.value)} />
+                  </div>
+                  <div className={styles.field}>
+                    <label className={styles.fieldLabel}>Institution monthly quota (tokens)</label>
+                    <input className={styles.input} type="number" min={0} placeholder="No monthly cap"
+                      value={aiPolicy.monthly_token_quota ?? ''}
+                      onChange={e => handleAiQuotaChange('monthly_token_quota', e.target.value)} />
                   </div>
                   <div className={styles.field}>
                     <label className={styles.fieldLabel}>Per-student daily quota (tokens)</label>

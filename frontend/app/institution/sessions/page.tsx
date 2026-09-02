@@ -12,7 +12,8 @@ import {
 import {
   Radio, Calendar, PlayCircle, StopCircle, History,
   Clock, Users, BookOpen, Edit2, X, ChevronRight,
-  AlertTriangle, CheckCircle, CalendarPlus, Layers,
+  AlertTriangle, CheckCircle, CalendarPlus, Layers, CalendarDays,
+  ChevronLeft,
 } from 'lucide-react';
 import styles from '../dashboard/page.module.css';
 
@@ -41,7 +42,7 @@ interface Session {
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-type Tab = 'live' | 'upcoming' | 'planner' | 'history';
+type Tab = 'live' | 'calendar' | 'upcoming' | 'planner' | 'history';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -194,10 +195,54 @@ export default function SessionsPage() {
     conflicts: BulkScheduleConflict[];
     created_count: number;
     skipped_count: number;
+    warnings?: string[];
     message?: string;
   } | null>(null);
 
   // ── Data loading ───────────────────────────────────────────────────────────
+
+  // Calendar week view — "did I double-book Thursday 10 AM?" answered at a glance.
+  const [weekStart, setWeekStart] = useState(() => {
+    const d = new Date(); d.setHours(0, 0, 0, 0);
+    d.setDate(d.getDate() - ((d.getDay() + 6) % 7));   // Monday of this week
+    return d;
+  });
+  const [weekSessions, setWeekSessions] = useState<Session[]>([]);
+  const [weekLoading, setWeekLoading] = useState(false);
+
+  const loadWeek = async (ws: Date) => {
+    setWeekLoading(true);
+    try {
+      const we = new Date(ws); we.setDate(we.getDate() + 7);
+      const sessions = await institutionService.getSessionsRange(ws.toISOString(), we.toISOString());
+      setWeekSessions(sessions);
+    } catch { setWeekSessions([]); }
+    setWeekLoading(false);
+  };
+
+  useEffect(() => { if (tab === 'calendar') loadWeek(weekStart); /* eslint-disable-line */ }, [tab, weekStart]);
+
+  const weekDays = useMemo(() => {
+    const days: Date[] = [];
+    for (let i = 0; i < 7; i++) { const d = new Date(weekStart); d.setDate(d.getDate() + i); days.push(d); }
+    return days;
+  }, [weekStart]);
+
+  const dayKey = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+
+  const sessionsByDay = useMemo(() => {
+    const map: Record<string, Session[]> = {};
+    for (const s of weekSessions) {
+      const d = new Date(s.scheduled_at);
+      const k = dayKey(d);
+      (map[k] ??= []).push(s);
+    }
+    // sort each day by start time
+    for (const k of Object.keys(map)) {
+      map[k].sort((a, b) => new Date(a.scheduled_at).getTime() - new Date(b.scheduled_at).getTime());
+    }
+    return map;
+  }, [weekSessions]);
 
   const loadLive = async () => {
     try {
@@ -376,6 +421,7 @@ export default function SessionsPage() {
       <div className={styles.tabs} style={{ marginBottom: 24 }}>
         {([
           { id: 'live'     as Tab, label: 'Live',     Icon: Radio },
+          { id: 'calendar' as Tab, label: 'Calendar', Icon: CalendarDays },
           { id: 'upcoming' as Tab, label: 'Upcoming',  Icon: Clock },
           { id: 'planner'  as Tab, label: 'Planner',   Icon: CalendarPlus },
           { id: 'history'  as Tab, label: 'History',   Icon: History },
@@ -847,6 +893,28 @@ export default function SessionsPage() {
                   </>
                 )}
 
+                {/* Readiness warnings — non-blocking, surfaced so the admin can act */}
+                {(bulkResult.warnings?.length ?? 0) > 0 && (
+                  <>
+                    <p style={{ fontSize: 12, fontWeight: 700, color: '#9891a6', margin: '10px 0 8px', textTransform: 'uppercase', letterSpacing: '.06em' }}>
+                      Heads-up
+                    </p>
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 5 }}>
+                      {bulkResult.warnings!.map((w, i) => (
+                        <div key={i} style={{
+                          padding: '8px 12px', borderRadius: 10,
+                          background: 'rgba(245,158,11,0.07)', border: '1px solid rgba(245,158,11,0.2)',
+                        }}>
+                          <div style={{ display: 'flex', alignItems: 'flex-start', gap: 7 }}>
+                            <AlertTriangle size={11} color="#f59e0b" style={{ marginTop: 2, flexShrink: 0 }} />
+                            <p style={{ margin: 0, fontSize: 11.5, color: '#92400e', lineHeight: 1.45 }}>{w}</p>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  </>
+                )}
+
                 {bulkResult.message && (
                   <p style={{ margin: '10px 0 0', fontSize: 12.5, color: '#9891a6', fontStyle: 'italic' }}>
                     {bulkResult.message}
@@ -862,6 +930,104 @@ export default function SessionsPage() {
             )}
           </div>
         </div>
+      )}
+
+      {/* ═══════════════════════════════════════════════════════════════════
+          CALENDAR — week grid for spotting clashes and gaps at a glance
+      ══════════════════════════════════════════════════════════════════════ */}
+      {tab === 'calendar' && (
+        <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button className={styles.btnSecondary} onClick={() => { const d = new Date(weekStart); d.setDate(d.getDate() - 7); setWeekStart(d); }}>
+                <ChevronLeft size={14} /> Prev
+              </button>
+              <button className={styles.btnSecondary} onClick={() => {
+                const d = new Date(); d.setHours(0, 0, 0, 0);
+                d.setDate(d.getDate() - ((d.getDay() + 6) % 7));
+                setWeekStart(d);
+              }}>This week</button>
+              <button className={styles.btnSecondary} onClick={() => { const d = new Date(weekStart); d.setDate(d.getDate() + 7); setWeekStart(d); }}>
+                Next <ChevronRight size={14} />
+              </button>
+            </div>
+            <p style={{ margin: 0, fontSize: 13, color: '#726a85', fontWeight: 600 }}>
+              {weekStart.toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })} –{' '}
+              {new Date(weekStart.getFullYear(), weekStart.getMonth(), weekStart.getDate() + 6).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
+              {weekLoading && <span style={{ marginLeft: 8, color: '#9891a6', fontWeight: 400 }}>loading…</span>}
+            </p>
+          </div>
+
+          {/* 7-day grid; blocks positioned by local time (backend now sends UTC with Z) */}
+          <div style={{ overflowX: 'auto' }}>
+            <div style={{ display: 'grid', gridTemplateColumns: '64px repeat(7, minmax(120px, 1fr))', minWidth: 900, border: '1px solid rgba(124,58,237,0.12)', borderRadius: 14, overflow: 'hidden', background: '#fff' }}>
+              {/* Header row */}
+              <div style={{ padding: 8, background: '#faf9ff', fontSize: 11, fontWeight: 700, color: '#9891a6' }}>GMT{new Date().getTimezoneOffset() === 0 ? '' : (new Date().getTimezoneOffset() > 0 ? '-' : '+') + Math.floor(Math.abs(new Date().getTimezoneOffset()) / 60)}</div>
+              {weekDays.map(d => {
+                const isToday = dayKey(d) === dayKey(new Date());
+                return (
+                  <div key={dayKey(d)} style={{
+                    padding: 8, background: isToday ? 'rgba(147,51,234,0.08)' : '#faf9ff',
+                    textAlign: 'center', borderLeft: '1px solid rgba(124,58,237,0.08)',
+                  }}>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: isToday ? '#7c3aed' : '#9891a6', textTransform: 'uppercase', letterSpacing: '.05em' }}>
+                      {DAY_SHORT[(d.getDay() + 6) % 7]}
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 800, color: isToday ? '#7c3aed' : '#201b2e' }}>{d.getDate()}</div>
+                  </div>
+                );
+              })}
+
+              {/* Time gutter + day columns */}
+              {[...Array(13)].map((_, i) => {
+                const hour = 8 + i;   // 8:00 → 20:00
+                return (
+                  <div key={hour} style={{ display: 'contents' }}>
+                    <div style={{ padding: '4px 6px', borderTop: '1px solid #f1ecfb', fontSize: 10.5, color: '#9891a6', fontWeight: 600 }}>{hour}:00</div>
+                    {weekDays.map(d => {
+                      const k = dayKey(d);
+                      const blocks = (sessionsByDay[k] ?? []).filter(s => {
+                        const st = new Date(s.scheduled_at); return st.getHours() === hour;
+                      });
+                      return (
+                        <div key={`${k}-${hour}`} style={{ borderTop: '1px solid #f1ecfb', borderLeft: '1px solid rgba(124,58,237,0.08)', padding: 3, minHeight: 44, background: dayKey(d) === dayKey(new Date()) ? 'rgba(147,51,234,0.03)' : 'transparent' }}>
+                          {blocks.map(s => {
+                            const st = new Date(s.scheduled_at);
+                            return (
+                              <div key={s.id} title={`${s.title || 'Lab session'}\n${st.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} · ${s.subject_name ?? ''} · ${s.section_name ?? ''}\nInstructor: ${s.instructor_name ?? '—'}`}
+                                style={{
+                                  marginBottom: 3, padding: '5px 7px', borderRadius: 8, cursor: 'default',
+                                  background: statusBg[s.status] ?? '#faf5ff',
+                                  border: `1.5px solid ${statusColor[s.status] ?? '#7c3aed'}44`,
+                                  borderLeft: `3.5px solid ${statusColor[s.status] ?? '#7c3aed'}`,
+                                }}>
+                                <div style={{ fontSize: 10.5, fontWeight: 700, color: '#201b2e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {st.toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' })} {s.subject_code || s.title || 'Lab'}
+                                </div>
+                                <div style={{ fontSize: 10, color: '#726a85', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                                  {s.section_name ?? ''}{s.instructor_name ? ` · ${s.instructor_name}` : ''}
+                                </div>
+                              </div>
+                            );
+                          })}
+                        </div>
+                      );
+                    })}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {!weekLoading && weekSessions.length === 0 && (
+            <p style={{ margin: '18px 0 0', fontSize: 13, color: '#9891a6' }}>
+              No sessions this week — use the Planner to fill it.
+            </p>
+          )}
+          <p style={{ margin: '12px 0 0', fontSize: 12, color: '#9891a6' }}>
+            Times shown in your local timezone. Overlaps are checked automatically by the Planner.
+          </p>
+        </>
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════
