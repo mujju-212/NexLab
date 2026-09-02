@@ -10,6 +10,7 @@ class Subject(db.Model):
     name            = db.Column(db.Text, nullable=False)
     code            = db.Column(db.String(20))               # e.g. "CS3401"
     description     = db.Column(db.Text)
+    icon            = db.Column(db.String(50), default='datastruct')
     env_profile_id  = db.Column(db.String(36), db.ForeignKey('environment_profiles.id'))
     total_marks     = db.Column(db.Integer, default=100)     # sum of all experiment weightages → max marks for the subject
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)
@@ -22,6 +23,7 @@ class Subject(db.Model):
             'name': self.name,
             'code': self.code,
             'description': self.description,
+            'icon': self.icon or 'datastruct',
             'env_profile_id': self.env_profile_id,
             'total_marks': self.total_marks,
         }
