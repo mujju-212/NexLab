@@ -1,13 +1,12 @@
-﻿import type { Metadata } from 'next';
+﻿'use client';
 
-export const metadata: Metadata = { title: 'Batches | AI Virtual Lab' };
+import { useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 
-export default function Page() {
-  return (
-    <div>
-      <h1 className="text-2xl font-bold mb-4">Batches</h1>
-      <p className="text-gray-500 mb-6">Manage student batches.</p>
-    </div>
-  );
+// Academic structure is institution-scoped - each institution admin manages
+// years/departments/batches/sections/subjects in their portal.
+export default function AcademicRedirect() {
+  const router = useRouter();
+  useEffect(() => { router.replace('/admin/institutions'); }, [router]);
+  return null;
 }
-
