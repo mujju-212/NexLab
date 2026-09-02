@@ -63,8 +63,8 @@ export default function PreLabListPage() {
   };
 
   return (
-    <StudentShell activePage="Pre-Lab" title="Pre-Lab Activities" subtitle="Complete theory, video and quiz modules to unlock your live lab session">
-      {loading && <div className={styles.loadingBox}><Loader2 size={20} className={styles.spinner} /> Loading pre-lab content…</div>}
+    <StudentShell activePage="Content" title="Lab Content" subtitle="Complete theory, video and quiz modules to unlock your live lab session">
+      {loading && <div className={styles.loadingBox}><Loader2 size={20} className={styles.spinner} /> Loading content…</div>}
       {error && <div className={styles.errorBox}>⚠️ {error}</div>}
       {!loading && !error && items.length === 0 && (
         <div className={styles.errorBox}>No published experiments found for your enrolled subjects yet.</div>
