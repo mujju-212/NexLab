@@ -45,6 +45,58 @@ def _run_docker(code: str, lang_id: str, stdin: str, user_id, packages=None, ext
     return result, None
 
 
+# ── Live-session rules (server-side enforcement of D2 + Stage-0 gate) ────────
+def _enforce_live_session_rules(session_id):
+    """
+    Enforce, server-side, what the student client previously enforced alone:
+      a) enrollment  — only students of the session's section may run code in it
+      b) mode matrix — code execution only during the 'working' phase (D2)
+      c) pre-lab gate — every gate quiz of the experiment passed at threshold
+    Returns None when execution may proceed, or a (response, status) tuple.
+
+    Only applies while the session is ACTIVE: practice outside class,
+    catch-up after the session ended, and pre-lab submissions are unaffected.
+    Instructors/admins are exempt (they may demo inside a live session).
+    """
+    if not session_id or getattr(g, 'role', None) != 'student':
+        return None
+
+    from app.models.session import LabSession
+    from app.models.academic import SectionSubject, SectionStudent
+    from app.models.experiment import ContentModule, ContentProgress
+
+    sess = LabSession.query.filter_by(
+        id=session_id, institution_id=g.institution_id).first()
+    if not sess:
+        return jsonify({'error': 'Session not found in your institution.'}), 404
+    if sess.status != 'active':
+        return None   # ended/scheduled → normal rules (catch-up, practice)
+
+    # a) Enrollment
+    ss = SectionSubject.query.get(sess.section_subject_id)
+    enrolled = ss and SectionStudent.query.filter_by(
+        section_id=ss.section_id, student_id=g.user_id).first()
+    if not enrolled:
+        return jsonify({'error': 'You are not enrolled in this session.'}), 403
+
+    # b) Mode capability matrix — 'working' is the only exec-friendly phase
+    mode = sess.current_mode or 'briefing'
+    MODE_BLOCK = {
+        'briefing':    'the instructor has not opened the working phase yet',
+        'quiz_active': 'a quiz is active — the editor is locked',
+        'paused':      'the session is paused by the instructor',
+        'debrief':     'the working phase is over — editor is read-only',
+        'ended':       'the session has ended',
+    }
+    if mode in MODE_BLOCK:
+        return jsonify({'error': f'Code execution is disabled: {MODE_BLOCK[mode]}.'}), 403
+
+    # ── Pre-lab gate: REMOVED as a blocker (product decision — it broke the
+    # join flow). The quiz remains available in pre-lab content and its score
+    # is still reported via check-gate; it simply no longer stops execution.
+    return None
+
+
 @execution_bp.route('/run', methods=['POST'])
 @require_auth
 @limiter.limit("10 per minute")   # prevent Run-button spam
@@ -69,6 +121,12 @@ def run_code():
         return jsonify({'error': 'Browser languages run client-side only.'}), 400
     if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
         return jsonify({'error': 'Code execution engine is not enabled on this server.'}), 503
+
+    # Live-session rules: enrollment + mode matrix + pre-lab gate, enforced
+    # server-side so a modified client can't bypass them (D2 / Stage 0).
+    blocked = _enforce_live_session_rules(session_id)
+    if blocked:
+        return blocked
 
     # For single execution, use main file
     primary_code = code_files.get('main', next(iter(code_files.values()), ''))
@@ -224,6 +282,7 @@ def grade_against_test_cases(code, language, experiment_id, student_id, session_
     if session_id and attempt:
         passed_ids = {r['test_case_id'] for r in per_case if r['passed']}
         checkpoints = Checkpoint.query.filter_by(experiment_id=experiment_id).all()
+        newly_verified = []
         for cp in checkpoints:
             mapped = set(cp.test_case_ids or [])
             if mapped and mapped.issubset(passed_ids):
@@ -238,6 +297,19 @@ def grade_against_test_cases(code, language, experiment_id, student_id, session_
                     prog.status = 'verified'
                     prog.passed_at = _dt.utcnow()
                     prog.last_signal_at = _dt.utcnow()
+                    # D-S1 relay: execution verdicts update the SPARK grid live —
+                    # otherwise the instructor only sees verified on manual refresh.
+                    newly_verified.append(cp.id)
+
+        if newly_verified:
+            try:
+                from app.extensions import socketio as _sio
+                for cp_id in newly_verified:
+                    payload = {'checkpoint_id': cp_id, 'student_id': student_id, 'status': 'verified'}
+                    _sio.emit('checkpoint_update', payload, room=f"session_{session_id}_instructor")
+                    _sio.emit('my_checkpoint_update', payload, room=f"student_{student_id}")
+            except Exception:
+                pass   # relay is best-effort; persistence already committed
 
     from app.extensions import db
     db.session.commit()

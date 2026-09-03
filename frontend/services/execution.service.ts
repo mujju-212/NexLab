@@ -64,6 +64,8 @@ export interface EngineHealth {
 }
 
 
+let languagesCache: { languages: CompilerLanguage[]; groups: string[] } | null = null;
+
 export const executionService = {
 
   // ── Run Code (authenticated, stores attempt) ────────────────────────────────
@@ -89,10 +91,14 @@ export const executionService = {
   // ── Compiler: language catalog ──────────────────────────────────────────────
   // GET /api/execution/languages
   // Response: { languages: CompilerLanguage[], groups: string[] }
-  async listLanguages(): Promise<{ languages: CompilerLanguage[]; groups: string[] }> {
+  async listLanguages(force = false): Promise<{ languages: CompilerLanguage[]; groups: string[] }> {
+    if (!force && languagesCache) {
+      return languagesCache;
+    }
     const { data } = await apiClient.get<{ languages: CompilerLanguage[]; groups: string[] }>(
       '/execution/languages',
     );
+    languagesCache = data;
     return data;
   },
 
