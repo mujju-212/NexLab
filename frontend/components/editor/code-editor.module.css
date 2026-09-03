@@ -203,3 +203,24 @@
     padding: 12px 12px;
   }
 }
+
+/* ── Light theme (T3: editor themes) — toggled via data-theme="light" ─────── */
+.wrap[data-theme='light'] {
+  background: #ffffff;
+  border-color: rgba(124, 58, 237, 0.22);
+}
+
+.wrap[data-theme='light'] .gutter {
+  color: #9891a6;
+  background: #faf9ff;
+  border-right-color: rgba(124, 58, 237, 0.18);
+}
+
+.wrap[data-theme='light'] .backdrop {
+  color: #241f33;
+}
+
+.wrap[data-theme='light'] .input {
+  color: transparent;
+  caret-color: #7c3aed;
+}

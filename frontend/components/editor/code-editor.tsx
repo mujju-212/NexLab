@@ -32,6 +32,8 @@ export interface CodeEditorProps {
   tabSize?: number;
   readOnly?: boolean;
   ariaLabel?: string;
+  /** Light or dark editor surface (default dark). */
+  theme?: 'dark' | 'light';
 }
 
 export function CodeEditor({
@@ -43,6 +45,7 @@ export function CodeEditor({
   tabSize = 4,
   readOnly = false,
   ariaLabel = 'Code editor',
+  theme = 'dark',
 }: CodeEditorProps) {
   const taRef = useRef<HTMLTextAreaElement>(null);
   const preRef = useRef<HTMLPreElement>(null);
@@ -242,7 +245,10 @@ export function CodeEditor({
   }, [INDENT, lineComment, onRun, readOnly, replaceRange, tabSize]);
 
   return (
-    <div className={styles.wrap}>
+    <div
+      className={`${styles.wrap} ${theme === 'light' ? styles.wrapLight : ''}`}
+      data-theme={theme}
+    >
       <pre className={styles.gutter} ref={gutterRef} aria-hidden="true">{gutter}</pre>
 
       <div className={styles.surface}>
