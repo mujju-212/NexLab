@@ -16,7 +16,7 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, RotateCcw,
-  Play, Send, Lightbulb, CheckCircle2, XCircle
+  Play, Send, Lightbulb, CheckCircle2, XCircle, Star, X
 } from 'lucide-react';
 import styles from './ProblemSolver.module.css';
 import { apiClient } from '@/services/api-client';
@@ -50,7 +50,7 @@ interface SampleCase { id: string; input_data: string; expected: string; }
 interface Submission {
   id: string; language: string; status: string;
   runtime_ms: number | null; memory_kb: number | null;
-  submitted_at: string; score: number;
+  submitted_at: string; score: number; code?: string;
 }
 
 interface CaseResult {
@@ -188,6 +188,8 @@ export default function ProblemSolverPage({ slug, baseRoute }: ProblemSolverPage
 
   // UI state
   const [leftTab, setLeftTab] = useState<'description' | 'hints' | 'submissions'>('description');
+  // T3 — submission timeline diff: which submission is open for side-by-side
+  const [diffSub, setDiffSub] = useState<Submission | null>(null);
   const [rightTab, setRightTab] = useState<'testcases' | 'result'>('testcases');
   const [hintShown, setHintShown] = useState(0);
   const [running, setRunning] = useState(false);
@@ -524,19 +526,49 @@ export default function ProblemSolverPage({ slug, baseRoute }: ProblemSolverPage
                     No submissions yet. Write your solution and hit Submit!
                   </div>
                 ) : (
-                  mySubmissions.map(s => (
-                    <div key={s.id} className={styles.subCard}>
-                      <span className={`${styles.subStatus} ${s.status === 'Accepted' ? styles.subAccepted : styles.subWrong}`}>
-                        {s.status === 'Accepted' ? <CheckCircle2 size={13} style={{ verticalAlign: 'middle' }} /> : <XCircle size={13} style={{ verticalAlign: 'middle' }} />}
-                        {' '}{s.status}
-                      </span>
-                      <span className={styles.subLang}>{s.language}</span>
-                      {s.runtime_ms != null && (
-                        <span className={styles.subTime}>{s.runtime_ms}ms</span>
-                      )}
-                      <span className={styles.subTime}>{timeSince(s.submitted_at)}</span>
-                    </div>
-                  ))
+                  <>
+                    {mySubmissions.map(s => (
+                      <div key={s.id} className={styles.subCard} style={{ cursor: 'pointer' }}
+                        onClick={() => setDiffSub(diffSub?.id === s.id ? null : s)}>
+                        <span className={`${styles.subStatus} ${s.status === 'Accepted' ? styles.subAccepted : styles.subWrong}`}>
+                          {s.status === 'Accepted' ? <CheckCircle2 size={13} style={{ verticalAlign: 'middle' }} /> : <XCircle size={13} style={{ verticalAlign: 'middle' }} />}
+                          {' '}{s.status}
+                        </span>
+                        <span className={styles.subLang}>{s.language}</span>
+                        {s.runtime_ms != null && (
+                          <span className={styles.subTime}>{s.runtime_ms}ms</span>
+                        )}
+                        <span className={styles.subTime}>{timeSince(s.submitted_at)}</span>
+                      </div>
+                    ))}
+
+                    {/* T3 — side-by-side code compare: selected vs previous attempt */}
+                    {diffSub && (() => {
+                      const idx = mySubmissions.findIndex(s => s.id === diffSub.id);
+                      const prev = mySubmissions[idx + 1];
+                      return (
+                        <div style={{ marginTop: 10, border: '1px solid #e9e4f7', borderRadius: 10, overflow: 'hidden' }}>
+                          <div style={{ padding: '8px 12px', background: '#faf9ff', fontSize: 12, fontWeight: 700, color: '#7c3aed', display: 'flex', justifyContent: 'space-between' }}>
+                            <span>Compare attempt {mySubmissions.length - idx}</span>
+                            {prev && <span style={{ color: '#9891a6', fontWeight: 600 }}>vs previous</span>}
+                            <button onClick={e => { e.stopPropagation(); setDiffSub(null); }} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9891a6' }}><X size={13} /></button>
+                          </div>
+                          <div style={{ display: prev ? 'grid' : 'block', gridTemplateColumns: prev ? '1fr 1fr' : undefined }}>
+                            <div style={{ padding: 10, borderRight: prev ? '1px solid #f1ecfb' : undefined }}>
+                              <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 700, color: '#9891a6' }}>SELECTED ({diffSub.language})</p>
+                              <pre style={{ margin: 0, fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto', color: '#374151' }}>{diffSub.code ?? '(code not available)'}</pre>
+                            </div>
+                            {prev && (
+                              <div style={{ padding: 10, background: '#fcfbff' }}>
+                                <p style={{ margin: '0 0 6px', fontSize: 11, fontWeight: 700, color: '#9891a6' }}>PREVIOUS ({prev.language})</p>
+                                <pre style={{ margin: 0, fontSize: 11, lineHeight: 1.5, whiteSpace: 'pre-wrap', maxHeight: 220, overflowY: 'auto', color: '#374151' }}>{prev.code ?? '(code not available)'}</pre>
+                              </div>
+                            )}
+                          </div>
+                        </div>
+                      );
+                    })()}
+                  </>
                 )}
               </div>
             )}

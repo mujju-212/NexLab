@@ -13,11 +13,12 @@
 import { useState, useEffect, useCallback, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import {
-  Search, Flame, Zap, Trophy, BookMarked,
+  Search, Flame, Zap, Trophy, BookMarked, Star,
   CheckCircle2, Circle, MinusCircle, ChevronRight
 } from 'lucide-react';
 import styles from './PracticeLibrary.module.css';
 import { apiClient } from '@/services/api-client';
+import { practiceExtraService, type CollectionRow, type CollectionItemRow } from '@/services/practice-extra.service';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
@@ -50,7 +51,7 @@ interface StudyPlan {
 
 // ── Tabs ──────────────────────────────────────────────────────────────────────
 
-const TABS = ['All Problems', 'Foundations', 'Data Structures', 'Algorithms', 'Graphs', 'SQL & Shell', 'Study Plans'];
+const TABS = ['All Problems', 'Foundations', 'Data Structures', 'Algorithms', 'Graphs', 'SQL & Shell', 'Saved', 'Study Plans'];
 
 const SECTION_TABS: Record<string, string[]> = {
   'Foundations':     ['Array', 'Matrix', 'String', 'Math', 'Number Theory', 'Sorting', 'Recursion'],
@@ -96,7 +97,18 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
   const [search, setSearch] = useState('');
   const [diffFilter, setDiffFilter] = useState('');
   const [selectedTopic, setSelectedTopic] = useState('');
+  const [bookmarkIds, setBookmarkIds] = useState<Set<string>>(new Set());
+  const [collections, setCollections] = useState<CollectionRow[]>([]);
+  const [selectedColl, setSelectedColl] = useState<{ collection: CollectionRow; items: CollectionItemRow[] } | null>(null);
+  const [newCollOpen, setNewCollOpen] = useState(false);
+  const [newCollTitle, setNewCollTitle] = useState('');
   const [loading, setLoading] = useState(true);
+
+  const refreshCollections = useCallback(() => {
+    practiceExtraService.collections()
+      .then(r => setCollections(r.collections ?? []))
+      .catch(() => {});
+  }, []);
 
   // Fetch all data on mount
   useEffect(() => {
@@ -125,6 +137,24 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
     fetchAll();
     // Advance the daily streak on any visit (fire-and-forget, once per day server-side)
     apiClient.post('/practice/quest/daily-checkin').catch(() => {});
+    // Starred problems for the Saved tab (best-effort)
+    apiClient.get('/practice/bookmarks/ids')
+      .then(res => setBookmarkIds(new Set(res.data.starred ?? [])))
+      .catch(() => {});
+    refreshCollections();
+  }, [refreshCollections]);
+
+  // Star toggle from the list
+  const toggleStar = useCallback(async (problemId: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    try {
+      const res = await apiClient.post('/practice/bookmarks', { problem_id: problemId });
+      setBookmarkIds(prev => {
+        const next = new Set(prev);
+        if (res.data.starred) next.add(problemId); else next.delete(problemId);
+        return next;
+      });
+    } catch { /* silent */ }
   }, []);
 
   // Filter problems
@@ -134,12 +164,14 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
     if (diffFilter) p = p.filter(x => x.difficulty === diffFilter);
     if (selectedTopic) p = p.filter(x => x.nexlab_topic === selectedTopic);
     // Tab filter
-    if (activeTab !== 'All Problems' && activeTab !== 'Study Plans') {
+    if (activeTab === 'Saved') {
+      p = p.filter(x => bookmarkIds.has(x.id));
+    } else if (activeTab !== 'All Problems' && activeTab !== 'Study Plans') {
       const sectionTopics = SECTION_TABS[activeTab];
       if (sectionTopics) p = p.filter(x => sectionTopics.includes(x.nexlab_topic));
     }
     return p;
-  }, [problems, search, diffFilter, selectedTopic, activeTab]);
+  }, [problems, search, diffFilter, selectedTopic, activeTab, bookmarkIds]);
 
   const goToProblem = (slug: string) => router.push(`${baseRoute}/${slug}`);
 
@@ -208,7 +240,7 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
         ))}
       </div>
 
-      {/* ── Study Plans tab ── */}
+      {/* ── Study Plans / Collections tab ── */}
       {activeTab === 'Study Plans' ? (
         <div className={styles.planGrid}>
           {plans.map(plan => (
@@ -238,6 +270,81 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
               </button>
             </div>
           ))}
+        </div>
+      ) : activeTab === 'Saved' ? (
+        /* ── Saved tab: starred problems + user collections ── */
+        <div>
+          <div style={{ display: 'flex', gap: 8, marginBottom: 14, flexWrap: 'wrap' }}>
+            <button className={styles.tab} onClick={() => setNewCollOpen(o => !o)}>
+              <BookMarked size={13} style={{ marginRight: 4 }} /> New collection
+            </button>
+            {newCollOpen && (
+              <>
+                <input
+                  value={newCollTitle}
+                  onChange={e => setNewCollTitle(e.target.value)}
+                  placeholder="Collection name (e.g. 'DP revision')"
+                  style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #e9e4f7', fontSize: 13, minWidth: 220 }}
+                />
+                <button className={`${styles.tab} ${styles.tabActive}`}
+                  onClick={async () => {
+                    if (!newCollTitle.trim()) return;
+                    try {
+                      await practiceExtraService.createCollection(newCollTitle.trim());
+                      setNewCollTitle('');
+                      setNewCollOpen(false);
+                      refreshCollections();
+                    } catch { /* toast-less silent */ }
+                  }}>
+                  Create
+                </button>
+              </>
+            )}
+          </div>
+          {collections.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(220px, 1fr))', gap: 12, marginBottom: 18 }}>
+              {collections.map(c => (
+                <div key={c.id} style={{
+                  cursor: 'pointer', background: 'rgba(255,255,255,0.85)', borderRadius: 14,
+                  border: '1px solid rgba(255,255,255,0.9)', padding: '14px 16px',
+                }}
+                  onClick={async () => {
+                    const detail = await practiceExtraService.collectionItems(c.id).catch(() => null);
+                    if (detail) {
+                      setSelectedColl(detail);
+                    }
+                  }}>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#201b2e' }}>{c.title}</p>
+                  <p style={{ margin: '4px 0 0', fontSize: 12, color: '#9891a6' }}>{c.item_count} problem(s)</p>
+                </div>
+              ))}
+            </div>
+          )}
+          {selectedColl && (
+            <div style={{ background: 'rgba(255,255,255,0.85)', borderRadius: 14, border: '1px solid rgba(255,255,255,0.9)', padding: 16, marginBottom: 18 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 10 }}>
+                <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#201b2e' }}>📁 {selectedColl.collection.title}</p>
+                <button className={styles.tab} onClick={() => setSelectedColl(null)}>Close</button>
+              </div>
+              {selectedColl.items.map(it => (
+                <div key={it.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '7px 0', borderBottom: '1px solid #f3f0fa' }}>
+                  <span className={styles.probTitle} style={{ cursor: 'pointer' }}
+                    onClick={() => it.problem && goToProblem(it.problem.slug)}>
+                    {it.problem?.title ?? 'Problem'}
+                  </span>
+                  <button className={styles.tab} onClick={async () => {
+                    await practiceExtraService.removeFromCollection(selectedColl.collection.id, it.id).catch(() => {});
+                    const detail = await practiceExtraService.collectionItems(selectedColl.collection.id).catch(() => null);
+                    if (detail) setSelectedColl(detail);
+                    refreshCollections();
+                  }}>Remove</button>
+                </div>
+              ))}
+            </div>
+          )}
+          {filtered.length > 0 && (
+            <p style={{ margin: '0 0 10px', fontSize: 12.5, color: '#9891a6', fontWeight: 600 }}>★ Starred problems</p>
+          )}
         </div>
       ) : (
         <>
@@ -305,14 +412,19 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
                   <th>Title</th>
                   <th>Topic</th>
                   <th>Difficulty</th>
-                  <th>Acceptance</th>
-                  <th>Status</th>
+                  <th>Acceptance</th>                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>
                 {filtered.map(p => (
                   <tr key={p.id}>
-                    <td className={styles.probNum}>{p.lc_id}</td>
+                    <td className={styles.probNum}>
+                      <Star size={13} style={{
+                        cursor: 'pointer', flexShrink: 0,
+                        color: bookmarkIds.has(p.id) ? '#f59e0b' : '#c9c2d8',
+                        fill: bookmarkIds.has(p.id) ? '#f59e0b' : 'transparent',
+                      }} onClick={e => toggleStar(p.id, e)} />
+                    </td>
                     <td>
                       <span className={styles.probTitle} onClick={() => goToProblem(p.slug)}>
                         {p.title}
@@ -325,7 +437,9 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
                   </tr>
                 ))}
                 {filtered.length === 0 && (
-                  <tr><td colSpan={6} className={styles.empty}>No problems found.</td></tr>
+                  <tr><td colSpan={6} className={styles.empty}>
+                    {activeTab === 'Saved' ? 'No starred problems yet — click the ☆ on any problem.' : 'No problems found.'}
+                  </td></tr>
                 )}
               </tbody>
             </table>

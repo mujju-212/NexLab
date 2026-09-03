@@ -47,7 +47,7 @@ def _award_badge(student_id, badge_id):
 
 def _update_plan_progress(student_id, problem_slug):
     """Mark a solved problem inside every enrolled plan that contains it; award the
-    plan's completion badge once all of its problems are solved."""
+    plan's completion badge + certificate once all of its problems are solved."""
     progs = StudyPlanProgress.query.filter_by(student_id=student_id).all()
     for prog in progs:
         plan = StudyPlan.query.get(prog.plan_id)
@@ -67,6 +67,67 @@ def _update_plan_progress(student_id, problem_slug):
             if plan.badge_id and not prog.badge_awarded:
                 _award_badge(student_id, plan.badge_id)
                 prog.badge_awarded = True
+            # F7 — plan-completion certificate (PDF, idempotent)
+            if not prog.certificate_path:
+                try:
+                    prog.certificate_path = _generate_plan_certificate(student_id, plan)
+                except Exception as exc:
+                    from flask import current_app as _app
+                    _app.logger.warning('[practice] certificate generation failed: %s', exc)
+
+
+def _generate_plan_certificate(student_id, plan) -> str:
+    """Render a completion certificate PDF via pdfkit (same infra as lab records)."""
+    import pathlib
+    from app.models.user import User as _User
+
+    user = _User.query.get(student_id)
+    student_name = user.full_name if user else 'Student'
+    issued = datetime.utcnow().strftime('%d %B %Y')
+    cert_id = f'NEX-{plan.slug[:10].upper()}-{student_id[:8].upper()}'
+
+    html = f"""<!DOCTYPE html>
+<html><head><meta charset="utf-8"><style>
+  body {{ font-family: Georgia, serif; text-align: center; padding: 60px 40px; color: #2d2438; }}
+  .frame {{ border: 6px double #7c3aed; border-radius: 16px; padding: 46px 30px; }}
+  .brand {{ letter-spacing: 6px; font-size: 13px; color: #7c3aed; font-weight: bold; }}
+  h1 {{ font-size: 34px; margin: 18px 0 4px; letter-spacing: 2px; }}
+  .sub {{ font-size: 14px; color: #6b6480; margin-bottom: 26px; }}
+  .name {{ font-size: 30px; font-style: italic; margin: 16px 0; border-bottom: 2px solid #c4b5fd; display: inline-block; padding: 0 34px 8px; }}
+  .body {{ font-size: 15px; line-height: 1.7; margin: 14px 0 24px; }}
+  .meta {{ font-size: 11.5px; color: #9891a6; margin-top: 30px; }}
+</style></head><body>
+  <div class="frame">
+    <div class="brand">NEXLAB PRACTICE</div>
+    <h1>Certificate of Completion</h1>
+    <p class="sub">This certifies that</p>
+    <div class="name">{student_name}</div>
+    <p class="body">has successfully completed the practice plan<br/>
+       <strong>{plan.title}</strong><br/>
+       ({plan.total_problems} problems &middot; {plan.difficulty_mix})</p>
+    <div class="meta">
+      Certificate ID: {cert_id} &middot; Issued {issued}<br/>
+      Verify at your NexLab profile.
+    </div>
+  </div>
+</body></html>"""
+
+    try:
+        import pdfkit
+        pdf_bytes = pdfkit.from_string(html, False, options={
+            'page-size': 'A4', 'orientation': 'Landscape',
+            'margin-top': '10mm', 'margin-bottom': '10mm',
+            'enable-local-file-access': '',
+        })
+    except Exception:
+        from app.services.pdf_service import _render_pdf
+        pdf_bytes = _render_pdf(html)
+
+    out_dir = pathlib.Path(__file__).parent.parent.parent / 'certificates'
+    out_dir.mkdir(exist_ok=True)
+    path = out_dir / f'plan_{plan.slug}_{student_id[:8]}.pdf'
+    path.write_bytes(pdf_bytes)
+    return str(path)
 
 
 def _reward_solve(student_id, problem, xp_earned, elapsed_sec=None):
@@ -184,21 +245,22 @@ def get_problem(slug):
     return jsonify({
         'problem': problem.to_dict(include_description=True),
         'sample_cases': [tc.to_dict() for tc in samples],
-        'my_submissions': [s.to_dict() for s in my_subs],
+        'my_submissions': [s.to_dict(include_code=True) for s in my_subs],
     }), 200
 
 
 @practice_bp.route('/problems/<slug>/submissions', methods=['GET'])
 @require_role('student', 'free_user')
 def problem_submissions(slug):
-    """Full submission history for the current student on this problem (newest first)."""
+    """Full submission history for the current student on this problem (newest first).
+    Includes code (owner-scoped) so the UI can diff consecutive attempts."""
     problem = Problem.query.filter_by(slug=slug, is_active=True).first_or_404()
     subs = PracticeSubmission.query.filter_by(
         student_id=g.user_id, problem_id=problem.id, is_run=False
     ).order_by(PracticeSubmission.submitted_at.desc()).all()
     return jsonify({
         'problem_slug': slug,
-        'submissions': [s.to_dict() for s in subs],
+        'submissions': [s.to_dict(include_code=True) for s in subs],
         'total': len(subs),
     }), 200
 
@@ -266,13 +328,46 @@ def daily_challenge():
     today = date.today()
     problem = Problem.query.filter_by(is_daily=True, daily_date=today).first()
     if not problem:
-        # Fallback: pick by day-of-year modulo
-        import hashlib
-        day_hash = int(hashlib.md5(str(today).encode()).hexdigest(), 16)
-        count = Problem.query.filter_by(is_active=True).count()
-        if count:
-            offset = day_hash % count
-            problem = Problem.query.filter_by(is_active=True).offset(offset).first()
+        # Adaptive fallback (Tier 3): pick by the user's weak topics + level,
+        # not arbitrary hash. Weak topics = most recent non-accepted attempts;
+        # difficulty ceiling = one above their best accepted solve.
+        import random as _rand
+        active = Problem.query.filter_by(is_active=True).all()
+        if active:
+            my_subs = (PracticeSubmission.query
+                       .filter(PracticeSubmission.student_id == g.user_id,
+                               PracticeSubmission.is_run == False)  # noqa: E712
+                       .order_by(PracticeSubmission.submitted_at.desc())
+                       .limit(100).all())
+            by_id = {p.id: p for p in active}
+            solved_ids = set()
+            weak = {}
+            solved_rank = -1
+            rank_map = {'Easy': 0, 'Medium': 1, 'Hard': 2}
+            for s in my_subs:
+                p = by_id.get(s.problem_id)
+                if not p:
+                    continue
+                if s.status == 'Accepted':
+                    solved_ids.add(p.id)
+                    solved_rank = max(solved_rank, rank_map.get(p.difficulty, 1))
+                else:
+                    weak[p.nexlab_topic] = weak.get(p.nexlab_topic, 0) + 3
+            unsolved = [p for p in active if p.id not in solved_ids]
+            if weak and unsolved:
+                weak_order = sorted(weak.keys(), key=lambda t: -weak[t])
+                pool = [p for p in unsolved if p.nexlab_topic in weak_order[:3]
+                        and rank_map.get(p.difficulty, 1) <= solved_rank + 1]
+                pool = pool or unsolved
+                # deterministic per user+day so refreshes don't reshuffle
+                seed = f"{g.user_id}-{today.isoformat()}"
+                _rand.Random(seed).shuffle(pool)
+                problem = pool[0] if pool else None
+            if not problem:
+                import hashlib
+                day_hash = int(hashlib.md5(str(today).encode()).hexdigest(), 16)
+                offset = day_hash % len(active)
+                problem = active[offset]
 
     if not problem:
         return jsonify({'daily': None}), 200
@@ -460,7 +555,32 @@ def get_plan(plan_id):
         'plan': plan.to_dict(),
         'sections': sections_data,
         'progress': prog.to_dict() if prog else None,
+        'certificate_ready': bool(prog and prog.completed_at),
     }), 200
+
+
+@practice_bp.route('/plans/<plan_id>/certificate', methods=['GET'])
+@require_role('student', 'free_user')
+def download_plan_certificate(plan_id):
+    """Download the plan-completion certificate PDF (generated at completion)."""
+    import os
+    from flask import send_file
+    plan = _resolve_plan(plan_id)
+    prog = StudyPlanProgress.query.filter_by(
+        student_id=g.user_id, plan_id=plan.id).first()
+    if not prog or not prog.completed_at:
+        return jsonify({'error': 'Complete the plan first to earn your certificate.'}), 400
+    path = prog.certificate_path
+    if not path or not os.path.exists(path):
+        # regenerate once if the file was cleaned up
+        try:
+            prog.certificate_path = _generate_plan_certificate(g.user_id, plan)
+            db.session.commit()
+            path = prog.certificate_path
+        except Exception:
+            return jsonify({'error': 'Certificate unavailable.'}), 404
+    return send_file(path, as_attachment=True,
+                     download_name=f'nexlab_certificate_{plan.slug}.pdf')
 
 
 @practice_bp.route('/plans/<plan_id>/enroll', methods=['POST'])

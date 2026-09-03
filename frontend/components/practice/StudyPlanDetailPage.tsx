@@ -9,6 +9,7 @@ import { useRouter } from 'next/navigation';
 import { ArrowLeft, ChevronDown, CheckCircle2, Circle } from 'lucide-react';
 import styles from './PracticePages.module.css';
 import { apiClient } from '@/services/api-client';
+import { practiceExtraService } from '@/services/practice-extra.service';
 
 interface ProblemRow {
   id: string; slug: string; lc_id: string; title: string;
@@ -43,12 +44,14 @@ export default function StudyPlanDetailPage({
   const [openSections, setOpenSections] = useState<Set<string>>(new Set());
   const [enrolling, setEnrolling] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [certificateReady, setCertificateReady] = useState(false);
 
   useEffect(() => {
     const load = async () => {
       setLoading(true);
       try {
         const res = await apiClient.get(`/practice/plans/${planSlug}`);
+        setCertificateReady(!!res.data.certificate_ready);
         setPlan(res.data.plan);
         setSections(res.data.sections || []);
         setProgress(res.data.progress || null);
@@ -131,6 +134,21 @@ export default function StudyPlanDetailPage({
             <div style={{ marginTop: '.65rem', color: '#15803d', fontSize: '.8rem', fontWeight: 800 }}>
               🎉 Completed!
             </div>
+          )}
+          {enrolled && progress?.completed_at && certificateReady && (
+            <button
+              onClick={async () => {
+                try { await practiceExtraService.downloadCertificate(plan.id); }
+                catch { /* download failed — ignore */ }
+              }}
+              style={{
+                marginTop: '.6rem', width: '100%', display: 'flex', alignItems: 'center',
+                justifyContent: 'center', gap: 6, padding: '.55rem 0', borderRadius: '.7rem',
+                border: 'none', background: 'linear-gradient(135deg,#7c3aed,#9333ea)',
+                color: '#fff', fontSize: '.8rem', fontWeight: 700, cursor: 'pointer',
+              }}>
+              🏅 Download Certificate (PDF)
+            </button>
           )}
         </div>
       </div>

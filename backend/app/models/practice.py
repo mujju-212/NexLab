@@ -117,7 +117,7 @@ class PracticeSubmission(db.Model):
     is_run      = db.Column(db.Boolean, default=False)              # True = "Run" only, False = full submit
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
 
-    def to_dict(self):
+    def to_dict(self, include_code=False):
         return {
             'id':           self.id,
             'student_id':   self.student_id,
@@ -132,6 +132,8 @@ class PracticeSubmission(db.Model):
             'is_run':       self.is_run,
             'submitted_at': self.submitted_at.isoformat() if self.submitted_at else None,
         }
+        # note: code intentionally excluded by default; pass include_code=True
+        # in owner-scoped endpoints (diff view) — never in public payloads
 
 
 # ─── Study Plans ──────────────────────────────────────────────────────────────
@@ -203,6 +205,7 @@ class StudyPlanProgress(db.Model):
     started_at          = db.Column(db.DateTime, default=datetime.utcnow)
     completed_at        = db.Column(db.DateTime, nullable=True)
     badge_awarded       = db.Column(db.Boolean, default=False)
+    certificate_path    = db.Column(db.String(500))                 # plan-completion PDF
 
     __table_args__ = (db.UniqueConstraint('student_id', 'plan_id', name='uq_student_plan'),)
 
@@ -264,6 +267,10 @@ class StudentXP(db.Model):
     easy_solved         = db.Column(db.Integer, default=0)
     medium_solved       = db.Column(db.Integer, default=0)
     hard_solved         = db.Column(db.Integer, default=0)
+
+    # Public achievement showcase (opt-in)
+    profile_public      = db.Column(db.Boolean, default=False)
+    profile_slug        = db.Column(db.String(40), index=True)
 
     def add_xp(self, amount: int):
         self.total_xp += amount
