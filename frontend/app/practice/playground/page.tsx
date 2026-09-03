@@ -4,12 +4,13 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import IndividualShell from '@/components/layout/IndividualShell';
 import { executionService, type CompilerLanguage, type PlaygroundResult } from '@/services/execution.service';
+import { practiceExtraService, type PlaygroundSessionRow } from '@/services/practice-extra.service';
 import { useAuthStore } from '@/store/auth-store';
 import { CodeEditor } from '@/components/editor/code-editor';
 import styles from './playground.module.css';
 import {
   Play, Terminal, Trash2, Copy, Check, Loader2, Zap,
-  Clock, MemoryStick, AlertCircle, CheckCircle2
+  Clock, MemoryStick, AlertCircle, CheckCircle2, Save, Share2, History, Moon, Sun, X
 } from 'lucide-react';
 
 const FALLBACK_LANGUAGES: CompilerLanguage[] = [
@@ -35,6 +36,15 @@ export default function PlaygroundPage() {
   const [result, setResult] = useState<PlaygroundResult | null>(null);
   const [copied, setCopied] = useState(false);
   const outputRef = useRef<HTMLDivElement>(null);
+
+  // T3 — cloud save/share/history + editor theme
+  const [darkEditor, setDarkEditor] = useState(true);
+  const [showHistory, setShowHistory] = useState(false);
+  const [sessions, setSessions] = useState<PlaygroundSessionRow[]>([]);
+  const [currentSessionId, setCurrentSessionId] = useState<string | null>(null);
+  const [shareUrl, setShareUrl] = useState<string | null>(null);
+  const [saveMsg, setSaveMsg] = useState<string | null>(null);
+  const flashSave = (m: string) => { setSaveMsg(m); setTimeout(() => setSaveMsg(null), 2600); };
 
   // Guard: only logged-in free_user
   useEffect(() => {
@@ -104,7 +114,77 @@ export default function PlaygroundPage() {
     setCode(selectedLang.starter);
     setResult(null);
     setPhase('idle');
+    setCurrentSessionId(null);
+    setShareUrl(null);
     localStorage.removeItem(`playground_draft_${selectedLang.id}`);
+  };
+
+  // ── Cloud save / history / share (T3) ─────────────────────────────────────
+  const loadHistory = useCallback(() => {
+    practiceExtraService.playgroundSessions()
+      .then(r => setSessions(r.sessions ?? []))
+      .catch(() => {});
+  }, []);
+
+  const openHistory = () => {
+    if (!showHistory) loadHistory();
+    setShowHistory(s => !s);
+  };
+
+  const handleSave = async () => {
+    if (!code.trim()) return;
+    try {
+      const s = await practiceExtraService.savePlaygroundSession({
+        id: currentSessionId ?? undefined,
+        title: `Session — ${new Date().toLocaleDateString('en-IN')}`,
+        language: selectedLang.id,
+        code,
+        stdin_data: stdin || undefined,
+      });
+      setCurrentSessionId(s.id);
+      flashSave(currentSessionId ? 'Session updated ✓' : 'Saved to your history ✓');
+      loadHistory();
+    } catch {
+      flashSave('Save failed — try again.');
+    }
+  };
+
+  const loadSession = async (id: string) => {
+    try {
+      const s = await practiceExtraService.getPlaygroundSession(id);
+      setCurrentSessionId(s.id);
+      setCode(s.code ?? '');
+      setStdin(s.stdin_data ?? '');
+      const lang = languages.find(l => l.id === s.language);
+      if (lang) setSelectedLang(lang);
+      setShareUrl(s.is_shared && s.share_slug ? `/u/playground/${s.share_slug}` : null);
+      setShowHistory(false);
+      flashSave('Session loaded ✓');
+    } catch {
+      flashSave('Could not load session.');
+    }
+  };
+
+  const handleShare = async () => {
+    if (!currentSessionId) { flashSave('Save the session first.'); return; }
+    try {
+      const url = await practiceExtraService.sharePlaygroundSession(currentSessionId, true);
+      setShareUrl(url);
+      if (url) {
+        await navigator.clipboard.writeText(`${window.location.origin}${url}`).catch(() => {});
+        flashSave('Share link copied ✓');
+      }
+    } catch {
+      flashSave('Share failed.');
+    }
+  };
+
+  const handleDeleteSession = async (id: string) => {
+    try {
+      await practiceExtraService.deletePlaygroundSession(id);
+      if (currentSessionId === id) { setCurrentSessionId(null); setShareUrl(null); }
+      loadHistory();
+    } catch { /* silent */ }
   };
 
   if (!isAuthenticated || !user) return null;
@@ -172,12 +252,79 @@ export default function PlaygroundPage() {
               <Terminal size={14} />
               <span className={styles.stdinLabel}>stdin</span>
             </button>
+            <button className={styles.iconBtn} onClick={handleSave} title="Save to your history">
+              <Save size={14} />
+            </button>
+            <button className={styles.iconBtn} onClick={handleShare} title="Share a read-only link">
+              <Share2 size={14} />
+            </button>
+            <button
+              className={`${styles.iconBtn} ${showHistory ? styles.iconBtnActive : ''}`}
+              onClick={openHistory}
+              title="Saved sessions"
+            >
+              <History size={14} />
+            </button>
+            <button
+              className={styles.iconBtn}
+              onClick={() => setDarkEditor(d => !d)}
+              title={darkEditor ? 'Switch editor to light theme' : 'Switch editor to dark theme'}
+            >
+              {darkEditor ? <Sun size={14} /> : <Moon size={14} />}
+            </button>
           </div>
 
           <div className={styles.topRight}>
             <span className={styles.langBadge}>{selectedLang.label}</span>
           </div>
         </div>
+
+        {/* ── Save/share/status strip ──────────────────────────────────────── */}
+        {(saveMsg || shareUrl || currentSessionId) && (
+          <div style={{
+            display: 'flex', alignItems: 'center', gap: 12, padding: '6px 14px',
+            background: '#f6f2ff', borderBottom: '1px solid #ede9fe',
+            fontSize: 12, color: '#6b6480', flexWrap: 'wrap',
+          }}>
+            {currentSessionId && <span>💾 session saved{shareUrl ? '' : ' (private)'}</span>}
+            {saveMsg && <span style={{ color: '#7c3aed', fontWeight: 700 }}>{saveMsg}</span>}
+            {shareUrl && (
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                🔗 <code style={{ fontSize: 11.5 }}>{`${typeof window !== 'undefined' ? window.location.origin : ''}${shareUrl}`}</code>
+              </span>
+            )}
+          </div>
+        )}
+
+        {/* ── History drawer ───────────────────────────────────────────────── */}
+        {showHistory && (
+          <div style={{
+            borderBottom: '1px solid #ede9fe', background: '#fbfaff',
+            padding: '12px 16px', maxHeight: 260, overflowY: 'auto',
+          }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+              <span style={{ fontSize: 12, fontWeight: 800, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '.05em' }}>Saved sessions</span>
+              <button className={styles.iconBtn} onClick={() => setShowHistory(false)}><X size={13} /></button>
+            </div>
+            {sessions.length === 0 ? (
+              <p style={{ margin: 0, fontSize: 12.5, color: '#9891a6' }}>Nothing saved yet — hit 💾 to keep your work.</p>
+            ) : sessions.map(s => (
+              <div key={s.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid #f1ecfb' }}>
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <p style={{ margin: 0, fontSize: 13, fontWeight: 600, color: '#201b2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    {s.title} <span style={{ fontSize: 11, color: '#9891a6' }}>· {s.language}</span>
+                    {s.is_shared && <span style={{ fontSize: 11, color: '#059669' }}> · shared</span>}
+                  </p>
+                  <p style={{ margin: 0, fontSize: 11, color: '#9891a6' }}>
+                    {s.updated_at ? new Date(s.updated_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : ''}
+                  </p>
+                </div>
+                <button className={styles.iconBtn} onClick={() => loadSession(s.id)} title="Load"><Play size={13} /></button>
+                <button className={styles.iconBtn} onClick={() => handleDeleteSession(s.id)} title="Delete"><Trash2 size={13} /></button>
+              </div>
+            ))}
+          </div>
+        )}
 
         {/* ── Hint bar ─────────────────────────────────────────────────────── */}
         {selectedLang.hint && (
@@ -202,6 +349,7 @@ export default function PlaygroundPage() {
                 mode={selectedLang.editor_mode}
                 lineComment={selectedLang.line_comment}
                 onRun={handleRun}
+                theme={darkEditor ? 'dark' : 'light'}
               />
             </div>
 

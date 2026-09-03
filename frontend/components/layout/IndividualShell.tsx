@@ -9,6 +9,8 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './IndividualShell.module.css';
+import { ShellNotifications, ShellSearchBox, type SearchHit } from './shell-widgets';
+import { practiceExtraService } from '@/services/practice-extra.service';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
 
@@ -132,15 +134,13 @@ export default function IndividualShell({ activePage, children, title, subtitle 
               Practice <ChevronRight size={14} className={styles.breadSep} /> <strong>{activePage}</strong>
             </div>
             <div className={styles.headerRight}>
-              <div className={styles.searchBar}>
-                <Search size={14} strokeWidth={2} className={styles.searchIcon} />
-                <span>Search</span>
-                <kbd className={styles.searchKbd}>⌘ /</kbd>
-              </div>
-              <button className={styles.iconBtn}>
-                <Bell size={16} strokeWidth={1.9} />
-                <span className={styles.notifDot} />
-              </button>
+              <ShellSearchBox
+                className={styles.searchBar}
+                placeholder="Search practice problems…"
+                fetcher={(q) => practiceExtraService.searchProblems(q)}
+                onSelect={(hit: SearchHit) => router.push(hit.link ?? '/practice/library')}
+              />
+              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
               <div className={styles.profileChip} onClick={() => router.push('/practice/profile')}>
                 <div className={styles.avatarLg} style={{ background: '#9333ea' }}>
                   {user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? 'ME'}

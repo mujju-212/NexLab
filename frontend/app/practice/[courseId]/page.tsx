@@ -25,6 +25,7 @@ export default function CoursePage() {
   const [course,    setCourse]    = useState<FreeCourse | null>(null);
   const [exercises, setExercises] = useState<FreeExercise[]>([]);
   const [solvedIds, setSolvedIds] = useState<Set<string>>(new Set());
+  const [leaderboard, setLeaderboard] = useState<Array<{ user_id?: string; rank: number; name: string; xp: number; solved: number }>>([]);
   const [loading,   setLoading]   = useState(true);
 
   // Guard: only logged-in users may see this page
@@ -43,6 +44,8 @@ export default function CoursePage() {
         const prog = await freeService.getCourseProgress(c.id);
         setSolvedIds(new Set(prog.solved_ids ?? []));
       }
+      // Public leaderboard — safe to fetch regardless of auth state
+      freeService.getLeaderboard(c.id).then(lb => setLeaderboard(lb.leaderboard ?? [])).catch(() => {});
     } finally {
       setLoading(false);
     }
@@ -125,6 +128,21 @@ export default function CoursePage() {
             <p className={styles.freeBannerTitle}>🎓 Free &amp; Open</p>
             <p className={styles.freeBannerSub}>All courses are free forever.</p>
           </div>
+
+          {/* Leaderboard (public endpoint) */}
+          {leaderboard.length > 0 && (
+            <div className={styles.progressCard} style={{ width: '100%', marginBottom: 20 }}>
+              <div className={styles.progressHead}><Trophy size={14} color="#b45309" /> Course Leaderboard</div>
+              <div style={{ marginTop: 8, display: 'flex', flexDirection: 'column', gap: 4 }}>
+                {leaderboard.slice(0, 5).map(r => (
+                  <div key={r.user_id ?? r.rank} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, color: '#374151' }}>
+                    <span>#{r.rank} {r.name}</span>
+                    <span><Zap size={11} /> {r.xp} XP · {r.solved} solved</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Exercise List */}
           <p className={styles.listTitle}>Exercises — {exercises.length} total</p>

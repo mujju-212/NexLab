@@ -6,11 +6,12 @@ import IndividualShell from '@/components/layout/IndividualShell';
 import { useAuthStore } from '@/store/auth-store';
 import { authService } from '@/services/auth.service';
 import { freeService } from '@/services/free.service';
+import { practiceExtraService } from '@/services/practice-extra.service';
 import styles from './profile.module.css';
 import {
   User, Mail, Phone, Lock, Save, LogOut,
   Zap, CheckCircle2, Eye, EyeOff,
-  Target, TrendingUp, AlertCircle
+  Target, TrendingUp, AlertCircle, Trophy, Sparkles
 } from 'lucide-react';
 
 export default function ProfilePage() {
@@ -36,6 +37,10 @@ export default function ProfilePage() {
   // Stats
   const [stats, setStats] = useState<{ total_xp: number; total_solved: number; total_attempted: number } | null>(null);
 
+  // T3 — public showcase + AI meter
+  const [showcase, setShowcase] = useState<{ profile_public: boolean; profile_slug: string | null } | null>(null);
+  const [meter, setMeter] = useState<{ used: number; limit: number; remaining: number } | null>(null);
+
   useEffect(() => {
     if (!isAuthenticated || !user) { router.replace('/login'); }
   }, [isAuthenticated, user, router]);
@@ -54,6 +59,8 @@ export default function ProfilePage() {
         const attempted = p.records.filter(r => r.status === 'attempted').length;
         setStats({ total_xp: p.total_xp, total_solved: p.total_solved, total_attempted: attempted });
       }).catch(() => {});
+      practiceExtraService.myShowcase().then(setShowcase).catch(() => {});
+      practiceExtraService.aiMeter().then(setMeter).catch(() => {});
     }
   }, [user]);
 
@@ -140,6 +147,62 @@ export default function ProfilePage() {
           ))}
         </div>
       )}
+
+      {/* Public showcase + AI meter (T3) */}
+      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16, marginBottom: 18 }}>
+        {/* Achievement showcase toggle */}
+        <div className={styles.formCard} style={{ marginBottom: 0 }}>
+          <div className={styles.formCardHeader}>
+            <Trophy size={16} />
+            <h2>Public Achievement Profile</h2>
+          </div>
+          <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', fontSize: 14, color: '#374151' }}>
+            <input type="checkbox" checked={showcase?.profile_public ?? false}
+              onChange={async e => {
+                const on = e.target.checked;
+                try {
+                  const res = await practiceExtraService.toggleShowcase(on);
+                  setShowcase({ profile_public: res.profile_public, profile_slug: res.profile_slug });
+                } catch { /* keep old state */ }
+              }} />
+            Show my badges, XP and solved problems publicly
+          </label>
+          {showcase?.profile_public && showcase.profile_slug && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12 }}>
+              <code style={{ fontSize: 12, background: '#faf9ff', padding: '6px 10px', borderRadius: 8, flex: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                {typeof window !== 'undefined' ? window.location.origin : ''}/u/{showcase.profile_slug}
+              </code>
+              <button className={styles.saveBtn} style={{ padding: '6px 12px', minHeight: 0 }}
+                onClick={() => navigator.clipboard.writeText(`${window.location.origin}/u/${showcase.profile_slug}`).catch(() => {})}>
+                Copy
+              </button>
+            </div>
+          )}
+        </div>
+
+        {/* AI meter */}
+        {meter && (
+          <div className={styles.formCard} style={{ marginBottom: 0 }}>
+            <div className={styles.formCardHeader}>
+              <Sparkles size={16} />
+              <h2>Daily AI Calls</h2>
+            </div>
+            <div style={{ fontSize: 20, fontWeight: 800, color: '#201b2e' }}>
+              {meter.used} / {meter.limit}
+            </div>
+            <div style={{ height: 7, borderRadius: 6, background: 'rgba(124,58,237,0.1)', overflow: 'hidden', marginTop: 8 }}>
+              <div style={{
+                height: '100%', borderRadius: 6, transition: 'width .3s',
+                width: `${Math.min((meter.used / Math.max(meter.limit, 1)) * 100, 100)}%`,
+                background: meter.remaining === 0 ? '#ef4444' : 'linear-gradient(90deg,#7c3aed,#a78bfa)',
+              }} />
+            </div>
+            <p style={{ margin: '6px 0 0', fontSize: 12, color: '#9891a6' }}>
+              {meter.remaining} remaining today · resets at midnight UTC
+            </p>
+          </div>
+        )}
+      </div>
 
       <div className={styles.formsGrid}>
         {/* Profile Form */}

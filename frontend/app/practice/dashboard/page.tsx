@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import IndividualShell from '@/components/layout/IndividualShell';
 import { freeService, type FreeCourse, type Progress } from '@/services/free.service';
+import { practiceExtraService, type RecommendedProblem } from '@/services/practice-extra.service';
 import { useAuthStore } from '@/store/auth-store';
 import {
   Loader2, Zap, CheckCircle2, GraduationCap, Terminal,
@@ -17,6 +18,7 @@ export default function IndividualDashboardPage() {
 
   const [progress, setProgress] = useState<Progress | null>(null);
   const [courses, setCourses]   = useState<FreeCourse[]>([]);
+  const [recs, setRecs]         = useState<RecommendedProblem[]>([]);
   const [loading, setLoading]   = useState(true);
 
 
@@ -36,6 +38,10 @@ export default function IndividualDashboardPage() {
       .then(([prog, list]) => { setProgress(prog); setCourses(list); })
       .catch(() => { /* best-effort — render empty states */ })
       .finally(() => setLoading(false));
+    // Best-effort recommendations (library problems) — never blocks the page
+    practiceExtraService.recommended()
+      .then(r => setRecs(r.recommendations ?? []))
+      .catch(() => {});
   }, [user]);
 
   if (!isAuthenticated || !user) return null;
@@ -183,6 +189,36 @@ export default function IndividualDashboardPage() {
               <p className={styles.statCompare}>{courses.length} courses available</p>
             </div>
           </div>
+
+          {/* ── Recommended next (T3) ──────────────────────────────────── */}
+          {recs.length > 0 && (
+            <section className={styles.section}>
+              <div className={styles.sectionHeader}>
+                <h2 className={styles.sectionTitle}><Sparkles size={18} /> Recommended next</h2>
+                <button className={styles.sectionLink} onClick={() => router.push('/practice/library')}>Library →</button>
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(230px, 1fr))', gap: 12 }}>
+                {recs.map(r => (
+                  <div key={r.id}
+                    onClick={() => router.push(`/practice/library/${r.slug}`)}
+                    style={{
+                      cursor: 'pointer', background: 'rgba(255,255,255,0.8)', borderRadius: 14,
+                      border: '1px solid rgba(255,255,255,0.9)', padding: '14px 16px',
+                    }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span style={{
+                        fontSize: 11, fontWeight: 700, textTransform: 'uppercase', letterSpacing: '.04em',
+                        color: r.difficulty === 'Hard' ? '#dc2626' : r.difficulty === 'Medium' ? '#d97706' : '#059669',
+                      }}>{r.difficulty}</span>
+                      <span style={{ fontSize: 11, color: '#9891a6' }}>{r.reason}</span>
+                    </div>
+                    <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#201b2e', lineHeight: 1.35 }}>{r.title}</p>
+                    <p style={{ margin: '6px 0 0', fontSize: 12, color: '#7c3aed', fontWeight: 600 }}>{r.nexlab_topic}</p>
+                  </div>
+                ))}
+              </div>
+            </section>
+          )}
 
           {/* ── Your courses / Continue ───────────────────────────────── */}
           <section className={styles.section}>
