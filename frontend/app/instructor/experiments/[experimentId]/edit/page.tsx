@@ -4,7 +4,7 @@ import { use, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Save, Sparkles, AlertCircle,
-  Code2, MessageSquare, HelpCircle, GripVertical,
+  Code2, MessageSquare, HelpCircle, GripVertical, BookOpen, Check, X, Code, Lock, ShieldCheck
 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import ContentStudio from '@/components/instructor/studio/ContentStudio';
@@ -12,9 +12,9 @@ import ExperimentDesign from '@/components/instructor/ExperimentDesign';
 import { experimentService } from '@/services/experiment.service';
 import { instructorService } from '@/services/instructor.service';
 import { executionService, type CompilerLanguage } from '@/services/execution.service';
+import createStyles from '../../new/create-experiment.module.css';
 import styles from '../../../shared.module.css';
 
-// Details, Pre-lab Content and Design (checkpoints/rubric/proctoring/type).
 type Tab = 'details' | 'content' | 'design';
 
 interface Exp {
@@ -34,18 +34,22 @@ interface Exp {
   is_published: boolean;
   weightage: number;
   grade_scale: 100 | 10;
+  experiment_type?: string;
+  rubric_test_cases?: number;
+  rubric_lab_report?: number;
+  rubric_code_quality?: number;
+  rubric_viva?: number;
+  rubric_quiz?: number;
 }
 
-// A gradable block pulled from the studio block list.
 interface GradableBlock {
   id: string;
   title: string;
   module_type: 'assign' | 'quiz' | 'viva';
-  weight: number; // editable points
+  weight: number;
 }
 
-// Sensible fallback when the compiler catalog can't be reached.
-const DEFAULT_LANGS = ['python', 'cpp', 'c', 'java'];
+const DEFAULT_LANGS = ['python', 'cpp', 'c', 'java', 'sql', 'javascript'];
 
 const BLOCK_TYPE_ICON: Record<string, React.ReactNode> = {
   assign: <Code2 size={14} color="#7c3aed" />,
@@ -59,7 +63,7 @@ const BLOCK_TYPE_LABEL: Record<string, string> = {
   viva:   'Viva',
 };
 
-// ── Grading tab ───────────────────────────────────────────────────────────────
+// ── Grading Block Weights Component ──────────────────────────────────────────
 
 function GradingSection({
   experimentId,
@@ -72,7 +76,6 @@ function GradingSection({
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
 
-  // Load the content blocks, keep only gradable types.
   const load = useCallback(async () => {
     setLoading(true);
     try {
@@ -125,9 +128,9 @@ function GradingSection({
 
   if (blocks.length === 0) {
     return (
-      <div className={styles.sectionCard} style={{ textAlign: 'center', padding: '32px 0' }}>
-        <Sparkles size={28} color="#d8b4fe" style={{ marginBottom: 8 }} />
-        <p className={styles.sectionSub}>
+      <div className={createStyles.optionsCard} style={{ textAlign: 'center', padding: '24px' }}>
+        <Sparkles size={24} color="#7c3aed" style={{ marginBottom: 6, margin: '0 auto' }} />
+        <p className={styles.sectionSub} style={{ margin: 0 }}>
           No gradable blocks yet. Add an <strong>Assign</strong>, <strong>Quiz</strong>, or <strong>Viva</strong>{' '}
           block in the Pre-lab Content tab.
         </p>
@@ -136,16 +139,15 @@ function GradingSection({
   }
 
   return (
-    <div className={styles.sectionCard}>
-      <div className={styles.sectionHeader}>
-        <h3 className={styles.sectionTitle}>Block grading weights</h3>
-        <span style={{ fontSize: 13, color: '#6b7280', fontWeight: 600 }}>
-          Total: <strong style={{ color: total === 100 ? '#059669' : '#b45309' }}>{total}</strong> pts
+    <div className={createStyles.rubricCard}>
+      <div className={createStyles.rubricHeaderRow}>
+        <span className={createStyles.rubricTitle}>Block Grading Points</span>
+        <span className={createStyles.rubricSumBadge} style={{ background: '#ede9fe', color: '#7c3aed' }}>
+          Total: {total} pts
         </span>
       </div>
-      <p className={styles.sectionSub} style={{ marginBottom: 14 }}>
-        Assign point weights to each gradable block. They do not need to sum to 100 — the system
-        converts them to percentages automatically.
+      <p className={styles.sectionSub} style={{ margin: '4px 0 12px 0' }}>
+        Assign point weights to each gradable block. The system converts them to final scores automatically.
       </p>
 
       <table className={styles.table}>
@@ -161,11 +163,11 @@ function GradingSection({
           {blocks.map(b => (
             <tr key={b.id}>
               <td>
-                <GripVertical size={14} color="#d1d5db" />
+                <GripVertical size={14} color="#94a3b8" />
               </td>
               <td className={styles.tdStrong}>{b.title}</td>
               <td>
-                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6, fontSize: 13 }}>
                   {BLOCK_TYPE_ICON[b.module_type]}
                   {BLOCK_TYPE_LABEL[b.module_type]}
                 </span>
@@ -175,8 +177,8 @@ function GradingSection({
                   type="number"
                   min={0}
                   max={9999}
-                  className={styles.input}
-                  style={{ width: 80 }}
+                  className={createStyles.formInput}
+                  style={{ width: 90, padding: '6px 10px' }}
                   value={b.weight}
                   onChange={e => updateWeight(b.id, parseInt(e.target.value) || 0)}
                 />
@@ -186,17 +188,16 @@ function GradingSection({
         </tbody>
       </table>
 
-      <div className={styles.actionRow} style={{ marginTop: 14 }}>
-        <span />
-        <button className={styles.primaryBtn} onClick={saveWeights} disabled={saving}>
-          <Save size={13} /> {saving ? 'Saving…' : 'Save Weights'}
+      <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 12 }}>
+        <button className={createStyles.draftBtn} onClick={saveWeights} disabled={saving}>
+          <Save size={14} /> {saving ? 'Saving…' : 'Save Block Weights'}
         </button>
       </div>
     </div>
   );
 }
 
-// ── Page ───────────────────────────────────────────────────────────────────────
+// ── Edit Experiment Page ──────────────────────────────────────────────────────
 
 export default function EditExperimentPage({ params }: { params: Promise<{ experimentId: string }> }) {
   const { experimentId } = use(params);
@@ -206,51 +207,74 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
   const [exp, setExp] = useState<Exp | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
   const [languages, setLanguages] = useState<CompilerLanguage[]>([]);
 
-  // details form — removed: input_format, output_format, rubric_* fields
+  // Interactive Concept Tags state
+  const [tagInput, setTagInput] = useState('');
+  const [tagsList, setTagsList] = useState<string[]>([]);
+
+  // Form State
   const [form, setForm] = useState({
     title: '',
     aim: '',
-    theory: '',
-    problem_statement: '',
-    difficulty_level: 1,
-    concept_tags: '',
-    time_limit_sec: 10,
+    exp_number: 1,
+    difficulty_level: 2,
+    time_limit_sec: 60,
     allowed_languages: [] as string[],
-    enable_viva: false,
-    enable_lockdown: false,
+    experiment_type: 'coding',
+    enable_viva: true,
+    enable_lockdown: true,
     allow_ai_hints: true,
-    weightage: 1,
+    weightage: 100,
     grade_scale: 100 as 100 | 10,
+    prerequisites: '',
+    learning_outcomes: '',
+
+    // Rubric breakdown
+    rubric_test_cases: 60,
+    rubric_lab_report: 20,
+    rubric_code_quality: 10,
+    rubric_viva: 10,
+    rubric_quiz: 0,
   });
 
-  // content is managed inside <ContentStudio />; it reports its block count up
-  // so the tab label can show it.
   const [contentCount, setContentCount] = useState<number | null>(null);
 
   const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
   const loadExp = useCallback(async () => {
     try {
-      const exps = await experimentService.listMine() as Exp[];
-      const found = exps.find(e => e.id === experimentId) ?? null;
+      let found: Exp | null = null;
+      try {
+        found = (await experimentService.getById(experimentId)) as unknown as Exp;
+      } catch {
+        const exps = (await experimentService.listMine()) as Exp[];
+        found = exps.find(e => e.id === experimentId) ?? null;
+      }
       setExp(found);
       if (found) {
+        setTagsList(found.concept_tags ?? []);
         setForm({
           title: found.title,
           aim: found.aim ?? '',
-          theory: found.theory ?? '',
-          problem_statement: found.problem_statement ?? '',
-          difficulty_level: found.difficulty_level,
-          concept_tags: found.concept_tags.join(', '),
-          time_limit_sec: found.time_limit_sec,
+          exp_number: found.exp_number ?? 1,
+          difficulty_level: found.difficulty_level ?? 2,
+          time_limit_sec: found.time_limit_sec ?? 60,
           allowed_languages: found.allowed_languages ?? [],
-          enable_viva: found.enable_viva,
-          enable_lockdown: found.enable_lockdown,
-          allow_ai_hints: found.allow_ai_hints,
-          weightage: found.weightage ?? 1,
+          experiment_type: found.experiment_type ?? 'coding',
+          enable_viva: found.enable_viva ?? true,
+          enable_lockdown: found.enable_lockdown ?? true,
+          allow_ai_hints: found.allow_ai_hints ?? true,
+          weightage: found.weightage ?? 100,
           grade_scale: (found.grade_scale === 10 ? 10 : 100) as 100 | 10,
+          prerequisites: '',
+          learning_outcomes: '',
+          rubric_test_cases: found.rubric_test_cases ?? 60,
+          rubric_lab_report: found.rubric_lab_report ?? 20,
+          rubric_code_quality: found.rubric_code_quality ?? 10,
+          rubric_viva: found.rubric_viva ?? 10,
+          rubric_quiz: found.rubric_quiz ?? 0,
         });
       }
     } catch { setExp(null); }
@@ -258,66 +282,87 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
 
   useEffect(() => { loadExp(); }, [loadExp]);
 
-  // Compiler catalog — docker-executable languages only.
   useEffect(() => {
     executionService.listLanguages()
       .then(d => setLanguages((d.languages ?? []).filter(l => l.engine === 'docker')))
       .catch(() => setLanguages([]));
   }, []);
 
-  // Deep-link support: /edit?tab=content lands directly in the studio.
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('tab');
     if (t === 'content') setTab('content');
+    else if (t === 'design') setTab('design');
   }, []);
 
-  // ── actions ────────────────────────────────────────────────────────────────
+  const langOptions: { id: string; label: string }[] = languages.length
+    ? languages.map(l => ({ id: l.id, label: l.label }))
+    : DEFAULT_LANGS.map(id => ({ id, label: id.toUpperCase() }));
+
+  const toggleLanguage = (langId: string) => {
+    setForm(f => ({
+      ...f,
+      allowed_languages: f.allowed_languages.includes(langId)
+        ? f.allowed_languages.filter(l => l !== langId)
+        : [...f.allowed_languages, langId],
+    }));
+  };
+
+  const handleAddTag = (tag: string) => {
+    const cleaned = tag.trim().toLowerCase().replace(/[^a-z0-9-]/g, '');
+    if (cleaned && !tagsList.includes(cleaned)) {
+      setTagsList(prev => [...prev, cleaned]);
+    }
+    setTagInput('');
+  };
+
+  const handleRemoveTag = (tagToRemove: string) => {
+    setTagsList(prev => prev.filter(t => t !== tagToRemove));
+  };
+
+  const rubricSum = form.rubric_test_cases + form.rubric_lab_report + form.rubric_code_quality + form.rubric_viva + form.rubric_quiz;
 
   const saveDetails = async () => {
     setError(null);
-    const tags = form.concept_tags.split(',').map(t => t.trim()).filter(Boolean);
-    if (tags.length === 0) { setError('At least one concept tag is required.'); return; }
+    if (!form.title.trim()) { setError('Experiment title is required.'); return; }
+    if (tagsList.length === 0) { setError('At least one concept tag is required.'); return; }
+    if (form.allowed_languages.length === 0) { setError('Select at least one allowed language.'); return; }
+    if (rubricSum !== 100) { setError(`Rubric weight percentages must sum to 100% (Current sum: ${rubricSum}%).`); return; }
+
+    setSaving(true);
     try {
       await experimentService.update(experimentId, {
         title: form.title,
         aim: form.aim,
-        theory: form.theory,
-        problem_statement: form.problem_statement,
         difficulty_level: form.difficulty_level,
-        concept_tags: tags,
+        concept_tags: tagsList,
         time_limit_sec: form.time_limit_sec,
         allowed_languages: form.allowed_languages,
+        experiment_type: form.experiment_type,
         enable_viva: form.enable_viva,
         enable_lockdown: form.enable_lockdown,
         allow_ai_hints: form.allow_ai_hints,
         weightage: form.weightage,
         grade_scale: form.grade_scale,
+        rubric_test_cases: form.rubric_test_cases,
+        rubric_lab_report: form.rubric_lab_report,
+        rubric_code_quality: form.rubric_code_quality,
+        rubric_viva: form.rubric_viva,
+        rubric_quiz: form.rubric_quiz,
       });
-      toast3('Experiment saved.');
+      toast3('Experiment settings saved successfully.');
       loadExp();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };
-      setError(e?.response?.data?.error ?? 'Failed to save.');
+      setError(e?.response?.data?.error ?? 'Failed to save experiment.');
+    } finally {
+      setSaving(false);
     }
   };
-
-  // Catalog if loaded, else a minimal fallback so the selector still works.
-  const langOptions: { id: string; label: string }[] = languages.length
-    ? languages.map(l => ({ id: l.id, label: l.label }))
-    : DEFAULT_LANGS.map(id => ({ id, label: id }));
-
-  const toggleLang = (id: string) =>
-    setForm(f => ({
-      ...f,
-      allowed_languages: f.allowed_languages.includes(id)
-        ? f.allowed_languages.filter(l => l !== id)
-        : [...f.allowed_languages, id],
-    }));
 
   if (!exp) {
     return (
       <InstructorShell activePage="Experiments" title="Experiment">
-        <p className={styles.sectionSub}>Loading experiment…</p>
+        <p className={styles.sectionSub}>Loading experiment details…</p>
       </InstructorShell>
     );
   }
@@ -326,7 +371,7 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
     <InstructorShell
       activePage="Experiments"
       title={`#${exp.exp_number} — ${exp.title}`}
-      subtitle={exp.is_published ? 'Published — students can see this experiment.' : 'Draft — not visible to students yet.'}
+      subtitle={exp.is_published ? 'Published — visible to students.' : 'Draft — hidden from students.'}
     >
       {toast && (
         <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 300, background: '#111827', color: '#fff', padding: '12px 20px', borderRadius: 12, fontSize: 14, fontWeight: 600 }}>
@@ -334,15 +379,19 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
         </div>
       )}
 
-      <div className={styles.actionRow}>
-        <button className={styles.ghostBtn} onClick={() => router.push('/instructor/experiments')}>
-          <ArrowLeft size={13} /> Back
-        </button>
+      {/* Header Tab Bar & Navigation */}
+      <div className={createStyles.topHeader} style={{ marginBottom: 20 }}>
+        <div className={createStyles.topActions}>
+          <button className={createStyles.draftBtn} onClick={() => router.push('/instructor/experiments')}>
+            <ArrowLeft size={15} /> Back to Experiments
+          </button>
+        </div>
+
         <div className={styles.tabRow}>
           {([
-            { id: 'details', label: 'Details' },
+            { id: 'details', label: 'Details & Configuration' },
             { id: 'content', label: `Pre-lab Content${contentCount != null ? ` (${contentCount})` : ''}` },
-            { id: 'design',  label: 'Design' },
+            { id: 'design',  label: 'Rubrics & Checkpoints' },
           ] as { id: Tab; label: string }[]).map(t => (
             <button
               key={t.id}
@@ -353,137 +402,349 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
             </button>
           ))}
         </div>
+
+        {tab === 'details' && (
+          <button className={createStyles.nextTopBtn} disabled={saving} onClick={saveDetails}>
+            <Save size={15} /> {saving ? 'Saving...' : 'Save Changes'}
+          </button>
+        )}
       </div>
 
       {error && (
-        <p style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', padding: '10px 14px', borderRadius: 10, fontSize: 13, fontWeight: 600 }}>
-          <AlertCircle size={14} /> {error}
-        </p>
+        <div style={{ display: 'flex', gap: 10, alignItems: 'center', background: '#fef2f2', color: '#b91c1c', border: '1px solid #fecaca', padding: '12px 18px', borderRadius: 14, fontSize: 13.5, fontWeight: 700, marginBottom: 20 }}>
+          <AlertCircle size={18} /> {error}
+        </div>
       )}
 
-      {/* ══ DETAILS ══ */}
+      {/* ══ DETAILS TAB ══ */}
       {tab === 'details' && (
-        <div className={styles.sectionCard}>
-          {/* Title */}
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Title</label>
-            <input className={styles.input} value={form.title}
-              onChange={e => setForm(f => ({ ...f, title: e.target.value }))} />
-          </div>
-
-          {/* Aim + Problem statement */}
-          <div className={styles.gridTwo}>
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Aim</label>
-              <textarea className={styles.textarea} value={form.aim}
-                onChange={e => setForm(f => ({ ...f, aim: e.target.value }))} />
+        <div className={createStyles.formCard} style={{ maxWidth: 1000, margin: '0 auto' }}>
+          <div className={createStyles.formHeader}>
+            <div className={createStyles.formIconBox}>
+              <BookOpen size={24} />
             </div>
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Problem statement</label>
-              <textarea className={styles.textarea} value={form.problem_statement}
-                onChange={e => setForm(f => ({ ...f, problem_statement: e.target.value }))} />
+            <div className={createStyles.formTitleGroup}>
+              <h2 className={createStyles.formCardTitle}>Edit Experiment Details</h2>
+              <p className={createStyles.formCardSubtitle}>Modify experiment metadata, rules, options, and rubric weights.</p>
             </div>
           </div>
 
-          {/* Theory */}
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Theory</label>
-            <textarea className={styles.textarea} value={form.theory}
-              onChange={e => setForm(f => ({ ...f, theory: e.target.value }))} />
+          {/* ── SECTION 1: BASICS ── */}
+          <div className={createStyles.sectionSubHeader}>
+            <span>1. Basics</span>
           </div>
 
-          {/* Concept tags + Difficulty */}
-          <div className={styles.gridTwo}>
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Concept tags (comma separated)</label>
-              <input className={styles.input} value={form.concept_tags}
-                onChange={e => setForm(f => ({ ...f, concept_tags: e.target.value }))} />
+          <div className={createStyles.gridTwo}>
+            <div className={createStyles.formGroup}>
+              <label className={createStyles.formLabel}>
+                Exp # <span className={createStyles.reqStar}>*</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                className={createStyles.formInput}
+                value={form.exp_number}
+                onChange={e => setForm(f => ({ ...f, exp_number: parseInt(e.target.value) || 1 }))}
+              />
             </div>
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Difficulty (1–4)</label>
-              <select className={styles.select} value={form.difficulty_level}
-                onChange={e => setForm(f => ({ ...f, difficulty_level: parseInt(e.target.value) }))}>
-                <option value={1}>1 — Intro</option>
-                <option value={2}>2 — Intermediate</option>
-                <option value={3}>3 — Advanced</option>
-                <option value={4}>4 — Expert</option>
+
+            <div className={createStyles.formGroup}>
+              <label className={createStyles.formLabel}>
+                Weightage (Marks) <span className={createStyles.reqStar}>*</span>
+              </label>
+              <input
+                type="number"
+                min={1}
+                className={createStyles.formInput}
+                value={form.weightage}
+                onChange={e => setForm(f => ({ ...f, weightage: parseInt(e.target.value) || 100 }))}
+              />
+            </div>
+          </div>
+
+          <div className={createStyles.formGroup}>
+            <label className={createStyles.formLabel}>
+              Experiment Title <span className={createStyles.reqStar}>*</span>
+            </label>
+            <input
+              type="text"
+              className={createStyles.formInput}
+              placeholder="e.g. Stack Implementation using Arrays"
+              value={form.title}
+              onChange={e => setForm(f => ({ ...f, title: e.target.value }))}
+            />
+          </div>
+
+          <div className={createStyles.formGroup}>
+            <label className={createStyles.formLabel}>
+              <span>Short Description / Aim <span className={createStyles.reqStar}>*</span></span>
+              <span className={createStyles.charCount}>{form.aim.length}/200</span>
+            </label>
+            <textarea
+              className={createStyles.formTextarea}
+              rows={3}
+              maxLength={200}
+              placeholder="e.g. Implement a fixed-size stack using arrays and analyze time complexity."
+              value={form.aim}
+              onChange={e => setForm(f => ({ ...f, aim: e.target.value }))}
+            />
+          </div>
+
+          {/* ── SECTION 2: CLASSIFICATION & RULES ── */}
+          <div className={createStyles.sectionSubHeader}>
+            <span>2. Classification & Rules</span>
+          </div>
+
+          <div className={createStyles.gridTwo}>
+            <div className={createStyles.formGroup}>
+              <label className={createStyles.formLabel}>
+                Difficulty Level <span className={createStyles.reqStar}>*</span>
+              </label>
+              <select
+                className={createStyles.formSelect}
+                value={form.difficulty_level}
+                onChange={e => setForm(f => ({ ...f, difficulty_level: parseInt(e.target.value) }))}
+              >
+                <option value={1}>Level 1 — Introductory</option>
+                <option value={2}>Level 2 — Intermediate</option>
+                <option value={3}>Level 3 — Advanced</option>
+              </select>
+            </div>
+
+            <div className={createStyles.formGroup}>
+              <label className={createStyles.formLabel}>
+                Default Execution Time Limit <span className={createStyles.reqStar}>*</span>
+              </label>
+              <select
+                className={createStyles.formSelect}
+                value={form.time_limit_sec}
+                onChange={e => setForm(f => ({ ...f, time_limit_sec: parseInt(e.target.value) }))}
+              >
+                <option value={15}>15 minutes</option>
+                <option value={30}>30 minutes</option>
+                <option value={60}>60 minutes</option>
+                <option value={90}>90 minutes</option>
+                <option value={120}>120 minutes</option>
               </select>
             </div>
           </div>
 
-          {/* Allowed languages */}
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>
-              Allowed languages{languages.length ? ` (${languages.length} available from the compiler)` : ''}
-            </label>
-            <div style={{ display: 'flex', gap: 14, flexWrap: 'wrap' }}>
-              {langOptions.map(lang => (
-                <label key={lang.id} style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
-                  <input type="checkbox" checked={form.allowed_languages.includes(lang.id)}
-                    onChange={() => toggleLang(lang.id)} />
-                  {lang.label}
-                </label>
-              ))}
-            </div>
-          </div>
-
-          {/* Options — inline toggles */}
-          <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Options</label>
-            <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap', paddingTop: 4 }}>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.enable_viva}
-                  onChange={e => setForm(f => ({ ...f, enable_viva: e.target.checked }))} />
-                Enable Viva
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.enable_lockdown}
-                  onChange={e => setForm(f => ({ ...f, enable_lockdown: e.target.checked }))} />
-                Lockdown mode
-              </label>
-              <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'pointer' }}>
-                <input type="checkbox" checked={form.allow_ai_hints}
-                  onChange={e => setForm(f => ({ ...f, allow_ai_hints: e.target.checked }))} />
-                Allow AI hints
-              </label>
-            </div>
-          </div>
-
-          {/* Experiment grading weightage */}
-          <div className={styles.gridTwo}>
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Weightage (marks toward subject total)</label>
-              <input className={styles.input} type="number" min={1} value={form.weightage}
-                onChange={e => setForm(f => ({ ...f, weightage: parseInt(e.target.value) || 1 }))} />
-              <p className={styles.sectionSub} style={{ marginTop: 4 }}>
-                How many marks this experiment contributes to the subject's total.
-              </p>
-            </div>
-            <div className={styles.formGroup}>
-              <label className={styles.formLabel}>Grade scale</label>
-              <select className={styles.select} value={form.grade_scale}
-                onChange={e => setForm(f => ({ ...f, grade_scale: parseInt(e.target.value) as 100 | 10 }))}>
-                <option value={100}>100-point scale</option>
+          <div className={createStyles.gridTwo}>
+            <div className={createStyles.formGroup}>
+              <label className={createStyles.formLabel}>Grade Scale</label>
+              <select
+                className={createStyles.formSelect}
+                value={form.grade_scale}
+                onChange={e => setForm(f => ({ ...f, grade_scale: parseInt(e.target.value) as 100 | 10 }))}
+              >
+                <option value={100}>100-point scale (0 - 100%)</option>
                 <option value={10}>10-point scale</option>
               </select>
-              <p className={styles.sectionSub} style={{ marginTop: 4 }}>
-                The denominator for this experiment's score (100 or 10).
-              </p>
+            </div>
+
+            <div className={createStyles.formGroup}>
+              <label className={createStyles.formLabel}>Experiment Type</label>
+              <select
+                className={createStyles.formSelect}
+                value={form.experiment_type}
+                onChange={e => setForm(f => ({ ...f, experiment_type: e.target.value }))}
+              >
+                <option value="coding">Coding Lab</option>
+                <option value="quiz_only">Quiz Only</option>
+                <option value="mixed">Mixed (Theory + Code + Quiz)</option>
+                <option value="reading">Reading & Conceptual</option>
+              </select>
             </div>
           </div>
 
-          {/* Grading — block weights */}
-          <div style={{ marginTop: 8 }}>
-            <label className={styles.formLabel} style={{ marginBottom: 10 }}>
-              Grading — block weights
-            </label>
+          {/* Interactive Concept Tags Input */}
+          <div className={createStyles.formGroup}>
+            <label className={createStyles.formLabel}>Concept Tags (press Enter or comma to add)</label>
+            <div className={createStyles.tagsBox}>
+              {tagsList.map(tag => (
+                <span key={tag} className={createStyles.tagPill}>
+                  {tag}
+                  <button type="button" className={createStyles.tagRemoveBtn} onClick={() => handleRemoveTag(tag)}>
+                    <X size={13} />
+                  </button>
+                </span>
+              ))}
+              <input
+                type="text"
+                className={createStyles.tagInput}
+                placeholder={tagsList.length === 0 ? "Add tags e.g. stacks, arrays..." : "Add tag..."}
+                value={tagInput}
+                onChange={e => setTagInput(e.target.value)}
+                onKeyDown={e => {
+                  if (e.key === 'Enter' || e.key === ',') {
+                    e.preventDefault();
+                    handleAddTag(tagInput);
+                  }
+                }}
+              />
+            </div>
+          </div>
+
+          {/* Allowed Languages Selection */}
+          <div className={createStyles.formGroup}>
+            <label className={createStyles.formLabel}>Allowed Programming Languages</label>
+            <div className={createStyles.langGrid}>
+              {langOptions.map(lang => {
+                const selected = form.allowed_languages.includes(lang.id);
+                return (
+                  <div
+                    key={lang.id}
+                    className={`${createStyles.langPill} ${selected ? createStyles.langPillSelected : ''}`}
+                    onClick={() => toggleLanguage(lang.id)}
+                  >
+                    <Code size={14} />
+                    <span>{lang.label}</span>
+                    {selected && <Check size={14} />}
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* ── SECTION 3: OPTIONS ── */}
+          <div className={createStyles.sectionSubHeader}>
+            <span>3. Experiment Options</span>
+          </div>
+
+          <div className={createStyles.optionsCard}>
+            <div className={createStyles.optionRow}>
+              <div className={createStyles.optionLabelGroup}>
+                <span className={createStyles.optionTitle}>
+                  <MessageSquare size={16} color="#7c3aed" /> Enable Viva Voice Evaluation
+                </span>
+                <span className={createStyles.optionSub}>AI interactive viva voice questions after lab completion.</span>
+              </div>
+              <input
+                type="checkbox"
+                className={createStyles.toggleCheckbox}
+                checked={form.enable_viva}
+                onChange={e => setForm(f => ({ ...f, enable_viva: e.target.checked }))}
+              />
+            </div>
+
+            <div className={createStyles.optionRow}>
+              <div className={createStyles.optionLabelGroup}>
+                <span className={createStyles.optionTitle}>
+                  <Lock size={16} color="#7c3aed" /> Enable Browser Lockdown
+                </span>
+                <span className={createStyles.optionSub}>Restrict tab switching, copy-paste, and external dev tools.</span>
+              </div>
+              <input
+                type="checkbox"
+                className={createStyles.toggleCheckbox}
+                checked={form.enable_lockdown}
+                onChange={e => setForm(f => ({ ...f, enable_lockdown: e.target.checked }))}
+              />
+            </div>
+
+            <div className={createStyles.optionRow}>
+              <div className={createStyles.optionLabelGroup}>
+                <span className={createStyles.optionTitle}>
+                  <Sparkles size={16} color="#7c3aed" /> Allow AI Hints & Assistance
+                </span>
+                <span className={createStyles.optionSub}>Give students step-by-step guidance when compiler errors occur.</span>
+              </div>
+              <input
+                type="checkbox"
+                className={createStyles.toggleCheckbox}
+                checked={form.allow_ai_hints}
+                onChange={e => setForm(f => ({ ...f, allow_ai_hints: e.target.checked }))}
+              />
+            </div>
+          </div>
+
+          {/* ── SECTION 4: RUBRIC WEIGHT BREAKDOWN ── */}
+          <div className={createStyles.sectionSubHeader}>
+            <span>4. Rubric Weight Distribution (Total: 100%)</span>
+          </div>
+
+          <div className={createStyles.rubricCard}>
+            <div className={createStyles.rubricHeaderRow}>
+              <span className={createStyles.rubricTitle}>Assessment Breakdown Weights</span>
+              <span className={`${createStyles.rubricSumBadge} ${rubricSum === 100 ? createStyles.rubricValid : createStyles.rubricInvalid}`}>
+                Sum: {rubricSum}% {rubricSum === 100 ? '✓ Valid' : '⚠️ Must sum to 100%'}
+              </span>
+            </div>
+
+            <div className={createStyles.gridThree}>
+              <div className={createStyles.formGroup}>
+                <label className={createStyles.formLabel}>Test Cases (%)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  className={createStyles.formInput}
+                  value={form.rubric_test_cases}
+                  onChange={e => setForm(f => ({ ...f, rubric_test_cases: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+
+              <div className={createStyles.formGroup}>
+                <label className={createStyles.formLabel}>Lab Report (%)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  className={createStyles.formInput}
+                  value={form.rubric_lab_report}
+                  onChange={e => setForm(f => ({ ...f, rubric_lab_report: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+
+              <div className={createStyles.formGroup}>
+                <label className={createStyles.formLabel}>Code Quality (%)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  className={createStyles.formInput}
+                  value={form.rubric_code_quality}
+                  onChange={e => setForm(f => ({ ...f, rubric_code_quality: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+
+              <div className={createStyles.formGroup}>
+                <label className={createStyles.formLabel}>Viva Voice (%)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  className={createStyles.formInput}
+                  value={form.rubric_viva}
+                  onChange={e => setForm(f => ({ ...f, rubric_viva: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+
+              <div className={createStyles.formGroup}>
+                <label className={createStyles.formLabel}>Quiz Block (%)</label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  className={createStyles.formInput}
+                  value={form.rubric_quiz}
+                  onChange={e => setForm(f => ({ ...f, rubric_quiz: parseInt(e.target.value) || 0 }))}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Block Grading Weights Table */}
+          <div style={{ marginTop: 12 }}>
             <GradingSection experimentId={experimentId} onToast={toast3} />
           </div>
 
-          <div className={styles.actionRow}>
-            <span />
-            <button className={styles.primaryBtn} onClick={saveDetails}>
-              <Save size={13} /> Save Changes
+          <div className={createStyles.formActionsRow}>
+            <button type="button" className={createStyles.cancelBtn} onClick={() => router.push('/instructor/experiments')}>
+              Cancel
+            </button>
+            <button type="button" className={createStyles.nextStepBtn} disabled={saving} onClick={saveDetails}>
+              <Save size={15} /> {saving ? 'Saving...' : 'Save Changes'}
             </button>
           </div>
         </div>

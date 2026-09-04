@@ -24,6 +24,14 @@ export const experimentService = {
     return data.experiments;
   },
 
+  // ── Instructor/Student: Get single experiment by ID ──────────────────────
+  async getById(id: string): Promise<unknown> {
+    const { data } = await apiClient.get<{ experiment: unknown }>(
+      `/instructor/experiments/${id}`
+    );
+    return data.experiment;
+  },
+
   // ── Instructor: Create experiment ───────────────────────────────────────────
   // POST /api/instructor/experiments
   async create(payload: Record<string, unknown>): Promise<unknown> {
@@ -46,6 +54,16 @@ export const experimentService = {
   async setPublished(id: string, is_published: boolean): Promise<unknown> {
     const { data } = await apiClient.patch<{ experiment: unknown }>(
       `/instructor/experiments/${id}`, { is_published }
+    );
+    return data.experiment;
+  },
+
+  // ── Instructor: Republish — freeze the current draft into the live snapshot ──
+  // Edits auto-save as a draft; students keep seeing the previous published
+  // version until this is called. POST /instructor/experiments/<id>/republish
+  async republish(id: string): Promise<unknown> {
+    const { data } = await apiClient.post<{ experiment: unknown }>(
+      `/instructor/experiments/${id}/republish`
     );
     return data.experiment;
   },
@@ -98,4 +116,20 @@ export const experimentService = {
     );
     return data;
   },
+
+  // ── Instructor: Update Subject details & 3D icon ────────────────────────────
+  // PATCH /api/instructor/subjects/<subject_id>
+  async updateSubject(subjectId: string, payload: {
+    name?: string;
+    code?: string;
+    description?: string;
+    icon?: string;
+    total_marks?: number;
+  }): Promise<unknown> {
+    const { data } = await apiClient.patch<{ subject: unknown }>(
+      `/instructor/subjects/${subjectId}`, payload
+    );
+    return data.subject;
+  },
 };
+

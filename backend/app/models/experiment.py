@@ -3,6 +3,14 @@ from datetime import datetime
 from app.extensions import db
 
 
+def _iso_z(dt):
+    """Serialize a naive-UTC datetime to ISO-8601 with a trailing 'Z' so JS
+    `new Date(...)` parses it as UTC (not local). Returns None when dt is None."""
+    if dt is None:
+        return None
+    return dt.isoformat() + ('' if dt.isoformat().endswith('+00:00') else 'Z')
+
+
 class Experiment(db.Model):
     __tablename__ = 'experiments'
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
@@ -45,8 +53,19 @@ class Experiment(db.Model):
     simulation_files    = db.Column(db.Text)    # JSON list of uploaded files
 
     is_published        = db.Column(db.Boolean, default=False)
+    ranking_visible     = db.Column(db.Boolean, default=True)  # public-ranking opt-out (T3-15)
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at          = db.Column(db.DateTime, onupdate=datetime.utcnow)
+
+    # ── Staged publishing (draft → republish) ────────────────────────────────
+    # published_content    — frozen snapshot of pages/modules/questions that students read.
+    #                        Live rows are the instructor's working draft; students only
+    #                        ever see this snapshot until the instructor republishes.
+    # content_dirty        — live edits exist that are not yet in published_content.
+    # content_published_at — timestamp (UTC) of the last publish/republish.
+    published_content      = db.Column(db.JSON)
+    content_dirty          = db.Column(db.Boolean, default=False)
+    content_published_at   = db.Column(db.DateTime)
 
     # ── Experiment type (D6): coding | quiz_only | mixed | reading ─────────────
     experiment_type     = db.Column(db.String(20), default='coding')
@@ -106,6 +125,10 @@ class Experiment(db.Model):
             'allow_ai_hints': self.allow_ai_hints,
             'time_limit_sec': self.time_limit_sec,
             'is_published': self.is_published,
+            'ranking_visible': self.ranking_visible if self.ranking_visible is not None else True,
+            'content_dirty': bool(self.content_dirty),
+            'content_published_at': _iso_z(self.content_published_at),
+            'has_published_content': self.published_content is not None,
             'weightage': self.weightage,
             'grade_scale': self.grade_scale,
             'experiment_type': self.experiment_type or 'coding',
@@ -230,6 +253,9 @@ class ContentProgress(db.Model):
     completed       = db.Column(db.Boolean, default=False)
     score           = db.Column(db.Float)          # for quiz modules
     attempts        = db.Column(db.Integer, default=0)
+    # Per-question breakdown for quiz modules (per-question analytics):
+    # {question_id: {"answer": "A", "correct": true}}
+    answers         = db.Column(db.JSON)
     watch_pct       = db.Column(db.Float)          # for video modules
     last_attempt_at = db.Column(db.DateTime)
     completed_at    = db.Column(db.DateTime)
