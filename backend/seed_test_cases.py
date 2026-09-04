@@ -540,8 +540,7 @@ def seed():
                 )
                 db.session.add(tc)
                 total_added += 1
-        db.session.commit()
-        print(f"\n✅ Done — seeded {total_added} test cases across {total_problems} problems.")
+        print(f"\n[OK] Done -- seeded {total_added} test cases across {total_problems} problems.")
 
 
 if __name__ == '__main__':
