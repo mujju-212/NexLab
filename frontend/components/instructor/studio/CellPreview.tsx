@@ -515,48 +515,68 @@ function InteractiveAssignBlock({ d, block }: { d: Record<string, unknown>; bloc
   };
 
   return (
-    <div style={{ display: 'flex', flexDirection: 'column', gap: 14, marginTop: 6 }}>
-      {/* Meta Bar */}
-      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, padding: '8px 12px', background: '#f3effc', borderRadius: 8, border: '1px solid #e5e0ec' }}>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 16, marginTop: 6 }}>
+      {/* 1. Meta Header */}
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', flexWrap: 'wrap', gap: 8, padding: '10px 14px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0' }}>
         <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#7c3aed', background: '#ede9fe', padding: '2px 8px', borderRadius: 6, border: '1px solid #ddd6fe' }}>
-            {lang}
+          <span style={{ fontSize: 11, fontWeight: 700, textTransform: 'uppercase', color: '#7c3aed', background: '#f3e8ff', padding: '3px 10px', borderRadius: 6, border: '1px solid #d8b4fe' }}>
+            {lang.toUpperCase()}
           </span>
-          <span style={{ fontSize: 12.5, fontWeight: 600, color: '#374151' }}>
-            Graded Coding Task · Pass ≥ {pass}%
+          <span style={{ fontSize: 13, fontWeight: 700, color: '#1e293b' }}>
+            Graded Coding Assignment · Pass ≥ {pass}%
           </span>
         </div>
-        <span style={{ fontSize: 12, color: '#6b7280' }}>
-          {tests.length} test case{tests.length === 1 ? '' : 's'} ({publicTests.length} public, {hiddenTests.length} hidden)
-        </span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontSize: 12, fontWeight: 600 }}>
+          <span style={{ color: '#2563eb', background: '#eff6ff', padding: '2px 8px', borderRadius: 6, border: '1px solid #bfdbfe' }}>
+            🌐 {publicTests.length} Public Test{publicTests.length === 1 ? '' : 's'}
+          </span>
+          <span style={{ color: '#d97706', background: '#fffbeb', padding: '2px 8px', borderRadius: 6, border: '1px solid #fde68a' }}>
+            🔒 {hiddenTests.length} Private Hidden
+          </span>
+        </div>
       </div>
 
-      {/* Instructions / Problem Statement */}
+      {/* 2. Instructions / Problem Statement in Formatted Markdown */}
       {instructions ? (
-        <div className={s.preview} style={{ minHeight: 0, border: 'none', padding: 0 }}
-          dangerouslySetInnerHTML={{ __html: renderMarkdown(instructions) }} />
+        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 10, padding: '16px 18px', boxShadow: '0 1px 2px rgba(0,0,0,0.03)' }}>
+          <div style={{ fontSize: 12, fontWeight: 700, textTransform: 'uppercase', color: '#64748b', letterSpacing: '0.05em', marginBottom: 10, display: 'flex', alignItems: 'center', gap: 6 }}>
+            📝 Task Instructions &amp; Requirements
+          </div>
+          <div
+            className={s.preview}
+            style={{ minHeight: 0, border: 'none', padding: 0, fontSize: 13.5, lineHeight: 1.6 }}
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(instructions) }}
+          />
+        </div>
       ) : (
-        <p className={s.qOpts} style={{ fontStyle: 'italic', color: '#9ca3af' }}>No instructions set for this task.</p>
+        <p className={s.qOpts} style={{ fontStyle: 'italic', color: '#94a3b8' }}>No instructions set for this task.</p>
       )}
 
-      {/* Public Test Cases Preview */}
+      {/* 3. Public Sample Test Cases Display */}
       {publicTests.length > 0 && (
-        <div style={{ background: '#faf8fc', border: '1px solid #e5e0ec', borderRadius: 8, padding: '12px 14px' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, fontWeight: 700, color: '#6b21a8', marginBottom: 8 }}>
-            <Eye size={14} /> Public Sample Test Cases
+        <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: '14px 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 13, fontWeight: 700, color: '#2563eb', marginBottom: 10 }}>
+            <Eye size={15} /> Public Sample Test Cases ({publicTests.length})
           </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 10 }}>
             {publicTests.map((t, idx) => (
-              <div key={idx} style={{ background: '#fff', border: '1px solid #e5e0ec', borderRadius: 6, padding: '8px 12px', fontSize: 12 }}>
-                <div style={{ fontWeight: 600, color: '#4b5563', marginBottom: 4 }}>Sample Test #{idx + 1}</div>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 8 }}>
+              <div key={idx} style={{ background: '#ffffff', border: '1px solid #cbd5e1', borderRadius: 8, padding: '10px 12px', fontSize: 12 }}>
+                <div style={{ fontWeight: 700, color: '#334155', marginBottom: 6, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                  <span>Sample Test #{idx + 1}</span>
+                  <span style={{ fontSize: 10.5, color: '#64748b', fontWeight: 600 }}>Weight: {t.weight ?? 1}</span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
                   <div>
-                    <span style={{ color: '#6b7280', fontSize: 11 }}>Input (stdin):</span>
-                    <pre style={{ margin: '2px 0 0', padding: '4px 8px', background: '#f3f4f6', borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}>{t.input || '(empty)'}</pre>
+                    <span style={{ color: '#64748b', fontSize: 11, fontWeight: 600 }}>Input (stdin):</span>
+                    <pre style={{ margin: '2px 0 0', padding: '6px 8px', background: '#0f172a', color: '#38bdf8', borderRadius: 6, fontFamily: 'monospace', fontSize: 11.5, overflowX: 'auto' }}>
+                      {t.input || '(empty input)'}
+                    </pre>
                   </div>
                   <div>
-                    <span style={{ color: '#6b7280', fontSize: 11 }}>Expected Output:</span>
-                    <pre style={{ margin: '2px 0 0', padding: '4px 8px', background: '#f3f4f6', borderRadius: 4, fontFamily: 'monospace', fontSize: 12 }}>{t.expected || '(empty)'}</pre>
+                    <span style={{ color: '#64748b', fontSize: 11, fontWeight: 600 }}>Expected Output:</span>
+                    <pre style={{ margin: '2px 0 0', padding: '6px 8px', background: '#0f172a', color: '#4ade80', borderRadius: 6, fontFamily: 'monospace', fontSize: 11.5, overflowX: 'auto' }}>
+                      {t.expected || '(empty expected)'}
+                    </pre>
                   </div>
                 </div>
               </div>
@@ -565,100 +585,116 @@ function InteractiveAssignBlock({ d, block }: { d: Record<string, unknown>; bloc
         </div>
       )}
 
-      {/* Hidden Test Cases Notice */}
+      {/* 4. Hidden Private Test Cases Notice */}
       {hiddenTests.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 12px', background: '#fefce8', border: '1px solid #fef08a', borderRadius: 8, fontSize: 12, color: '#854d0e', fontWeight: 500 }}>
-          <Lock size={14} color="#a16207" />
-          <span><b>{hiddenTests.length} Private Hidden Test Case{hiddenTests.length === 1 ? '' : 's'}</b> — evaluated automatically upon submission (inputs and expected outputs remain hidden to prevent hardcoding).</span>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10, fontSize: 12.5, color: '#92400e' }}>
+          <Lock size={16} color="#b45309" />
+          <span>
+            <b>{hiddenTests.length} Private Hidden Test Case{hiddenTests.length === 1 ? '' : 's'}</b> — evaluated silently during grading to prevent hardcoded solutions.
+          </span>
         </div>
       )}
 
-      {/* Code Solution Editor */}
-      <div style={{ borderRadius: 10, border: '1px solid #e5e0ec', overflow: 'hidden', background: '#1e1b2e' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: '#171424', borderBottom: '1px solid #282438' }}>
-          <span style={{ fontSize: 12, fontWeight: 600, color: '#c4b5fd' }}>Student Solution ({lang})</span>
-          <span style={{ fontSize: 11, color: '#9ca3af' }}>Editable in preview</span>
+      {/* 5. Code IDE Terminal */}
+      <div style={{ borderRadius: 10, border: '1px solid #334155', overflow: 'hidden', background: '#0f172a', boxShadow: '0 4px 12px rgba(0,0,0,0.15)' }}>
+        {/* Terminal Header Bar */}
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: '#1e293b', borderBottom: '1px solid #334155' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', gap: 6 }}>
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#ef4444' }} />
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#eab308' }} />
+              <span style={{ width: 10, height: 10, borderRadius: '50%', background: '#22c55e' }} />
+            </div>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#f8fafc', marginLeft: 6, letterSpacing: '0.02em' }}>
+              💻 {lang.toUpperCase()} IDE Code Terminal
+            </span>
+          </div>
+          <span style={{ fontSize: 11, color: '#94a3b8', fontWeight: 600 }}>
+            {code.split('\n').length} Lines
+          </span>
         </div>
+
+        {/* Code Editor Area */}
         <textarea
           value={code}
           onChange={e => setCode(e.target.value)}
           spellCheck={false}
           placeholder={`# Write your ${lang} solution code here`}
           style={{
-            width: '100%', minHeight: 160, padding: '14px 16px', margin: 0,
-            background: '#1e1b2e', color: '#f3f0ff', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
+            width: '100%', minHeight: 180, padding: '14px 16px', margin: 0,
+            background: '#0f172a', color: '#f1f5f9', fontFamily: 'ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, monospace',
             fontSize: 13, lineHeight: 1.5, border: 'none', resize: 'vertical', outline: 'none', boxSizing: 'border-box'
           }}
         />
       </div>
 
       {error && (
-        <div style={{ padding: '8px 14px', background: '#fef2f2', border: '1px solid #fee2e2', borderRadius: 8, color: '#b91c1c', fontSize: 12.5, fontWeight: 500 }}>
+        <div style={{ padding: '10px 14px', background: '#fef2f2', border: '1px solid #fecaca', borderRadius: 8, color: '#991b1b', fontSize: 12.5, fontWeight: 600 }}>
           ⚠️ {error}
         </div>
       )}
 
-      {/* Submit Button */}
+      {/* 6. Submit Action & Terminal Results Display */}
       {!result ? (
         <button
           onClick={handleSubmit}
           disabled={submitting}
           style={{
-            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '10px 18px', borderRadius: 8,
-            background: '#7c3aed', color: '#fff', fontSize: 13.5, fontWeight: 600, border: 'none', cursor: submitting ? 'not-allowed' : 'pointer',
-            boxShadow: '0 2px 4px rgba(124, 58, 237, 0.25)', opacity: submitting ? 0.7 : 1
+            display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: '11px 22px', borderRadius: 8,
+            background: 'linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%)', color: '#ffffff', fontSize: 14, fontWeight: 700, border: 'none', cursor: submitting ? 'not-allowed' : 'pointer',
+            boxShadow: '0 4px 12px rgba(124, 58, 237, 0.3)', opacity: submitting ? 0.7 : 1
           }}
         >
-          {submitting ? <Loader2 size={15} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={15} fill="currentColor" />}
-          {submitting ? 'Running & Grading Tests…' : 'Submit & Grade Solution'}
+          {submitting ? <Loader2 size={16} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={16} fill="currentColor" />}
+          {submitting ? 'Executing & Grading Test Suite…' : 'Run & Grade Solution'}
         </button>
       ) : (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-          {/* Status Banner */}
+          {/* Status Result Banner */}
           <div style={{
-            display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '12px 16px', borderRadius: 8,
-            background: result.passed ? '#f0fdf4' : '#fef2f2', border: `1px solid ${result.passed ? '#bbf7d0' : '#fecaca'}`
+            display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '14px 18px', borderRadius: 10,
+            background: result.passed ? '#f0fdf4' : '#fef2f2', border: `1.5px solid ${result.passed ? '#86efac' : '#fca5a5'}`
           }}>
             <div>
-              <h4 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: result.passed ? '#15803d' : '#b91c1c' }}>
+              <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: result.passed ? '#15803d' : '#b91c1c' }}>
                 {result.passed ? '🎉 Assignment Passed!' : '😕 Task Not Passed Yet'}
               </h4>
-              <p style={{ margin: '4px 0 0', fontSize: 12.5, color: result.passed ? '#166534' : '#991b1b' }}>
+              <p style={{ margin: '4px 0 0', fontSize: 13, color: result.passed ? '#166534' : '#991b1b' }}>
                 Score: <b>{result.score}%</b> (Pass threshold: {result.threshold}%) · Passed {result.passed_tests} of {result.total_tests} tests
               </p>
             </div>
             <button
               onClick={() => setResult(null)}
               style={{
-                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '6px 12px', borderRadius: 6,
-                background: '#fff', border: '1px solid #d1d5db', color: '#374151', fontSize: 12, fontWeight: 600, cursor: 'pointer'
+                display: 'inline-flex', alignItems: 'center', gap: 6, padding: '7px 14px', borderRadius: 6,
+                background: '#ffffff', border: '1px solid #cbd5e1', color: '#334155', fontSize: 12.5, fontWeight: 700, cursor: 'pointer'
               }}
             >
-              <RotateCcw size={13} /> Retry
+              <RotateCcw size={14} /> Retry Task
             </button>
           </div>
 
-          {/* Test Case Breakdown */}
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+          {/* Detailed Test Results Console */}
+          <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {result.results.map((r, idx) => (
-              <div key={idx} style={{ border: '1px solid #e5e0ec', borderRadius: 8, overflow: 'hidden', background: '#fff' }}>
+              <div key={idx} style={{ border: '1px solid #cbd5e1', borderRadius: 8, overflow: 'hidden', background: '#ffffff' }}>
                 <div style={{
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', fontSize: 12.5, fontWeight: 600,
-                  background: r.passed ? '#ecfdf3' : '#fef2f2', color: r.passed ? '#067647' : '#b42318'
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '9px 14px', fontSize: 13, fontWeight: 700,
+                  background: r.passed ? '#f0fdf4' : '#fef2f2', color: r.passed ? '#15803d' : '#b91c1c'
                 }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <span>{r.passed ? '✓' : '✕'}</span>
-                    <span>Test Case #{r.index + 1} {r.hidden ? '(Hidden Private)' : '(Public Sample)'}</span>
+                    <span>Test Case #{r.index + 1} {r.hidden ? '(🔒 Hidden Private)' : '(🌐 Public Sample)'}</span>
                   </div>
-                  <span>{r.passed ? 'Passed' : r.status || 'Failed'}</span>
+                  <span style={{ fontSize: 12, fontWeight: 800 }}>{r.passed ? 'PASSED' : r.status || 'FAILED'}</span>
                 </div>
 
                 {!r.hidden && (
-                  <div style={{ padding: '10px 12px', background: '#13111c', color: '#e5e7eb', fontSize: 12, display: 'grid', gap: 6 }}>
-                    {r.input ? <div><span style={{ color: '#9ca3af' }}>stdin:</span><pre style={{ margin: '2px 0 0', fontFamily: 'monospace', color: '#f3f4f6', whiteSpace: 'pre-wrap' }}>{r.input}</pre></div> : null}
-                    <div><span style={{ color: '#9ca3af' }}>expected output:</span><pre style={{ margin: '2px 0 0', fontFamily: 'monospace', color: '#86efac', whiteSpace: 'pre-wrap' }}>{r.expected}</pre></div>
-                    <div><span style={{ color: '#9ca3af' }}>actual output:</span><pre style={{ margin: '2px 0 0', fontFamily: 'monospace', color: r.passed ? '#86efac' : '#fca5a5', whiteSpace: 'pre-wrap' }}>{r.actual || '(no output)'}</pre></div>
-                    {r.stderr ? <div><span style={{ color: '#f87171', fontWeight: 600 }}>stderr / error:</span><pre style={{ margin: '2px 0 0', fontFamily: 'monospace', color: '#fca5a5', whiteSpace: 'pre-wrap' }}>{r.stderr}</pre></div> : null}
+                  <div style={{ padding: '12px 14px', background: '#0f172a', color: '#f8fafc', fontSize: 12, display: 'grid', gap: 8, fontFamily: 'monospace' }}>
+                    {r.input ? <div><span style={{ color: '#94a3b8' }}>stdin:</span><pre style={{ margin: '2px 0 0', color: '#38bdf8', whiteSpace: 'pre-wrap' }}>{r.input}</pre></div> : null}
+                    <div><span style={{ color: '#94a3b8' }}>expected output:</span><pre style={{ margin: '2px 0 0', color: '#4ade80', whiteSpace: 'pre-wrap' }}>{r.expected}</pre></div>
+                    <div><span style={{ color: '#94a3b8' }}>actual output:</span><pre style={{ margin: '2px 0 0', color: r.passed ? '#4ade80' : '#f87171', whiteSpace: 'pre-wrap' }}>{r.actual || '(no output)'}</pre></div>
+                    {r.stderr ? <div><span style={{ color: '#ef4444', fontWeight: 700 }}>stderr:</span><pre style={{ margin: '2px 0 0', color: '#f87171', whiteSpace: 'pre-wrap' }}>{r.stderr}</pre></div> : null}
                   </div>
                 )}
               </div>
@@ -710,11 +746,34 @@ function renderBody(type: string, d: Record<string, unknown>, block?: ContentBlo
       </div>;
     }
 
-    case 'html':
-      return <div className={s.mediaPreview} style={{ marginTop: 0 }}>
-        <iframe className={s.embedFrame} title="html-embed" srcDoc={asString(d.html)}
-          sandbox="allow-scripts allow-popups allow-forms" />
-      </div>;
+    case 'html': {
+      const htmlDoc = asString(d.html);
+      return (
+        <div style={{ borderRadius: 10, border: '1px solid #cbd5e1', overflow: 'hidden', background: '#ffffff', boxShadow: '0 2px 8px rgba(0,0,0,0.04)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 14px', background: '#f8fafc', borderBottom: '1px solid #e2e8f0' }}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
+              🌐 Live HTML/CSS Interactive Simulation
+            </span>
+            <span style={{ fontSize: 10.5, fontWeight: 600, color: '#2563eb', background: '#eff6ff', padding: '2px 8px', borderRadius: 4, border: '1px solid #bfdbfe' }}>
+              Sandboxed Iframe
+            </span>
+          </div>
+          {htmlDoc ? (
+            <div style={{ width: '100%', minHeight: 280, height: 360, position: 'relative' }}>
+              <iframe
+                className={s.embedFrame}
+                title="html-embed"
+                srcDoc={htmlDoc}
+                style={{ width: '100%', height: '100%', border: 'none', background: '#ffffff' }}
+                sandbox="allow-scripts allow-popups allow-forms allow-same-origin"
+              />
+            </div>
+          ) : (
+            <p className={s.qOpts} style={{ padding: 14, margin: 0, color: '#94a3b8' }}>No HTML content provided for this simulation.</p>
+          )}
+        </div>
+      );
+    }
 
     case 'link': {
       const url = asString(d.url);

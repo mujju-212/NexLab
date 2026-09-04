@@ -8,14 +8,15 @@
  * studio debounces the PATCH to updateContentModule. Editors never touch the
  * network except Code (Run via playground) and Quiz (question CRUD).
  */
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import DOMPurify from 'dompurify';
-import { Play, Loader2, Plus, Trash2, ImageOff, Sparkles, Check as CheckIcon } from 'lucide-react';
+import { Play, Loader2, Plus, Trash2, ImageOff, Sparkles, Check as CheckIcon, Save, BookOpen } from 'lucide-react';
 import { renderMarkdown } from '@/lib/markdown';
 import {
   executionService, type CompilerLanguage, type PlaygroundResult,
 } from '@/services/execution.service';
 import { instructorService } from '@/services/instructor.service';
+import { experienceService, type BankQuestionRow } from '@/services/experience.service';
 import { asString, asBool, asNumber } from './blocks';
 import shared from '@/app/instructor/shared.module.css';
 import s from './studio.module.css';
@@ -29,6 +30,21 @@ export interface EditorProps {
 }
 
 const FALLBACK_LANGS = ['python', 'cpp', 'c', 'java', 'javascript'];
+
+// datetime-local ↔ UTC ISO-Z helpers (mirror the instructor exam editors) so an
+// optional assignment deadline can be authored without trusting the client clock.
+const dtLocalToIso = (v: string): string | null => {
+  if (!v) return null;
+  const d = new Date(v);
+  return Number.isNaN(d.getTime()) ? null : d.toISOString();
+};
+const dtIsoToLocal = (iso: string | null | undefined): string => {
+  if (!iso) return '';
+  const d = new Date(iso);
+  if (Number.isNaN(d.getTime())) return '';
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+};
 
 // ── AI assist chip ────────────────────────────────────────────────────────────
 // A compact "✦ AI" button that generates content for the block it sits in.
@@ -494,10 +510,104 @@ export function QuizEditor({ data, onData, moduleId }: EditorProps) {
     } finally { setBusy(false); }
   };
 
-  const delQ = async (id: string) => {
-    try { await instructorService.deleteQuestion(id); setQuestions(qs => qs.filter(q => q.id !== id)); }
-    catch { setErr('Failed to delete question.'); }
+  const delQ = async (id: string, index?: number) => {
+    try {
+      if (id) {
+        await instructorService.deleteQuestion(id).catch(() => {});
+      }
+      setQuestions(qs => qs.filter((q, idx) => (q.id ? q.id !== id : idx !== index)));
+      if (data.inline_questions && Array.isArray(data.inline_questions)) {
+        const nextInline = (data.inline_questions as any[]).filter((_: any, idx: number) => idx !== index);
+        onData({ ...data, inline_questions: nextInline });
+      }
+    } catch {
+      setErr('Failed to delete question.');
+    }
   };
+
+  // ── Question bank (T3-12): save current draft / import existing ───────────
+  const [showBank, setShowBank] = useState(false);
+  const [bank, setBank] = useState<BankQuestionRow[]>([]);
+  const [bankLoading, setBankLoading] = useState(false);
+
+  const openBank = async () => {
+    setShowBank(s => !s);
+    if (!showBank) {
+      setBankLoading(true);
+      try { setBank((await experienceService.listBankQuestions()).questions); }
+      catch { setBank([]); }
+      finally { setBankLoading(false); }
+    }
+  };
+
+  const saveDraftToBank = async () => {
+    if (!nq.question_text || !nq.a || !nq.b || !nq.c || !nq.d) {
+      setErr('Fill the question and options first to bank it.'); return;
+    }
+    try {
+      await experienceService.addToBank({
+        question_text: nq.question_text, options: [nq.a, nq.b, nq.c, nq.d],
+        correct_answer: nq.correct_answer,
+      });
+      setErr(null);
+      // feedback via bank list refresh
+      setBankLoading(true);
+      setBank((await experienceService.listBankQuestions()).questions);
+      setBankLoading(false);
+    } catch { setErr('Failed to save to bank.'); }
+  };
+
+  const importFromBank = async (q: BankQuestionRow) => {
+    if (!moduleId) return;
+    setBusy(true);
+    try {
+      await instructorService.addQuestions(moduleId, {
+        question_text: q.question_text, options: q.options,
+        correct_answer: q.correct_answer, points: 1,
+      });
+      await load();
+    } catch { setErr('Import failed.'); }
+    finally { setBusy(false); }
+  };
+
+  // Combine database questions AND inline_questions (from AI generation)
+  const displayQuestions = useMemo(() => {
+    const list: { id?: string; question_text: string; options: string[]; correct_answer: string; explanation?: string }[] = [];
+
+    if (questions.length > 0) {
+      questions.forEach(q => {
+        list.push({
+          id: q.id,
+          question_text: q.question_text,
+          options: Array.isArray(q.options) ? q.options : [],
+          correct_answer: q.correct_answer || 'A',
+        });
+      });
+    } else if (Array.isArray(data.inline_questions) && data.inline_questions.length > 0) {
+      (data.inline_questions as any[]).forEach((iq, idx) => {
+        const letters = ['A', 'B', 'C', 'D'];
+        let corr = 'A';
+        if (typeof iq.correct_index === 'number' && iq.correct_index >= 0 && iq.correct_index < 4) {
+          corr = letters[iq.correct_index];
+        } else if (typeof iq.correct_answer === 'string') {
+          corr = iq.correct_answer;
+        }
+
+        const opts = Array.isArray(iq.options) ? [...iq.options] : [];
+        while (opts.length < 4) opts.push(`Option ${opts.length + 1}`);
+
+        list.push({
+          id: iq.id,
+          question_text: iq.question || iq.question_text || `Question ${idx + 1}`,
+          options: opts.map(String),
+          correct_answer: corr,
+          explanation: iq.explanation,
+        });
+      });
+    }
+
+    return list;
+  }, [questions, data.inline_questions]);
 
   return (
     <div>
@@ -521,6 +631,16 @@ export function QuizEditor({ data, onData, moduleId }: EditorProps) {
             value={asNumber(data.cooldown_minutes, 30)}
             onChange={e => onData({ ...data, cooldown_minutes: Number(e.target.value) })} />
         </div>
+        <div className={s.field} style={{ maxWidth: 150 }}>
+          <span className={s.fieldLabel}>Time limit (min)</span>
+          <input className={shared.input} type="number" min={0} placeholder="Untimed"
+            title="Optional countdown; students auto-submit when it reaches zero. Leave blank for untimed."
+            value={data.time_limit_minutes == null ? '' : String(data.time_limit_minutes)}
+            onChange={e => {
+              const v = e.target.value.trim();
+              onData({ ...data, time_limit_minutes: v === '' ? null : Number(v) });
+            }} />
+        </div>
         <label className={s.check} style={{ marginBottom: 8 }}>
           <input type="checkbox" checked={asBool(data.shuffle, true)}
             onChange={e => onData({ ...data, shuffle: e.target.checked })} />
@@ -529,25 +649,51 @@ export function QuizEditor({ data, onData, moduleId }: EditorProps) {
       </div>
 
       {/* questions */}
-      <span className={s.fieldLabel} style={{ display: 'block', margin: '4px 0 6px' }}>
-        Questions ({questions.length})
+      <span className={s.fieldLabel} style={{ display: 'block', margin: '12px 0 8px', fontSize: 13, fontWeight: 700 }}>
+        Questions ({displayQuestions.length})
       </span>
       <div className={s.qList}>
-        {questions.map((q, i) => (
-          <div key={q.id} className={s.qRow}>
-            <div>
-              <p className={s.qText}>{i + 1}. {q.question_text}</p>
-              <p className={s.qOpts}>
-                {(Array.isArray(q.options) ? q.options : []).map((o, oi) => `${'ABCD'[oi]}: ${o}`).join('  ·  ')} — answer <b>{q.correct_answer}</b>
-              </p>
+        {displayQuestions.map((q, i) => (
+          <div key={q.id || i} className={s.quizCardItem}>
+            <div className={s.quizCardHeader}>
+              <span className={s.quizCardNum}>Q{i + 1}</span>
+              <h4 className={s.quizCardQuestion}>{q.question_text}</h4>
+              <button
+                className={`${s.iconBtn} ${s.iconBtnDanger}`}
+                onClick={() => delQ(q.id || '', i)}
+                title="Delete Question"
+              >
+                <Trash2 size={14} />
+              </button>
             </div>
-            <button className={`${s.iconBtn} ${s.iconBtnDanger}`} onClick={() => delQ(q.id)} title="Delete">
-              <Trash2 size={13} />
-            </button>
+
+            <div className={s.quizOptionsGrid}>
+              {['A', 'B', 'C', 'D'].map((letter, optIdx) => {
+                const optionText = q.options[optIdx] || '';
+                const isCorrect = q.correct_answer === letter;
+                return (
+                  <div
+                    key={letter}
+                    className={`${s.quizOptionCard} ${isCorrect ? s.quizOptionCorrect : ''}`}
+                  >
+                    <span className={s.quizOptionLetter}>{letter}</span>
+                    <span className={s.quizOptionText}>{optionText}</span>
+                    {isCorrect && <span className={s.quizCorrectBadge}>✓ Correct</span>}
+                  </div>
+                );
+              })}
+            </div>
+
+            {q.explanation && (
+              <div className={s.quizExplanationBox}>
+                💡 <b>Explanation:</b> {q.explanation}
+              </div>
+            )}
           </div>
         ))}
-        {loaded && questions.length === 0 && (
-          <p className={shared.sectionSub} style={{ margin: 0 }}>No questions yet — add the first below.</p>
+
+        {loaded && displayQuestions.length === 0 && (
+          <p className={shared.sectionSub} style={{ margin: 0 }}>No questions in this quiz yet — add your first question below.</p>
         )}
       </div>
 
@@ -574,8 +720,44 @@ export function QuizEditor({ data, onData, moduleId }: EditorProps) {
         <button className={shared.primaryBtn} onClick={addQ} disabled={busy}>
           <Plus size={13} /> Add question
         </button>
+        <button className={shared.ghostBtn ?? shared.iconBtn} onClick={saveDraftToBank}
+          title="Save this question to your reusable bank">
+          <Save size={13} /> Bank it
+        </button>
+        <button className={shared.ghostBtn ?? shared.iconBtn} onClick={openBank}>
+          <BookOpen size={13} /> {showBank ? 'Hide bank' : 'From bank'}
+        </button>
         {err && <span style={{ color: '#ef4444', fontSize: 12.5, fontWeight: 600 }}>{err}</span>}
       </div>
+
+      {/* Question bank (T3-12) */}
+      {showBank && (
+        <div style={{
+          marginTop: 10, border: '1px solid #ede9fe', borderRadius: 10,
+          padding: 12, maxHeight: 260, overflowY: 'auto',
+        }}>
+          {bankLoading ? (
+            <p style={{ fontSize: 12.5, color: '#9891a6', margin: 0 }}>Loading bank…</p>
+          ) : bank.length === 0 ? (
+            <p style={{ fontSize: 12.5, color: '#9891a6', margin: 0 }}>
+              Your bank is empty — write a question and click “Bank it” to reuse it later.
+            </p>
+          ) : bank.map(q => (
+            <div key={q.id} className={s.qRow}>
+              <div>
+                <p className={s.qText}>{q.question_text}</p>
+                <p className={s.qOpts}>
+                  {q.options.map((o, oi) => `${'ABCD'[oi]}: ${o}`).join('  ·  ')} — answer <b>{q.correct_answer}</b>
+                </p>
+              </div>
+              <button className={shared.primaryBtn} style={{ padding: '4px 10px', minHeight: 0 }}
+                onClick={() => importFromBank(q)} disabled={busy}>
+                <Plus size={12} /> Import
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
     </div>
   );
 }
@@ -644,6 +826,16 @@ export function AssignEditor({ data, onData, languages, experimentId }: EditorPr
         </div>
       </div>
 
+      <div className={s.row}>
+        <div className={s.field} style={{ maxWidth: 280 }}>
+          <span className={s.fieldLabel}>Submission deadline (optional)</span>
+          <input className={shared.input} type="datetime-local"
+            title="After this time students can no longer submit. Leave blank for no deadline."
+            value={dtIsoToLocal(asString(data.due_at))}
+            onChange={e => onData({ ...data, due_at: dtLocalToIso(e.target.value) })} />
+        </div>
+      </div>
+
       <PackageSelector
         value={asString(data.packages)}
         onChange={next => onData({ ...data, packages: next })}
@@ -664,47 +856,99 @@ export function AssignEditor({ data, onData, languages, experimentId }: EditorPr
           onChange={e => onData({ ...data, starter_code: e.target.value })} />
       </div>
 
-      <span className={s.fieldLabel} style={{ display: 'block', margin: '12px 0 6px' }}>
-        Test cases ({tests.length}) — hidden ones grade silently; stdin is fed to the program, stdout is compared to “expected”.
-      </span>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '18px 0 8px' }}>
+        <span className={s.fieldLabel} style={{ fontSize: 13, fontWeight: 700, margin: 0 }}>
+          🧪 Test Cases Suite ({tests.length})
+        </span>
+        <div style={{ display: 'flex', gap: 12, fontSize: 11.5, fontWeight: 600 }}>
+          <span style={{ color: '#2563eb' }}>🌐 Public: {tests.filter(t => !t.hidden).length}</span>
+          <span style={{ color: '#d97706' }}>🔒 Hidden Private: {tests.filter(t => t.hidden).length}</span>
+        </div>
+      </div>
+
       <div className={s.qList}>
         {tests.map((t, i) => (
-          <div key={i} className={s.qRow} style={{ display: 'block' }}>
-            <div className={s.row} style={{ marginBottom: 8, alignItems: 'center' }}>
-              <span className={s.typeTag}>#{i + 1}</span>
-              <label className={s.check}>
-                <input type="checkbox" checked={!!t.hidden}
-                  onChange={e => updTest(i, { hidden: e.target.checked })} /> Hidden
+          <div key={i} className={s.quizCardItem} style={{ borderLeft: t.hidden ? '4px solid #f59e0b' : '4px solid #3b82f6' }}>
+            <div className={s.quizCardHeader}>
+              <span className={s.quizCardNum} style={{ background: t.hidden ? '#fffbeb' : '#eff6ff', color: t.hidden ? '#b45309' : '#1d4ed8', border: t.hidden ? '1px solid #fde68a' : '1px solid #bfdbfe' }}>
+                {t.hidden ? '🔒 Private #' + (i + 1) : '🌐 Public #' + (i + 1)}
+              </span>
+
+              <label className={s.check} style={{ fontSize: 12, fontWeight: 600, cursor: 'pointer', margin: 0 }}>
+                <input
+                  type="checkbox"
+                  checked={!!t.hidden}
+                  onChange={e => updTest(i, { hidden: e.target.checked })}
+                />
+                Hidden Private Test (graded silently upon submission)
               </label>
-              <div className={s.field} style={{ maxWidth: 110 }}>
-                <span className={s.fieldLabel}>Weight</span>
-                <input className={shared.input} type="number" min={1}
+
+              <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginLeft: 'auto' }}>
+                <span className={s.fieldLabel} style={{ fontSize: 11, margin: 0 }}>Weight:</span>
+                <input
+                  className={shared.input}
+                  type="number"
+                  min={1}
+                  style={{ width: 60, padding: '2px 6px', height: 26, fontSize: 12 }}
                   value={typeof t.weight === 'number' ? t.weight : 1}
-                  onChange={e => updTest(i, { weight: Number(e.target.value) })} />
+                  onChange={e => updTest(i, { weight: Number(e.target.value) })}
+                />
+                <button
+                  className={`${s.iconBtn} ${s.iconBtnDanger}`}
+                  onClick={() => delTest(i)}
+                  title="Remove test case"
+                >
+                  <Trash2 size={13} />
+                </button>
               </div>
-              <span className={s.barSpacer} />
-              <button className={`${s.iconBtn} ${s.iconBtnDanger}`} onClick={() => delTest(i)} title="Remove test">
-                <Trash2 size={13} />
-              </button>
             </div>
-            <div className={s.split}>
+
+            <div className={s.split} style={{ gap: 10, marginTop: 6 }}>
               <div className={s.splitPane}>
-                <span className={s.paneLabel}>Stdin</span>
-                <textarea className={s.codeArea} style={{ minHeight: 60 }} value={asString(t.input)}
-                  onChange={e => updTest(i, { input: e.target.value })} />
+                <span className={s.paneLabel} style={{ fontSize: 11, color: '#475569', fontWeight: 700 }}>
+                  Input (stdin)
+                </span>
+                <textarea
+                  className={s.codeArea}
+                  style={{ minHeight: 65, fontSize: 12, fontFamily: 'monospace', background: '#f8fafc' }}
+                  placeholder="e.g. input data or stdin text"
+                  value={asString(t.input)}
+                  onChange={e => updTest(i, { input: e.target.value })}
+                />
               </div>
               <div className={s.splitPane}>
-                <span className={s.paneLabel}>Expected stdout</span>
-                <textarea className={s.codeArea} style={{ minHeight: 60 }} value={asString(t.expected)}
-                  onChange={e => updTest(i, { expected: e.target.value })} />
+                <span className={s.paneLabel} style={{ fontSize: 11, color: '#475569', fontWeight: 700 }}>
+                  Expected Output (stdout)
+                </span>
+                <textarea
+                  className={s.codeArea}
+                  style={{ minHeight: 65, fontSize: 12, fontFamily: 'monospace', background: '#f8fafc' }}
+                  placeholder="Expected exact stdout output"
+                  value={asString(t.expected)}
+                  onChange={e => updTest(i, { expected: e.target.value })}
+                />
               </div>
             </div>
           </div>
         ))}
       </div>
-      <button className={shared.secondaryBtn} onClick={addTest} style={{ marginTop: 4 }}>
-        <Plus size={13} /> Add test case
-      </button>
+
+      <div style={{ display: 'flex', gap: 10, marginTop: 8 }}>
+        <button
+          className={shared.secondaryBtn}
+          onClick={() => setTests([...tests, { input: '', expected: '', hidden: false, weight: 1 }])}
+          style={{ fontSize: 12, padding: '6px 12px' }}
+        >
+          <Plus size={13} /> Add Public Sample Test Case
+        </button>
+        <button
+          className={shared.secondaryBtn}
+          onClick={() => setTests([...tests, { input: '', expected: '', hidden: true, weight: 1 }])}
+          style={{ fontSize: 12, padding: '6px 12px', background: '#fffbeb', borderColor: '#fde68a', color: '#b45309' }}
+        >
+          <Plus size={13} /> Add Hidden Private Test Case
+        </button>
+      </div>
     </div>
   );
 }
@@ -852,7 +1096,7 @@ export function VivaEditor({ data, onData, moduleId, experimentId }: EditorProps
                   <p className={s.qText} style={{ fontSize: 13.5 }}><b>{i + 1}.</b> {q.question}</p>
                   <p className={s.qOpts} style={{ fontSize: 12.5 }}>
                     <b>Answer:</b> {q.expected_answer} &nbsp;|&nbsp;
-                    <b>Topics:</b> {q.topics.length ? q.topics.join(', ') : '—'} &nbsp;|&nbsp;
+                    <b>Topics:</b> {q.topics?.length ? q.topics.join(', ') : '—'} &nbsp;|&nbsp;
                     <b>Difficulty:</b> {q.difficulty ?? '—'}
                   </p>
                 </div>
@@ -882,7 +1126,7 @@ export function VivaEditor({ data, onData, moduleId, experimentId }: EditorProps
                 <p className={s.qText} style={{ fontSize: 13.5 }}><b>{i + 1}.</b> {q.question}</p>
                 <p className={s.qOpts} style={{ fontSize: 12.5 }}>
                   <b>Answer:</b> {q.expected_answer} &nbsp;|&nbsp;
-                  <b>Topics:</b> {q.topics.length ? q.topics.join(', ') : '—'} &nbsp;|&nbsp;
+                  <b>Topics:</b> {q.topics?.length ? q.topics.join(', ') : '—'} &nbsp;|&nbsp;
                   <b>Difficulty:</b> {q.difficulty ?? '—'}
                 </p>
               </div>

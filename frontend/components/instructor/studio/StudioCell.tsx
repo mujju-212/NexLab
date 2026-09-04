@@ -8,7 +8,7 @@
 import { useEffect, useState } from 'react';
 import {
   GripVertical, ChevronUp, ChevronDown, ChevronRight, Copy, Trash2, Loader2, Check,
-  MoreHorizontal,
+  ArrowRightLeft,
 } from 'lucide-react';
 import type { CompilerLanguage } from '@/services/execution.service';
 import { metaFor, type ContentBlock } from './blocks';
@@ -69,8 +69,6 @@ export default function StudioCell(p: Props) {
   const [collapsed, setCollapsed] = useState(false);
   const [height, setHeight] = useState<number | undefined>(undefined);
 
-  // Per-author cell height is a pure UI preference — kept in localStorage so it
-  // never touches content_data (and never reaches students).
   const hKey = `studio-h-${block.id}`;
   useEffect(() => {
     try { const v = localStorage.getItem(hKey); if (v) setHeight(Number(v)); } catch { /* ignore */ }
@@ -102,15 +100,26 @@ export default function StudioCell(p: Props) {
           <button className={s.iconBtn} disabled={index === 0} onClick={() => p.onMove(index, -1)} title="Move up"><ChevronUp size={15} /></button>
           <button className={s.iconBtn} disabled={index === total - 1} onClick={() => p.onMove(index, +1)} title="Move down"><ChevronDown size={15} /></button>
           <button className={s.iconBtn} onClick={() => p.onDuplicate(block)} title="Duplicate"><Copy size={14} /></button>
+
           {p.canMoveToPage && p.otherPages && p.otherPages.length > 0 && p.onMoveToPage && (
             <div className={s.moveToPageWrap}>
-              <button className={s.iconBtn} onClick={() => {}} title="Move to page…"><MoreHorizontal size={14} /></button>
-              <select className={s.moveToPageSelect} defaultValue="" onChange={e => { if (e.target.value) p.onMoveToPage!(e.target.value); e.target.value = ''; }}>
-                <option value="" disabled>Move to…</option>
-                {p.otherPages.map(op => <option key={op.id} value={op.id}>{op.title}</option>)}
+              <select
+                className={s.moveToPageSelect}
+                defaultValue=""
+                onChange={e => {
+                  if (e.target.value) p.onMoveToPage!(e.target.value);
+                  e.target.value = '';
+                }}
+                title="Move to another page"
+              >
+                <option value="" disabled>Move to page…</option>
+                {p.otherPages.map(op => (
+                  <option key={op.id} value={op.id}>{op.title}</option>
+                ))}
               </select>
             </div>
           )}
+
           <button className={`${s.iconBtn} ${s.iconBtnDanger}`} onClick={() => p.onDelete(block)} title="Delete"><Trash2 size={14} /></button>
         </div>
       </div>
