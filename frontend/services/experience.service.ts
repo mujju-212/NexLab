@@ -153,7 +153,7 @@ export interface LiveState {
 
 export interface ChatMessage {
   id: string; session_id: string; from_id: string; to_id: string | null;
-  text: string; at: string; from_name?: string;
+  text: string; at: string; from_name?: string; to_name?: string;
 }
 
 export interface ReportRow {
@@ -164,6 +164,151 @@ export interface ReportRow {
   created_at: string | null;
   completed_at: string | null;
   error: string | null;
+}
+
+// ── Tier 1: management tools ─────────────────────────────────────────────────
+
+export interface InterventionRow {
+  id: string;
+  student_id: string;
+  student_name?: string | null;
+  roll_number?: string | null;
+  action_type: string;
+  note?: string | null;
+  follow_up_at?: string | null;
+  outcome: 'open' | 'improved' | 'no_change' | 'worsened';
+  outcome_note?: string | null;
+  created_at?: string | null;
+}
+
+export interface MasteryHeatmap {
+  students: Array<{ student_id: string; full_name: string; roll_number: string | null }>;
+  concepts: string[];
+  values: Array<{ student_id: string; values: (number | null)[] }>;
+  concept_avgs: Array<{ concept: string; avg: number; students: number }>;
+  weak_flags: Array<{ student_id: string; concept: string; mastery: number }>;
+  threshold: number;
+}
+
+export interface ExtensionRow {
+  id: string;
+  student_id: string;
+  student_name?: string | null;
+  experiment_id: string;
+  experiment_title?: string | null;
+  reason?: string | null;
+  extension_until: string;
+  excused: boolean;
+  created_at?: string | null;
+}
+
+export interface EarlyWarningRow {
+  student_id: string;
+  full_name: string;
+  roll_number: string | null;
+  risk_score: number;
+  level: 'low' | 'medium' | 'high';
+  reasons: string[];
+  mastery_avg?: number | null;
+  days_since_submission?: number | null;
+  avg_focus?: number | null;
+}
+
+export interface ErrorAnalysis {
+  experiment_id: string;
+  title: string;
+  total_attempts: number;
+  error_attempts: number;
+  error_rate_pct: number;
+  errors: Array<{ label: string; count: number; sample: string }>;
+}
+
+export interface BankQuestionRow {
+  id: string;
+  question_text: string;
+  options: string[];
+  correct_answer: string | null;
+  explanation?: string | null;
+  tags: string[];
+}
+
+export interface TeacherNoteRow {
+  id: string;
+  student_id: string;
+  note: string;
+  author?: string | null;
+  created_at?: string | null;
+}
+
+export interface HintEffectiveness {
+  experiment_id: string;
+  title: string;
+  students_with_attempts: number;
+  hint_users: number;
+  non_hint_users: number;
+  pass_rate_hint_users: number | null;
+  pass_rate_non_users: number | null;
+  avg_hints_passed: number;
+  avg_hints_failed: number;
+  level_distribution: Record<string, number>;
+  top_users: Array<{ name: string; hints: number; passed: boolean; best_pass_pct: number }>;
+}
+
+export interface InstructorSearchHit {
+  type: string; id: string; label: string;
+  sub_label?: string | null; link: string;
+}
+
+export interface SubmissionItem {
+  id?: string;
+  type: string;
+  title: string;
+  status: string;
+  score: number | null;
+  at: string | null;
+  tests?: string;
+  language?: string;
+  compile_status?: string;
+  compile_output?: string;
+  stdout?: string;
+  stderr?: string;
+  files?: Record<string, string> | null;
+  execution_time_ms?: number;
+  loc?: number;
+  quality_grade?: string;
+  questions?: {
+    id: string;
+    question: string;
+    options: string[];
+    selected: string | null;
+    correct_answer?: string | null;
+    is_correct?: boolean | null;
+    explanation?: string;
+  }[];
+  total_questions?: number;
+}
+
+export interface StudentDetail {
+  student: { id: string; full_name: string; roll_number: string | null; email: string };
+  attendance_status: string;
+  joined_at: string | null;
+  total_time_sec: number;
+  focus_score: number | null;
+  focus_timeline: { at: string | null; score: number }[];
+  checkpoints: { id: string; order: number; title: string; status: string; passed_at: string | null }[];
+  checkpoints_done: number;
+  checkpoints_total: number;
+  code_executions: number;
+  last_attempt_at: string | null;
+  quiz_status: string;
+  quiz_score: number | null;
+  assignment_status: string;
+  assignment_score: number | null;
+  final_grade: number | null;
+  proctor_events: { tab_switch: number; fullscreen_exit: number; copy_paste: number; lockdown_violation: number; total: number };
+  submissions: SubmissionItem[];
+  latest_code: { files: Record<string, string> | null; saved_at: string | null; save_type: string | null };
+  experiment: { id: string | null; title: string | null };
 }
 
 export const experienceService = {
@@ -202,6 +347,13 @@ export const experienceService = {
   async analyticsAiUsage(params?: Record<string, unknown>) {
     const { data } = await apiClient.get<{ ai_usage: AiUsageRow[]; by_feature: { feature: string; count: number }[] }>(
       '/instructor/analytics/ai-usage', { params });
+    return data;
+  },
+
+  /** Lightweight roster for the trajectory picker — avoids the heavy integrity endpoint */
+  async analyticsRoster() {
+    const { data } = await apiClient.get<{ roster: { student_id: string; full_name: string; roll_number: string | null }[] }>(
+      '/instructor/analytics/roster');
     return data;
   },
 
@@ -273,8 +425,37 @@ export const experienceService = {
     return data;
   },
 
+  async studentDetail(sessionId: string, studentId: string): Promise<StudentDetail> {
+    const { data } = await apiClient.get<StudentDetail>(
+      `/instructor/sessions/${sessionId}/student/${studentId}/detail`);
+    return data;
+  },
+
   async finalizeGrades(sessionId: string) {
     const { data } = await apiClient.post(`/instructor/sessions/${sessionId}/finalize-grades`);
+    return data;
+  },
+
+  // ── Present & Teach — full experiment content (all pages incl. unreleased) ─────
+  async getSessionContent(expId: string) {
+    const { data } = await apiClient.get<{
+      pages: Array<{
+        id: string | null; title: string; display_order: number;
+        release_at: string | null; is_live?: boolean;
+        modules: Array<{ id: string; page_id: string | null; module_type: string; title: string;
+          content_data: Record<string, unknown>; display_order: number; question_count?: number;
+          questions?: unknown[] }>;
+      }>;
+      count: number;
+      flat: Array<{ id: string; page_id: string | null; module_type: string; title: string;
+        content_data: Record<string, unknown>; display_order: number; question_count?: number }>;
+    }>(`/instructor/experiments/${expId}/content`);
+    return data;
+  },
+
+  /** Release / unrelease a content page live (is_live toggle or scheduled release_at). */
+  async releasePage(expId: string, pageId: string, payload: { is_live?: boolean; release_at?: string | null }) {
+    const { data } = await apiClient.patch(`/instructor/experiments/${expId}/pages/${pageId}`, payload);
     return data;
   },
 
@@ -341,8 +522,7 @@ export const experienceService = {
   },
 
   // ── Reports ───────────────────────────────────────────────────────────────────
-  async listReports(): Promise<ReportRow[]> {
-    const { data } = await apiClient.get<{ reports: ReportRow[] }>('/instructor/reports');
+  async listReports(): Promise<ReportRow[]> {    const { data } = await apiClient.get<{ reports: ReportRow[] }>('/instructor/reports');
     return data.reports;
   },
 
@@ -351,21 +531,157 @@ export const experienceService = {
     return data.report;
   },
 
-  async downloadReport(reportId: string) {
+  async downloadReport(reportId: string, fmt: 'csv' | 'xlsx' = 'csv') {
     const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
     const token = (await import('js-cookie')).default.get('access_token');
-    const res = await fetch(`${base}/instructor/reports/${reportId}/download`, {
+    const res = await fetch(`${base}/instructor/reports/${reportId}/download?format=${fmt}`, {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
     });
-    if (!res.ok) throw new Error('Download failed');
+    if (!res.ok) {
+      let msg = 'Download failed';
+      try { msg = (await res.json()).error ?? msg; } catch { /* keep */ }
+      throw new Error(msg);
+    }
     const blob = await res.blob();
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = `report_${reportId.slice(0, 8)}.csv`;
+    a.download = fmt === 'xlsx'
+      ? `report_${reportId.slice(0, 8)}.xlsx`
+      : `report_${reportId.slice(0, 8)}.csv`;
     document.body.appendChild(a);
     a.click();
     a.remove();
     URL.revokeObjectURL(url);
+  },
+
+  // ── Tier 1: management tools ──────────────────────────────────────────────
+
+  async listInterventions(status?: 'open' | 'resolved'): Promise<{ interventions: InterventionRow[]; my_students: string[] }> {
+    const { data } = await apiClient.get('/instructor/interventions', { params: status ? { status } : {} });
+    return data;
+  },
+  async createIntervention(payload: { student_id: string; action_type: string; note?: string; follow_up_at?: string }): Promise<InterventionRow> {
+    const { data } = await apiClient.post<{ intervention: InterventionRow }>('/instructor/interventions', payload);
+    return data.intervention;
+  },
+  async setInterventionOutcome(id: string, outcome: string, outcome_note?: string): Promise<InterventionRow> {
+    const { data } = await apiClient.patch<{ intervention: InterventionRow }>(`/instructor/interventions/${id}/outcome`, { outcome, outcome_note });
+    return data.intervention;
+  },
+  async dueInterventions(): Promise<{ due: InterventionRow[] }> {
+    const { data } = await apiClient.get('/instructor/interventions/due');
+    return data;
+  },
+
+  async masteryHeatmap(threshold = 40): Promise<MasteryHeatmap> {
+    const { data } = await apiClient.get('/instructor/mastery-heatmap', { params: { threshold } });
+    return data;
+  },
+
+  async announcementRecipients(): Promise<{ recipients: Array<{ section_subject_id: string; subject_name: string; section_name: string; student_count: number }> }> {
+    const { data } = await apiClient.get('/instructor/announcements/recipients');
+    return data;
+  },
+  async instructorAnnounce(payload: { section_subject_id: string; title: string; message: string }): Promise<{ sent_to: number }> {
+    const { data } = await apiClient.post('/instructor/announcements', payload);
+    return data;
+  },
+
+  async listExtensions(experimentId?: string): Promise<{ extensions: ExtensionRow[] }> {
+    const { data } = await apiClient.get('/instructor/extensions', { params: experimentId ? { experiment_id: experimentId } : {} });
+    return data;
+  },
+  async grantExtension(payload: { student_id: string; experiment_id: string; extension_until: string; reason?: string; excused?: boolean }): Promise<ExtensionRow> {
+    const { data } = await apiClient.post<{ extension: ExtensionRow }>('/instructor/extensions', payload);
+    return data.extension;
+  },
+  async revokeExtension(id: string): Promise<void> {
+    await apiClient.delete(`/instructor/extensions/${id}`);
+  },
+
+  // ── Tier 2/3 enhancements ─────────────────────────────────────────────────
+
+  async earlyWarning(ssId: string): Promise<{ students: EarlyWarningRow[] }> {
+    const { data } = await apiClient.get(`/instructor/early-warning/${ssId}`);
+    return data;
+  },
+
+  async aiFeedbackDraft(studentId: string, experimentId: string): Promise<{ draft: string; model: string }> {
+    const { data } = await apiClient.post('/instructor/ai-feedback-draft', {
+      student_id: studentId, experiment_id: experimentId,
+    });
+    return data;
+  },
+
+  async errorAnalysis(experimentId: string): Promise<ErrorAnalysis> {
+    const { data } = await apiClient.get(`/instructor/error-analysis/${experimentId}`);
+    return data;
+  },
+
+  async curveGrades(payload: { experiment_id: string; mode: 'add' | 'factor'; value: number; apply?: boolean }): Promise<{
+    applied: boolean; affected?: number; changed?: number; locked_skipped?: number;
+    class_avg_before?: number | null; class_avg_after?: number | null;
+    rows?: Array<{ student_id: string; before: number | null; after: number | null; locked: boolean }>;
+  }> {
+    const { data } = await apiClient.post('/instructor/grades/curve', payload);
+    return data;
+  },
+  async setModerationLock(gradeId: string, isLocked: boolean): Promise<void> {
+    await apiClient.post('/instructor/grades/moderation', { grade_id: gradeId, is_locked: isLocked });
+  },
+
+  async randomStudent(sessionId: string): Promise<{ student_id: string; full_name: string; roll_number: string | null }> {
+    const { data } = await apiClient.get(`/instructor/sessions/${sessionId}/random-student`);
+    return data;
+  },
+  async createPoll(sessionId: string, question: string, options: string[]): Promise<{ poll: { id: string; question: string; options: string[] } }> {
+    const { data } = await apiClient.post(`/instructor/sessions/${sessionId}/poll`, { question, options });
+    return data;
+  },
+  async closePoll(sessionId: string, pollId: string): Promise<{ poll: { id: string; results: number[]; responses_count: number; is_open: boolean; options: string[]; question: string } }> {
+    const { data } = await apiClient.post(`/instructor/sessions/${sessionId}/poll/${pollId}/close`);
+    return data;
+  },
+
+  async cloneExperiment(expId: string): Promise<{ experiment: { id: string; title: string }; copied: Record<string, number>; message: string }> {
+    const { data } = await apiClient.post(`/instructor/experiments/${expId}/clone`);
+    return data;
+  },
+
+  async listBankQuestions(q?: string): Promise<{ questions: BankQuestionRow[] }> {
+    const { data } = await apiClient.get('/instructor/question-bank', { params: q ? { q } : {} });
+    return data.questions ? data : { questions: [] };
+  },
+  async addToBank(payload: { question_text: string; options: string[]; correct_answer: string; explanation?: string; tags?: string[] }): Promise<BankQuestionRow> {
+    const { data } = await apiClient.post<{ question: BankQuestionRow }>('/instructor/question-bank', payload);
+    return data.question;
+  },
+  async deleteBankQuestion(id: string): Promise<void> {
+    await apiClient.delete(`/instructor/question-bank/${id}`);
+  },
+
+  async listNotes(studentId: string): Promise<{ notes: TeacherNoteRow[] }> {
+    const { data } = await apiClient.get(`/instructor/notes/${studentId}`);
+    return data;
+  },
+  async addNote(studentId: string, note: string): Promise<TeacherNoteRow> {
+    const { data } = await apiClient.post<{ note: TeacherNoteRow }>('/instructor/notes', { student_id: studentId, note });
+    return data.note;
+  },
+  async deleteNote(id: string): Promise<void> {
+    await apiClient.delete(`/instructor/notes/${id}`);
+  },
+
+  async hintEffectiveness(experimentId: string): Promise<HintEffectiveness> {
+    const { data } = await apiClient.get(`/instructor/analytics/hint-effectiveness/${experimentId}`);
+    return data;
+  },
+
+  // ── Shell search (students/experiments/sessions) ──────────────────────────
+  async instructorSearch(q: string, types = 'students,experiments,sessions'): Promise<InstructorSearchHit[]> {
+    const { data } = await apiClient.get('/instructor/search', { params: { q, types } })
+      .catch(() => ({ data: { results: [] as InstructorSearchHit[] } }));
+    return data.results ?? [];
   },
 };

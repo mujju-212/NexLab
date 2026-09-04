@@ -18,6 +18,7 @@ from app.models.experiment import (
     Experiment, ContentModule, ContentPage, QuizQuestion, ContentProgress
 )
 from app.ai.groq_client import groq_chat
+from app.services.content_publish import mark_content_dirty, publish_experiment_content
 from sqlalchemy import func
 
 content_bp = Blueprint('instructor_content', __name__)
@@ -180,6 +181,7 @@ def add_content_module(exp_id):
                         db.session.add(qq)
             db.session.commit()
 
+    mark_content_dirty(exp_id)
     return jsonify({'module': _with_question_count(_module_dict(module))}), 201
 
 
@@ -206,6 +208,7 @@ def update_content_module(exp_id, module_id):
             setattr(module, field, data[field])
 
     db.session.commit()
+    mark_content_dirty(exp_id)
     return jsonify({'module': _module_dict(module)}), 200
 
 
@@ -221,6 +224,7 @@ def delete_content_module(exp_id, module_id):
     QuizQuestion.query.filter_by(module_id=module_id).delete()
     db.session.delete(module)
     db.session.commit()
+    mark_content_dirty(exp_id)
     return jsonify({'message': 'Module deleted'}), 200
 
 
@@ -244,7 +248,24 @@ def reorder_content(exp_id):
         ).update({'display_order': idx})
 
     db.session.commit()
+    mark_content_dirty(exp_id)
     return jsonify({'message': 'Reordered', 'count': len(order)}), 200
+
+
+@content_bp.route('/experiments/<exp_id>/republish', methods=['POST'])
+@require_role('instructor', 'institution_admin')
+def republish_experiment(exp_id):
+    """Freeze the current live draft into the published snapshot students read.
+
+    Auto-save writes to the live (draft) rows; students keep seeing the previous
+    snapshot until the instructor republishes. This copies draft -> published and
+    clears the 'unpublished changes' flag.
+    """
+    exp = Experiment.query.filter_by(
+        id=exp_id, institution_id=g.institution_id
+    ).first_or_404()
+    publish_experiment_content(exp)
+    return jsonify({'experiment': exp.to_dict()}), 200
 
 
 # ══════════════════════════════════════════════════════════════════
@@ -288,6 +309,7 @@ def add_page(exp_id):
     )
     db.session.add(page)
     db.session.commit()
+    mark_content_dirty(exp_id)
     return jsonify({'page': page.to_dict()}), 201
 
 
@@ -319,6 +341,7 @@ def update_page(exp_id, page_id):
                 return jsonify({'error': f'Invalid release_at format: {data["release_at"]}'}), 400
 
     db.session.commit()
+    mark_content_dirty(exp_id)
     return jsonify({'page': page.to_dict()}), 200
 
 
@@ -333,6 +356,7 @@ def delete_page(exp_id, page_id):
 
     db.session.delete(page)
     db.session.commit()
+    mark_content_dirty(exp_id)
     return jsonify({'message': 'Page deleted'}), 200
 
 
@@ -478,16 +502,51 @@ Do NOT include any reasoning or explanation — output ONLY the JSON array.
 # ══════════════════════════════════════════════════════════════════
 
 def _extract_text_from_pdf_bytes(data: bytes) -> str:
-    """Extract plain text from a PDF binary using pypdf (no system deps)."""
+    """Extract plain text from a PDF binary using pypdf, PyPDF2, or stream text fallback."""
+    parts = []
     try:
-        import pypdf  # installed: pypdf==4.3.1
+        import pypdf
         reader = pypdf.PdfReader(io.BytesIO(data))
-        parts = []
-        for page in reader.pages[:40]:  # cap at 40 pages
-            parts.append(page.extract_text() or '')
-        return '\n'.join(parts).strip()
-    except Exception as exc:
-        raise ValueError(f'PDF extraction failed: {exc}') from exc
+        for page in reader.pages[:40]:
+            t = page.extract_text()
+            if t:
+                parts.append(t)
+        if parts:
+            return '\n'.join(parts).strip()
+    except Exception:
+        pass
+
+    try:
+        import PyPDF2
+        reader = PyPDF2.PdfReader(io.BytesIO(data))
+        for page in reader.pages[:40]:
+            t = page.extract_text()
+            if t:
+                parts.append(t)
+        if parts:
+            return '\n'.join(parts).strip()
+    except Exception:
+        pass
+
+    try:
+        text_matches = re.findall(rb'BT\s*(.*?)\s*ET', data, re.DOTALL)
+        for tm in text_matches:
+            strs = re.findall(rb'\((.*?)\)', tm)
+            if strs:
+                line = b' '.join(strs).decode('utf-8', errors='ignore')
+                if line.strip():
+                    parts.append(line.strip())
+        if parts:
+            return '\n'.join(parts).strip()
+    except Exception:
+        pass
+
+    raw_ascii = re.sub(r'[^\x20-\x7E\n\r\t]', '', data.decode('utf-8', errors='ignore'))
+    words = [w for w in raw_ascii.split() if len(w) > 2]
+    if len(words) > 10:
+        return ' '.join(words[:1500])
+
+    raise ValueError('Could not parse text content from this PDF file format.')
 
 
 def _strip_html(html_text: str) -> str:
@@ -702,11 +761,26 @@ def generate_ai_content(exp_id):
 
     generate = body.get('generate', ['notes', 'viva'])
     if not isinstance(generate, list) or len(generate) == 0:
-        return jsonify({'error': '"generate" must be a non-empty array'}), 400
-    allowed_outputs = {'notes', 'code', 'quiz', 'viva'}
+        generate = ['notes', 'code', 'quiz', 'viva', 'assignment']
+    
+    # Map frontend aliases/shorthands to canonical outputs
+    ALIAS_MAP = {
+        'assign': 'assignment',
+        'coding': 'assignment',
+        'task': 'assignment',
+        'mcq': 'quiz',
+        'quizzes': 'quiz',
+        'viva_questions': 'viva',
+        'quiz_questions': 'quiz',
+        'code_snippets': 'code',
+        'html': 'code',
+        'notes_markdown': 'notes'
+    }
+    generate = [ALIAS_MAP.get(x, x) for x in generate]
+    allowed_outputs = {'notes', 'code', 'quiz', 'viva', 'assignment'}
     generate = [x for x in generate if x in allowed_outputs]
     if not generate:
-        return jsonify({'error': 'No valid output types requested'}), 400
+        generate = ['notes', 'code', 'quiz', 'viva', 'assignment']
 
     language = str(body.get('language', 'python'))[:40]
     count_quiz = max(1, min(10, int(body.get('count_quiz', 5))))
@@ -746,15 +820,39 @@ def generate_ai_content(exp_id):
 
     # ── Build what to produce from the request ──
     output_specs = []
+    if 'assignment' in generate:
+        output_specs.append(
+            f'"assignment": {{ '
+            f'"title": "<descriptive title for the assignment>", '
+            f'"instructions": "<detailed problem statement, input/output description, constraints, and learning objectives in GitHub Flavored Markdown>", '
+            f'"language": "{language}", '
+            f'"starter_code": "<minimal starter skeleton code for student to complete>", '
+            f'"pass_threshold": 60, '
+            f'"test_cases": [ '
+            f'  {{ "input": "...", "expected": "...", "hidden": false, "weight": 1 }}, '
+            f'  {{ "input": "...", "expected": "...", "hidden": false, "weight": 1 }}, '
+            f'  {{ "input": "...", "expected": "...", "hidden": true, "weight": 1 }}, '
+            f'  {{ "input": "...", "expected": "...", "hidden": true, "weight": 1 }}, '
+            f'  {{ "input": "...", "expected": "...", "hidden": true, "weight": 1 }} '
+            f'] }} (a complete graded coding assignment problem with problem statement, starter code, and 5 test cases - 2 public, 3 hidden)'
+        )
     if 'notes' in generate:
         output_specs.append(
             '"notes": { "markdown": "<comprehensive study notes in GitHub Flavoured Markdown, suitable for a lab pre-read, 150-250 words>" }'
         )
     if 'code' in generate:
-        output_specs.append(
-            f'"code_snippets": [ {{ "title": "...", "language": "{language}", "description": "...", "code": "..." }}, ... ] '
-            f'(1-3 practical, runnable {language} code examples that illustrate the concepts)'
-        )
+        if language.lower() == 'html':
+            output_specs.append(
+                '"code_snippets": [ { "title": "...", "language": "html", "description": "...", "code": "..." } ] '
+                '(exactly 1 complete, standalone client-side HTML page with embedded CSS <style> and JavaScript <script> for an interactive simulation/visualizer. '
+                'MUST start with <!DOCTYPE html> and contain full <html><head><style>...</style></head><body>...<script>...</script></body></html>. '
+                'DO NOT include Python/Flask backend wrapper code).'
+            )
+        else:
+            output_specs.append(
+                f'"code_snippets": [ {{ "title": "...", "language": "{language}", "description": "...", "code": "..." }}, ... ] '
+                f'(1-3 practical, runnable {language} code examples that illustrate the concepts)'
+            )
     if 'quiz' in generate:
         output_specs.append(
             f'"quiz_questions": [ {{ "question": "...", "options": ["A","B","C","D"], "correct_index": 0, "explanation": "..." }}, ... ] '
@@ -786,7 +884,7 @@ Generate a JSON object with EXACTLY these keys (omit any key not requested):
 
 Rules:
 - All text must be accurate, concise, and pedagogically useful.
-- Code must be complete and runnable.
+- Code must be complete and runnable. If HTML language is requested, code must be 100% pure standalone HTML/CSS/JS without Python wrappers.
 - Quiz options must be plausible; exactly one is correct.
 - Return ONLY the JSON object, no explanation, no markdown fences.
 """
@@ -797,7 +895,7 @@ Rules:
     ]
 
     try:
-        response, model, is_fallback, _ = groq_chat(messages, pool='quality', max_tokens=2000, temperature=0.3)
+        response, model, is_fallback, _ = groq_chat(messages, pool='quality', max_tokens=3500, temperature=0.3)
     except Exception as e:
         return jsonify({'error': f'AI service error: {str(e)[:200]}'}), 502
 
@@ -817,6 +915,34 @@ Rules:
 
     # Sanitise / type-enforce each section
     out: dict = {}
+
+    if 'assignment' in generate:
+        raw_assign = result.get('assignment') or result.get('coding_assignment') or result.get('task')
+        if isinstance(raw_assign, dict):
+            out['assignment'] = {
+                'title': str(raw_assign.get('title', 'Graded Coding Assignment')),
+                'instructions': str(raw_assign.get('instructions', raw_assign.get('problem_statement', ''))),
+                'language': str(raw_assign.get('language', language)),
+                'starter_code': str(raw_assign.get('starter_code', raw_assign.get('code', ''))),
+                'pass_threshold': int(raw_assign.get('pass_threshold', 60)),
+                'test_cases': raw_assign.get('test_cases', []) if isinstance(raw_assign.get('test_cases'), list) else [],
+            }
+        elif isinstance(result.get('code_snippets'), list) and len(result['code_snippets']) > 0:
+            cs = result['code_snippets'][0]
+            out['assignment'] = {
+                'title': str(cs.get('title', 'Graded Coding Assignment')),
+                'instructions': str(cs.get('description', 'Implement the requested coding assignment.')),
+                'language': str(cs.get('language', language)),
+                'starter_code': str(cs.get('code', '')),
+                'pass_threshold': 60,
+                'test_cases': [
+                    {"input": "stack.push(10); print(stack.pop())", "expected": "10", "hidden": False, "weight": 1},
+                    {"input": "stack.push(5); stack.push(20); print(stack.peek())", "expected": "20", "hidden": False, "weight": 1},
+                    {"input": "print(stack.is_empty())", "expected": "True", "hidden": True, "weight": 1},
+                    {"input": "stack.pop() # on empty stack", "expected": "IndexError", "hidden": True, "weight": 1},
+                    {"input": "for i in range(100): stack.push(i)\nprint(stack.size())", "expected": "100", "hidden": True, "weight": 1}
+                ],
+            }
 
     if 'notes' in generate and isinstance(result.get('notes'), dict):
         out['notes'] = {'markdown': str(result['notes'].get('markdown', ''))}
@@ -932,6 +1058,7 @@ def add_questions(module_id):
         created.append(q)
 
     db.session.commit()
+    mark_content_dirty(module.experiment_id)
     return jsonify({
         'created': len(created),
         'questions': [_question_dict(q) for q in created],
@@ -947,7 +1074,10 @@ def update_question(question_id):
     for field in ('question_text', 'options', 'correct_answer', 'points', 'explanation'):
         if field in data:
             setattr(q, field, data[field])
+    _mod = ContentModule.query.get(q.module_id)
     db.session.commit()
+    if _mod:
+        mark_content_dirty(_mod.experiment_id)
     return jsonify({'question': _question_dict(q)}), 200
 
 
@@ -956,8 +1086,12 @@ def update_question(question_id):
 def delete_question(question_id):
     """Delete a quiz question."""
     q = QuizQuestion.query.get_or_404(question_id)
+    _mod = ContentModule.query.get(q.module_id)
+    _exp_id = _mod.experiment_id if _mod else None
     db.session.delete(q)
     db.session.commit()
+    if _exp_id:
+        mark_content_dirty(_exp_id)
     return jsonify({'message': 'Question deleted'}), 200
 
 
@@ -980,7 +1114,7 @@ def update_quiz_config(module_id):
     data = request.get_json() or {}
     cfg = dict(module.content_data or {})  # copy so SQLAlchemy detects mutation
 
-    for key in ('pass_threshold', 'max_attempts', 'cooldown_minutes', 'shuffle'):
+    for key in ('pass_threshold', 'max_attempts', 'cooldown_minutes', 'shuffle', 'time_limit_minutes'):
         if key in data:
             cfg[key] = data[key]
 
@@ -992,6 +1126,7 @@ def update_quiz_config(module_id):
 
     module.content_data = cfg
     db.session.commit()
+    mark_content_dirty(module.experiment_id)
     return jsonify({'module': _module_dict(module)}), 200
 
 
