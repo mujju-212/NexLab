@@ -2,5 +2,5 @@
 
 // All content types are managed per-experiment in the Content Library.
 export default function Page() {
-  redirect('/instructor/content');
+  redirect('/instructor/experiments');
 }
