@@ -58,6 +58,16 @@ export const aiService = {
     return data;
   },
 
+  // ── Topic Explainer (P5) ────────────────────────────────────────────────────
+  // POST /api/ai/explain-topic
+  // Institution-gated, no code context. Response: { explanation, model_used, is_fallback }
+  async explainTopic(topic: string): Promise<{ explanation: string; model_used: string | null; is_fallback: boolean }> {
+    const { data } = await apiClient.post<{ explanation: string; model_used: string | null; is_fallback: boolean }>(
+      '/ai/explain-topic', { topic }, { timeout: 40_000 },
+    );
+    return data;
+  },
+
   // ── Generate Viva Questions (instructor only) ───────────────────────────────
   // POST /api/ai/viva/generate
   // Response: { viva_session_id, questions: [{ question, expected_topics }] }

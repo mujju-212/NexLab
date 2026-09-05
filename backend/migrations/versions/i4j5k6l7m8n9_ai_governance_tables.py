@@ -55,7 +55,7 @@ def upgrade():
         sa.Column('prompt_tokens', sa.Integer(), nullable=False, server_default='0'),
         sa.Column('completion_tokens', sa.Integer(), nullable=False, server_default='0'),
         sa.Column('total_tokens', sa.Integer(), nullable=False, server_default='0'),
-        sa.Column('estimated_cost_usd', sa.Float(), nullable=True),
+        sa.Column('estimated_cost_usd', sa.Numeric(12, 8), nullable=True),
         sa.Column('latency_ms', sa.Integer(), nullable=True),
         sa.Column('success', sa.Boolean(), nullable=False, server_default='true'),
         sa.Column('section_subject_id', sa.String(length=36), nullable=True),
@@ -72,8 +72,8 @@ def upgrade():
     op.create_table(
         'ai_agent_run',
         sa.Column('id', sa.String(length=36), nullable=False),
-        sa.Column('institution_id', sa.String(length=36), nullable=True),
-        sa.Column('user_id', sa.String(length=36), nullable=True),
+        sa.Column('institution_id', sa.String(length=36), nullable=False),
+        sa.Column('user_id', sa.String(length=36), nullable=False),
         sa.Column('prompt', sa.Text(), nullable=True),
         sa.Column('tool_calls', sa.Text(), nullable=True),   # JSON
         sa.Column('result', sa.Text(), nullable=True),

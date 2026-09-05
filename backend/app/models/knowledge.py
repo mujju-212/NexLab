@@ -65,8 +65,8 @@ class FocusScore(db.Model):
     """Focus score records per student per 30-second interval"""
     __tablename__ = 'focus_scores'
     id          = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    student_id  = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
-    session_id  = db.Column(db.String(36), db.ForeignKey('lab_sessions.id'), nullable=False)
+    student_id  = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False, index=True)
+    session_id  = db.Column(db.String(36), db.ForeignKey('lab_sessions.id'), nullable=False, index=True)
 
     # All 6 behavioral signals stored as JSON
     # {tab_switches_per_min, idle_seconds, typing_speed_wpm,
@@ -74,7 +74,12 @@ class FocusScore(db.Model):
     signals     = db.Column(db.JSON, default=dict)
 
     focus_score = db.Column(db.Float)     # 0-100 from RF model
-    recorded_at = db.Column(db.DateTime, default=datetime.utcnow)
+    recorded_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
+
+    __table_args__ = (
+        db.Index('ix_focus_session_recorded', 'session_id', 'recorded_at'),
+        db.Index('ix_focus_student_session', 'student_id', 'session_id'),
+    )
 
     def to_dict(self):
         return {

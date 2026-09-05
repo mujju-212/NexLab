@@ -48,6 +48,9 @@ def get_hint():
         return jsonify({'error': 'experiment_id required'}), 400
     if hint_level not in (1, 2, 3):
         return jsonify({'error': 'hint_level must be 1, 2, or 3'}), 400
+    blocked = _require_institution_account()
+    if blocked:
+        return blocked
 
     # ── Check Groq quota (legacy request-count check — gate also enforces token quota) ──
     if not _check_quota(g.institution_id):
@@ -146,6 +149,10 @@ def help_chat():
     experiment_id = data.get('experiment_id')
     messages      = data.get('messages', [])   # conversation history (last 5)
     language      = data.get('language', 'python')
+
+    blocked = _require_institution_account()
+    if blocked:
+        return blocked
 
     if not _check_quota(g.institution_id):
         return jsonify({'error': 'Daily AI assistance limit reached.'}), 429
@@ -261,6 +268,10 @@ def evaluate_viva_answer():
     answer_text     = data.get('answer', '')
     code            = data.get('code', '')
 
+    blocked = _require_institution_account()
+    if blocked:
+        return blocked
+
     system_prompt = """You are evaluating a student's viva answer.
 Return ONLY valid JSON: {"score": <0-10>, "feedback": "<one sentence>"}
 Score guidelines: 9-10=excellent, 7-8=good, 5-6=partial, 3-4=weak, 0-2=incorrect"""
@@ -282,8 +293,11 @@ Score guidelines: 9-10=excellent, 7-8=good, 5-6=partial, 3-4=weak, 0-2=incorrect
             max_tokens=80,
             temperature=0.3,
         )
-    except (AIDisabled, AIQuotaExceeded):
-        response = None
+    except AIDisabled as e:
+        # Governance must win: return the error, don't store a fabricated score.
+        return jsonify({'error': str(e.reason)}), 403
+    except AIQuotaExceeded as e:
+        return jsonify({'error': e.reason, 'quota': e.quota, 'used': e.used}), 429
 
     import json, re
     try:
@@ -453,6 +467,9 @@ def code_assist():
     Playground code help. mode = hint | explain_error | review | ask.
     Requires no experiment and never affects a grade.
     """
+    blocked = _require_institution_account()
+    if blocked:
+        return blocked
     data     = request.get_json(silent=True) or {}
     mode     = (data.get('mode') or 'hint').strip().lower()
     code     = (data.get('code') or '').strip()
@@ -566,14 +583,36 @@ def _get_fallback_hint() -> str:
 
 def _check_quota(institution_id: str) -> bool:
     """
-    True when the institution may still call Groq today.
+    True when the caller may still use Groq today.
 
-    Fails **open**: `groq_usage` is created by database/init.sql rather than by a
-    migration, so a database that was set up another way simply has no counter.
-    Losing the meter must not take the AI tutor down with it.
+    Two meters:
+      - institution users: legacy request-count meter (`groq_usage`, seeded by
+        database/init.sql) + the token quota the AI gate enforces on top.
+      - platform-direct users (free_user / any caller without an institution):
+        counted from AIUsageLog against PlatformConfig `free_user_daily_ai_calls`
+        (default 10/day). Previously `None` institution short-circuited to
+        always-allow — free users consumed AI with no meter at all.
+
+    Fails **open** on meter-read failures so the AI tutor never goes down with
+    the counter.
     """
+    from datetime import date, datetime
     if not institution_id:
-        return True          # platform-level users have no institution meter
+        # ── Free-tier meter (per-user, from the usage log we already write) ──
+        try:
+            from app.models.institution import PlatformConfig
+            from app.models.ai_usage import AIUsageLog
+            from sqlalchemy import func
+            limit = int(PlatformConfig.get('free_user_daily_ai_calls', 10))
+            day_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
+            used = db.session.query(func.count(AIUsageLog.id)).filter(
+                AIUsageLog.user_id == g.user_id,
+                AIUsageLog.created_at >= day_start,
+            ).scalar() or 0
+            return used < limit
+        except Exception:
+            current_app.logger.warning('[ai] free-tier quota lookup failed; allowing request', exc_info=True)
+            return True
     from datetime import date
     from app.extensions import db
     from sqlalchemy import text
@@ -592,6 +631,20 @@ def _check_quota(institution_id: str) -> bool:
     return (result is None) or (result[0] < limit)
 
 
+def _require_institution_account():
+    """
+    Lab AI features (hints, chat, code-assist, viva, explain) exist inside
+    institution labs only. Platform-direct accounts have no lab experiments —
+    returning 403 also closes the cost/content-leak hole where a free user
+    could hint/assist against someone else's experiment id.
+    Returns None when the caller is fine, else a (response, status) tuple.
+    """
+    if not getattr(g, 'institution_id', None):
+        return jsonify({'error': 'Lab AI features require an institution account. '
+                                 'Use the Practice Library instead.'}), 403
+    return None
+
+
 def _increment_quota(institution_id: str):
     """Increment Groq usage counter for institution"""
     if not institution_id:
@@ -607,6 +660,72 @@ def _increment_quota(institution_id: str):
         DO UPDATE SET count = groq_usage.count + 1
     """), {'iid': institution_id, 'date': today})
     db.session.commit()
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# P5 — Topic Explainer (institution-gated, no code context)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route('/explain-topic', methods=['POST'])
+@require_auth
+@limiter.limit("6 per minute")
+def explain_topic():
+    """
+    General topic explanation for students — no code context, no cheating.
+    Institution-gated via guarded_ai_call (same policy as hints).
+    Explains the concept, its real-world use, and common pitfalls.
+    """
+    blocked = _require_institution_account()
+    if blocked:
+        return blocked
+    data = request.get_json(silent=True) or {}
+    topic = (data.get('topic') or '').strip()
+    if not topic:
+        return jsonify({'error': 'Provide a topic to explain.'}), 400
+
+    system_prompt = (
+        "You are a knowledgeable lab tutor. Explain the given topic as if "
+        "teaching a first-year university student.\n\n"
+        "Structure your answer:\n"
+        "1. What it is (plain language, one sentence)\n"
+        "2. How it works (the core idea, ~2-3 sentences)\n"
+        "3. Real-world example where it's used\n"
+        "4. Common mistakes beginners make\n\n"
+        "STRICT RULES:\n"
+        "- Do NOT write code, pseudocode, or algorithms.\n"
+        "- Do NOT solve any specific problem or assignment.\n"
+        "- If the topic is unrelated to computer science or engineering, "
+        "say 'I can only explain technical topics.'\n"
+        "- Maximum 600 characters."
+    )
+
+    try:
+        text, model, is_fallback, usage = guarded_ai_call(
+            feature='chat',
+            institution_id=getattr(g, 'institution_id', None),
+            user_id=getattr(g, 'user_id', None),
+            role=getattr(g, 'role', 'student'),
+            messages=[
+                {'role': 'system', 'content': system_prompt},
+                {'role': 'user', 'content': f'Explain: {topic}'},
+            ],
+            pool='fast',
+            max_tokens=400,
+            temperature=0.4,
+        )
+    except AIDisabled as e:
+        return jsonify({'error': str(e)}), 403
+    except AIQuotaExceeded as e:
+        return jsonify({'error': str(e)}), 429
+
+    if not text:
+        text = "I'm temporarily unavailable. Please try again in a moment."
+
+    return jsonify({
+        'explanation': text,
+        'model_used': model,
+        'is_fallback': is_fallback,
+    }), 200
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -730,9 +849,9 @@ def agent_apply(run_id):
     """
     Confirm and apply a pending action from a previous agent run.
 
-    Currently only supports `draft_announcement` — the draft is forwarded to the
-    existing `POST /api/institution/announcements/targeted` endpoint using the
-    admin's own JWT, so the same permission, tenancy and audit logic applies.
+    Currently only supports `draft_announcement` — the draft is applied through
+    the shared core of the existing `POST /api/institution/announcements/targeted`
+    endpoint, so the same permission, tenancy and audit logic applies.
     """
     import json
     from app.models.ai_usage import AIAgentRun
@@ -755,22 +874,19 @@ def agent_apply(run_id):
     if not draft:
         return jsonify({'error': 'No draft announcement found in this run'}), 400
 
-    # Forward to the existing targeted announcement endpoint using the admin's
-    # own JWT, so auth + tenancy + audit re-run exactly as for a direct call.
-    auth_header = request.headers.get('Authorization')
-    if not auth_header:
-        return jsonify({'error': 'No auth token available'}), 401
+    # Apply via the shared core of POST /institution/announcements/targeted —
+    # same tenancy filters, notification fan-out, socket emission and audit row
+    # as a direct admin call, without an HTTP round trip. Runs inside this
+    # admin's own request context, so g.user_id / g.institution_id apply.
+    from app.institution.routes import _send_targeted_announcement
+    from werkzeug.exceptions import HTTPException
 
-    client = current_app.test_client()
-    resp = client.post(
-        '/api/institution/announcements/targeted',
-        headers={'Authorization': auth_header},
-        json=draft,
-    )
-
-    body = resp.get_json(silent=True) or {}
-    if resp.status_code >= 300:
-        return jsonify({'error': body.get('error') or 'Failed to send announcement'}), resp.status_code
+    try:
+        payload, status = _send_targeted_announcement(draft)
+    except HTTPException as exc:
+        payload, status = {'error': exc.description or 'Invalid announcement target'}, exc.code or 400
+    if status >= 300:
+        return jsonify(payload), status
 
     # Mark run as completed
     run.status = 'completed'
@@ -782,7 +898,7 @@ def agent_apply(run_id):
 
     return jsonify({
         'success': True,
-        'sent_to': body.get('sent_to'),
-        'target':  body.get('target'),
+        'sent_to': payload.get('sent_to'),
+        'target':  payload.get('target'),
         'run_id':  run_id,
     }), 200

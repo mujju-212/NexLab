@@ -91,6 +91,24 @@ def _tokens_used_today(institution_id: str) -> int:
         return 0   # fail-open: don't block on DB error
 
 
+def _tokens_used_this_month(institution_id: str) -> int:
+    """Sum total_tokens from AIUsageLog for this institution this calendar month (UTC)."""
+    from app.models.ai_usage import AIUsageLog
+    from app.extensions import db
+    month_start = datetime.utcnow().replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    try:
+        row = (db.session.query(func.coalesce(func.sum(AIUsageLog.total_tokens), 0))
+               .filter(
+                   AIUsageLog.institution_id == institution_id,
+                   AIUsageLog.created_at >= month_start,
+                   AIUsageLog.success == True,
+               )
+               .scalar())
+        return int(row or 0)
+    except Exception:
+        return 0   # fail-open: don't block on DB error
+
+
 def _student_tokens_today(institution_id: str, user_id: str) -> int:
     """Sum total_tokens from AIUsageLog for this student today (UTC day)."""
     from app.models.ai_usage import AIUsageLog
@@ -234,6 +252,20 @@ def guarded_ai_call(
             else:
                 log.warning('[ai.gate] institution %s over daily quota (%d/%d) — warn-only',
                             institution_id, used_today, inst_quota)
+
+        # Monthly institution quota (calendar month, UTC)
+        if policy and policy.monthly_token_quota:
+            used_month = _tokens_used_this_month(institution_id)
+            if used_month >= policy.monthly_token_quota:
+                if hard_stop:
+                    raise AIQuotaExceeded(
+                        reason=f'Monthly AI token quota ({policy.monthly_token_quota:,}) reached for this institution.',
+                        quota=policy.monthly_token_quota,
+                        used=used_month,
+                    )
+                else:
+                    log.warning('[ai.gate] institution %s over monthly quota (%d/%d) — warn-only',
+                                institution_id, used_month, policy.monthly_token_quota)
 
         # Per-student cap (students only)
         if user_role == 'student' and policy and policy.per_student_daily_quota:
