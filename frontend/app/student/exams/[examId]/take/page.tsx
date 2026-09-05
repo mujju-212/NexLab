@@ -1,0 +1,309 @@
+'use client';
+
+import { useCallback, useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  Loader2, Timer, Send, ChevronLeft, ChevronRight, HelpCircle, Code2, ArrowLeft,
+} from 'lucide-react';
+import StudentShell from '@/components/layout/StudentShell';
+import styles from '../../exams.module.css';
+import {
+  examService, type Exam, type ExamQuestion, type ExamAttempt,
+} from '@/services/exam.service';
+import { useServerCountdown } from '@/lib/countdown';
+
+type Answers = Record<string, unknown>;
+
+export default function TakeExamPage({ params }: { params: Promise<{ examId: string }> }) {
+  const router = useRouter();
+  const [examId, setExamId] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  const [attempt, setAttempt] = useState<ExamAttempt | null>(null);
+  const [exam, setExam] = useState<Exam | null>(null);
+  const [questions, setQuestions] = useState<ExamQuestion[]>([]);
+  const [answers, setAnswers] = useState<Answers>({});
+  const [current, setCurrent] = useState(0);
+  const [expiresAt, setExpiresAt] = useState<string | null>(null);
+  const [serverNow, setServerNow] = useState<string>(new Date().toISOString());
+
+  const [submitting, setSubmitting] = useState(false);
+  const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
+  const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Refs keep the latest values available to timers/effects without re-firing them.
+  const answersRef = useRef<Answers>({});
+  const attemptRef = useRef<ExamAttempt | null>(null);
+  const dirtyRef = useRef(false);
+  const submittedRef = useRef(false);
+
+  // ── Start (or resume) the attempt ────────────────────────────────────────
+  useEffect(() => {
+    let cancelled = false;
+    (async () => {
+      const { examId: id } = await params;
+      if (cancelled) return;
+      setExamId(id);
+      try {
+        const res = await examService.startExam(id);
+        if (cancelled) return;
+        const init: Answers = { ...(res.answers || {}) };
+        // Seed coding answers with starter code so a submit without edits still runs it.
+        for (const q of res.questions) {
+          if (q.question_type === 'coding' && init[q.id] == null) init[q.id] = q.starter_code ?? '';
+        }
+        answersRef.current = init;
+        attemptRef.current = res.attempt;
+        setAttempt(res.attempt);
+        setExam(res.exam);
+        setQuestions(res.questions);
+        setAnswers(init);
+        setExpiresAt(res.expires_at);
+        setServerNow(res.server_now);
+      } catch (e) {
+        if (!cancelled) {
+          const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error;
+          setError(msg || 'Could not start this exam.');
+        }
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [params]);
+
+  const cd = useServerCountdown(expiresAt, serverNow);
+
+  const setAnswer = useCallback((qid: string, value: unknown) => {
+    setAnswers(prev => {
+      const next = { ...prev, [qid]: value };
+      answersRef.current = next;
+      return next;
+    });
+    dirtyRef.current = true;
+  }, []);
+
+  // ── Debounced auto-save (1.2s after the last edit) ───────────────────────
+  useEffect(() => {
+    if (!attempt || submitting || !dirtyRef.current) return;
+    setSaveState('saving');
+    const t = setTimeout(() => {
+      examService.saveAttempt(examId!, attempt.id, answersRef.current)
+        .then(() => { setSaveState('saved'); dirtyRef.current = false; })
+        .catch(() => setSaveState('idle'));
+    }, 1200);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [answers, attempt, submitting]);
+
+  const doSubmit = useCallback(async () => {
+    if (!attempt || !examId || submittedRef.current) return;
+    submittedRef.current = true;
+    setSubmitting(true);
+    setConfirmOpen(false);
+    try {
+      // Flush any pending edits, then submit the full answer set.
+      await examService.submitAttempt(examId, attempt.id, answersRef.current);
+      router.replace(`/student/exams/${examId}/result`);
+    } catch (e) {
+      const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      submittedRef.current = false;
+      setSubmitting(false);
+      setError(msg || 'Submission failed. Please try again.');
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [attempt, examId, router]);
+
+  // ── Auto-submit when the countdown hits zero ─────────────────────────────
+  useEffect(() => {
+    if (cd.expired && attempt && expiresAt && !submittedRef.current && !submitting) {
+      doSubmit();
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cd.expired, attempt, expiresAt]);
+
+  const isAnswered = useCallback((qq: ExamQuestion): boolean => {
+    const a = answers[qq.id];
+    if (qq.question_type === 'mcq') return a != null && a !== '';
+    const code = typeof a === 'string' ? a : '';
+    const starter = qq.starter_code ?? '';
+    return code.trim().length > 0 && code !== starter;
+  }, [answers]);
+
+  if (loading) {
+    return (
+      <StudentShell activePage="Exams" title="Exam" subtitle="Starting your attempt…">
+        <div className={styles.loadingBox}><Loader2 size={20} className={styles.spinner} /> Starting exam…</div>
+      </StudentShell>
+    );
+  }
+
+  if (error && !attempt) {
+    return (
+      <StudentShell activePage="Exams" title="Exam" subtitle="Unable to start">
+        <div className={styles.errorBox}>⚠️ {error}</div>
+        <button type="button" className={styles.secondaryBtn}
+          onClick={() => router.push(examId ? `/student/exams/${examId}` : '/student/exams')}>
+          <ArrowLeft size={16} /> Back
+        </button>
+      </StudentShell>
+    );
+  }
+
+  const q = questions[current];
+  const answeredCount = questions.filter(isAnswered).length;
+
+  return (
+    <StudentShell activePage="Exams" title={exam?.title || 'Exam'} subtitle="Answer every question — your work auto-saves">
+      {error && <div className={styles.errorBox}>⚠️ {error}</div>}
+
+      {/* Header: progress + live countdown + submit */}
+      <div className={styles.takeHeader}>
+        <div style={{ minWidth: 0 }}>
+          <h2 style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#111827', letterSpacing: '-.02em' }}>
+            {exam?.title}
+          </h2>
+          <p style={{ margin: '5px 0 0', fontSize: 12.5, color: '#6b7280' }}>
+            Question {questions.length ? current + 1 : 0} of {questions.length} · {answeredCount} answered
+            {saveState === 'saving' && <span style={{ color: '#b45309' }}> · Saving…</span>}
+            {saveState === 'saved' && <span style={{ color: '#059669' }}> · Saved ✓</span>}
+          </p>
+        </div>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+          <span className={`${styles.countdownPill} ${cd.warn ? styles.countdownWarn : ''} ${cd.expired ? styles.countdownExpired : ''}`}>
+            <Timer size={16} /> {cd.label}
+          </span>
+          <button type="button" className={styles.primaryBtn} onClick={() => setConfirmOpen(true)} disabled={submitting}>
+            {submitting ? <Loader2 size={16} className={styles.spinner} /> : <Send size={16} />} Submit
+          </button>
+        </div>
+      </div>
+
+      <div className={styles.takeLayout}>
+        {/* Question navigator */}
+        <aside className={styles.navPanel}>
+          <p className={styles.navTitle}>Questions</p>
+          <div className={styles.navGrid}>
+            {questions.map((qq, i) => (
+              <button key={qq.id} type="button"
+                className={`${styles.navDot} ${i === current ? styles.navActive : isAnswered(qq) ? styles.navAnswered : ''}`}
+                onClick={() => setCurrent(i)}>
+                {i + 1}
+              </button>
+            ))}
+          </div>
+          <div style={{ marginTop: 16, fontSize: 11.5, color: '#9ca3af', lineHeight: 1.7 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ width: 12, height: 12, borderRadius: 4, background: 'rgba(236,253,245,.9)', border: '1.5px solid rgba(16,185,129,.4)' }} /> Answered
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+              <span style={{ width: 12, height: 12, borderRadius: 4, background: '#fff', border: '1.5px solid #e5e7eb' }} /> Not answered
+            </div>
+          </div>
+        </aside>
+
+        {/* Active question */}
+        <section className={styles.questionCard}>
+          {!q ? (
+            <p style={{ margin: 0, color: '#9ca3af', fontSize: 14, textAlign: 'center', padding: '20px 0' }}>
+              This exam has no questions. You can submit to finish.
+            </p>
+          ) : (
+            <>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 14, flexWrap: 'wrap' }}>
+                <span className={`${styles.badge} ${q.question_type === 'mcq' ? styles.blueBadge : styles.greenBadge}`}>
+                  {q.question_type === 'mcq' ? <HelpCircle size={11} /> : <Code2 size={11} />}
+                  {q.question_type === 'mcq' ? 'Multiple Choice' : `Coding · ${q.language || 'python'}`}
+                </span>
+                <span style={{ fontSize: 12, color: '#9ca3af', fontWeight: 600 }}>
+                  {q.points} point{q.points === 1 ? '' : 's'}
+                </span>
+              </div>
+
+              <p className={styles.qPrompt}>{q.prompt}</p>
+
+              {q.question_type === 'mcq' ? (
+                <div className={styles.mcqOptions}>
+                  {(q.options || []).map((opt, i) => {
+                    const selected = answers[q.id] != null && Number(answers[q.id]) === i;
+                    return (
+                      <button key={i} type="button"
+                        className={`${styles.mcqOption} ${selected ? styles.mcqOptionSelected : ''}`}
+                        onClick={() => setAnswer(q.id, i)}>
+                        <span className={styles.mcqLetter}>{String.fromCharCode(65 + i)}</span>
+                        <span>{opt || `Option ${String.fromCharCode(65 + i)}`}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              ) : (
+                <>
+                  <textarea
+                    className={styles.codeEditor}
+                    spellCheck={false}
+                    value={typeof answers[q.id] === 'string' ? (answers[q.id] as string) : (q.starter_code ?? '')}
+                    onChange={e => setAnswer(q.id, e.target.value)}
+                  />
+                  {(q.test_cases || []).length > 0 && (
+                    <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                      <p className={styles.tcLabel}>Sample test cases</p>
+                      {q.test_cases!.map((tc, i) => (
+                        <div key={i} className={styles.tcBox}>
+                          <div className={styles.tcLabel}>Input</div>
+                          <pre className={styles.tcPre}>{tc.input || '(none)'}</pre>
+                          <div className={styles.tcLabel} style={{ marginTop: 8 }}>Expected output</div>
+                          <pre className={styles.tcPre}>{tc.expected || '(empty)'}</pre>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
+              )}
+
+              {/* Prev / Next */}
+              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 10, marginTop: 26 }}>
+                <button type="button" className={styles.secondaryBtn}
+                  onClick={() => setCurrent(c => Math.max(0, c - 1))} disabled={current === 0}>
+                  <ChevronLeft size={16} /> Previous
+                </button>
+                {current < questions.length - 1 ? (
+                  <button type="button" className={styles.primaryBtn}
+                    onClick={() => setCurrent(c => Math.min(questions.length - 1, c + 1))}>
+                    Next <ChevronRight size={16} />
+                  </button>
+                ) : (
+                  <button type="button" className={styles.primaryBtn} onClick={() => setConfirmOpen(true)} disabled={submitting}>
+                    <Send size={16} /> Submit Exam
+                  </button>
+                )}
+              </div>
+            </>
+          )}
+        </section>
+      </div>
+
+      {/* Confirm submit modal */}
+      {confirmOpen && (
+        <div className={styles.modalOverlay} onClick={() => !submitting && setConfirmOpen(false)}>
+          <div className={styles.modalCard} onClick={e => e.stopPropagation()} style={{ maxWidth: 440 }}>
+            <h3 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 800, color: '#111827' }}>Submit exam?</h3>
+            <p style={{ margin: '0 0 20px', fontSize: 13.5, color: '#475569', lineHeight: 1.6 }}>
+              You have answered <strong>{answeredCount}</strong> of <strong>{questions.length}</strong> questions.
+              {answeredCount < questions.length && ' Unanswered questions will be scored as incorrect.'}
+              {' '}Once submitted, you cannot change your answers.
+            </p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end' }}>
+              <button type="button" className={styles.secondaryBtn} onClick={() => setConfirmOpen(false)} disabled={submitting}>
+                Keep Working
+              </button>
+              <button type="button" className={styles.primaryBtn} onClick={doSubmit} disabled={submitting}>
+                {submitting ? <Loader2 size={16} className={styles.spinner} /> : <Send size={16} />} Submit
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+    </StudentShell>
+  );
+}
