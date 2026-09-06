@@ -5,6 +5,13 @@ import type {
   StudentRanking, Grade, Notification
 } from '@/types';
 
+export type { ContentModule, QuizQuestion };
+
+export interface SearchHit {
+  type: string; id: string; label: string;
+  sub_label?: string | null; link: string;
+}
+
 /** One test-case outcome from a graded-assignment submission. Hidden tests omit the I/O fields. */
 export interface AssignmentTestResult {
   index: number;
@@ -46,13 +53,60 @@ export interface ContentPage {
   display_order: number;
 }
 
-/** Full getPreLabContent response (new shape includes pages). */
+export interface ExperimentDetail {
+  id: string;
+  title: string;
+  exp_number?: number;
+  aim?: string;
+  subject_id?: string;
+  subject_name?: string;
+  subject_code?: string;
+  icon?: string;
+  concept_tags?: string[];
+  difficulty_level?: number;
+  allowed_languages?: string[];
+}
+
+/** Full getPreLabContent response (new shape includes pages and experiment metadata). */
 export interface PreLabContentResponse {
   modules: ContentModule[];
   pages: ContentPage[];
+  experiment?: ExperimentDetail;
+  /** Server clock (ISO-Z) so deadline countdowns never trust the client clock. */
+  server_now?: string;
+}
+
+/** Response of GET /student/prelab/<module_id>/quiz/start. */
+export interface QuizStartResponse {
+  questions: QuizQuestion[];
+  /** Optional per-quiz countdown (Feature 3); null = untimed. */
+  time_limit_minutes: number | null;
+  /** Server clock (ISO-Z) captured when the questions were fetched. */
+  server_now: string;
+}
+
+// In-memory cache to eliminate redundant network waterfalls on tab switching
+const memoryCache = new Map<string, { data: unknown; expiresAt: number }>();
+
+function getCached<T>(key: string): T | null {
+  const item = memoryCache.get(key);
+  if (!item) return null;
+  if (Date.now() > item.expiresAt) {
+    memoryCache.delete(key);
+    return null;
+  }
+  return item.data as T;
+}
+
+function setCached<T>(key: string, data: T, ttlMs: number): void {
+  memoryCache.set(key, { data, expiresAt: Date.now() + ttlMs });
 }
 
 export const studentService = {
+
+  clearCache(): void {
+    memoryCache.clear();
+  },
 
   // ── Dashboard ───────────────────────────────────────────────────────────────
   // GET /api/student/dashboard
@@ -63,14 +117,25 @@ export const studentService = {
 
   // ── Subjects & Experiments ──────────────────────────────────────────────────
   // GET /api/student/subjects
-  async getSubjects(): Promise<SectionSubject[]> {
+  async getSubjects(force = false): Promise<SectionSubject[]> {
+    if (!force) {
+      const cached = getCached<SectionSubject[]>('student_subjects');
+      if (cached) return cached;
+    }
     const { data } = await apiClient.get<{ subjects: SectionSubject[] }>('/student/subjects');
+    setCached('student_subjects', data.subjects, 30_000); // 30s cache
     return data.subjects;
   },
 
   // GET /api/student/experiments/<subject_id>
-  async getExperiments(subjectId: string): Promise<Experiment[]> {
+  async getExperiments(subjectId: string, force = false): Promise<Experiment[]> {
+    const cacheKey = `student_experiments_${subjectId}`;
+    if (!force) {
+      const cached = getCached<Experiment[]>(cacheKey);
+      if (cached) return cached;
+    }
     const { data } = await apiClient.get<{ experiments: Experiment[] }>(`/student/experiments/${subjectId}`);
+    setCached(cacheKey, data.experiments, 60_000); // 60s cache
     return data.experiments;
   },
 
@@ -110,15 +175,19 @@ export const studentService = {
 
   // ── Quiz Gate ───────────────────────────────────────────────────────────────
   // GET /api/student/prelab/<module_id>/quiz/start
-  async getQuizQuestions(moduleId: string): Promise<QuizQuestion[]> {
-    const { data } = await apiClient.get<{ questions: QuizQuestion[] }>(`/student/prelab/${moduleId}/quiz/start`);
-    return data.questions;
+  async getQuizQuestions(moduleId: string): Promise<QuizStartResponse> {
+    const { data } = await apiClient.get<{ questions: QuizQuestion[]; time_limit_minutes?: number | null; server_now?: string }>(`/student/prelab/${moduleId}/quiz/start`);
+    return {
+      questions: data.questions,
+      time_limit_minutes: data.time_limit_minutes ?? null,
+      server_now: data.server_now ?? new Date().toISOString(),
+    };
   },
 
   // POST /api/student/prelab/<module_id>/quiz/submit
-  async submitQuiz(moduleId: string, answers: Record<string, string>) {
-    const { data } = await apiClient.post(`/student/prelab/${moduleId}/quiz/submit`, { answers });
-    return data; // { score, passed, threshold, attempts_used, correct_count, total_points }
+  async submitQuiz(moduleId: string, answers: Record<string, string>, startedAt?: string | null) {
+    const { data } = await apiClient.post(`/student/prelab/${moduleId}/quiz/submit`, { answers, started_at: startedAt ?? undefined });
+    return data; // { score, passed, threshold, attempts_used, correct_count, total_points, timed_out }
   },
 
   // GET /api/student/sessions/<session_id>/check-gate
@@ -170,6 +239,13 @@ export const studentService = {
   async getNotifications(): Promise<Notification[]> {
     const { data } = await apiClient.get<{ notifications: Notification[] }>('/student/notifications');
     return data.notifications;
+  },
+
+  // ── Shell search (sessions/experiments/practice problems) ─────────────────
+  async search(q: string, types = 'sessions,experiments,problems'): Promise<SearchHit[]> {
+    const { data } = await apiClient.get('/student/search', { params: { q, types } })
+      .catch(() => ({ data: { results: [] as SearchHit[] } }));
+    return data.results ?? [];
   },
 
   // ── Anonymous Feedback ──────────────────────────────────────────────────────

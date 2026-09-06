@@ -1,10 +1,11 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import StudentShell from '@/components/layout/StudentShell';
 import { studentService } from '@/services/student.service';
 import type { StudentDashboard, LabSession, Experiment } from '@/types';
+import { getGlobalSocket } from '@/lib/socket';
 import {
   FlaskConical, Terminal, Upload, Trophy, Calendar, Filter,
   Plus, Code2, Cpu, Crosshair, Beaker, Thermometer, Loader2
@@ -30,35 +31,55 @@ export default function StudentDashboard() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
-  useEffect(() => {
-    let cancelled = false;
-    (async () => {
-      try {
-        const [d, sess, subjects] = await Promise.all([
-          studentService.getDashboard(),
-          studentService.getSessions(),
-          studentService.getSubjects(),
-        ]);
-        if (cancelled) return;
-        setDash(d);
-        setSessions(sess as SessionWithMeta[]);
+  const fetchData = useCallback(async () => {
+    try {
+      const [d, sess, subjects] = await Promise.all([
+        studentService.getDashboard(),
+        studentService.getSessions(),
+        studentService.getSubjects(),
+      ]);
+      setDash(d);
+      setSessions(sess as SessionWithMeta[]);
 
-        // Build experiment title lookup across all enrolled subjects
-        const expLists = await Promise.all(
-          subjects.map(s => studentService.getExperiments(s.subject_id).catch(() => [] as Experiment[]))
-        );
-        if (cancelled) return;
-        const titles: Record<string, string> = {};
-        expLists.flat().forEach(e => { titles[e.id] = e.title; });
-        setExpTitles(titles);
-      } catch (e) {
-        if (!cancelled) setError(e instanceof Error ? e.message : 'Failed to load dashboard');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    })();
-    return () => { cancelled = true; };
+      // Build experiment title lookup across all enrolled subjects
+      const expLists = await Promise.all(
+        subjects.map(s => studentService.getExperiments(s.subject_id).catch(() => [] as Experiment[]))
+      );
+      const titles: Record<string, string> = {};
+      expLists.flat().forEach(e => { titles[e.id] = e.title; });
+      setExpTitles(titles);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : 'Failed to load dashboard');
+    } finally {
+      setLoading(false);
+    }
   }, []);
+
+  useEffect(() => {
+    fetchData();
+    const t = setInterval(fetchData, 20_000);
+    return () => clearInterval(t);
+  }, [fetchData]);
+
+  // Real-time socket listener: when session is started or ended, reload immediately!
+  useEffect(() => {
+    const socket = getGlobalSocket();
+    if (!socket) return;
+
+    const onSessionChange = () => {
+      fetchData();
+    };
+
+    socket.on('session_started', onSessionChange);
+    socket.on('session_ended', onSessionChange);
+    socket.on('new_notification', onSessionChange);
+
+    return () => {
+      socket.off('session_started', onSessionChange);
+      socket.off('session_ended', onSessionChange);
+      socket.off('new_notification', onSessionChange);
+    };
+  }, [fetchData]);
 
   if (loading) {
     return (
