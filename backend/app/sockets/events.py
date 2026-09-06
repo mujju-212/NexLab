@@ -39,6 +39,42 @@ def _persist_proctor_event(institution_id: str, session_id: str, student_id: str
             pass
 
 
+def _get_session_or_none(session_id):
+    """
+    Resolve a LabSession for socket handlers, enforcing tenancy:
+    the session must exist, belong to the caller's institution, and be live.
+    Returns None (and logs why at debug level) when any check fails, so a
+    forged or foreign session_id can neither receive relays nor poison
+    attendance / proctor analytics.
+    """
+    if not session_id:
+        return None
+    from flask import session as sock_session
+    user = sock_session.get('user') or {}
+    try:
+        sess = LabSession.query.filter_by(
+            id=session_id, institution_id=user.get('institution_id')
+        ).first()
+        if not sess or sess.status != 'active':
+            return None
+        return sess
+    except Exception:
+        return None
+
+
+def _cap_elapsed(raw) -> int:
+    """
+    Heartbeat elapsed_seconds sanity cap. A well-behaved client sends ~30s;
+    anything above 90s is treated as clock skew / tampering and clamped so
+    presence time can't be inflated by a modified client.
+    """
+    try:
+        val = int(raw)
+    except (TypeError, ValueError):
+        return 0
+    return max(0, min(val, 90))
+
+
 def get_user_from_token(token):
     """Extract user claims from JWT token passed in Socket.io auth"""
     try:
@@ -73,6 +109,19 @@ def handle_connect(auth):
     from flask import session as sock_session
     sock_session['user'] = user
 
+    # Automatically join personal and role rooms for real-time routing
+    uid = user.get('user_id')
+    if uid:
+        join_room(f"user_{uid}")
+        if user.get('role') == 'student':
+            join_room(f"student_{uid}")
+    role = user.get('role')
+    if role:
+        join_room(f"role_{role}")
+    inst_id = user.get('institution_id')
+    if inst_id:
+        join_room(f"institution_{inst_id}")
+
 
 @socketio.on('disconnect')
 def handle_disconnect():
@@ -93,11 +142,28 @@ def handle_join_session(data):
     session_id = data.get('session_id')
     role = user['role']
 
+    # Tenancy + liveness: reject sessions that don't exist, aren't ours, or aren't live.
+    sess = _get_session_or_none(session_id)
+    if not sess:
+        emit('session_error', {'error': 'Session not found, not active, or not in your institution'})
+        return
+
     if role in ('instructor', 'institution_admin'):
         # Instructor joins instructor room
         join_room(f"session_{session_id}_instructor")
         emit('joined', {'room': 'instructor', 'session_id': session_id})
     else:
+        # Enrollment check: only students enrolled in the session's section
+        # may join (and get attendance). Prevents a student from another
+        # section (or a shared login) silently joining someone else's class.
+        from app.models.academic import SectionSubject, SectionStudent
+        ss = SectionSubject.query.get(sess.section_subject_id)
+        enrolled = ss and SectionStudent.query.filter_by(
+            section_id=ss.section_id, student_id=user['user_id']).first()
+        if not enrolled:
+            emit('session_error', {'error': 'You are not enrolled in this session.'})
+            return
+
         # Student joins student room
         join_room(f"session_{session_id}_students")
         join_room(f"student_{user['user_id']}")  # private room for targeted messages
@@ -110,11 +176,14 @@ def handle_join_session(data):
             attendance = SessionAttendance(
                 session_id=session_id,
                 student_id=user['user_id'],
-                status='absent',
+                status='present',
                 total_time_seconds=0,
                 reconnect_count=0,
             )
             db.session.add(attendance)
+        else:
+            if attendance.status == 'absent':
+                attendance.status = 'present'
         if not attendance.joined_at:
             attendance.joined_at = datetime.utcnow()
         else:
@@ -125,6 +194,7 @@ def handle_join_session(data):
         emit('student_joined', {
             'student_id': user['user_id'],
             'full_name': user['full_name'],
+            'status': attendance.status,
             'timestamp': datetime.utcnow().isoformat(),
         }, room=f"session_{session_id}_instructor")
 
@@ -145,6 +215,7 @@ def handle_leave_session(data):
         # Notify instructor
         emit('student_left', {
             'student_id': user['user_id'],
+            'full_name': user.get('full_name', ''),
             'timestamp': datetime.utcnow().isoformat(),
         }, room=f"session_{session_id}_instructor")
 
@@ -163,7 +234,11 @@ def handle_heartbeat(data):
         return
 
     session_id    = data.get('session_id')
-    elapsed       = int(data.get('elapsed_seconds', 30))
+    elapsed       = _cap_elapsed(data.get('elapsed_seconds', 30))
+
+    # Tenancy: only accumulate time on a live session in the caller's institution.
+    if not _get_session_or_none(session_id):
+        return
 
     attendance = SessionAttendance.query.filter_by(
         session_id=session_id, student_id=user['user_id']
@@ -171,6 +246,48 @@ def handle_heartbeat(data):
     if attendance:
         attendance.total_time_seconds = (attendance.total_time_seconds or 0) + elapsed
         db.session.commit()
+
+
+# ── Checkpoint Events ──────────────────────────────────────────────────────────
+
+# ── Poll voting (T2-10) ────────────────────────────────────────────────────────
+
+@socketio.on('poll_vote')
+def handle_poll_vote(data):
+    """Student votes on an open poll; server tallies and relays to both rooms."""
+    from flask import session as sock_session
+    user = sock_session.get('user')
+    if not user or user['role'] != 'student':
+        return
+
+    from app.models.enhancements import SessionPoll
+    poll_id = data.get('poll_id')
+    option_idx = data.get('option_idx')
+    poll = SessionPoll.query.get(poll_id)
+    if not poll or not poll.is_open:
+        return
+
+    sess = _get_session_or_none(poll.session_id)
+    if not sess:
+        return
+
+    try:
+        option_idx = int(option_idx)
+    except (TypeError, ValueError):
+        return
+    if option_idx < 0 or option_idx >= len(poll.options or []):
+        return
+
+    responses = dict(poll.responses or {})
+    responses[user['user_id']] = option_idx
+    poll.responses = responses
+    db.session.commit()
+
+    results = poll.results()
+    payload = {'poll_id': poll.id, 'results': results,
+               'responses_count': len(responses)}
+    emit('poll_update', payload, room=f"session_{poll.session_id}_instructor")
+    emit('my_poll_vote', {'poll_id': poll.id, 'option_idx': option_idx})
 
 
 # ── Checkpoint Events ──────────────────────────────────────────────────────────
@@ -227,7 +344,17 @@ def handle_checkpoint(data):
 
 @socketio.on('focus_score_update')
 def handle_focus_update(data):
-    """Focus score computed by ML microservice — relay to instructor"""
+    """Focus score computed by ML microservice — relay to instructor.
+
+    Auth: instructor/admin only. A student must never be able to inject
+    focus scores or integrity alerts for themselves or classmates — the
+    student-side path is `behavioral_signals` (server-scored) instead.
+    """
+    from flask import session as sock_session
+    user = sock_session.get('user')
+    if not user or user['role'] not in ('instructor', 'institution_admin'):
+        return
+
     session_id  = data.get('session_id')
     student_id  = data.get('student_id')
     focus_score = data.get('focus_score')
@@ -256,7 +383,7 @@ def handle_focus_update(data):
 
 @socketio.on('instructor_broadcast')
 def handle_broadcast(data):
-    """Instructor sends message to all students"""
+    """Instructor sends message to all students. Auth: instructor/admin only."""
     from flask import session as sock_session
     user = sock_session.get('user')
     if not user or user['role'] not in ('instructor', 'institution_admin'):
@@ -274,7 +401,16 @@ def handle_broadcast(data):
 
 @socketio.on('message_student')
 def handle_private_message(data):
-    """Instructor sends private message to one student"""
+    """Instructor sends private message to one student.
+
+    Auth: instructor/admin only — a student must not be able to spoof
+    'instructor' DMs into another student's private room.
+    """
+    from flask import session as sock_session
+    user = sock_session.get('user')
+    if not user or user['role'] not in ('instructor', 'institution_admin'):
+        return
+
     session_id = data.get('session_id')
     student_id = data.get('student_id')
     message    = data.get('message')
@@ -287,6 +423,12 @@ def handle_private_message(data):
 
 @socketio.on('session_extended')
 def handle_session_extended(data):
+    """Instructor extends session time. Auth: instructor/admin only."""
+    from flask import session as sock_session
+    user = sock_session.get('user')
+    if not user or user['role'] not in ('instructor', 'institution_admin'):
+        return
+
     session_id     = data.get('session_id')
     added_minutes  = data.get('added_minutes')
     emit('session_time_extended', {
@@ -297,6 +439,13 @@ def handle_session_extended(data):
 
 @socketio.on('force_submit')
 def handle_force_submit(data):
+    """Force one student to submit. Auth: instructor/admin only — this is a
+    destructive classroom action a student must never be able to trigger."""
+    from flask import session as sock_session
+    user = sock_session.get('user')
+    if not user or user['role'] not in ('instructor', 'institution_admin'):
+        return
+
     session_id = data.get('session_id')
     student_id = data.get('student_id')
     emit('force_submission', {
@@ -320,6 +469,10 @@ def handle_tab_switch(data):
     session_id   = data.get('session_id')
     switch_count = data.get('count', 1)
     severity     = 'high' if switch_count >= 3 else 'medium'
+
+    # Tenancy: a forged/foreign session_id must not poison integrity analytics.
+    if not _get_session_or_none(session_id):
+        return
 
     # Persist event for analytics
     _persist_proctor_event(
@@ -353,6 +506,10 @@ def handle_fullscreen_exit(data):
         return
 
     session_id = data.get('session_id')
+
+    # Tenancy: a forged/foreign session_id must not poison integrity analytics.
+    if not _get_session_or_none(session_id):
+        return
 
     # Persist event for analytics
     _persist_proctor_event(
@@ -445,6 +602,10 @@ def handle_screen_share_stopped(data):
 
     session_id = data.get('session_id')
 
+    # Tenancy: a forged/foreign session_id must not poison integrity analytics.
+    if not _get_session_or_none(session_id):
+        return
+
     # Persist event for analytics
     _persist_proctor_event(
         institution_id = user.get('institution_id', ''),
@@ -510,6 +671,10 @@ def handle_lockdown_violation(data):
 
     session_id = data.get('session_id')
     action     = data.get('action', 'unknown')
+
+    # Tenancy: a forged/foreign session_id must not poison integrity analytics.
+    if not _get_session_or_none(session_id):
+        return
 
     # Persist event for analytics
     _persist_proctor_event(
