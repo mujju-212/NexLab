@@ -135,26 +135,37 @@ def live_state(session_id):
             ]
 
         # Progress per (student, checkpoint)
-        if cps and students:
-            cp_ids = [cp.id for cp in cps]
+        if students:
+            cp_ids = [cp.id for cp in cps] if cps else []
             progress_rows = CheckpointProgress.query.filter(
                 CheckpointProgress.session_id == session_id,
                 CheckpointProgress.student_id.in_([s['student_id'] for s in students]),
                 CheckpointProgress.checkpoint_id.in_(cp_ids),
-            ).all()
+            ).all() if cp_ids else []
             prog_by_key = {
                 (p.student_id, p.checkpoint_id): p
                 for p in progress_rows
             }
 
-            # Latest focus per student
+            # Latest focus per student — ONE batched query instead of N
             from app.models.knowledge import FocusScore
             focus_map = {}
-            for sid in [s['student_id'] for s in students]:
-                fs = FocusScore.query.filter_by(
-                    session_id=session_id, student_id=sid
-                ).order_by(FocusScore.recorded_at.desc()).first()
-                focus_map[sid] = fs.focus_score if fs else None
+            if students:
+                sids = [s['student_id'] for s in students]
+                focus_rows = (
+                    FocusScore.query
+                    .filter(
+                        FocusScore.session_id == session_id,
+                        FocusScore.student_id.in_(sids),
+                    )
+                    # newest row per student: window over recorded_at desc
+                    .order_by(FocusScore.student_id, FocusScore.recorded_at.desc())
+                    .distinct(FocusScore.student_id)
+                    .with_entities(FocusScore.student_id, FocusScore.focus_score)
+                    .all()
+                )
+                for sid, score in focus_rows:
+                    focus_map[sid] = score
 
             # Proctor event counts per student
             from app.models.proctor_event import ProctorEvent
@@ -292,6 +303,11 @@ def set_mode(session_id):
         actor_id=g.user_id, reason=reason,
     ))
     db.session.commit()
+
+    # D3 — ending the session triggers background grade finalization
+    # (quiz-grade population + final blend) without blocking the response.
+    if to_mode == 'ended' and sess.experiment_id:
+        _spawn_finalize_worker(session_id)
 
     socketio.emit('session_mode_changed', {
         'mode': to_mode,
@@ -477,11 +493,16 @@ def broadcast(session_id):
 
     socketio.emit('instructor_message', {
         'message': message,
-        'from': sender_name,
-        'timestamp': datetime.utcnow().isoformat(),
+        'from': sender_name,        'timestamp': datetime.utcnow().isoformat(),
     }, room=f"session_{session_id}_students")
 
-    return jsonify({'message': chat.to_dict()}), 200
+    # The instructor's own log and student chat logs must show this broadcast
+    payload = chat.to_dict()
+    payload['from_name'] = sender_name
+    socketio.emit('chat_message', payload, room=f"session_{session_id}_students")
+    socketio.emit('chat_message', payload, room=f"session_{session_id}_instructor")
+
+    return jsonify({'message': payload}), 200
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -543,13 +564,29 @@ def get_chat(session_id):
         except ValueError:
             pass
     rows = q.order_by(ChatMessage.at.asc()).limit(200).all()
-    return jsonify({'messages': [c.to_dict() for c in rows]}), 200
+    user_ids = set()
+    for c in rows:
+        if c.from_id:
+            user_ids.add(c.from_id)
+        if c.to_id:
+            user_ids.add(c.to_id)
+    from app.models.user import User as _U
+    users = _U.query.filter(_U.id.in_(list(user_ids))).all() if user_ids else []
+    name_map = {u.id: u.full_name for u in users}
+    res = []
+    for c in rows:
+        d = c.to_dict()
+        d['from_name'] = name_map.get(c.from_id, 'User')
+        if c.to_id:
+            d['to_name'] = name_map.get(c.to_id, 'User')
+        res.append(d)
+    return jsonify({'messages': res}), 200
 
 
 @conductor_bp.route('/sessions/<session_id>/chat', methods=['POST'])
 @require_role('instructor', 'institution_admin', 'student')
 def send_chat(session_id):
-    """Send a chat message. Students may only message the instructor;
+    """Send a chat message. Students may message the group (to_id null) or instructor;
     instructors may broadcast (to_id null) or message one student."""
     data = request.get_json() or {}
     text = (data.get('text') or '').strip()
@@ -559,20 +596,31 @@ def send_chat(session_id):
 
     role = getattr(g, 'role', None)
 
-    # Verify session exists
+    # Verify session exists AND belongs to the sender's institution
     sess = LabSession.query.get(session_id)
     if not sess:
         return jsonify({'error': 'Session not found.'}), 404
+    if getattr(sess, 'institution_id', None) != getattr(g, 'institution_id', None):
+        return jsonify({'error': 'Session not found.'}), 404
 
-    # Students -> instructor only
+    # Students may only chat inside a live session they attend.
     if role == 'student':
-        to_id = sess.section_subject_id  # resolved below
-        ss = SectionSubject.query.get(sess.section_subject_id)
-        if not ss:
-            return jsonify({'error': 'Session has no instructor.'}), 400
-        to_id = ss.instructor_id
+        enrolled = SectionStudent.query.filter_by(
+            section_id=SectionSubject.query.get(sess.section_subject_id).section_id,
+            student_id=g.user_id,
+        ).first()
+        if not enrolled:
+            return jsonify({'error': 'You are not enrolled in this session.'}), 403
+
+    if role == 'student':
+        # If student specified a target (direct chat with instructor), resolve instructor ID
+        if to_id:
+            ss = SectionSubject.query.get(sess.section_subject_id)
+            to_id = ss.instructor_id if ss else to_id
+        else:
+            to_id = None
     else:
-        # Instructor can broadcast or target a student
+        # Instructor can broadcast (to_id is None) or target a student
         to_id = to_id or None
 
     chat = ChatMessage(session_id=session_id, from_id=g.user_id, to_id=to_id, text=text)
@@ -583,14 +631,20 @@ def send_chat(session_id):
     from app.models.user import User as _U
     sender = _U.query.get(g.user_id)
     payload['from_name'] = sender.full_name if sender else ''
+    # Include the recipient's name for 1:1 DMs so the UI can label the thread.
+    if to_id:
+        recipient = _U.query.get(to_id)
+        payload['to_name'] = recipient.full_name if recipient else ''
 
-    if role == 'student':
-        # Relay to instructor room
-        socketio.emit('chat_message', payload, room=f"session_{session_id}_instructor")
-    elif to_id:
-        socketio.emit('chat_message', payload, room=f"student_{to_id}")
-    else:
+    if not to_id:
+        # Group broadcast: send to both student room and instructor room
         socketio.emit('chat_message', payload, room=f"session_{session_id}_students")
+        socketio.emit('chat_message', payload, room=f"session_{session_id}_instructor")
+    else:
+        # Direct 1:1 message
+        socketio.emit('chat_message', payload, room=f"student_{to_id}")
+        socketio.emit('chat_message', payload, room=f"student_{g.user_id}")
+        socketio.emit('chat_message', payload, room=f"session_{session_id}_instructor")
 
     return jsonify({'message': payload}), 200
 
@@ -624,6 +678,218 @@ def student_code_snapshot(session_id, student_id):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+# Student detail — full per-student dossier for the Conductor "View" page
+# ══════════════════════════════════════════════════════════════════════════════
+
+@conductor_bp.route('/sessions/<session_id>/student/<student_id>/detail', methods=['GET'])
+@require_role('instructor', 'institution_admin')
+def student_detail(session_id, student_id):
+    """Everything the Student Details page shows: identity, focus timeline,
+    checkpoints, quiz/assignment grades, code executions, submissions,
+    proctor breakdown, files, and the latest code snapshot."""
+    sess = _require_my_session(session_id)
+    if not sess:
+        return jsonify({'error': 'Session not found or not assigned to you.'}), 404
+
+    stu = User.query.get(student_id)
+    if not stu:
+        return jsonify({'error': 'Student not found.'}), 404
+
+    exp_id = sess.experiment_id
+    from app.models.knowledge import FocusScore
+    from app.models.proctor_event import ProctorEvent
+    from app.models.grading import Grade
+    from app.models.experiment import ContentModule, ContentProgress
+
+    # ── Focus timeline (this session, chronological) ───────────────────────
+    focus_rows = FocusScore.query.filter_by(
+        session_id=session_id, student_id=student_id
+    ).order_by(FocusScore.recorded_at.asc()).all()
+    focus_timeline = [
+        {'at': f.recorded_at.isoformat() if f.recorded_at else None, 'score': f.focus_score}
+        for f in focus_rows if f.focus_score is not None
+    ]
+    latest_focus = focus_timeline[-1]['score'] if focus_timeline else None
+
+    # ── Checkpoints (with this student's status) ───────────────────────────
+    checkpoints = []
+    verified_count = 0
+    if exp_id:
+        cps = Checkpoint.query.filter_by(experiment_id=exp_id).order_by(Checkpoint.order).all()
+        prog = {
+            p.checkpoint_id: p for p in CheckpointProgress.query.filter_by(
+                session_id=session_id, student_id=student_id).all()
+        }
+        for cp in cps:
+            p = prog.get(cp.id)
+            status = p.status if p else 'pending'
+            if status in ('verified', 'manual_pass'):
+                verified_count += 1
+            checkpoints.append({
+                'id': cp.id, 'order': cp.order, 'title': cp.title, 'status': status,
+                'passed_at': p.passed_at.isoformat() if (p and p.passed_at) else None,
+            })
+
+    # ── Code attempts (executions + final submissions) ─────────────────────
+    attempts = CodeAttempt.query.filter_by(
+        session_id=session_id, student_id=student_id
+    ).order_by(CodeAttempt.submitted_at.desc()).all() if exp_id else []
+    exec_count = len(attempts)
+    finals = [a for a in attempts if a.is_final_submission]
+
+    # ── Grade (quiz + assignment scores) ───────────────────────────────────
+    grade = Grade.query.filter_by(
+        student_id=student_id, experiment_id=exp_id, session_id=session_id
+    ).first() if exp_id else None
+
+    # ── Quiz progress (best score across quiz modules of this experiment) ──
+    quiz_status, quiz_score = 'not_started', None
+    if exp_id:
+        quiz_mods = ContentModule.query.filter_by(experiment_id=exp_id, module_type='quiz').all()
+        quiz_ids = [m.id for m in quiz_mods]
+        if quiz_ids:
+            qps = ContentProgress.query.filter(
+                ContentProgress.module_id.in_(quiz_ids),
+                ContentProgress.student_id == student_id,
+            ).all()
+            scored = [p.score for p in qps if p.score is not None]
+            if scored:
+                quiz_score = round(max(scored), 1)
+                quiz_status = 'submitted'
+
+    assign_status = 'submitted' if finals else ('in_progress' if attempts else 'not_started')
+    assign_score = None
+    if finals:
+        best = max((a.test_cases_passed / a.test_cases_total * 100 if a.test_cases_total else 0) for a in finals)
+        assign_score = round(best, 1)
+
+    # ── Proctor event breakdown ────────────────────────────────────────────
+    from collections import defaultdict
+    pe_counts = defaultdict(int)
+    for pe in ProctorEvent.query.filter_by(session_id=session_id, student_id=student_id).all():
+        pe_counts[pe.event_type] += 1
+
+    # ── Submissions list (quiz/assignment/code rows with full details) ───
+    submissions = []
+    if exp_id:
+        quiz_mods = ContentModule.query.filter_by(experiment_id=exp_id, module_type='quiz').all()
+        for qmod in quiz_mods:
+            qp = ContentProgress.query.filter_by(module_id=qmod.id, student_id=student_id).first()
+            if qp and (qp.completed or qp.score is not None or qp.answers):
+                questions_data = []
+                cdata = qmod.content_data or {}
+                raw_questions = cdata.get('questions', [])
+                student_answers = qp.answers or {}
+                for idx, q in enumerate(raw_questions):
+                    qid = str(q.get('id', idx))
+                    user_ans = student_answers.get(qid, {})
+                    chosen = user_ans.get('answer') if isinstance(user_ans, dict) else user_ans
+                    is_correct = user_ans.get('correct') if isinstance(user_ans, dict) else None
+                    questions_data.append({
+                        'id': qid,
+                        'question': q.get('question', q.get('title', f'Question {idx + 1}')),
+                        'options': q.get('options', []),
+                        'selected': chosen,
+                        'correct_answer': q.get('correct_answer'),
+                        'is_correct': is_correct if is_correct is not None else (chosen == q.get('correct_answer')),
+                        'explanation': q.get('explanation', ''),
+                    })
+
+                submissions.append({
+                    'id': f'quiz-{qp.module_id}',
+                    'type': 'Quiz',
+                    'title': qmod.title or 'Concept Quiz',
+                    'status': 'graded' if qp.score is not None else 'submitted',
+                    'score': round(qp.score, 1) if qp.score is not None else None,
+                    'at': qp.completed_at.isoformat() if qp.completed_at else (qp.last_attempt_at.isoformat() if qp.last_attempt_at else None),
+                    'questions': questions_data,
+                    'total_questions': len(raw_questions),
+                })
+
+    if not any(s['type'] == 'Quiz' for s in submissions) and grade and grade.quiz_grade is not None:
+        submissions.insert(0, {
+            'id': 'quiz-grade',
+            'type': 'Quiz',
+            'title': 'Pre-Lab Quiz',
+            'status': 'graded',
+            'score': grade.quiz_grade,
+            'at': grade.graded_at.isoformat() if grade.graded_at else None,
+            'questions': [],
+            'total_questions': 0,
+        })
+
+    attempts_to_show = finals[:10] if finals else attempts[:5]
+    for a in attempts_to_show:
+        submissions.append({
+            'id': a.id,
+            'type': 'Assignment' if a.is_final_submission else 'Execution',
+            'title': f'Attempt #{a.attempt_number}' + (' (Final)' if a.is_final_submission else ''),
+            'status': 'submitted',
+            'score': (round(a.test_cases_passed / a.test_cases_total * 100, 1) if a.test_cases_total else None),
+            'at': a.submitted_at.isoformat() if a.submitted_at else None,
+            'tests': f'{a.test_cases_passed or 0}/{a.test_cases_total or 0}',
+            'language': a.language,
+            'compile_status': a.compile_status,
+            'compile_output': a.compile_output,
+            'stdout': a.stdout,
+            'stderr': a.stderr,
+            'files': a.files,
+            'execution_time_ms': a.execution_time_ms,
+            'loc': a.loc,
+            'quality_grade': a.quality_grade,
+        })
+
+    # ── Latest code snapshot / files ───────────────────────────────────────
+    version = CodeVersion.query.filter_by(
+        session_id=session_id, student_id=student_id
+    ).order_by(CodeVersion.saved_at.desc()).first()
+
+    # ── Attendance / activity ──────────────────────────────────────────────
+    att = SessionAttendance.query.filter_by(session_id=session_id, student_id=student_id).first()
+    att_status = att.status if att else 'not_joined'
+    if att and (att.joined_at or att.status in ('present', 'joined')):
+        att_status = 'present'
+    elif focus_timeline or attempts:
+        att_status = 'present'
+
+    return jsonify({
+        'student': {
+            'id': stu.id, 'full_name': stu.full_name, 'roll_number': stu.roll_number,
+            'email': stu.email,
+        },
+        'attendance_status': att_status,
+        'joined_at': att.joined_at.isoformat() if (att and att.joined_at) else None,
+        'total_time_sec': att.total_time_seconds if att else 0,
+        'focus_score': latest_focus,
+        'focus_timeline': focus_timeline,
+        'checkpoints': checkpoints,
+        'checkpoints_done': verified_count,
+        'checkpoints_total': len(checkpoints),
+        'code_executions': exec_count,
+        'last_attempt_at': attempts[0].submitted_at.isoformat() if (attempts and attempts[0].submitted_at) else None,
+        'quiz_status': quiz_status,
+        'quiz_score': quiz_score,
+        'assignment_status': assign_status,
+        'assignment_score': assign_score,
+        'final_grade': grade.final_grade if grade else None,
+        'proctor_events': {
+            'tab_switch': pe_counts.get('tab_switch', 0),
+            'fullscreen_exit': pe_counts.get('fullscreen_exit', 0),
+            'copy_paste': pe_counts.get('copy_paste', 0) + pe_counts.get('paste', 0) + pe_counts.get('cut', 0),
+            'lockdown_violation': pe_counts.get('lockdown_violation', 0),
+            'total': sum(pe_counts.values()),
+        },
+        'submissions': submissions,
+        'latest_code': {
+            'files': version.files if version else None,
+            'saved_at': version.saved_at.isoformat() if (version and version.saved_at) else None,
+            'save_type': version.save_type if version else None,
+        },
+        'experiment': {'id': exp_id, 'title': (Experiment.query.get(exp_id).title if exp_id else None)},
+    }), 200
+
+
+# ══════════════════════════════════════════════════════════════════════════════
 # Grade finalization (D3) — quiz grade population + final blend recompute
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -637,9 +903,17 @@ def finalize_grades(session_id):
     if not sess or not sess.experiment_id:
         return jsonify({'error': 'Session has no experiment to grade.'}), 400
 
+    updated, count = _finalize_grades_core(sess)
+    return jsonify({'updated': updated, 'count': count}), 200
+
+
+def _finalize_grades_core(sess):
+    """Grade finalization shared by the HTTP route and the session-end
+    background worker (D3: mode → ended triggers this automatically)."""
     exp = Experiment.query.get(sess.experiment_id)
+    session_id = sess.id
     if not exp:
-        return jsonify({'error': 'Experiment not found.'}), 404
+        return [], 0
 
     rubric = {
         'test_cases':   exp.rubric_test_cases or 0,
@@ -661,6 +935,26 @@ def finalize_grades(session_id):
     attendance = SessionAttendance.query.filter_by(session_id=session_id).all()
     student_ids |= {a.student_id for a in attendance if a.status != 'absent'}
 
+    # Quiz modules + their best progress scores — batch ONCE, not per student.
+    # (Each loop iteration previously re-queried ContentModule + ContentProgress.)
+    # ContentProgress.score is already the best-per-module; average across the
+    # experiment's quiz modules to match the original per-student mean.
+    quiz_module_ids = [
+        qm.id for qm in ContentModule.query.filter_by(
+            experiment_id=exp.id, module_type='quiz').all()
+    ]
+    quiz_scores_by_student: dict[str, list[float]] = {}
+    if quiz_module_ids:
+        cps = ContentProgress.query.filter(
+            ContentProgress.module_id.in_(quiz_module_ids),
+        ).with_entities(
+            ContentProgress.student_id, ContentProgress.score,
+        ).all()
+        for c_sid, c_score in cps:
+            if c_score is None:
+                continue
+            quiz_scores_by_student.setdefault(c_sid, []).append(c_score)
+
     updated = []
     for sid in student_ids:
         # Best auto grade from final submissions
@@ -679,15 +973,8 @@ def finalize_grades(session_id):
             grade_map = {'A': 10, 'B': 8, 'C': 6, 'D': 4, 'E': 2, 'F': 0}
             quality_score = max(grade_map.get(q, 0) for q in quality_scores)
 
-        # Quiz grade from ContentProgress on quiz modules of this experiment
-        quiz_modules = ContentModule.query.filter_by(
-            experiment_id=exp.id, module_type='quiz').all()
-        quiz_scores = []
-        for qm in quiz_modules:
-            cp = ContentProgress.query.filter_by(
-                student_id=sid, module_id=qm.id).first()
-            if cp and cp.score is not None:
-                quiz_scores.append(cp.score)
+        # Quiz grade from pre-batched ContentProgress scores (no per-student queries)
+        quiz_scores = quiz_scores_by_student.get(sid, [])
         quiz_grade = round(sum(quiz_scores) / len(quiz_scores), 2) if quiz_scores else None
 
         # Upsert Grade
@@ -713,4 +1000,28 @@ def finalize_grades(session_id):
         })
 
     db.session.commit()
-    return jsonify({'updated': updated, 'count': len(updated)}), 200
+    return updated, len(updated)
+
+
+def _spawn_finalize_worker(session_id):
+    """D3 — on session end, grade finalization runs in the background so the
+    HTTP response returns immediately. Separate app context, like the report
+    worker; failures are logged, never raised into the request."""
+    import threading
+
+    def _worker():
+        from app import create_app
+        worker_app = create_app()
+        with worker_app.app_context():
+            try:
+                sess = db.session.get(LabSession, session_id)
+                if sess and sess.experiment_id:
+                    _finalize_grades_core(sess)
+            except Exception as exc:
+                db.session.rollback()
+                import logging
+                logging.getLogger(__name__).warning(
+                    '[conductor] auto-finalize failed for session %s: %s',
+                    session_id, exc)
+
+    threading.Thread(target=_worker, daemon=True).start()

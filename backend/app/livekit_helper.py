@@ -115,3 +115,64 @@ def make_token(
     except Exception as exc:
         current_app.logger.warning('livekit make_token failed: %s', exc)
         return None
+
+
+def control_participant(
+    room_name: str,
+    identity: str,
+    action: str,
+    value: bool = True,
+) -> dict | None:
+    """Server-side participant control for the conductor's Student Controls.
+
+    action='mute'   → mute/unmute the participant's microphone track
+    action='camera' → mute/unmute the participant's camera track
+    action='remove' → kick the participant out of the room
+
+    Returns {'ok': True, 'detail': ...} on success, {'ok': False, 'error': ...}
+    when the participant/track is not in the room, or None when LiveKit is not
+    configured so callers can fall back to a chat-based request.
+    """
+    if not _configured():
+        return None
+    try:
+        import asyncio
+        from livekit.api import (
+            LiveKitAPI, ListParticipantsRequest, MuteRoomTrackRequest,
+            RoomParticipantIdentity, TrackSource,
+        )
+        cfg = current_app.config
+
+        async def _run() -> dict:
+            api = LiveKitAPI(cfg['LIVEKIT_URL'], cfg['LIVEKIT_API_KEY'], cfg['LIVEKIT_API_SECRET'])
+            try:
+                res = await api.room.list_participants(ListParticipantsRequest(room=room_name))
+                target = next((p for p in res.participants if p.identity == identity), None)
+                if target is None:
+                    return {'ok': False, 'error': 'Participant is not in the video room.'}
+                if action == 'remove':
+                    await api.room.remove_participant(
+                        RoomParticipantIdentity(room=room_name, identity=identity))
+                    return {'ok': True, 'detail': 'removed'}
+                want = TrackSource.MICROPHONE if action == 'mute' else TrackSource.CAMERA
+                track = next((t for t in target.tracks if t.source == want), None)
+                if track is None:
+                    return {'ok': False, 'error': 'That track is not published.'}
+                await api.room.mute_published_track(MuteRoomTrackRequest(
+                    room=room_name, identity=identity, track_sid=track.sid, muted=value))
+                return {'ok': True, 'detail': 'muted' if value else 'unmuted'}
+            finally:
+                await api.aclose()
+
+        return asyncio.run(_run())
+    except Exception as exc:
+        # LiveKit creates rooms lazily on first join, so a room that no browser
+        # has connected to yet raises a not_found ServerError. That is a normal
+        # "no one has joined" state, not a misconfiguration — surface it as a
+        # soft failure (route → 404) instead of None (route → 503 "not configured").
+        status = getattr(exc, 'status', None)
+        code = getattr(exc, 'code', None)
+        if status == 404 or code == 'not_found':
+            return {'ok': False, 'error': 'No one has joined the video room yet.'}
+        current_app.logger.warning('livekit control_participant failed: %s', exc)
+        return None
