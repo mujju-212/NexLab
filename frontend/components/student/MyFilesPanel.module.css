@@ -1,0 +1,153 @@
+/* MyFilesPanel — cloud-saved program browser for the student Compiler.
+   Mirrors the Compiler page's glass/purple design language so it reads as one
+   surface rather than a bolted-on widget. */
+
+.card {
+  background: rgba(255,255,255,.55); border: 1.5px solid rgba(255,255,255,.7);
+  border-radius: 20px; overflow: hidden;
+  box-shadow: 0 6px 20px rgba(20,20,30,.05);
+  display: flex; flex-direction: column; min-width: 0;
+}
+
+/* ── Header ─────────────────────────────────────────────────────────── */
+.head {
+  display: flex; align-items: center; justify-content: space-between; gap: 10px;
+  padding: 11px 16px; border-bottom: 1px solid rgba(147,51,234,.12);
+  background: rgba(255,255,255,.4);
+}
+.title {
+  display: inline-flex; align-items: center; gap: 7px;
+  font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700;
+  color: #201b2e;
+}
+.title svg { color: #9333ea; }
+.meta { font-size: 11.5px; font-weight: 600; color: #9891a6; }
+
+/* ── Search + refresh row ───────────────────────────────────────────── */
+.tools {
+  display: flex; align-items: center; gap: 8px;
+  padding: 10px 12px; border-bottom: 1px solid rgba(147,51,234,.1);
+  background: rgba(255,255,255,.28);
+}
+.searchWrap {
+  position: relative; flex: 1 1 auto; display: flex; align-items: center; min-width: 0;
+}
+.searchWrap > svg { position: absolute; left: 11px; color: #a9a2b6; pointer-events: none; }
+.search {
+  width: 100%; padding: 8px 12px 8px 32px;
+  border: 1.5px solid rgba(147,51,234,.16); border-radius: 11px;
+  background: rgba(255,255,255,.85); outline: none;
+  font-family: 'Space Grotesk', sans-serif; font-size: 12.5px; font-weight: 600;
+  color: #201b2e; transition: border-color .16s, box-shadow .16s;
+}
+.search:focus { border-color: rgba(147,51,234,.45); box-shadow: 0 0 0 3px rgba(147,51,234,.1); }
+.search::placeholder { color: #a9a2b6; font-weight: 500; }
+
+/* ── List ───────────────────────────────────────────────────────────── */
+.body {
+  display: flex; flex-direction: column; gap: 7px;
+  padding: 11px 12px; max-height: 340px; overflow-y: auto;
+}
+
+.row {
+  display: flex; align-items: center; gap: 11px; width: 100%;
+  padding: 10px 12px; border-radius: 14px; cursor: pointer; text-align: left;
+  border: 1.5px solid rgba(147,51,234,.12); background: rgba(255,255,255,.62);
+  transition: border-color .16s, background .16s, transform .16s, box-shadow .16s;
+  font: inherit;
+}
+.row:hover {
+  border-color: rgba(147,51,234,.38); background: rgba(147,51,234,.055);
+  transform: translateY(-1px); box-shadow: 0 5px 14px rgba(20,20,30,.06);
+}
+.rowActive {
+  border-color: rgba(147,51,234,.5); background: rgba(147,51,234,.09);
+  box-shadow: 0 0 0 3px rgba(147,51,234,.09);
+}
+
+.glyph {
+  width: 34px; height: 34px; border-radius: 11px; flex-shrink: 0;
+  display: flex; align-items: center; justify-content: center;
+  background: linear-gradient(140deg, rgba(147,51,234,.16), rgba(34,211,238,.14));
+  color: #7e22ce; border: 1px solid rgba(147,51,234,.2);
+}
+.rowActive .glyph {
+  background: linear-gradient(140deg,#9333ea,#7c3aed); color: #fff; border-color: transparent;
+}
+
+.text { flex: 1 1 auto; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
+.name {
+  font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700; color: #201b2e;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.metaRow { display: flex; align-items: center; gap: 7px; flex-wrap: wrap; }
+.langPill {
+  font-family: 'JetBrains Mono', ui-monospace, Consolas, monospace;
+  font-size: 9.5px; font-weight: 700; letter-spacing: .04em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px;
+  background: rgba(147,51,234,.12); color: #7e22ce; border: 1px solid rgba(147,51,234,.18);
+}
+.sharedPill {
+  font-size: 9.5px; font-weight: 700; letter-spacing: .03em; text-transform: uppercase;
+  padding: 2px 7px; border-radius: 999px;
+  background: rgba(34,197,94,.13); color: #0f8a3f; border: 1px solid rgba(15,138,63,.2);
+}
+
+/* ── Row actions ────────────────────────────────────────────────────── */
+.actions { display: flex; align-items: center; gap: 3px; flex-shrink: 0; }
+.iconBtn {
+  width: 30px; height: 30px; border-radius: 9px; cursor: pointer;
+  display: flex; align-items: center; justify-content: center;
+  border: 1.5px solid transparent; background: transparent; color: #9891a6;
+  transition: background .15s, color .15s, border-color .15s;
+}
+.iconBtn:hover:not(:disabled) {
+  background: rgba(147,51,234,.1); color: #7e22ce; border-color: rgba(147,51,234,.25);
+}
+.iconBtn:disabled { opacity: .4; cursor: not-allowed; }
+.iconBtnDanger:hover:not(:disabled) {
+  background: rgba(239,68,68,.1); color: #dc2626; border-color: rgba(239,68,68,.25);
+}
+
+/* ── Inline rename ──────────────────────────────────────────────────── */
+.renameRow { display: flex; align-items: center; gap: 6px; flex: 1 1 auto; min-width: 0; }
+.renameInput {
+  flex: 1 1 auto; min-width: 0; padding: 7px 11px;
+  border: 1.5px solid rgba(147,51,234,.4); border-radius: 10px; outline: none;
+  background: #fff; font-family: 'Space Grotesk', sans-serif; font-size: 12.5px;
+  font-weight: 700; color: #201b2e;
+}
+.renameInput:focus { box-shadow: 0 0 0 3px rgba(147,51,234,.12); }
+
+/* ── Empty / loading / error ────────────────────────────────────────── */
+.empty {
+  display: flex; flex-direction: column; align-items: center; gap: 9px;
+  padding: 32px 18px; text-align: center; color: #9891a6;
+}
+.empty svg { color: #c4b5fd; }
+.emptyTitle {
+  font-family: 'Space Grotesk', sans-serif; font-size: 13px; font-weight: 700; color: #615a72;
+}
+.emptyHint { font-size: 11.5px; font-weight: 500; line-height: 1.55; max-width: 340px; margin: 0; }
+
+.loading {
+  display: flex; align-items: center; justify-content: center; gap: 9px;
+  padding: 34px 18px; color: #9891a6;
+  font-family: 'Space Grotesk', sans-serif; font-size: 12.5px; font-weight: 700;
+}
+.error {
+  display: flex; align-items: flex-start; gap: 9px;
+  margin: 11px 12px; padding: 11px 13px; border-radius: 13px;
+  background: rgba(254,226,226,.7); border: 1.5px solid rgba(185,28,28,.2);
+  color: #b91c1c; font-size: 12px; font-weight: 600; line-height: 1.5;
+}
+.error svg { flex-shrink: 0; margin-top: 1px; }
+
+.spin { animation: spin 1s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+@media (max-width: 640px) {
+  .actions { display: none; }
+  .row { padding: 9px 10px; gap: 9px; }
+  .body { max-height: 260px; }
+}

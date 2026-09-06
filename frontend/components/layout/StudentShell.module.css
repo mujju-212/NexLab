@@ -53,6 +53,7 @@
   position: relative; display: flex; align-items: center; gap: 11px;
   padding: 9px 12px; border-radius: 11px; cursor: pointer;
   font-size: 14px; font-weight: 600; color: #463f57;
+  text-decoration: none;
   transition: background .15s ease, color .15s ease; user-select: none;
 }
 .navIcon { color: #9b93ad; flex-shrink: 0; }

@@ -1,16 +1,19 @@
 'use client';
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   LayoutDashboard, BookOpen, FlaskConical, LogIn,
   Terminal, Upload, TrendingUp, Trophy, Clock, RotateCcw,
   ShieldCheck, Settings, LogOut, Bell, Search, MessageCircle,
   ChevronRight, User, Menu, GraduationCap, Code2,
-  Library, Zap, Flame, BookMarked
+  Library, Zap, Flame, BookMarked, FileClock
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './StudentShell.module.css';
+import { ShellNotifications, ShellSearchBox, type SearchHit } from './shell-widgets';
+import { studentService } from '@/services/student.service';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
 
@@ -18,8 +21,7 @@ const NAV_FAVORITES = [
   { id: 'Dashboard Home',     Icon: LayoutDashboard, route: '/student/dashboard'         },
   { id: 'My Subjects',        Icon: BookOpen,         route: '/student/subjects'          },
   { id: 'Compiler',           Icon: Code2,            route: '/student/compiler'          },
-  { id: 'Pre-Lab',            Icon: FlaskConical,     route: '/student/pre-lab'           },
-  { id: 'Join Lab',           Icon: LogIn,            route: '/student/live-lab'          },
+  { id: 'Live Coding Lab',    Icon: Terminal,         route: '/student/live-lab'          },
 ];
 const NAV_PRACTICE = [
   { id: 'Practice Library',   Icon: Library,          route: '/student/practice'          },
@@ -29,7 +31,7 @@ const NAV_PRACTICE = [
   { id: 'Quest',              Icon: Zap,               route: '/student/practice/quest'   },
 ];
 const NAV_MAIN = [
-  { id: 'Live Coding Lab',              Icon: Terminal,    route: '/student/live-lab'      },
+  { id: 'Exams',                        Icon: FileClock,   route: '/student/exams'         },
   { id: 'Submission',                   Icon: Upload,      route: '/student/submissions'   },
   { id: 'Performance Analytics',        Icon: TrendingUp,  route: '/student/analytics'     },
   { id: 'Ranking',                      Icon: Trophy,      route: '/student/rankings'      },
@@ -51,15 +53,30 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
-  const go = async (id: string, route: string) => {
-    setDrawerOpen(false); // close mobile drawer on navigation
-    if (id === 'Logout') {
-      await authService.logout();
-      clearAuth();
-      router.push('/login');
-      return;
-    }
-    router.push(route);
+  // Background idle warming — prefetch primary student routes so transitions are instant
+  useEffect(() => {
+    const primaryRoutes = [
+      '/student/dashboard',
+      '/student/subjects',
+      '/student/compiler',
+      '/student/live-lab',
+      '/student/practice',
+      '/student/courses',
+    ];
+    primaryRoutes.forEach((route) => {
+      try {
+        router.prefetch(route);
+      } catch {
+        /* noop */
+      }
+    });
+  }, [router]);
+
+  const handleLogout = async () => {
+    setDrawerOpen(false);
+    await authService.logout();
+    clearAuth();
+    router.push('/login');
   };
 
   const navCls = (id: string, isLogout = false) =>
@@ -78,9 +95,9 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
         {/* ══ SIDEBAR ══ */}
         <aside className={`${styles.sidebar} ${collapsed ? styles.sidebarCollapsed : ''} ${drawerOpen ? styles.sidebarDrawerOpen : ''}`}>
           <div className={styles.sidebarTop}>
-            <div className={styles.logo} onClick={() => router.push('/student/dashboard')}>
+            <Link href="/student/dashboard" prefetch={true} className={styles.logo} onClick={() => setDrawerOpen(false)}>
               <Image src="/logo.png" alt="NexLab" width={collapsed ? 54 : 105} height={collapsed ? 36 : 70} style={{ objectFit: 'contain' }} priority />
-            </div>
+            </Link>
             <button className={styles.collapseBtn} onClick={() => setCollapsed(p => !p)} title="Collapse">
               <Menu size={16} strokeWidth={2} />
             </button>
@@ -90,9 +107,18 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
             <span className={styles.navLabel}>Favorites</span>
             <ul>
               {NAV_FAVORITES.map(({ id, Icon, route }) => (
-                <li key={id} className={navCls(id)} title={id} onClick={() => go(id, route)}>
-                  <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
-                  <span className={styles.label}>{id}</span>
+                <li key={id}>
+                  <Link
+                    href={route}
+                    prefetch={true}
+                    className={navCls(id)}
+                    title={id}
+                    onClick={() => setDrawerOpen(false)}
+                    onMouseEnter={() => { try { router.prefetch(route); } catch {} }}
+                  >
+                    <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
+                    <span className={styles.label}>{id}</span>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -102,9 +128,18 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
             <span className={styles.navLabel}>Practice</span>
             <ul>
               {NAV_PRACTICE.map(({ id, Icon, route }) => (
-                <li key={id} className={navCls(id)} title={id} onClick={() => go(id, route)}>
-                  <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
-                  <span className={styles.label}>{id}</span>
+                <li key={id}>
+                  <Link
+                    href={route}
+                    prefetch={true}
+                    className={navCls(id)}
+                    title={id}
+                    onClick={() => setDrawerOpen(false)}
+                    onMouseEnter={() => { try { router.prefetch(route); } catch {} }}
+                  >
+                    <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
+                    <span className={styles.label}>{id}</span>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -114,9 +149,18 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
             <span className={styles.navLabel}>Main Menu</span>
             <ul>
               {NAV_MAIN.map(({ id, Icon, route }) => (
-                <li key={id} className={navCls(id)} title={id} onClick={() => go(id, route)}>
-                  <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
-                  <span className={styles.label}>{id}</span>
+                <li key={id}>
+                  <Link
+                    href={route}
+                    prefetch={true}
+                    className={navCls(id)}
+                    title={id}
+                    onClick={() => setDrawerOpen(false)}
+                    onMouseEnter={() => { try { router.prefetch(route); } catch {} }}
+                  >
+                    <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
+                    <span className={styles.label}>{id}</span>
+                  </Link>
                 </li>
               ))}
             </ul>
@@ -124,13 +168,30 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
 
           <div className={`${styles.navGroup} ${styles.bottomGroup}`}>
             <ul>
-              <li className={navCls('Profile')} title="Profile" onClick={() => go('Profile', '/student/profile')}>
-                <User size={17} strokeWidth={1.9} className={styles.navIcon} />
-                <span className={styles.label}>Profile</span>
+              <li>
+                <Link
+                  href="/student/profile"
+                  prefetch={true}
+                  className={navCls('Profile')}
+                  title="Profile"
+                  onClick={() => setDrawerOpen(false)}
+                  onMouseEnter={() => { try { router.prefetch('/student/profile'); } catch {} }}
+                >
+                  <User size={17} strokeWidth={1.9} className={styles.navIcon} />
+                  <span className={styles.label}>Profile</span>
+                </Link>
               </li>
-              <li className={navCls('Logout', true)} title="Logout" onClick={() => go('Logout', '/login')}>
-                <LogOut size={17} strokeWidth={1.9} className={styles.navIcon} />
-                <span className={styles.label}>Logout</span>
+              <li>
+                <div
+                  className={navCls('Logout', true)}
+                  title="Logout"
+                  onClick={handleLogout}
+                  role="button"
+                  tabIndex={0}
+                >
+                  <LogOut size={17} strokeWidth={1.9} className={styles.navIcon} />
+                  <span className={styles.label}>Logout</span>
+                </div>
               </li>
             </ul>
           </div>
@@ -139,7 +200,7 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
             <div className={styles.promoIcon}><MessageCircle size={16} strokeWidth={1.9} /></div>
             <div className={styles.promoText}>
               <p className={styles.promoTitle}>Stuck on a doubt?</p>
-              <a className={styles.promoLink} onClick={() => router.push('/student/live-lab')}>Ask AI Tutor</a>
+              <Link href="/student/live-lab" prefetch={true} className={styles.promoLink} onClick={() => setDrawerOpen(false)}>Ask AI Tutor</Link>
             </div>
           </div>
         </aside>
@@ -157,15 +218,13 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
               Student <ChevronRight size={14} className={styles.breadSep} /> <strong>{activePage}</strong>
             </div>
             <div className={styles.headerRight}>
-              <div className={styles.searchBar}>
-                <Search size={14} strokeWidth={2} className={styles.searchIcon} />
-                <span>Search</span>
-                <kbd className={styles.searchKbd}>⌘ /</kbd>
-              </div>
-              <button className={styles.iconBtn}>
-                <Bell size={16} strokeWidth={1.9} />
-                <span className={styles.notifDot} />
-              </button>
+              <ShellSearchBox
+                className={styles.searchBar}
+                placeholder="Search sessions, problems…"
+                fetcher={(q) => studentService.search(q)}
+                onSelect={(hit: SearchHit) => router.push(hit.link ?? '/student/practice')}
+              />
+              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
               <div className={styles.profileChip} onClick={() => router.push('/student/profile')}>
                 <div className={styles.avatarLg} style={{ background: '#9333ea' }}>
                   {user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? 'ST'}
