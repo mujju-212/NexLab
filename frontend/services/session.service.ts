@@ -1,6 +1,14 @@
 import { apiClient } from './api-client';
 import Cookies from 'js-cookie';
 
+export interface SessionConflict {
+  session_id: string;
+  reason: string;
+  title: string;
+  scheduled_at: string | null;
+  duration: number;
+}
+
 export const sessionService = {
 
   // ── Instructor: List sessions ─────────────────────────────────────────────────
@@ -42,9 +50,36 @@ export const sessionService = {
     return data;
   },
 
+  // POST /api/instructor/sessions/check-conflict — pre-flight clash check
+  async checkConflict(payload: {
+    section_subject_id: string;
+    scheduled_at: string;
+    duration_minutes: number;
+    exclude_session_id?: string;
+  }): Promise<{ conflicts: Array<{ session_id: string; reason: string; title: string; scheduled_at: string | null; duration: number }>; clear: boolean }> {
+    const { data } = await apiClient.post('/instructor/sessions/check-conflict', payload);
+    return data;
+  },
+
   // POST /api/instructor/sessions/<id>/start
   async start(id: string) {
     const { data } = await apiClient.post(`/instructor/sessions/${id}/start`);
+    return data;
+  },
+
+  // GET /api/instructor/sessions/<id>/video-token — mint a LiveKit token on
+  // demand for an already-active session (re-entry / refresh).
+  async getVideoToken(id: string): Promise<{ livekit_token: string; jitsi_room: string; livekit_url: string }> {
+    const { data } = await apiClient.get(`/instructor/sessions/${id}/video-token`);
+    return data;
+  },
+
+  // POST /api/instructor/sessions/<id>/video-control — server-side LiveKit
+  // participant control: mute mic / disable camera / remove from room.
+  async videoControl(id: string, action: 'mute' | 'camera' | 'remove', studentId: string, value = true) {
+    const { data } = await apiClient.post(`/instructor/sessions/${id}/video-control`, {
+      action, student_id: studentId, value,
+    });
     return data;
   },
 

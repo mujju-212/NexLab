@@ -1,6 +1,21 @@
 import uuid
-from datetime import datetime
+from datetime import datetime, timezone
 from app.extensions import db
+
+
+def _iso_z(dt):
+    """
+    Serialize a naive-UTC datetime with an explicit 'Z' suffix.
+
+    Without the suffix, JS `new Date('2026-09-01T05:30:00')` parses the value
+    as *local* time — a UTC 05:30 (11:00 IST) renders as 05:30 on campus
+    screens. With 'Z', every client converts to its own local time correctly.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        return dt.isoformat() + 'Z'
+    return dt.astimezone(timezone.utc).isoformat().replace('+00:00', 'Z')
 
 
 class LabSession(db.Model):
@@ -47,18 +62,18 @@ class LabSession(db.Model):
             'title': self.title,
             'section_subject_id': self.section_subject_id,
             'experiment_id': self.experiment_id,
-            'scheduled_at': self.scheduled_at.isoformat() if self.scheduled_at else None,
+            'scheduled_at': _iso_z(self.scheduled_at),
             'duration_minutes': self.duration_minutes,
             'gate_score_threshold': self.gate_score_threshold,
             'focus_ml_enabled': self.focus_ml_enabled,
             'lockdown_enabled': self.lockdown_enabled,
             'catchup_enabled': self.catchup_enabled,
-            'catchup_deadline': self.catchup_deadline.isoformat() if self.catchup_deadline else None,
+            'catchup_deadline': _iso_z(self.catchup_deadline),
             'status': self.status,
             'current_mode': self.current_mode or 'briefing',
             'jitsi_room_name': self.jitsi_room_name,
-            'started_at': self.started_at.isoformat() if self.started_at else None,
-            'ended_at': self.ended_at.isoformat() if self.ended_at else None,
+            'started_at': _iso_z(self.started_at),
+            'ended_at': _iso_z(self.ended_at),
         }
 
 
