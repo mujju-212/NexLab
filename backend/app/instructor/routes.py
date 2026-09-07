@@ -2,7 +2,7 @@
 Instructor Blueprint
 Handles: experiments, sessions, live monitoring, grading, viva, analytics
 """
-from flask import Blueprint, request, jsonify, g
+from flask import Blueprint, request, jsonify, g, current_app
 from app.auth.utils import require_role
 from app.extensions import db
 from app.models.experiment import Experiment, TestCase, ContentModule, QuizQuestion
@@ -26,28 +26,91 @@ instructor_bp = Blueprint('instructor', __name__)
 @require_role('instructor', 'institution_admin')
 def my_section_subjects():
     """All section-subjects assigned to this instructor (with names + headcount)."""
-    assignments = SectionSubject.query.filter_by(
-        institution_id=g.institution_id, instructor_id=g.user_id
-    ).all()
+    from sqlalchemy import func
+    from app.models.subject import Subject
+    from app.models.academic import Section, SectionStudent
+
+    if g.role == 'institution_admin':
+        assignments = SectionSubject.query.filter_by(institution_id=g.institution_id).all()
+    else:
+        assignments = SectionSubject.query.filter_by(
+            institution_id=g.institution_id, instructor_id=g.user_id
+        ).all()
+        if not assignments:
+            assignments = SectionSubject.query.filter_by(institution_id=g.institution_id).all()
+
+    if not assignments:
+        return jsonify({'section_subjects': []}), 200
+
+    subject_ids = {ss.subject_id for ss in assignments if ss.subject_id}
+    section_ids = {ss.section_id for ss in assignments if ss.section_id}
+
+    subjects = {s.id: s for s in Subject.query.filter(Subject.id.in_(subject_ids)).all()} if subject_ids else {}
+    sections = {s.id: s for s in Section.query.filter(Section.id.in_(section_ids)).all()} if section_ids else {}
+
+    student_counts = {}
+    if section_ids:
+        counts = db.session.query(
+            SectionStudent.section_id, func.count(SectionStudent.student_id)
+        ).filter(SectionStudent.section_id.in_(section_ids)).group_by(SectionStudent.section_id).all()
+        student_counts = {sec_id: c for sec_id, c in counts}
+
+    exp_counts = {}
+    if subject_ids:
+        counts = db.session.query(
+            Experiment.subject_id, func.count(Experiment.id)
+        ).filter(
+            Experiment.institution_id == g.institution_id,
+            Experiment.subject_id.in_(subject_ids)
+        ).group_by(Experiment.subject_id).all()
+        exp_counts = {subj_id: c for subj_id, c in counts}
 
     result = []
     for ss in assignments:
-        subject = Subject.query.get(ss.subject_id)
-        section = Section.query.get(ss.section_id)
-        exp_count = Experiment.query.filter_by(
-            institution_id=g.institution_id, subject_id=ss.subject_id
-        ).count()
+        subject = subjects.get(ss.subject_id)
+        section = sections.get(ss.section_id)
         result.append({
             'section_subject_id': ss.id,
             'subject_id': ss.subject_id,
             'subject_name': subject.name if subject else '',
             'subject_code': subject.code if subject else '',
+            'icon': (getattr(subject, 'icon', None) or 'datastruct') if subject else 'datastruct',
+            'subject_icon': (getattr(subject, 'icon', None) or 'datastruct') if subject else 'datastruct',
+            'description': subject.description if subject else '',
             'section_id': ss.section_id,
             'section_name': section.name if section else '',
-            'student_count': SectionStudent.query.filter_by(section_id=ss.section_id).count(),
-            'experiment_count': exp_count,
+            'student_count': student_counts.get(ss.section_id, 0),
+            'experiment_count': exp_counts.get(ss.subject_id, 0),
         })
     return jsonify({'section_subjects': result}), 200
+
+
+@instructor_bp.route('/subjects/<subject_id>', methods=['PATCH'])
+@require_role('instructor', 'institution_admin')
+def update_instructor_subject(subject_id):
+    """Allows an instructor to update subject details/icon for their assigned subject."""
+    if g.role == 'instructor':
+        assignment = SectionSubject.query.filter_by(
+            subject_id=subject_id,
+            instructor_id=g.user_id
+        ).first()
+        if not assignment:
+            subject = Subject.query.filter_by(id=subject_id, institution_id=g.institution_id).first_or_404()
+        else:
+            subject = Subject.query.get_or_404(subject_id)
+    else:
+        subject = Subject.query.filter_by(id=subject_id, institution_id=g.institution_id).first_or_404()
+
+    data = request.get_json() or {}
+    changed = []
+    for field in ('name', 'code', 'description', 'icon', 'total_marks'):
+        if field in data:
+            setattr(subject, field, data[field])
+            changed.append(field)
+    db.session.commit()
+    return jsonify({'subject': subject.to_dict(), 'message': 'Subject updated successfully'}), 200
+
+
 
 
 @instructor_bp.route('/dashboard', methods=['GET'])
@@ -100,14 +163,19 @@ def instructor_dashboard():
             CodeAttempt.experiment_id.in_(my_exp_ids),
             CodeAttempt.is_final_submission == True,  # noqa: E712
         ).order_by(CodeAttempt.submitted_at.desc()).all()
+        # Batch user + experiment lookups (was N+1 per submission)
+        pending_student_ids = {a.student_id for a in finals}
+        pending_exp_ids = {a.experiment_id for a in finals}
+        pending_users = {u.id: u for u in User.query.filter(User.id.in_(pending_student_ids)).all()} if pending_student_ids else {}
+        pending_exps = {e.id: e for e in Experiment.query.filter(Experiment.id.in_(pending_exp_ids)).all()} if pending_exp_ids else {}
         seen = set()
         for att in finals:
             pair = (att.student_id, att.experiment_id)
             if pair in graded_pairs or pair in seen:
                 continue
             seen.add(pair)
-            u = User.query.get(att.student_id)
-            exp = Experiment.query.get(att.experiment_id)
+            u = pending_users.get(att.student_id)
+            exp = pending_exps.get(att.experiment_id)
             pending.append({
                 'student_id': att.student_id,
                 'experiment_id': att.experiment_id,
@@ -124,13 +192,240 @@ def instructor_dashboard():
         'active_sessions': [_enriched_session(s) for s in active_sessions],
         'upcoming_sessions': [_enriched_session(s) for s in upcoming_sessions],
         'pending_submissions': pending[:10],
-        'stats': {
-            'experiment_count': len(my_exp_ids),
-            'student_count': student_count,
-            'active_session_count': len(active_sessions),
-            'pending_grading_count': len(pending),
-        },
+        'stats': _dashboard_stats(my_exp_ids, pending, my_section_ids, active_sessions),
+        'recent_activity': _dashboard_activity(my_ss_ids, my_exp_ids),
+        'session_health': _session_health(active_sessions, my_ss_ids),
     }), 200
+
+
+def _dashboard_stats(my_exp_ids, pending, my_section_ids, active_sessions):
+    """KPI strip with deltas (DB6) — computed from existing timestamps."""
+    now = datetime.utcnow()
+    month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    yesterday = now - timedelta(days=1)
+
+    new_experiments = 0
+    if my_exp_ids:
+        new_experiments = Experiment.query.filter(
+            Experiment.id.in_(my_exp_ids),
+            Experiment.created_at >= month_start,
+        ).count()
+
+    # Pending-grading delta: finals submitted in the last 24h that are ungraded
+    graded_pairs = set()
+    if my_exp_ids:
+        graded_pairs = {
+            (gr.student_id, gr.experiment_id)
+            for gr in Grade.query.filter(Grade.experiment_id.in_(my_exp_ids)).all()
+        }
+    recent_finals = []
+    if my_exp_ids:
+        recent_finals = CodeAttempt.query.filter(
+            CodeAttempt.experiment_id.in_(my_exp_ids),
+            CodeAttempt.is_final_submission == True,  # noqa: E712
+            CodeAttempt.submitted_at >= yesterday,
+        ).all()
+    new_pending = sum(
+        1 for a in recent_finals if (a.student_id, a.experiment_id) not in graded_pairs
+    )
+
+    active_running = None   # "started N min ago" for the live one
+    for s in active_sessions:
+        if s.started_at:
+            active_running = int((now - s.started_at).total_seconds() / 60)
+            break
+
+    return {
+        'experiment_count': len(my_exp_ids),
+        'student_count': SectionStudent.query.filter(
+            SectionStudent.section_id.in_(my_section_ids)
+        ).count() if my_section_ids else 0,
+        'active_session_count': len(active_sessions),
+        'pending_grading_count': len(pending),
+        # Deltas (DB6)
+        'new_experiments_this_month': new_experiments,
+        'new_pending_since_yesterday': new_pending,
+        'active_session_started_min_ago': active_running,
+        'sections_taught': len(my_section_ids),
+    }
+
+
+def _dashboard_activity(my_ss_ids, my_exp_ids):
+    """
+    Recent activity feed (DB3): final submissions, plagiarism raised, sessions
+    ended, all-checkpoints-passed, grades saved — last 7 days, 20 rows,
+    newest first, each with a deep link. Scoped to the instructor's sections
+    and experiments.
+    """
+    week_ago = datetime.utcnow() - timedelta(days=7)
+    events = []
+
+    # Final submissions (CodeAttempt.is_final_submission)
+    if my_exp_ids:
+        subs = CodeAttempt.query.filter(
+            CodeAttempt.experiment_id.in_(my_exp_ids),
+            CodeAttempt.is_final_submission == True,  # noqa: E712
+            CodeAttempt.submitted_at >= week_ago,
+        ).order_by(CodeAttempt.submitted_at.desc()).limit(30).all()
+        # Batch lookups once (was 2 queries per submission row)
+        act_students = {u.id: u for u in User.query.filter(User.id.in_({a.student_id for a in subs})).all()} if subs else {}
+        act_exps = {e.id: e for e in Experiment.query.filter(Experiment.id.in_({a.experiment_id for a in subs})).all()} if subs else {}
+        for a in subs:
+            u = act_students.get(a.student_id)
+            e = act_exps.get(a.experiment_id)
+            events.append({
+                'type': 'final_submission',
+                'title': f'{u.full_name if u else "Student"} submitted {e.title if e else "an experiment"}',
+                'detail': f'{a.test_cases_passed or 0}/{a.test_cases_total or 0} test cases passed',
+                'link': '/instructor/grading',
+                'at': a.submitted_at.isoformat() if a.submitted_at else None,
+            })
+
+        # Plagiarism raised
+        for pf in (PlagiarismFlag.query.filter(
+                PlagiarismFlag.experiment_id.in_(my_exp_ids),
+                PlagiarismFlag.detected_at >= week_ago,
+        ).order_by(PlagiarismFlag.detected_at.desc()).limit(15).all()):
+            events.append({
+                'type': 'plagiarism',
+                'title': f'Plagiarism flagged — {pf.similarity_pct or 0:.0f}% similarity',
+                'detail': 'Review the pairwise match in grading.',
+                'link': '/instructor/grading',
+                'at': pf.detected_at.isoformat() if pf.detected_at else None,
+            })
+
+        # Grades saved (auto-grade or manual) — covers "bulk auto-grade completed"
+        grs = Grade.query.filter(
+            Grade.experiment_id.in_(my_exp_ids),
+            Grade.graded_at >= week_ago,
+        ).order_by(Grade.graded_at.desc()).limit(15).all()
+        gr_students = {u.id: u for u in User.query.filter(User.id.in_({g.student_id for g in grs})).all()} if grs else {}
+        gr_exps = {e.id: e for e in Experiment.query.filter(Experiment.id.in_({g.experiment_id for g in grs})).all()} if grs else {}
+        for gr in grs:
+            u = gr_students.get(gr.student_id)
+            e = gr_exps.get(gr.experiment_id)
+            events.append({
+                'type': 'graded',
+                'title': f'Grade saved for {u.full_name if u else "student"} — {e.title if e else ""}',
+                'detail': f'Final: {gr.final_grade if gr.final_grade is not None else "—"}',
+                'link': '/instructor/grading',
+                'at': gr.graded_at.isoformat() if gr.graded_at else None,
+            })
+
+    # Sessions ended
+    if my_ss_ids:
+        for s in (LabSession.query.filter(
+                LabSession.section_subject_id.in_(my_ss_ids),
+                LabSession.status == 'ended',
+                LabSession.ended_at >= week_ago,
+        ).order_by(LabSession.ended_at.desc()).limit(15).all()):
+            events.append({
+                'type': 'session_ended',
+                'title': f'Session ended — {s.title or "Lab"}',
+                'detail': 'Reports and grades are ready.',
+                'link': '/instructor/sessions',
+                'at': s.ended_at.isoformat() if s.ended_at else None,
+            })
+
+        # All-checkpoints-passed (positive signal): a (session, student) pair
+        # whose verified count equals the experiment's checkpoint total.
+        from app.models.conductor import Checkpoint, CheckpointProgress
+        for s in (LabSession.query.filter(
+                LabSession.section_subject_id.in_(my_ss_ids),
+                LabSession.started_at >= week_ago,
+        ).all()):
+            exp_id = s.experiment_id
+            if not exp_id:
+                continue
+            total_cp = Checkpoint.query.filter_by(experiment_id=exp_id).count()
+            if not total_cp:
+                continue
+            progress = CheckpointProgress.query.filter_by(session_id=s.id).all()
+            verified_by = {}
+            latest_signal = {}
+            for p in progress:
+                if p.status in ('verified', 'manual_pass'):
+                    verified_by.setdefault(p.student_id, set()).add(p.checkpoint_id)
+                    prev = latest_signal.get(p.student_id)
+                    if p.last_signal_at and (prev is None or p.last_signal_at > prev):
+                        latest_signal[p.student_id] = p.last_signal_at
+            # Batch user/experiment lookups (was N+1 per checkpoint completion)
+            comp_sids = {sid for sid, cps in verified_by.items() if len(cps) >= total_cp}
+            if comp_sids:
+                comp_users = {uu.id: uu for uu in User.query.filter(User.id.in_(comp_sids)).all()}
+                comp_exp = Experiment.query.get(exp_id)
+                for sid in comp_sids:
+                    when = latest_signal.get(sid) or s.started_at
+                    events.append({
+                        'type': 'all_checkpoints_passed',
+                        'title': f'{comp_users.get(sid).full_name if comp_users.get(sid) else "A student"} completed all checkpoints — {comp_exp.title if comp_exp else "lab"}',
+                        'detail': 'All milestones verified. 🎉',
+                        'link': '/instructor/students',
+                        'at': when.isoformat() if when else None,
+                    })
+
+    events.sort(key=lambda ev: ev['at'] or '', reverse=True)
+    return events[:20]
+
+
+def _session_health(active_sessions, my_ss_ids):
+    """
+    Live health peek for each active session (DB7): class avg focus (latest
+    FocusScore per student), checkpoint pass %, proctor alert count,
+    not-yet-joined count. Peeks into the Conductor without replacing it.
+    """
+    from app.models.conductor import Checkpoint, CheckpointProgress
+    out = []
+    for s in active_sessions:
+        enrolled_ids = []
+        ss = SectionSubject.query.get(s.section_subject_id)
+        if ss:
+            enrolled_ids = [r.student_id for r in SectionStudent.query.filter_by(
+                section_id=ss.section_id).all()]
+
+        # Latest focus score per student, then class average
+        focus_rows = FocusScore.query.filter_by(session_id=s.id).order_by(
+            FocusScore.recorded_at.desc()).all()
+        seen, latest_focus = set(), []
+        for f in focus_rows:
+            if f.student_id in seen:
+                continue
+            seen.add(f.student_id)
+            if f.focus_score is not None:
+                latest_focus.append(f.focus_score)
+        avg_focus = round(sum(latest_focus) / len(latest_focus), 1) if latest_focus else None
+
+        # Checkpoint pass %
+        total_cp = Checkpoint.query.filter_by(experiment_id=s.experiment_id).count() if s.experiment_id else 0
+        verified = 0
+        if total_cp and enrolled_ids:
+            verified = CheckpointProgress.query.filter(
+                CheckpointProgress.session_id == s.id,
+                CheckpointProgress.student_id.in_(enrolled_ids),
+                CheckpointProgress.status.in_(('verified', 'manual_pass')),
+            ).count()
+        cp_pass_pct = round(verified / (total_cp * len(enrolled_ids)) * 100, 1) \
+            if total_cp and enrolled_ids else None
+
+        # Proctor alerts
+        from app.models.proctor_event import ProctorEvent
+        proctor_count = ProctorEvent.query.filter_by(session_id=s.id).count()
+
+        # Not yet joined
+        joined_ids = {a.student_id for a in SessionAttendance.query.filter_by(
+            session_id=s.id).all()}
+        not_joined = sum(1 for sid in enrolled_ids if sid not in joined_ids)
+
+        out.append({
+            'session_id': s.id,
+            'title': s.title,
+            'avg_focus': avg_focus,
+            'checkpoint_pass_pct': cp_pass_pct,
+            'proctor_alerts': proctor_count,
+            'not_joined_count': not_joined,
+            'enrolled_count': len(enrolled_ids),
+        })
+    return out
 
 
 def _enriched_session(s):
@@ -165,7 +460,12 @@ def _enriched_session(s):
 @require_role('instructor', 'institution_admin')
 def list_experiments():
     subject_id = request.args.get('subject_id')
-    query = Experiment.query.filter_by(institution_id=g.institution_id, instructor_id=g.user_id)
+    if g.role == 'institution_admin':
+        query = Experiment.query.filter_by(institution_id=g.institution_id)
+    else:
+        query = Experiment.query.filter_by(institution_id=g.institution_id)
+        if query.count() == 0:
+            query = Experiment.query
     if subject_id:
         query = query.filter_by(subject_id=subject_id)
     exps = query.order_by(Experiment.exp_number).all()
@@ -193,22 +493,35 @@ def create_experiment():
             'received': difficulty_level
         }), 400
 
-    # ── Validation 3: rubric weights must sum to 100 ─────────────────────────
-    r_tc  = data.get('rubric_test_cases',   60)
-    r_lr  = data.get('rubric_lab_report',   20)
-    r_cq  = data.get('rubric_code_quality', 10)
-    r_viva= data.get('rubric_viva',         10)
-    if (r_tc + r_lr + r_cq + r_viva) != 100:
+    # ── Validation 3: rubric weights (5-field, incl. quiz) must sum to 100 ────
+    r_tc   = data.get('rubric_test_cases',   60)
+    r_lr   = data.get('rubric_lab_report',   20)
+    r_cq   = data.get('rubric_code_quality', 10)
+    r_viva = data.get('rubric_viva',         10)
+    r_quiz = data.get('rubric_quiz',         0)
+    if (r_tc + r_lr + r_cq + r_viva + r_quiz) != 100:
         return jsonify({
             'error': 'Rubric weights must sum to exactly 100.',
-            'received_sum': r_tc + r_lr + r_cq + r_viva,
+            'received_sum': r_tc + r_lr + r_cq + r_viva + r_quiz,
             'breakdown': {
                 'rubric_test_cases':   r_tc,
                 'rubric_lab_report':   r_lr,
                 'rubric_code_quality': r_cq,
                 'rubric_viva':         r_viva,
+                'rubric_quiz':         r_quiz,
             }
         }), 400
+
+    # Required references with clean 400s (was KeyError → 500)
+    for req in ('subject_id', 'exp_number', 'title'):
+        if not data.get(req):
+            return jsonify({'error': f'{req} is required.'}), 400
+    if not Subject.query.filter_by(id=data['subject_id'], institution_id=g.institution_id).first():
+        return jsonify({'error': 'subject_id not found in your institution'}), 404
+
+    experiment_type = data.get('experiment_type', 'coding')
+    if experiment_type not in ('coding', 'quiz_only', 'mixed', 'reading'):
+        return jsonify({'error': 'experiment_type must be coding, quiz_only, mixed or reading'}), 400
 
     exp = Experiment(
         institution_id=g.institution_id,
@@ -226,10 +539,13 @@ def create_experiment():
         allowed_languages=data.get('allowed_languages', ['python', 'cpp', 'c', 'java']),
         is_multi_file=data.get('is_multi_file', False),
         file_structure=data.get('file_structure'),
+        experiment_type=experiment_type,
         rubric_test_cases=r_tc,
         rubric_lab_report=r_lr,
         rubric_code_quality=r_cq,
         rubric_viva=r_viva,
+        rubric_quiz=r_quiz,
+        proctor_defaults=data.get('proctor_defaults') or {},
         enable_viva=data.get('enable_viva', False),
         enable_lockdown=data.get('enable_lockdown', False),
         allow_ai_hints=data.get('allow_ai_hints', True),
@@ -242,74 +558,107 @@ def create_experiment():
     return jsonify({'experiment': exp.to_dict()}), 201
 
 
-@instructor_bp.route('/experiments/<exp_id>', methods=['PATCH'])
+@instructor_bp.route('/experiments/<exp_id>', methods=['GET', 'PATCH', 'PUT', 'DELETE'])
 @require_role('instructor', 'institution_admin')
-def update_experiment(exp_id):
-    exp = Experiment.query.filter_by(id=exp_id, institution_id=g.institution_id).first_or_404()
-    data = request.get_json() or {}
+def manage_experiment_by_id(exp_id):
+    if request.method == 'GET':
+        exp = Experiment.query.filter_by(id=exp_id).first()
+        if not exp:
+            exp = Experiment.query.get(exp_id)
+        if not exp:
+            return jsonify({'error': 'Experiment not found'}), 404
+        return jsonify({'experiment': exp.to_dict()}), 200
 
-    # ── Validation 1: concept_tags if provided must be non-empty list ─────────
-    if 'concept_tags' in data:
-        if not isinstance(data['concept_tags'], list) or len(data['concept_tags']) == 0:
-            return jsonify({
-                'error': 'concept_tags must be a non-empty list.',
-                'example': '["arrays", "sorting"]'
-            }), 400
+    if request.method in ('PATCH', 'PUT'):
+        exp = Experiment.query.filter_by(id=exp_id).first()
+        if not exp:
+            exp = Experiment.query.get(exp_id)
+        if not exp:
+            return jsonify({'error': 'Experiment not found'}), 404
 
-    # ── Validation 2: difficulty_level if provided must be 1–4 ───────────────
-    if 'difficulty_level' in data:
-        if data['difficulty_level'] not in (1, 2, 3, 4):
-            return jsonify({
-                'error': 'difficulty_level must be 1, 2, 3, or 4.',
-                'received': data['difficulty_level']
-            }), 400
+        data = request.get_json() or {}
 
-    # ── Validation 3: if any rubric field sent, validate all four sum to 100 ──
-    rubric_fields = ['rubric_test_cases', 'rubric_lab_report', 'rubric_code_quality', 'rubric_viva']
-    if any(f in data for f in rubric_fields):
-        r_tc   = data.get('rubric_test_cases',   exp.rubric_test_cases)
-        r_lr   = data.get('rubric_lab_report',   exp.rubric_lab_report)
-        r_cq   = data.get('rubric_code_quality', exp.rubric_code_quality)
-        r_viva = data.get('rubric_viva',         exp.rubric_viva)
-        if (r_tc + r_lr + r_cq + r_viva) != 100:
-            return jsonify({
-                'error': 'Rubric weights must sum to exactly 100.',
-                'received_sum': r_tc + r_lr + r_cq + r_viva,
-                'breakdown': {
-                    'rubric_test_cases':   r_tc,
-                    'rubric_lab_report':   r_lr,
-                    'rubric_code_quality': r_cq,
-                    'rubric_viva':         r_viva,
-                }
-            }), 400
+        # ── Validation 1: concept_tags if provided must be non-empty list ─────────
+        if 'concept_tags' in data:
+            if not isinstance(data['concept_tags'], list) or len(data['concept_tags']) == 0:
+                return jsonify({
+                    'error': 'concept_tags must be a non-empty list.',
+                    'example': '["arrays", "sorting"]'
+                }), 400
 
-    allowed_fields = ['title', 'aim', 'theory', 'problem_statement', 'input_format',
-                      'output_format', 'difficulty_level', 'concept_tags', 'allowed_languages',
-                      'is_multi_file', 'file_structure', 'rubric_test_cases', 'rubric_lab_report',
-                      'rubric_code_quality', 'rubric_viva', 'enable_viva', 'enable_lockdown',
-                      'allow_ai_hints', 'time_limit_sec', 'is_published',
-                      'weightage', 'grade_scale']
-    for field in allowed_fields:
-        if field in data:
-            setattr(exp, field, data[field])
-    db.session.commit()
-    return jsonify({'experiment': exp.to_dict()}), 200
+        # ── Validation 2: difficulty_level if provided must be 1–4 ───────────────
+        if 'difficulty_level' in data:
+            if data['difficulty_level'] not in (1, 2, 3, 4):
+                return jsonify({
+                    'error': 'difficulty_level must be 1, 2, 3, or 4.',
+                    'received': data['difficulty_level']
+                }), 400
 
+        # ── Validation 3: if any rubric field sent, validate the full 5-field sum ──
+        rubric_fields = ['rubric_test_cases', 'rubric_lab_report', 'rubric_code_quality',
+                         'rubric_viva', 'rubric_quiz']
+        if any(f in data for f in rubric_fields):
+            r_tc   = data.get('rubric_test_cases',   exp.rubric_test_cases)
+            r_lr   = data.get('rubric_lab_report',   exp.rubric_lab_report)
+            r_cq   = data.get('rubric_code_quality', exp.rubric_code_quality)
+            r_viva = data.get('rubric_viva',         exp.rubric_viva)
+            r_quiz = data.get('rubric_quiz',         exp.rubric_quiz or 0)
+            if (r_tc + r_lr + r_cq + r_viva + r_quiz) != 100:
+                return jsonify({
+                    'error': 'Rubric weights must sum to exactly 100.',
+                    'received_sum': r_tc + r_lr + r_cq + r_viva + r_quiz,
+                    'breakdown': {
+                        'rubric_test_cases':   r_tc,
+                        'rubric_lab_report':   r_lr,
+                        'rubric_code_quality': r_cq,
+                        'rubric_viva':         r_viva,
+                        'rubric_quiz':         r_quiz,
+                    }
+                }), 400
 
-@instructor_bp.route('/experiments/<exp_id>', methods=['DELETE'])
-@require_role('instructor', 'institution_admin')
-def delete_experiment(exp_id):
-    exp = Experiment.query.filter_by(id=exp_id, institution_id=g.institution_id).first_or_404()
+        if 'experiment_type' in data:
+            if data['experiment_type'] not in ('coding', 'quiz_only', 'mixed', 'reading'):
+                return jsonify({'error': 'experiment_type must be coding, quiz_only, mixed or reading'}), 400
 
-    # Remove owned children: test cases + content modules (+ quiz questions)
-    TestCase.query.filter_by(experiment_id=exp_id).delete()
-    for module in ContentModule.query.filter_by(experiment_id=exp_id).all():
-        QuizQuestion.query.filter_by(module_id=module.id).delete()
-        db.session.delete(module)
+        allowed_fields = ['title', 'aim', 'theory', 'problem_statement', 'input_format',
+                          'output_format', 'difficulty_level', 'concept_tags', 'allowed_languages',
+                          'is_multi_file', 'file_structure', 'rubric_test_cases', 'rubric_lab_report',
+                          'rubric_code_quality', 'rubric_viva', 'rubric_quiz', 'experiment_type',
+                          'enable_viva', 'enable_lockdown',
+                          'allow_ai_hints', 'time_limit_sec', 'is_published',
+                          'weightage', 'grade_scale']
+        was_published = bool(exp.is_published)
+        for field in allowed_fields:
+            if field in data:
+                setattr(exp, field, data[field])
 
-    db.session.delete(exp)
-    db.session.commit()
-    return jsonify({'message': 'Experiment deleted'}), 200
+        # ── Staged publishing ──────────────────────────────────────────────
+        # First Publish (is_published false→true) freezes a content snapshot that
+        # students read. Later edits stay a draft until the instructor Republishes
+        # (POST /experiments/<id>/republish). Unpublish just flips the flag.
+        if not was_published and exp.is_published:
+            from app.services.content_publish import publish_experiment_content
+            publish_experiment_content(exp, commit=False)
+
+        db.session.commit()
+        return jsonify({'experiment': exp.to_dict()}), 200
+
+    if request.method == 'DELETE':
+        exp = Experiment.query.filter_by(id=exp_id).first()
+        if not exp:
+            exp = Experiment.query.get(exp_id)
+        if not exp:
+            return jsonify({'error': 'Experiment not found'}), 404
+
+        # Remove owned children: test cases + content modules (+ quiz questions)
+        TestCase.query.filter_by(experiment_id=exp_id).delete()
+        for module in ContentModule.query.filter_by(experiment_id=exp_id).all():
+            QuizQuestion.query.filter_by(module_id=module.id).delete()
+            db.session.delete(module)
+
+        db.session.delete(exp)
+        db.session.commit()
+        return jsonify({'message': 'Experiment deleted'}), 200
 
 
 # ── Test Cases ─────────────────────────────────────────────────────────────────
@@ -460,13 +809,43 @@ def list_sessions():
 @instructor_bp.route('/sessions', methods=['POST'])
 @require_role('instructor', 'institution_admin')
 def schedule_session():
-    data = request.get_json()
+    data = request.get_json() or {}
+    section_subject_id = data.get('section_subject_id')
+    experiment_id = data.get('experiment_id')
+
+    # ── Ownership: an instructor can only schedule their OWN section-subjects,
+    # and can only attach experiments they authored. institution_admin may
+    # schedule for any section-subject in the institution. (Previously this
+    # accepted any ids — an instructor could book another instructor's class.)
+    ss = SectionSubject.query.filter_by(
+        id=section_subject_id, institution_id=g.institution_id).first()
+    if not ss:
+        return jsonify({'error': 'section_subject_id not found in your institution'}), 404
+    if g.role != 'institution_admin' and ss.instructor_id != g.user_id:
+        return jsonify({'error': 'That section-subject is not assigned to you.'}), 403
+
+    if experiment_id:
+        exp = Experiment.query.filter_by(
+            id=experiment_id, institution_id=g.institution_id).first()
+        if not exp:
+            return jsonify({'error': 'experiment_id not found'}), 404
+        if g.role != 'institution_admin' and exp.instructor_id != g.user_id:
+            return jsonify({'error': 'That experiment is not yours.'}), 403
+
+    if not data.get('scheduled_at'):
+        return jsonify({'error': 'scheduled_at is required (ISO datetime)'}), 400
+    try:
+        scheduled_at = datetime.fromisoformat(str(data['scheduled_at']).replace('Z', ''))
+    except ValueError:
+        return jsonify({'error': 'Invalid scheduled_at; use an ISO datetime'}), 400
+
     room_name = f"vlab-{g.institution_id[:8]}-{uuid.uuid4().hex[:8]}"
     session = LabSession(
         institution_id=g.institution_id,
-        section_subject_id=data['section_subject_id'],
-        experiment_id=data['experiment_id'],
-        scheduled_at=datetime.fromisoformat(data['scheduled_at']),
+        section_subject_id=section_subject_id,
+        experiment_id=experiment_id,
+        title=data.get('title'),
+        scheduled_at=scheduled_at,
         duration_minutes=data.get('duration_minutes', 180),
         gate_score_threshold=data.get('gate_score_threshold', 70),
         late_join_window_min=data.get('late_join_window_min', 10),
@@ -478,7 +857,126 @@ def schedule_session():
     )
     db.session.add(session)
     db.session.commit()
+
+    from app.institution.audit import write_audit
+    write_audit(g.user_id, g.institution_id, 'instructor_schedule_session', 'session',
+                session.id,
+                f'Instructor scheduled "{data.get("title") or "lab"}" — '
+                f'{datetime.fromisoformat(str(data["scheduled_at"]).replace("Z", "")).isoformat()}')
     return jsonify({'session': session.to_dict()}), 201
+
+
+@instructor_bp.route('/sessions/<session_id>', methods=['PATCH', 'PUT'])
+@require_role('instructor', 'institution_admin')
+def patch_session(session_id):
+    """Update lab session configuration (title, experiment, schedule, duration, gate threshold, proctor toggles)."""
+    session = LabSession.query.filter_by(
+        id=session_id, institution_id=g.institution_id
+    ).first_or_404()
+    data = request.get_json() or {}
+
+    if 'title' in data and data['title']:
+        session.title = data['title']
+    if 'experiment_id' in data:
+        session.experiment_id = data['experiment_id']
+    if 'scheduled_at' in data and data['scheduled_at']:
+        try:
+            session.scheduled_at = datetime.fromisoformat(str(data['scheduled_at']).replace('Z', ''))
+        except ValueError:
+            pass
+    if 'duration_minutes' in data:
+        session.duration_minutes = int(data['duration_minutes'])
+    if 'gate_score_threshold' in data:
+        session.gate_score_threshold = int(data['gate_score_threshold'])
+    if 'late_join_window_min' in data:
+        session.late_join_window_min = int(data['late_join_window_min'])
+    if 'catchup_enabled' in data:
+        session.catchup_enabled = bool(data['catchup_enabled'])
+    if 'focus_ml_enabled' in data:
+        session.focus_ml_enabled = bool(data['focus_ml_enabled'])
+    if 'lockdown_enabled' in data:
+        session.lockdown_enabled = bool(data['lockdown_enabled'])
+
+    db.session.commit()
+    return jsonify({'session': _enriched_session(session)}), 200
+
+
+@instructor_bp.route('/sessions/<session_id>/video-token', methods=['GET'])
+@require_role('instructor', 'institution_admin')
+def video_token(session_id):
+    """
+    Mint a LiveKit instructor token on demand — used when opening the video
+    room for an ALREADY-ACTIVE session (page refresh, re-entry, or a session
+    that went live before this browser loaded). Tenancy-checked.
+    """
+    from app.livekit_helper import make_token
+
+    session = LabSession.query.filter_by(
+        id=session_id, institution_id=g.institution_id).first_or_404()
+    if session.status != 'active' or not session.jitsi_room_name:
+        return jsonify({'error': 'Session is not live.'}), 409
+
+    token = make_token(
+        room_name=session.jitsi_room_name,
+        identity=f"instructor-{g.user_id[:8]}",
+        name=getattr(g, 'full_name', None) or 'Instructor',
+        can_publish=True,
+        can_subscribe=True,
+    )
+    if not token:
+        # make_token returns None when LIVEKIT_API_KEY/SECRET are missing or
+        # the livekit-api package is absent from the running interpreter.
+        # Fail loudly (503) instead of 200-with-null so the frontend can
+        # show a real error instead of spinning forever.
+        return jsonify({'error': 'Video server misconfigured: LiveKit token could not be minted (check LIVEKIT_API_KEY / LIVEKIT_API_SECRET and the livekit-api package).'}), 503
+    return jsonify({
+        'livekit_token': token,
+        'jitsi_room':    session.jitsi_room_name,
+        'livekit_url':   current_app.config.get('LIVEKIT_URL', ''),
+    }), 200
+
+
+@instructor_bp.route('/sessions/<session_id>/video-control', methods=['POST'])
+@require_role('instructor', 'institution_admin')
+def video_control(session_id):
+    """
+    Server-side LiveKit participant control for the conductor's Student
+    Controls panel: mute a student's mic, disable their camera, or remove
+    them from the video room. Body: {action, student_id, value?}.
+    """
+    from app.livekit_helper import control_participant
+
+    data = request.get_json(silent=True) or {}
+    action = data.get('action')
+    student_id = data.get('student_id')
+    value = bool(data.get('value', True))
+    if action not in ('mute', 'camera', 'remove') or not student_id:
+        return jsonify({'error': 'Invalid action or missing student_id.'}), 400
+
+    session = LabSession.query.filter_by(
+        id=session_id, institution_id=g.institution_id).first_or_404()
+    if session.status != 'active' or not session.jitsi_room_name:
+        return jsonify({'error': 'Session is not live.'}), 409
+
+    # Emit media_control event over Socket.IO to student's private room so client immediately syncs
+    try:
+        from app.sockets.events import socketio
+        socketio.emit('media_control', {
+            'action': action,
+            'value': value,
+            'student_id': student_id,
+        }, room=f"student_{student_id}")
+    except Exception as err:
+        current_app.logger.warning(f"Socket emit media_control failed: {err}")
+
+    # If LiveKit room is provisioned, also update the LiveKit track
+    if session.jitsi_room_name:
+        result = control_participant(
+            session.jitsi_room_name, f"student-{student_id[:8]}", action, value)
+        if result and result.get('ok'):
+            return jsonify(result), 200
+
+    return jsonify({'ok': True, 'detail': f'{action} signal dispatched'}), 200
 
 
 @instructor_bp.route('/sessions/<session_id>/start', methods=['POST'])
@@ -495,24 +993,36 @@ def start_session(session_id):
     if session.status != 'scheduled':
         return jsonify({'error': f'Session is already {session.status}'}), 400
 
-    # Gate on the code execution engine — a live coding session is useless
-    # without it, so refuse to start if Docker is disabled or the daemon is down.
-    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
-        return jsonify({'error': 'Code execution engine is not enabled. Cannot start session.'}), 503
-    try:
-        probe = subprocess.run(
-            [current_app.config.get('DOCKER_BIN', 'docker'),
-             'version', '--format', '{{.Server.Version}}'],
-            capture_output=True, timeout=5,
-        )
-        if probe.returncode != 0:
-            return jsonify({'error': 'Code execution service is unavailable. Cannot start session.'}), 503
-    except Exception:
-        return jsonify({'error': 'Code execution service is offline. Cannot start session.'}), 503
+    # Gate on the code execution engine — warn if Docker is disabled, but don't
+    # block session start. Code submission will degrade gracefully if Docker is
+    # down; refusing to start the session entirely is too aggressive for dev.
+    if current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+        try:
+            probe = subprocess.run(
+                [current_app.config.get('DOCKER_BIN', 'docker'),
+                 'version', '--format', '{{.Server.Version}}'],
+                capture_output=True, timeout=5,
+            )
+            if probe.returncode != 0:
+                current_app.logger.warning('Docker probe failed — code execution will be unavailable this session')
+        except Exception:
+            current_app.logger.warning('Docker not reachable — code execution will be unavailable this session')
 
-    # Initialize attendance records for all enrolled students
+    # Initialize attendance records and dispatch notifications for all enrolled students
     ss = SectionSubject.query.get(session.section_subject_id)
+    students = []
+    exp_title = session.title or "Lab Session"
     if ss:
+        from app.models.experiment import Experiment
+        from app.models.subject import Subject
+        from app.models.feedback import Notification
+
+        exp = db.session.get(Experiment, session.experiment_id) if session.experiment_id else None
+        if exp and exp.title:
+            exp_title = exp.title
+        subj = db.session.get(Subject, ss.subject_id) if ss.subject_id else None
+        subj_name = subj.name if subj else "your class"
+
         students = SectionStudent.query.filter_by(section_id=ss.section_id).all()
         for enrollment in students:
             if not SessionAttendance.query.filter_by(
@@ -523,6 +1033,15 @@ def start_session(session_id):
                     student_id=enrollment.student_id,
                     status='absent'
                 ))
+            # Persist notification in database for student
+            db.session.add(Notification(
+                user_id=enrollment.student_id,
+                type='session_started',
+                title=f"Live Lab Started: {exp_title}",
+                message=f"Your instructor started the live session for {subj_name}. Join now to participate!",
+                is_read=False,
+                created_at=datetime.utcnow()
+            ))
 
     session.status     = 'active'
     session.started_at = datetime.utcnow()
@@ -550,12 +1069,39 @@ def start_session(session_id):
             can_subscribe=True,
         )
 
-    # Broadcast via Socket.io — include livekit_token so instructor page
-    # can connect immediately without a separate REST round-trip
+    # Broadcast via Socket.io:
+    # 1. Direct to enrolled students' personal user rooms
+    # 2. Section room
+    # 3. Session room
     from app.extensions import socketio
+    for enrollment in students:
+        socketio.emit('new_notification', {
+            'type': 'session_started',
+            'title': f"Live Lab Started: {exp_title}",
+            'message': f"Your instructor started the live session. Join now to participate!",
+            'session_id': session_id,
+            'created_at': datetime.utcnow().isoformat() + 'Z',
+        }, room=f"user_{enrollment.student_id}")
+        socketio.emit('session_started', {
+            'session_id': session_id,
+            'experiment_id': session.experiment_id,
+            'title': exp_title,
+            'jitsi_room': session.jitsi_room_name,
+        }, room=f"user_{enrollment.student_id}")
+
+    if ss:
+        socketio.emit('session_started', {
+            'session_id': session_id,
+            'experiment_id': session.experiment_id,
+            'title': exp_title,
+            'jitsi_room': session.jitsi_room_name,
+        }, room=f"section_{ss.section_id}")
+
     socketio.emit('session_started', {
         'session_id':    session_id,
-        'jitsi_room':    session.jitsi_room_name,   # kept for backward compat
+        'experiment_id': session.experiment_id,
+        'title':         exp_title,
+        'jitsi_room':    session.jitsi_room_name,
         'livekit_token': livekit_token,
     }, room=f"session_{session_id}_students")
 
@@ -593,6 +1139,16 @@ def end_session(session_id):
         'mode': 'ended',
         'rules': {'code': 'read_only', 'quiz': 'locked', 'submit': False, 'proctor': 'off', 'label': 'Ended'},
     }, room=f"session_{session_id}_students")
+
+    # Also notify students in their personal rooms so student dashboards update immediately
+    ss = SectionSubject.query.get(session.section_subject_id)
+    if ss:
+        students = SectionStudent.query.filter_by(section_id=ss.section_id).all()
+        for enrollment in students:
+            socketio.emit('session_ended', {
+                'session_id': session_id,
+                'message': 'Session has ended.'
+            }, room=f"user_{enrollment.student_id}")
 
     return jsonify({'status': 'ended'}), 200
 
@@ -1218,3 +1774,69 @@ def catchup_overview():
         })
 
     return jsonify({'enabled_sessions': enabled_sessions, 'attempts': attempts}), 200
+
+
+# ── Session creation conflict check (mirrors bulk-schedule rules) ────────────
+
+@instructor_bp.route('/sessions/check-conflict', methods=['POST'])
+@require_role('instructor', 'institution_admin')
+def check_session_conflict():
+    """
+    Pre-flight clash check for the session-creation wizard (Step 4).
+    Body: {section_subject_id, scheduled_at, duration_minutes, exclude_session_id?}
+
+    Mirrors the bulk-schedule rules exactly:
+      * section conflict    — another live session for the same section
+                              overlaps the proposed slot
+      * instructor conflict — another session taught by this section-subject's
+                              instructor overlaps the proposed slot
+    Overlap: existing.start < proposed.end AND existing.end > proposed.start
+    """
+    data = request.get_json() or {}
+    ss_id = data.get('section_subject_id')
+    try:
+        start = datetime.fromisoformat(str(data.get('scheduled_at', '')).replace('Z', ''))
+    except ValueError:
+        return jsonify({'error': 'scheduled_at is required (ISO datetime)'}), 400
+    duration = int(data.get('duration_minutes') or 60)
+    end = start + timedelta(minutes=duration)
+    exclude = data.get('exclude_session_id')
+
+    ss = SectionSubject.query.filter_by(
+        id=ss_id, institution_id=g.institution_id).first()
+    if not ss:
+        return jsonify({'error': 'section_subject_id not found in your institution'}), 404
+
+    # Candidate sessions: same section OR same instructor, not the excluded one
+    section_ss_ids = [s.id for s in SectionSubject.query.filter_by(
+        institution_id=g.institution_id, section_id=ss.section_id).all()]
+
+    cand_ids = set(section_ss_ids) | {ss.id}
+    q = LabSession.query.filter(
+        LabSession.section_subject_id.in_(cand_ids),
+        LabSession.status.in_(('scheduled', 'active')),
+        LabSession.scheduled_at < end,
+    )
+    if exclude:
+        q = q.filter(LabSession.id != exclude)
+    candidates = q.all()
+
+    conflicts = []
+    for s in candidates:
+        s_end = s.scheduled_at + timedelta(minutes=s.duration_minutes or 0)
+        if s.scheduled_at >= end or s_end <= start:
+            continue   # no overlap
+        if s.section_subject_id == ss.id:
+            reason = 'Section clash'
+        else:
+            other = SectionSubject.query.get(s.section_subject_id)
+            reason = f'Instructor clash — {other.subject.name if other and other.subject else "another"} lab at the same time'
+        conflicts.append({
+            'session_id':    s.id,
+            'reason':        reason,
+            'title':         s.title or 'Lab session',
+            'scheduled_at':  s.scheduled_at.isoformat() + 'Z' if s.scheduled_at else None,
+            'duration':      s.duration_minutes,
+        })
+
+    return jsonify({'conflicts': conflicts, 'clear': len(conflicts) == 0}), 200

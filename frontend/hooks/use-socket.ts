@@ -14,6 +14,7 @@ export interface StudentJoinedPayload {
 
 export interface StudentLeftPayload {
   student_id: string;
+  full_name?: string;
   timestamp: string;
 }
 
@@ -108,6 +109,12 @@ export interface QuizLaunchedPayload {
   module_title: string;
 }
 
+export interface MediaControlPayload {
+  action: 'mute' | 'camera' | 'remove';
+  value: boolean;
+  student_id: string;
+}
+
 interface UseSocketOptions {
   sessionId: string;
   enabled?: boolean;
@@ -132,11 +139,22 @@ interface UseSocketOptions {
   onQuizLaunched?:     (data: QuizLaunchedPayload) => void;
   onForceSubmit?:      (data: ForceSubmitPayload) => void;
   onMyCheckpoint?:     (data: DirectCheckpointPayload) => void;
+  onTimerExpired?:     (data: { session_id: string; page_id: string | null; page_title: string; passed_count: number; total_count: number; timestamp: string }) => void;
+  onPollUpdate?:       (data: { poll_id: string; results: number[]; responses_count: number }) => void;
+  onPollClosed?:       (data: { id: string; results: number[]; responses_count: number }) => void;
+  onMediaControl?:     (data: MediaControlPayload) => void;
   onError?:            (msg: string) => void;
 }
 
 /**
  * useSocket — connects to Flask-SocketIO backend for live lab sessions.
+ *
+ * Callbacks are forwarded through refs so changing a callback (e.g. because
+ * a parent state value it closes over changed) does NOT re-register socket
+ * listeners and does NOT re-create the socket connection. This eliminates the
+ * chief source of lag: a re-render that changes `onForceSubmit` (which closes
+ * over `gate`, `language`, `stdin`) was previously tearing down and re-building
+ * every socket listener on every keystroke in the stdin box.
  *
  * Backend socket events are in: backend/app/sockets/events.py
  * Event names use underscore style (join_session, student_joined, proctor_alert).
@@ -164,10 +182,68 @@ export function useSocket({
   onQuizLaunched,
   onForceSubmit,
   onMyCheckpoint,
+  onTimerExpired,
+  onPollUpdate,
+  onPollClosed,
+  onMediaControl,
   onError,
 }: UseSocketOptions) {
-  const socketRef   = useRef<Socket | null>(null);
+  const socketRef    = useRef<Socket | null>(null);
   const [isConnected, setIsConnected] = useState(false);
+
+  // ── Stable callback refs — updated every render, never cause re-registration ─
+  // The socket listener calls the ref's current value; the ref always holds the
+  // latest callback without the socket needing to be re-created.
+  const cbJoined            = useRef(onJoined);
+  const cbStudentJoined     = useRef(onStudentJoined);
+  const cbStudentLeft       = useRef(onStudentLeft);
+  const cbCodeResult        = useRef(onCodeResult);
+  const cbFocusUpdate       = useRef(onFocusUpdate);
+  const cbProctorAlert      = useRef(onProctorAlert);
+  const cbCheckpointUpdate  = useRef(onCheckpointUpdate);
+  const cbSessionStarted    = useRef(onSessionStarted);
+  const cbSessionEnded      = useRef(onSessionEnded);
+  const cbInstructorMessage = useRef(onInstructorMessage);
+  const cbScreenshotFrame   = useRef(onScreenshotFrame);
+  const cbModeChanged       = useRef(onModeChanged);
+  const cbDirectCheckpoint  = useRef(onDirectCheckpoint);
+  const cbChatMessage       = useRef(onChatMessage);
+  const cbProctorPolicy     = useRef(onProctorPolicy);
+  const cbPageLaunched      = useRef(onPageLaunched);
+  const cbQuizLaunched      = useRef(onQuizLaunched);
+  const cbForceSubmit       = useRef(onForceSubmit);
+  const cbMyCheckpoint      = useRef(onMyCheckpoint);
+  const cbTimerExpired      = useRef(onTimerExpired);
+  const cbPollUpdate        = useRef(onPollUpdate);
+  const cbPollClosed        = useRef(onPollClosed);
+  const cbMediaControl      = useRef(onMediaControl);
+  const cbError             = useRef(onError);
+
+  // Keep refs in sync with latest props — no socket reconnect needed
+  cbJoined.current            = onJoined;
+  cbStudentJoined.current     = onStudentJoined;
+  cbStudentLeft.current       = onStudentLeft;
+  cbCodeResult.current        = onCodeResult;
+  cbFocusUpdate.current       = onFocusUpdate;
+  cbProctorAlert.current      = onProctorAlert;
+  cbCheckpointUpdate.current  = onCheckpointUpdate;
+  cbSessionStarted.current    = onSessionStarted;
+  cbSessionEnded.current      = onSessionEnded;
+  cbInstructorMessage.current = onInstructorMessage;
+  cbScreenshotFrame.current   = onScreenshotFrame;
+  cbModeChanged.current       = onModeChanged;
+  cbDirectCheckpoint.current  = onDirectCheckpoint;
+  cbChatMessage.current       = onChatMessage;
+  cbProctorPolicy.current     = onProctorPolicy;
+  cbPageLaunched.current      = onPageLaunched;
+  cbQuizLaunched.current      = onQuizLaunched;
+  cbForceSubmit.current       = onForceSubmit;
+  cbMyCheckpoint.current      = onMyCheckpoint;
+  cbTimerExpired.current      = onTimerExpired;
+  cbPollUpdate.current        = onPollUpdate;
+  cbPollClosed.current        = onPollClosed;
+  cbMediaControl.current      = onMediaControl;
+  cbError.current             = onError;
 
   useEffect(() => {
     if (!sessionId || !enabled) return;
@@ -185,53 +261,54 @@ export function useSocket({
 
     socket.on('connect', () => {
       setIsConnected(true);
-      // Join the session room immediately on connect
       socket.emit('join_session', { session_id: sessionId });
     });
 
     socket.on('disconnect', () => setIsConnected(false));
 
     socket.on('connect_error', (err) => {
-      onError?.(`Connection error: ${err.message}`);
+      cbError.current?.(`Connection error: ${err.message}`);
     });
 
-    socket.on('error', (msg: string) => onError?.(msg));
+    socket.on('error', (msg: string) => cbError.current?.(msg));
 
-    // ── Server → Client events (names must match backend/app/sockets/events.py) ─
-    if (onJoined)            socket.on('joined',                onJoined);
-    if (onStudentJoined)     socket.on('student_joined',        onStudentJoined);
-    if (onStudentLeft)       socket.on('student_left',          onStudentLeft);
-    if (onCodeResult)        socket.on('code_result',           onCodeResult);
-    if (onFocusUpdate)       socket.on('student_focus_update',  onFocusUpdate);
-    if (onProctorAlert)      socket.on('proctor_alert',         onProctorAlert);
-    if (onCheckpointUpdate)  socket.on('student_checkpoint_update', onCheckpointUpdate);
-    if (onSessionStarted)    socket.on('session_started',       onSessionStarted);
-    if (onSessionEnded)      socket.on('session_ended',         onSessionEnded);
-    if (onInstructorMessage) socket.on('instructor_message',    onInstructorMessage);
-    if (onScreenshotFrame)   socket.on('student_screenshot',    onScreenshotFrame);
-    if (onModeChanged)       socket.on('session_mode_changed',  onModeChanged);
-    if (onDirectCheckpoint)  socket.on('checkpoint_update',     onDirectCheckpoint);
-    if (onChatMessage)       socket.on('chat_message',          onChatMessage);
-    if (onProctorPolicy)     socket.on('proctor_policy_updated', onProctorPolicy);
-    // Page / quiz launch: the instructor Conductor emits `conductor_*` into the
-    // instructor room and `student_*` into the students room — listen to both so
-    // either side can wire onPageLaunched / onQuizLaunched.
-    if (onPageLaunched) {
-      socket.on('conductor_page_launched', onPageLaunched);
-      socket.on('student_page_launched',   onPageLaunched);
-    }
-    if (onQuizLaunched) {
-      socket.on('conductor_quiz_launched', onQuizLaunched);
-      socket.on('student_quiz_launched',   onQuizLaunched);
-    }
-    if (onForceSubmit)       socket.on('force_submission',      onForceSubmit);
-    if (onMyCheckpoint)      socket.on('my_checkpoint_update',  onMyCheckpoint);
+    // ── Server → Client events — each listener delegates to the stable ref ────
+    // The listeners are registered once per sessionId/enabled change.
+    // Callback identity changes in the parent never cause re-registration.
+    socket.on('joined',                    (d) => cbJoined.current?.(d));
+    socket.on('student_joined',            (d) => cbStudentJoined.current?.(d));
+    socket.on('student_left',              (d) => cbStudentLeft.current?.(d));
+    socket.on('code_result',               (d) => cbCodeResult.current?.(d));
+    socket.on('student_focus_update',      (d) => cbFocusUpdate.current?.(d));
+    socket.on('proctor_alert',             (d) => cbProctorAlert.current?.(d));
+    socket.on('student_checkpoint_update', (d) => cbCheckpointUpdate.current?.(d));
+    socket.on('session_started',           (d) => cbSessionStarted.current?.(d));
+    socket.on('session_ended',             (d) => cbSessionEnded.current?.(d));
+    socket.on('instructor_message',        (d) => cbInstructorMessage.current?.(d));
+    socket.on('student_screenshot',        (d) => cbScreenshotFrame.current?.(d));
+    socket.on('session_mode_changed',      (d) => cbModeChanged.current?.(d));
+    socket.on('checkpoint_update',         (d) => cbDirectCheckpoint.current?.(d));
+    socket.on('chat_message',              (d) => cbChatMessage.current?.(d));
+    socket.on('proctor_policy_updated',    (d) => cbProctorPolicy.current?.(d));
+    // Page / quiz launch: Conductor emits conductor_* to instructor room and
+    // student_* to student room — listen to both so either side works.
+    socket.on('conductor_page_launched',   (d) => cbPageLaunched.current?.(d));
+    socket.on('student_page_launched',     (d) => cbPageLaunched.current?.(d));
+    socket.on('conductor_quiz_launched',   (d) => cbQuizLaunched.current?.(d));
+    socket.on('student_quiz_launched',     (d) => cbQuizLaunched.current?.(d));
+    socket.on('force_submission',          (d) => cbForceSubmit.current?.(d));
+    socket.on('my_checkpoint_update',      (d) => cbMyCheckpoint.current?.(d));
+    socket.on('timer_expired',             (d) => cbTimerExpired.current?.(d));
+    socket.on('poll_update',               (d) => cbPollUpdate.current?.(d));
+    socket.on('poll_closed',               (d) => cbPollClosed.current?.(d));
+    socket.on('media_control',             (d) => cbMediaControl.current?.(d));
 
     return () => {
       socket.emit('leave_session', { session_id: sessionId });
       socket.disconnect();
       socketRef.current = null;
     };
+  // Only reconnect when sessionId or enabled changes — NOT when callbacks change.
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionId, enabled]);
 
@@ -301,7 +378,6 @@ export function useSocket({
   /**
    * Send a JPEG screenshot frame to the instructor monitoring grid.
    * @param dataUrl  base64 data-URL from canvas.toDataURL('image/jpeg', 0.6)
-   * Call every ~30s from the student live-lab page (see Task #37).
    */
   const emitScreenshot = useCallback((dataUrl: string) => {
     socketRef.current?.emit('screenshot_frame', { session_id: sessionId, frame: dataUrl });
