@@ -94,3 +94,10 @@ backend/app/static/test_ui.html
 # Editor scratch files
 **/Untitled-*.txt
 
+# ── Local runtime pids, errs & test artifacts ───────────────────────────
+*.pid
+*.err
+test_results.json
+check_models.py
+backend/test_session_notification.py
+
