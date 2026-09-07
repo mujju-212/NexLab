@@ -2,11 +2,13 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import {
-  ClipboardCheck, CheckCircle2, History, MessageSquare, Lock, Save, X
+  ClipboardCheck, CheckCircle2, History, MessageSquare, Lock, Save, X,
+  Sparkles, Loader2, TrendingUp,
 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import { experimentService } from '@/services/experiment.service';
 import { submissionService } from '@/services/submission.service';
+import { experienceService } from '@/services/experience.service';
 import styles from '../shared.module.css';
 
 interface ExpOption { id: string; title: string; exp_number: number }
@@ -48,6 +50,18 @@ export default function GradingPage() {
   const [manualGrade, setManualGrade] = useState('');
   const [feedback, setFeedback] = useState('');
   const [saving, setSaving] = useState(false);
+  const [drafting, setDrafting] = useState(false);
+
+  // T2-9 curve modal
+  const [showCurve, setShowCurve] = useState(false);
+  const [curveMode, setCurveMode] = useState<'add' | 'factor'>('add');
+  const [curveValue, setCurveValue] = useState('5');
+  const [curvePreview, setCurvePreview] = useState<{
+    affected: number; locked_skipped: number;
+    class_avg_before: number | null; class_avg_after: number | null;
+    rows: Array<{ student_id: string; before: number | null; after: number | null; locked: boolean }>;
+  } | null>(null);
+  const [curving, setCurving] = useState(false);
 
   // replay modal
   const [replay, setReplay] = useState<{ student: string; versions: ReplayVersion[] } | null>(null);
@@ -80,6 +94,40 @@ export default function GradingPage() {
     setGrading(sub);
     setManualGrade('');
     setFeedback('');
+  };
+
+  // T2-7 — governed AI draft; instructor edits before saving
+  const generateDraft = async () => {
+    if (!grading) return;
+    setDrafting(true);
+    try {
+      const res = await experienceService.aiFeedbackDraft(grading.student_id, selectedExp);
+      setFeedback(res.draft);
+      toast3(`Draft generated (${res.model}). Edit before saving.`);
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string }; status?: number } };
+      toast3(e?.response?.data?.error ?? (e?.response?.status === 429 ? 'AI quota exceeded.' : 'Draft generation failed.'));
+    } finally { setDrafting(false); }
+  };
+
+  // T2-9 curve — preview then apply
+  const runCurve = async (apply: boolean) => {
+    const v = parseFloat(curveValue);
+    if (isNaN(v)) { toast3('Enter a number.'); return; }
+    setCurving(true);
+    try {
+      const res = await experienceService.curveGrades({
+        experiment_id: selectedExp, mode: curveMode, value: v, apply,
+      });
+      if (apply) {
+        toast3(`Curved ${res.changed} grade(s).`);
+        setShowCurve(false); setCurvePreview(null);
+      } else {
+        setCurvePreview(res as typeof curvePreview);
+      }
+    } catch (e: unknown) {
+      toast3((e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Curve failed.');
+    } finally { setCurving(false); }
   };
 
   const saveGrade = async () => {
@@ -130,6 +178,12 @@ export default function GradingPage() {
         <span className={styles.sectionSub}>
           {loading ? 'Loading…' : `${submissions.length} final submission${submissions.length === 1 ? '' : 's'}`}
         </span>
+        {selectedExp && (
+          <button className={styles.ghostBtn} onClick={() => { setShowCurve(true); setCurvePreview(null); }}
+            title="Curve final grades for this experiment">
+            <TrendingUp size={13} /> Curve
+          </button>
+        )}
       </div>
 
       <div className={styles.sectionCard}>
@@ -223,6 +277,14 @@ export default function GradingPage() {
               <textarea className={styles.textarea} value={feedback}
                 onChange={e => setFeedback(e.target.value)}
                 placeholder="What was good, what to improve…" />
+              <button type="button" className={styles.ghostBtn} onClick={generateDraft} disabled={drafting}
+                style={{ marginTop: 6 }}>
+                {drafting ? <Loader2 size={13} className="animate-spin" /> : <Sparkles size={13} />}
+                {drafting ? 'Drafting…' : 'Generate AI draft'}
+              </button>
+              <span style={{ fontSize: 11.5, color: '#9891a6', marginLeft: 8 }}>
+                Draft only — you edit and decide what the student sees.
+              </span>
             </div>
 
             <p style={{ fontSize: 12, color: '#b45309', display: 'flex', gap: 6, alignItems: 'center' }}>
@@ -270,6 +332,55 @@ export default function GradingPage() {
                   {versionCode || '(empty)'}
                 </pre>
               </>
+            )}
+          </div>
+        </div>
+      )}
+
+      {/* ══ Curve modal (T2-9) ══ */}
+      {showCurve && (
+        <div className={styles.modalOverlay} onClick={() => setShowCurve(false)}>
+          <div className={styles.modalCard} onClick={e => e.stopPropagation()}>
+            <div className={styles.modalHeader}>
+              <h2 className={styles.modalTitle}>Curve grades</h2>
+              <button className={styles.closeBtn} onClick={() => setShowCurve(false)}><X size={16} /></button>
+            </div>
+            <div className={styles.gridTwo}>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>Mode</label>
+                <select className={styles.select} value={curveMode} onChange={e => { setCurveMode(e.target.value as 'add' | 'factor'); setCurvePreview(null); }}>
+                  <option value="add">Add points (+N)</option>
+                  <option value="factor">Multiply (×factor)</option>
+                </select>
+              </div>
+              <div className={styles.formGroup}>
+                <label className={styles.formLabel}>{curveMode === 'add' ? 'Points (±50)' : 'Factor (0.5–2.0)'}</label>
+                <input className={styles.input} type="number" step="0.1" value={curveValue}
+                  onChange={e => { setCurveValue(e.target.value); setCurvePreview(null); }} />
+              </div>
+            </div>
+            <button className={styles.ghostBtn} onClick={() => runCurve(false)} disabled={curving}>
+              {curving ? <Loader2 size={13} className="animate-spin" /> : null} Preview
+            </button>
+
+            {curvePreview && (
+              <div style={{ marginTop: 12 }}>
+                <p style={{ fontSize: 13, color: '#374151', marginBottom: 6 }}>
+                  Class avg: {curvePreview.class_avg_before ?? '—'} → <strong>{curvePreview.class_avg_after ?? '—'}</strong>
+                  {' · '}{curvePreview.affected ?? 0} affected
+                  {curvePreview.locked_skipped ? ` · ${curvePreview.locked_skipped} locked (skipped)` : ''}
+                </p>
+                <div style={{ maxHeight: 180, overflowY: 'auto', marginBottom: 12 }}>
+                  {(curvePreview.rows ?? []).filter(r => r.before != null).slice(0, 30).map(r => (
+                    <div key={r.student_id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, padding: '3px 0', borderBottom: '1px solid #f3f0fa' }}>
+                      <span>{r.locked ? '🔒' : ''} {r.before} → <strong>{r.after}</strong></span>
+                    </div>
+                  ))}
+                </div>
+                <button className={styles.primaryBtn} onClick={() => runCurve(true)} disabled={curving}>
+                  {curving ? 'Applying…' : 'Apply curve'}
+                </button>
+              </div>
             )}
           </div>
         </div>

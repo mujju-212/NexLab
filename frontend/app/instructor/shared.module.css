@@ -63,7 +63,7 @@
 /* ── Tab row ────────────────────────────────────────────────────────────── */
 .tabRow {
   display: flex; align-items: center; gap: 4px; margin-bottom: 22px;
-  overflow-x: auto; padding-bottom: 4px;
+  overflow-x: auto; padding-bottom: 4px; flex-shrink: 0;
   background: rgba(245,243,255,.7); border-radius: 13px; padding: 4px;
   border: 1px solid rgba(255,255,255,.9);
   box-shadow: 0 1px 4px rgba(147,51,234,.06);

@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Loader2 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import { experienceService } from '@/services/experience.service';
@@ -102,11 +102,12 @@ export default function InstructorAnalyticsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, ssId]);
 
-  // Trajectory: load roster for the student picker
+  // Trajectory: load roster for the student picker — lightweight /roster endpoint
+  // (was calling the full integrity aggregation just to fill a dropdown)
   const loadRoster = async () => {
     try {
-      const data = await experienceService.analyticsIntegrity({});
-      setRoster((data.integrity || []).map(r => ({ student_id: r.student_id, full_name: r.full_name })));
+      const data = await experienceService.analyticsRoster();
+      setRoster((data.roster || []).map(r => ({ student_id: r.student_id, full_name: r.full_name })));
     } catch { /* ignore */ }
   };
 
@@ -118,12 +119,12 @@ export default function InstructorAnalyticsPage() {
     catch (e: any) { toast3(errText(e)); } finally { setLoading(false); }
   };
 
-  // Quality donut data
-  const qualityDonut = (() => {
+  // Quality donut data — memoized, only recomputed when experiments change
+  const qualityDonut = useMemo(() => {
     const q: Record<string, number> = {};
     exps.forEach(e => Object.entries(e.quality_distribution || {}).forEach(([k, v]) => { q[k] = (q[k] || 0) + (v as number); }));
     return Object.entries(q).map(([name, value]) => ({ name, value }));
-  })();
+  }, [exps]);
 
   const COLORS = ['#7c3aed', '#9333ea', '#f59e0b', '#10b981', '#ef4444', '#3b82f6'];
 

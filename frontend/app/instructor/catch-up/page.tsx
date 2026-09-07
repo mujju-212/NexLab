@@ -44,8 +44,8 @@ export default function CatchUpPage() {
     >
       {/* Action Row */}
       <div className={styles.actionRow}>
-        <button type="button" className={styles.primaryBtn} onClick={() => router.push('/instructor/content')}>
-          <Video size={16} strokeWidth={2} /> Video Recording Library
+        <button type="button" className={styles.primaryBtn} onClick={() => router.push('/instructor/experiments')}>
+          <Video size={16} strokeWidth={2} /> Manage Experiment Content
         </button>
         <button type="button" className={styles.secondaryBtn} onClick={() => router.push('/instructor/grading')}>
           <FileText size={16} strokeWidth={1.9} /> Review Catch-Up Submissions

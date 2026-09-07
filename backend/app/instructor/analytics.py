@@ -100,14 +100,28 @@ def analytics_experiments():
     ).order_by(Experiment.exp_number).all()
 
     rows = []
+    # Batch ALL grades, attempts, hints — 3 queries total instead of 3×N
+    all_grades = Grade.query.filter(Grade.experiment_id.in_(my_exp_ids)).all() if my_exp_ids else []
+    all_attempts = CodeAttempt.query.filter(CodeAttempt.experiment_id.in_(my_exp_ids)).all() if my_exp_ids else []
+    hint_counts = dict(
+        db.session.query(HintLog.experiment_id, db.func.count(HintLog.id))
+        .filter(HintLog.experiment_id.in_(my_exp_ids))
+        .group_by(HintLog.experiment_id).all()
+    ) if my_exp_ids else {}
+
+    grades_by_exp = {}
+    attempts_by_exp = {}
+    for g in all_grades:
+        grades_by_exp.setdefault(g.experiment_id, []).append(g)
+    for a in all_attempts:
+        attempts_by_exp.setdefault(a.experiment_id, []).append(a)
+
     for exp in experiments:
-        # Grades
-        grades = Grade.query.filter_by(experiment_id=exp.id).all()
+        grades = grades_by_exp.get(exp.id, [])
         finals = [g.final_grade for g in grades if g.final_grade is not None]
         avg_score = round(sum(finals) / len(finals), 1) if finals else None
 
-        # Attempts
-        attempts = CodeAttempt.query.filter_by(experiment_id=exp.id).all()
+        attempts = attempts_by_exp.get(exp.id, [])
         total_attempts = len(attempts)
         unique_students = len({a.student_id for a in attempts})
         avg_attempts = round(total_attempts / unique_students, 1) if unique_students else 0
@@ -132,8 +146,8 @@ def analytics_experiments():
         tc_total  = sum(a.test_cases_total or 0 for a in finals_attempts)
         avg_tc_score = round(tc_passed / tc_total * 100, 1) if tc_total else None
 
-        # Hint usage per experiment
-        hint_count = HintLog.query.filter_by(experiment_id=exp.id).count()
+        # Hint usage per experiment (from pre-batched aggregate)
+        hint_count = hint_counts.get(exp.id, 0)
         hint_usage_avg = round(hint_count / unique_students, 1) if unique_students else 0
 
         # Difficulty (from concept_tags / difficulty_level)
@@ -175,11 +189,15 @@ def student_trajectory(student_id):
     if not student:
         return jsonify({'error': 'Student not found'}), 404
 
-    # Grades over time
+    # Grades over time — batch session lookups (was N+1)
     grades = Grade.query.filter_by(student_id=student_id).order_by(Grade.created_at).all()
+    session_ids = {g.session_id for g in grades if g.session_id}
+    sessions_map = {
+        s.id: s for s in LabSession.query.filter(LabSession.id.in_(session_ids)).all()
+    } if session_ids else {}
     grade_timeline = []
     for g in grades:
-        sess = LabSession.query.get(g.session_id)
+        sess = sessions_map.get(g.session_id)
         grade_timeline.append({
             'session_id': g.session_id,
             'scheduled_at': sess.scheduled_at.isoformat() if sess else None,
@@ -192,18 +210,18 @@ def student_trajectory(student_id):
             'hint_deduction': g.hint_deduction,
         })
 
-    # Class average baseline for same experiments
-    exp_ids = [g.experiment_id for g in grades if g.experiment_id]
+    # Class average baseline — one grouped aggregate (was per-experiment loop)
+    exp_ids = list({g.experiment_id for g in grades if g.experiment_id})
     class_avg = {}
     if exp_ids:
-        for eid in exp_ids:
-            others = Grade.query.filter(
-                Grade.experiment_id == eid,
-                Grade.final_grade.isnot(None),
-            ).all()
-            vals = [g.final_grade for g in others]
-            if vals:
-                class_avg[eid] = round(sum(vals) / len(vals), 1)
+        agg = db.session.query(
+            Grade.experiment_id,
+            db.func.avg(Grade.final_grade),
+        ).filter(
+            Grade.experiment_id.in_(exp_ids),
+            Grade.final_grade.isnot(None),
+        ).group_by(Grade.experiment_id).all()
+        class_avg = {eid: round(avg, 1) for eid, avg in agg if avg is not None}
 
     for point in grade_timeline:
         point['class_avg'] = class_avg.get(point['experiment_id'])
@@ -276,43 +294,90 @@ def trends():
         'session_count': 0,
     })
 
+    # Batch all per-session data — 5 bulk queries instead of 5×N
+    session_ids = [sess.id for sess in sessions]
+    sess_id_to_ssid = {sess.id: sess.section_subject_id for sess in sessions}
+
+    # 1. Grades
+    all_grades = db.session.query(
+        Grade.session_id, Grade.final_grade,
+    ).filter(
+        Grade.session_id.in_(session_ids),
+        Grade.final_grade.isnot(None),
+    ).all() if session_ids else []
+    grades_by_sess = defaultdict(list)
+    for sid, fg in all_grades:
+        grades_by_sess[sid].append(fg)
+
+    # 2. Attendance counts
+    present_counts = dict(
+        db.session.query(
+            SessionAttendance.session_id,
+            db.func.count(SessionAttendance.id),
+        ).filter(
+            SessionAttendance.session_id.in_(session_ids),
+            SessionAttendance.status == 'present',
+        ).group_by(SessionAttendance.session_id).all()
+    ) if session_ids else {}
+
+    # 3. Enrolled counts per section_subject
+    ss_ids = set(sess_id_to_ssid.values())
+    enrolled_counts = dict(
+        db.session.query(
+            SectionSubject.id,
+            db.func.count(SectionStudent.student_id),
+        ).join(
+            SectionSubject, SectionSubject.section_id == SectionStudent.section_id
+        ).filter(
+            SectionSubject.id.in_(ss_ids),
+        ).group_by(SectionSubject.id).all()
+    ) if ss_ids else {}
+
+    # 4. Focus scores
+    all_focus = db.session.query(
+        FocusScore.session_id, FocusScore.focus_score,
+    ).filter(
+        FocusScore.session_id.in_(session_ids),
+        FocusScore.focus_score.isnot(None),
+    ).all() if session_ids else []
+    focus_by_sess = defaultdict(list)
+    for sid, fsc in all_focus:
+        focus_by_sess[sid].append(fsc)
+
+    # 5. Completion (unique students per session with final submissions)
+    completion_counts = {}
+    if session_ids:
+        uniq = db.session.query(
+            CodeAttempt.session_id, CodeAttempt.student_id,
+        ).filter(
+            CodeAttempt.session_id.in_(session_ids),
+            CodeAttempt.is_final_submission == True,
+        ).distinct().all()
+        for csid, cstu in uniq:
+            completion_counts.setdefault(csid, set()).add(cstu)
+
     for sess in sessions:
         week_key = sess.scheduled_at.strftime('%Y-W%W')
         weekly[week_key]['session_count'] += 1
 
-        # Scores
-        exp_grades = Grade.query.filter(
-            Grade.session_id == sess.id,
-            Grade.final_grade.isnot(None),
-        ).all()
-        scores = [g.final_grade for g in exp_grades]
+        # Scores (from batch)
+        scores = grades_by_sess.get(sess.id, [])
         if scores:
             weekly[week_key]['scores'].extend(scores)
 
         # Attendance
-        present = SessionAttendance.query.filter_by(
-            session_id=sess.id, status='present'
-        ).count()
-        enrolled = SectionStudent.query.join(
-            SectionSubject, SectionSubject.section_id == SectionStudent.section_id
-        ).filter(
-            SectionSubject.id == sess.section_subject_id
-        ).count()
+        present = present_counts.get(sess.id, 0)
+        enrolled = enrolled_counts.get(sess_id_to_ssid[sess.id], 0)
         if enrolled > 0:
             weekly[week_key]['attendance'].append(present / enrolled * 100)
 
-        # Focus
-        focus_rows = FocusScore.query.filter_by(session_id=sess.id).all()
-        focuses = [f.focus_score for f in focus_rows if f.focus_score is not None]
+        # Focus (from batch)
+        focuses = focus_by_sess.get(sess.id, [])
         if focuses:
             weekly[week_key]['focus'].append(round(sum(focuses) / len(focuses), 1))
 
         # Completion rate
-        attempts = CodeAttempt.query.filter(
-            CodeAttempt.session_id == sess.id,
-            CodeAttempt.is_final_submission == True,
-        ).all()
-        unique_completed = len({a.student_id for a in attempts})
+        unique_completed = len(completion_counts.get(sess.id, set()))
         if enrolled > 0:
             weekly[week_key]['completion'].append(unique_completed / enrolled * 100)
 
@@ -354,66 +419,67 @@ def engagement():
     if not session_ids:
         return jsonify({'engagement': []}), 200
 
-    # FocusScore
-    focus_rows = FocusScore.query.filter(
-        FocusScore.session_id.in_(session_ids)
-    ).all()
+    # SQL aggregate per student — 4 queries total (was: load full tables into RAM)
+    focus_avg = dict(db.session.query(
+        FocusScore.student_id, db.func.avg(FocusScore.focus_score),
+    ).filter(
+        FocusScore.session_id.in_(session_ids),
+        FocusScore.focus_score.isnot(None),
+    ).group_by(FocusScore.student_id).all()) if session_ids else {}
 
-    by_student = {}
-    for f in focus_rows:
-        by_student.setdefault(f.student_id, []).append(f)
+    hint_by_student = dict(db.session.query(
+        HintLog.student_id, db.func.count(HintLog.id),
+    ).filter(HintLog.experiment_id.in_(my_exp_ids)).group_by(HintLog.student_id).all()) if my_exp_ids else {}
 
-    # HintLog
-    hint_rows = HintLog.query.filter(
-        HintLog.experiment_id.in_(my_exp_ids)
-    ).all()
-    hint_by_student = {}
-    for h in hint_rows:
-        hint_by_student[h.student_id] = hint_by_student.get(h.student_id, 0) + 1
+    attempt_stats = {}
+    if session_ids:
+        aq = db.session.query(
+            CodeAttempt.student_id,
+            db.func.count(CodeAttempt.id),
+            db.func.coalesce(db.func.sum(CodeAttempt.execution_time_ms), 0),
+        ).filter(
+            CodeAttempt.session_id.in_(session_ids),
+        ).group_by(CodeAttempt.student_id).all()
+        for row in aq:
+            attempt_stats[row[0]] = (row[1], row[2])
 
-    # CodeAttempts
-    attempt_rows = CodeAttempt.query.filter(
-        CodeAttempt.session_id.in_(session_ids)
-    ).all()
-    attempts_by_student = {}
-    for a in attempt_rows:
-        attempts_by_student.setdefault(a.student_id, []).append(a)
-
-    # CodeVersion for save_type engagement signal (A10)
+    # CodeVersion save-type counts per student
     from app.models.submission import CodeVersion
-    version_rows = CodeVersion.query.filter(
-        CodeVersion.session_id.in_(session_ids),
-        CodeVersion.save_type.in_(['on_run', 'on_submit', 'auto']),
-    ).all()
     version_by_student = {}
-    for v in version_rows:
-        version_by_student.setdefault(v.student_id, []).append(v)
+    if session_ids:
+        vq = db.session.query(
+            CodeVersion.student_id, CodeVersion.save_type, db.func.count(CodeVersion.id),
+        ).filter(
+            CodeVersion.session_id.in_(session_ids),
+            CodeVersion.save_type.in_(['on_run', 'on_submit', 'auto']),
+        ).group_by(CodeVersion.student_id, CodeVersion.save_type).all()
+        for vsid, vtype, vcount in vq:
+            version_by_student.setdefault(vsid, {})[vtype] = vcount
 
     student_ids = list(set(
-        list(by_student.keys()) + list(hint_by_student.keys()) +
-        list(attempts_by_student.keys()) + list(version_by_student.keys())
+        list(focus_avg.keys()) + list(hint_by_student.keys()) +
+        list(attempt_stats.keys()) + list(version_by_student.keys())
     ))
-    users_map = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()}
+    users_map = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
 
     results = []
     exp_count = len(my_exp_ids) or 1
 
     for sid in student_ids:
-        focuses = by_student.get(sid, [])
-        avg_focus = round(sum(f.focus_score for f in focuses if f.focus_score) / len(focuses), 1) if focuses else None
+        avg_focus = focus_avg.get(sid)
 
-        attempts = attempts_by_student.get(sid, [])
-        attempt_count = len(attempts)
-        time_on_task = sum(a.execution_time_ms or 0 for a in attempts) / 1000.0  # seconds
+        at_info = attempt_stats.get(sid, (0, 0))
+        attempt_count = at_info[0] if isinstance(at_info, tuple) else 0
+        time_on_task = (at_info[1] if isinstance(at_info, tuple) else 0) / 1000.0
 
         hint_count = hint_by_student.get(sid, 0)
         hint_reliance = round(hint_count / exp_count, 2)
 
         # Save-type ratio for disengagement signal (A10)
-        versions = version_by_student.get(sid, [])
-        auto_count = sum(1 for v in versions if v.save_type == 'auto')
-        manual_count = sum(1 for v in versions if v.save_type in ('on_run', 'on_submit'))
-        total_v = len(versions)
+        vtypes = version_by_student.get(sid, {})
+        auto_count = vtypes.get('auto', 0)
+        manual_count = vtypes.get('on_run', 0) + vtypes.get('on_submit', 0)
+        total_v = auto_count + manual_count
         auto_ratio = round(auto_count / total_v, 2) if total_v else 0
 
         u = users_map.get(sid)
@@ -456,22 +522,33 @@ def integrity():
     if not session_ids:
         return jsonify({'integrity': []}), 200
 
-    # ProctorEvents
-    try:
-        pe_rows = ProctorEvent.query.filter(
-            ProctorEvent.session_id.in_(session_ids)
-        ).all()
-    except Exception:
-        pe_rows = []
-
-    # Per-student event counts
+    # ProctorEvents — aggregate in SQL (was loading full table into RAM)
     from collections import defaultdict
     pe_by_student = defaultdict(lambda: defaultdict(int))
-    for pe in pe_rows:
-        pe_by_student[pe.student_id][pe.event_type] += 1
+    try:
+        pe_agg = db.session.query(
+            ProctorEvent.student_id, ProctorEvent.event_type,
+            db.func.count(ProctorEvent.id),
+        ).filter(
+            ProctorEvent.session_id.in_(session_ids)
+        ).group_by(ProctorEvent.student_id, ProctorEvent.event_type).all()
+        for psid, ptype, pcount in pe_agg:
+            pe_by_student[psid][ptype] = pcount
+        all_student_ids = list(pe_by_student.keys())
+    except Exception:
+        all_student_ids = []
+        # Fallback if proctor_event table is unavailable — try a plain query
+        try:
+            pe_rows = ProctorEvent.query.filter(
+                ProctorEvent.session_id.in_(session_ids)
+            ).all()
+            for pe in pe_rows:
+                pe_by_student[pe.student_id][pe.event_type] += 1
+            all_student_ids = list({pe.student_id for pe in pe_rows})
+        except Exception:
+            all_student_ids = []
 
     # PlagiarismFlags
-    all_student_ids = list({pe.student_id for pe in pe_rows})
     # Also get students enrolled in these sections
     section_ids = {ss.section_id for ss in SectionSubject.query.filter(
         SectionSubject.id.in_(my_ss_ids)
@@ -562,7 +639,7 @@ def ai_usage_analytics():
     start, end = _date_window(30)
     ss_filter = _get_ss_filter()
 
-    # AIUsageLog scoped to instructor's institution
+    # AIUsageLog — aggregate in SQL (was loading all rows into RAM)
     logs = AIUsageLog.query.filter(
         AIUsageLog.institution_id == g.institution_id,
         AIUsageLog.created_at >= start,
@@ -579,35 +656,51 @@ def ai_usage_analytics():
 
     exp_count = len(my_exp_ids) or 1
 
-    # Per-student aggregation
+    # Per-student aggregation — use SQL group-by for tokens + calls
     from collections import defaultdict
-    by_student = defaultdict(lambda: {'tokens': 0, 'cost': 0.0, 'features': defaultdict(int), 'count': 0})
+    # Aggregate: total_tokens, estimated_cost, call_count, and feature breakdown
     by_feature = defaultdict(int)
 
-    for log in logs:
-        sid = log.user_id or 'unknown'
-        by_student[sid]['tokens'] += log.total_tokens or 0
-        by_student[sid]['cost'] += float(log.estimated_cost_usd or 0)
-        by_student[sid]['features'][log.feature] += 1
-        by_student[sid]['count'] += 1
-        by_feature[log.feature] += 1
+    # Student-level aggregates from SQL
+    student_agg = dict(db.session.query(
+        AIUsageLog.user_id,
+        db.func.coalesce(db.func.sum(AIUsageLog.total_tokens), 0),
+        db.func.coalesce(db.func.sum(AIUsageLog.estimated_cost_usd), 0.0),
+        db.func.count(AIUsageLog.id),
+    ).filter(
+        AIUsageLog.institution_id == g.institution_id,
+        AIUsageLog.created_at >= start,
+        AIUsageLog.created_at <= end,
+    ).group_by(AIUsageLog.user_id).all()) if logs else {}
 
-    # Normalize per experiment
-    student_ids = list(by_student.keys())
-    users_map = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()}
+    # Feature breakdown per student
+    feature_agg = defaultdict(lambda: defaultdict(int))
+    feature_rows = db.session.query(
+        AIUsageLog.user_id, AIUsageLog.feature, db.func.count(AIUsageLog.id),
+    ).filter(
+        AIUsageLog.institution_id == g.institution_id,
+        AIUsageLog.created_at >= start,
+        AIUsageLog.created_at <= end,
+    ).group_by(AIUsageLog.user_id, AIUsageLog.feature).all() if logs else []
+    for fsid, ffeat, fcount in feature_rows:
+        feature_agg[fsid][ffeat] = fcount
+        by_feature[ffeat] += fcount
+
+    student_ids = list(student_agg.keys())
+    users_map = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
 
     usage_rows = []
-    for sid, data in by_student.items():
+    for sid, (tokens, cost, call_count) in student_agg.items():
         u = users_map.get(sid)
         usage_rows.append({
             'student_id': sid,
             'full_name': u.full_name if u else '',
             'roll_number': u.roll_number if u else '',
-            'total_tokens': data['tokens'],
-            'estimated_cost_usd': round(data['cost'], 4),
-            'total_calls': data['count'],
-            'tokens_per_experiment': round(data['tokens'] / exp_count, 1),
-            'feature_breakdown': dict(data['features']),
+            'total_tokens': tokens,
+            'estimated_cost_usd': round(cost, 4),
+            'total_calls': call_count,
+            'tokens_per_experiment': round(tokens / exp_count, 1),
+            'feature_breakdown': dict(feature_agg.get(sid, {})),
         })
 
     usage_rows.sort(key=lambda r: r['total_tokens'], reverse=True)
@@ -617,3 +710,36 @@ def ai_usage_analytics():
         'by_feature': [{'feature': k, 'count': v} for k, v in sorted(by_feature.items(), key=lambda x: -x[1])],
         'normalization_factor': exp_count,
     }), 200
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# TAB B helper — lightweight roster (avoids loading the full integrity endpoint
+# just to populate the trajectory student picker)
+# ══════════════════════════════════════════════════════════════════════════════
+
+@analytics_bp.route('/roster', methods=['GET'])
+@require_role('instructor', 'institution_admin')
+def roster():
+    """Students in the instructor's sections — id/name/roll only."""
+    my_ss_ids = _my_ss_ids()
+    if not my_ss_ids:
+        return jsonify({'roster': []}), 200
+
+    section_ids = {ss.section_id for ss in SectionSubject.query.filter(
+        SectionSubject.id.in_(my_ss_ids)).all()}
+    enrolled = SectionStudent.query.filter(
+        SectionStudent.section_id.in_(section_ids),
+    ).with_entities(SectionStudent.student_id).all()
+    student_ids = [r[0] for r in enrolled]
+    if not student_ids:
+        return jsonify({'roster': []}), 200
+
+    users = User.query.filter(
+        User.id.in_(student_ids), User.role == 'student',
+    ).with_entities(User.id, User.full_name, User.roll_number).all()
+    roster = [
+        {'student_id': uid, 'full_name': name, 'roll_number': roll}
+        for uid, name, roll in users
+    ]
+    roster.sort(key=lambda r: (r['full_name'] or '').lower())
+    return jsonify({'roster': roster}), 200

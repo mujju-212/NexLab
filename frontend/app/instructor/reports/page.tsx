@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { Download, Table, Loader2, FileText, RefreshCw } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import styles from '../shared.module.css';
@@ -70,6 +70,9 @@ export default function ReportsPage() {
 
   // Async report generation (R2)
   const [reportKind, setReportKind] = useState('gradebook');
+  // R5: student_progress has two audiences — internal (instructor, with
+  // integrity columns) vs student (motivational, integrity excluded).
+  const [audience, setAudience] = useState<'internal' | 'student'>('internal');
   const [reports, setReports] = useState<ReportRow[]>([]);
   const [generating, setGenerating] = useState(false);
   const [reportsLoading, setReportsLoading] = useState(true);
@@ -85,8 +88,10 @@ export default function ReportsPage() {
   const generateReport = async () => {
     setGenerating(true);
     try {
-      await experienceService.requestReport(reportKind, { session_id: sessionId || undefined });
-      flash('Report generated.');
+      const params: Record<string, string | undefined> = { session_id: sessionId || undefined };
+      if (reportKind === 'student_progress') params.audience = audience;
+      await experienceService.requestReport(reportKind, params);
+      flash('Report generation started — it will appear below when ready.');
       await loadReports();
     } catch (e: any) {
       setError(e?.response?.data?.error || 'Report generation failed.');
@@ -95,9 +100,9 @@ export default function ReportsPage() {
     }
   };
 
-  const downloadReport = async (id: string) => {
-    try { await experienceService.downloadReport(id); }
-    catch { setError('Download failed.'); }
+  const downloadReport = async (id: string, fmt: 'csv' | 'xlsx' = 'csv') => {
+    try { await experienceService.downloadReport(id, fmt); }
+    catch (e: any) { setError(e?.response?.data?.error || 'Download failed.'); }
   };
 
   const reportStatusBadge = (status: string) => {
@@ -144,12 +149,18 @@ export default function ReportsPage() {
     })();
   }, [loadAttendance]);
 
-  const selectedSession = sessions.find((s) => s.id === sessionId);
+  const selectedSession = useMemo(() => sessions.find((s) => s.id === sessionId), [sessions, sessionId]);
 
-  const present = attendance.filter((a) => a.status === 'present').length;
-  const late = attendance.filter((a) => a.status === 'late').length;
-  const absent = attendance.filter((a) => a.status === 'absent').length;
-  const catchups = attendance.filter((a) => a.is_catchup).length;
+  const { present, late, absent, catchups } = useMemo(() => {
+    let present = 0, late = 0, absent = 0, catchups = 0;
+    for (const a of attendance) {
+      if (a.status === 'present') present++;
+      else if (a.status === 'late') late++;
+      else if (a.status === 'absent') absent++;
+      if (a.is_catchup) catchups++;
+    }
+    return { present, late, absent, catchups };
+  }, [attendance]);
 
   const handleExportServerCsv = async () => {
     if (!sessionId) return;
@@ -204,6 +215,13 @@ export default function ReportsPage() {
               style={{ width: 'auto', minWidth: 200 }}>
               {REPORT_KINDS.map(k => <option key={k.value} value={k.value}>{k.label}</option>)}
             </select>
+            {reportKind === 'student_progress' && (
+              <select className={styles.select} value={audience} onChange={e => setAudience(e.target.value as 'internal' | 'student')}
+                style={{ width: 'auto' }}>
+                <option value="internal">Internal (full detail)</option>
+                <option value="student">Student (motivational)</option>
+              </select>
+            )}
             <button className={styles.primaryBtn} onClick={generateReport} disabled={generating}>
               {generating ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
               Generate
@@ -230,10 +248,18 @@ export default function ReportsPage() {
                 <div className={styles.rowSide}>
                   <span className={`${styles.badge} ${reportStatusBadge(r.status)}`}>{r.status}</span>
                   {r.status === 'ready' && r.id && (
-                    <button className={styles.secondaryBtn} onClick={() => downloadReport(r.id)}
-                      style={{ padding: '6px 12px', minHeight: 0, fontSize: 12 }}>
-                      <Download size={12} /> CSV
-                    </button>
+                    <>
+                      <button className={styles.secondaryBtn} onClick={() => downloadReport(r.id)}
+                        style={{ padding: '6px 12px', minHeight: 0, fontSize: 12 }}>
+                        <Download size={12} /> CSV
+                      </button>
+                      <button className={styles.ghostBtn}
+                        onClick={() => downloadReport(r.id, 'xlsx')}
+                        style={{ padding: '6px 12px', minHeight: 0, fontSize: 12 }}
+                        title="Excel export (requires openpyxl on the server)">
+                        <Download size={12} /> XLSX
+                      </button>
+                    </>
                   )}
                 </div>
               </div>

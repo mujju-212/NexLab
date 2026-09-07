@@ -197,8 +197,10 @@ export const instructorService = {
       headers: token ? { Authorization: `Bearer ${token}` } : {},
       body: form,
     });
-    const data = await res.json();
-    if (!res.ok) throw { response: { data } };
+    const data = await res.json().catch(() => ({}));
+    if (!res.ok) {
+      throw new Error(data.error || `Server returned status ${res.status}`);
+    }
     return data;
   },
 
@@ -218,13 +220,21 @@ export const instructorService = {
     payload: {
       source: 'text' | 'experiment';
       text?: string;
-      generate: Array<'notes' | 'code' | 'quiz' | 'viva'>;
+      generate: Array<'notes' | 'code' | 'quiz' | 'viva' | 'assignment'>;
       language?: string;
       count_quiz?: number;
       count_viva?: number;
     }
   ): Promise<{
     notes?: { markdown: string };
+    assignment?: {
+      title?: string;
+      instructions: string;
+      language: string;
+      starter_code: string;
+      pass_threshold?: number;
+      test_cases: { input?: string; expected?: string; hidden?: boolean; weight?: number }[];
+    };
     code_snippets?: { title: string; language: string; description: string; code: string }[];
     quiz_questions?: { question: string; options: string[]; correct_index: number; explanation: string }[];
     viva_questions?: { question: string; expected_answer: string }[];
