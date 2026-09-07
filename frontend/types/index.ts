@@ -18,6 +18,9 @@ export interface Subject {
   name: string;
   code: string;
   institution_id: string;
+  icon?: string;
+  description?: string;
+  total_marks?: number;
 }
 
 export interface SectionSubject {
@@ -25,7 +28,15 @@ export interface SectionSubject {
   subject_id: string;
   subject_name: string;
   subject_code: string;
+  description?: string;
+  icon?: string;
+  subject_icon?: string;
   instructor_id: string;
+  total_experiments?: number;
+  completed_experiments?: number;
+  progress_percentage?: number;
+  status?: 'completed' | 'in_progress' | 'not_started';
+  concept_tags?: string[];
 }
 
 // ─── Experiment ───────────────────────────────────────────────────────────────
@@ -46,6 +57,9 @@ export interface Experiment {
   rubric_code_quality: number;
   rubric_viva: number;
   created_at: string;
+  student_status?: 'completed' | 'in_progress' | 'not_started';
+  completed_at?: string | null;
+  score?: number | null;
 }
 
 // ─── Pre-Lab Content ──────────────────────────────────────────────────────────
@@ -64,6 +78,7 @@ export interface ContentModule {
     max_attempts: number;
     cooldown_minutes: number;
     shuffle: boolean;
+    time_limit_minutes?: number | null;
     attempts_used: number;
     last_attempt_at: string | null;
   };

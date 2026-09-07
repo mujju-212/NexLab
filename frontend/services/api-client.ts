@@ -10,24 +10,35 @@ export const apiClient = axios.create({
   },
 });
 
-// Request interceptor — attach JWT token (backend uses 'token' key from login response)
+// Request interceptor — attach JWT token (with cookie & localStorage self-healing)
 apiClient.interceptors.request.use((config) => {
-  const token = Cookies.get('access_token');
+  let token = Cookies.get('access_token');
+  if (!token && typeof window !== 'undefined') {
+    token = localStorage.getItem('access_token') || undefined;
+    if (token) {
+      Cookies.set('access_token', token, { expires: 7, path: '/', sameSite: 'lax' });
+    }
+  }
   if (token) {
     config.headers.Authorization = `Bearer ${token}`;
   }
   return config;
 });
 
-// Response interceptor — handle 401 (no refresh token in Flask-JWT-Extended by default)
+// Response interceptor — handle 401 (JWT expired or revoked)
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
     if (error.response?.status === 401) {
-      // JWT expired — clear cookie and redirect to login
-      Cookies.remove('access_token');
+      Cookies.remove('access_token', { path: '/' });
       if (typeof window !== 'undefined') {
-        window.location.href = '/login';
+        localStorage.removeItem('access_token');
+        import('@/store/auth-store')
+          .then((m) => m.useAuthStore.getState().clearAuth())
+          .catch(() => {});
+        if (!window.location.pathname.startsWith('/login') && !window.location.pathname.startsWith('/register')) {
+          window.location.href = '/login';
+        }
       }
     }
     return Promise.reject(error);

@@ -57,6 +57,7 @@ class Config:
 
     # ── Groq API ──────────────────────────────────────────────────────────
     GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
+    OPENROUTER_API_KEY = os.environ.get('OPENROUTER_API_KEY', '')
     GROQ_DAILY_LIMIT_PER_INSTITUTION = int(os.environ.get('GROQ_DAILY_LIMIT_PER_INSTITUTION', 500))
 
     # ── Gemini API (fallback when all Groq models are rate-limited) ───────

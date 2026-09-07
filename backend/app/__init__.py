@@ -31,6 +31,13 @@ def create_app(config_name=None):
         }
     })
 
+    @app.after_request
+    def add_cors_headers(response):
+        response.headers['Access-Control-Allow-Origin'] = '*'
+        response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization, X-Requested-With, Accept'
+        response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
+        return response
+
     socketio.init_app(app, cors_allowed_origins='*', async_mode='threading')
     limiter.init_app(app)
 
@@ -48,12 +55,18 @@ def create_app(config_name=None):
     from app.instructor.analytics import analytics_bp
     from app.instructor.conductor import conductor_bp
     from app.instructor.features import features_bp
+    from app.instructor.management import mgmt_bp
+    from app.instructor.tier2 import tier2_bp
+    from app.instructor.exams import exam_bp
     from app.student.routes import student_bp
+    from app.student.exams import student_exam_bp
     from app.execution.routes import execution_bp
     from app.ai.routes import ai_bp
     from app.ml.routes import ml_bp
     from app.free.routes import free_bp
     from app.practice.routes import practice_bp
+    from app.practice.extras import extra_bp
+    from app.notifications import notif_bp
 
     app.register_blueprint(auth_bp,            url_prefix='/api/auth')
     app.register_blueprint(admin_bp,           url_prefix='/api/admin')
@@ -68,12 +81,18 @@ def create_app(config_name=None):
     app.register_blueprint(analytics_bp,       url_prefix='/api/instructor/analytics')
     app.register_blueprint(conductor_bp,       url_prefix='/api/instructor')
     app.register_blueprint(features_bp,        url_prefix='/api/instructor')
+    app.register_blueprint(mgmt_bp,            url_prefix='/api/instructor')
+    app.register_blueprint(tier2_bp,           url_prefix='/api/instructor')
+    app.register_blueprint(exam_bp,            url_prefix='/api/instructor')
     app.register_blueprint(student_bp,         url_prefix='/api/student')
+    app.register_blueprint(student_exam_bp,    url_prefix='/api/student')
     app.register_blueprint(execution_bp,       url_prefix='/api/execution')
     app.register_blueprint(ai_bp,              url_prefix='/api/ai')
     app.register_blueprint(ml_bp,              url_prefix='/api/ml')
     app.register_blueprint(free_bp,            url_prefix='/api/free')
     app.register_blueprint(practice_bp,        url_prefix='/api/practice')
+    app.register_blueprint(extra_bp,           url_prefix='/api/practice')
+    app.register_blueprint(notif_bp,           url_prefix='/api')
 
     # ── Execution Engine v2 (Docker runner) ─────────────────────────────
     # Registered unconditionally — all routes return 503 when the flag is off.
