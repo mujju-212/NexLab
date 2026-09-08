@@ -31,6 +31,12 @@ from app.models.conductor import (
     SessionModeTransition, ChatMessage,
     TestCaseResult, Report, InstructorSettings,
 )
+from app.models.planner import RecurringPlan
+from app.models.announcement import Announcement, AnnouncementInteraction
+from app.models.billing import Invoice, PaymentMethod
+from app.models.help import FAQArticle, SupportTicket
+from app.models.ai_governance import AIUserQuota, AIFeatureConfig, SecurityEvent, ComplianceSetting
+from app.models.admin_copilot import AdminChatSession, AdminChatMessage, InstitutionDocument
 
 __all__ = [
     'User', 'Institution',
@@ -48,6 +54,7 @@ __all__ = [
     'AIUsageLog', 'AIPolicy', 'AIAgentRun',
     'ProctorEvent',
     'ScheduledAnnouncement',
+    'Announcement', 'AnnouncementInteraction',
     'Intervention', 'Extension',
     'BankQuestion', 'TeacherNote', 'SessionPoll',
     'ProblemBookmark', 'PlaygroundSession', 'ProblemCollection',
@@ -57,4 +64,11 @@ __all__ = [
     'LivePageState', 'ProctorPolicy',
     'SessionModeTransition', 'ChatMessage',
     'TestCaseResult', 'Report', 'InstructorSettings',
+    'RecurringPlan',
+    'Invoice', 'PaymentMethod',
+    'FAQArticle', 'SupportTicket',
+    'AIUserQuota', 'AIFeatureConfig', 'SecurityEvent', 'ComplianceSetting',
+    'AdminChatSession', 'AdminChatMessage', 'InstitutionDocument',
 ]
+
+

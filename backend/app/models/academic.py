@@ -39,15 +39,22 @@ class Department(db.Model):
     institution_id = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
     name           = db.Column(db.Text, nullable=False)        # e.g. "Computer Science"
     code           = db.Column(db.String(20))                  # e.g. "CSE"
+    description    = db.Column(db.Text)
+    color          = db.Column(db.String(30), default='#7c3aed')
+    is_active      = db.Column(db.Boolean, default=True)
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
 
     users          = db.relationship('User', backref='department', lazy='dynamic')
+    subjects       = db.relationship('Subject', backref='department', lazy='dynamic')
 
     def to_dict(self):
         return {
             'id': self.id,
             'name': self.name,
             'code': self.code,
+            'description': self.description or '',
+            'color': self.color or '#7c3aed',
+            'is_active': bool(self.is_active) if self.is_active is not None else True,
             'created_at': self.created_at.isoformat() if self.created_at else None,
         }
 
@@ -58,6 +65,9 @@ class Section(db.Model):
     institution_id    = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
     batch_id          = db.Column(db.String(36), db.ForeignKey('batches.id'), nullable=False)
     name              = db.Column(db.String(10), nullable=False)  # e.g. "A", "B"
+    section_code      = db.Column(db.String(50))
+    max_students      = db.Column(db.Integer, default=60)
+    is_active         = db.Column(db.Boolean, default=True)
     class_teacher_id  = db.Column(db.String(36), db.ForeignKey('users.id'))
     created_at        = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -65,6 +75,9 @@ class Section(db.Model):
         return {
             'id': self.id,
             'name': self.name,
+            'section_code': self.section_code or '',
+            'max_students': self.max_students or 60,
+            'is_active': bool(self.is_active) if self.is_active is not None else True,
             'batch_id': self.batch_id,
             'class_teacher_id': self.class_teacher_id,
         }
@@ -76,6 +89,9 @@ class SectionStudent(db.Model):
     section_id  = db.Column(db.String(36), db.ForeignKey('sections.id'), primary_key=True)
     student_id  = db.Column(db.String(36), db.ForeignKey('users.id'), primary_key=True)
     enrolled_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
 
 class SectionSubject(db.Model):
@@ -110,15 +126,27 @@ class AuditLog(db.Model):
     target_type    = db.Column(db.String(30))   # user | session | experiment | section
     target_id      = db.Column(db.String(36))
     detail         = db.Column(db.Text)         # human-readable description
+    module         = db.Column(db.String(50), nullable=True, default='System')
+    ip_address     = db.Column(db.String(45), nullable=True, default='192.168.1.24')
+    severity       = db.Column(db.String(20), default='low', nullable=False)  # low | medium | high
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Actor relationship
+    actor          = db.relationship('User', foreign_keys=[actor_id], lazy='joined')
 
     def to_dict(self):
         return {
             'id':          self.id,
             'actor_id':    self.actor_id,
+            'actor_name':  self.actor.full_name if self.actor else 'Unknown User',
+            'actor_email': self.actor.email if self.actor else None,
+            'actor_role':  self.actor.role if self.actor else None,
             'action':      self.action,
+            'module':      self.module or 'System',
             'target_type': self.target_type,
             'target_id':   self.target_id,
             'detail':      self.detail,
-            'created_at':  self.created_at.isoformat() if self.created_at else None,
+            'ip_address':  self.ip_address or '192.168.1.24',
+            'severity':    self.severity or 'low',
+            'created_at':  self.created_at.isoformat() + 'Z' if self.created_at else None,
         }

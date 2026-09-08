@@ -11,6 +11,10 @@ class Subject(db.Model):
     code            = db.Column(db.String(20))               # e.g. "CS3401"
     description     = db.Column(db.Text)
     icon            = db.Column(db.String(50), default='datastruct')
+    color           = db.Column(db.String(30), default='#7c3aed')
+    department_id   = db.Column(db.String(36), db.ForeignKey('departments.id'))
+    subject_type    = db.Column(db.String(30), default='Theory')  # Theory, Practical, Lab, Elective
+    is_active       = db.Column(db.Boolean, default=True)
     env_profile_id  = db.Column(db.String(36), db.ForeignKey('environment_profiles.id'))
     total_marks     = db.Column(db.Integer, default=100)     # sum of all experiment weightages → max marks for the subject
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)
@@ -18,14 +22,20 @@ class Subject(db.Model):
     experiments     = db.relationship('Experiment', backref='subject', lazy='dynamic')
 
     def to_dict(self):
+        dept = self.department if hasattr(self, 'department') and self.department else None
         return {
             'id': self.id,
             'name': self.name,
-            'code': self.code,
-            'description': self.description,
+            'code': self.code or '',
+            'description': self.description or '',
             'icon': self.icon or 'datastruct',
+            'color': self.color or '#7c3aed',
+            'department_id': self.department_id,
+            'department_name': dept.name if dept else None,
+            'subject_type': self.subject_type or 'Theory',
+            'is_active': bool(self.is_active) if self.is_active is not None else True,
             'env_profile_id': self.env_profile_id,
-            'total_marks': self.total_marks,
+            'total_marks': self.total_marks or 100,
         }
 
 
