@@ -23,8 +23,31 @@ departments_bp = Blueprint('departments', __name__)
 @departments_bp.route('/departments', methods=['GET'])
 @require_role('institution_admin', 'instructor')
 def list_departments():
+    from app.models.subject import Subject
+    from sqlalchemy import func
     depts = Department.query.filter_by(institution_id=g.institution_id).order_by(Department.name).all()
-    return jsonify({'departments': [d.to_dict() for d in depts]}), 200
+    
+    # Bulk aggregate counts in 2 single queries instead of N*2 loop queries
+    stud_counts = dict(
+        db.session.query(User.department_id, func.count(User.id))
+        .filter(User.institution_id == g.institution_id, User.role == 'student', User.department_id.isnot(None))
+        .group_by(User.department_id)
+        .all()
+    )
+    subj_counts = dict(
+        db.session.query(Subject.department_id, func.count(Subject.id))
+        .filter(Subject.institution_id == g.institution_id, Subject.department_id.isnot(None))
+        .group_by(Subject.department_id)
+        .all()
+    )
+
+    res = []
+    for d in depts:
+        dd = d.to_dict()
+        dd['students_count'] = stud_counts.get(d.id, 0)
+        dd['subjects_count'] = subj_counts.get(d.id, 0)
+        res.append(dd)
+    return jsonify({'departments': res}), 200
 
 
 @departments_bp.route('/departments', methods=['POST'])
@@ -42,12 +65,18 @@ def create_department():
         institution_id=g.institution_id,
         name=name,
         code=(data.get('code') or '').strip().upper() or None,
+        description=data.get('description', ''),
+        color=data.get('color', '#7c3aed'),
+        is_active=data.get('is_active', True),
     )
     db.session.add(dept)
     db.session.commit()
     write_audit(g.user_id, g.institution_id, 'create_department', 'department',
                 dept.id, f"Created department {dept.name}")
-    return jsonify({'department': dept.to_dict()}), 201
+    d_dict = dept.to_dict()
+    d_dict['students_count'] = 0
+    d_dict['subjects_count'] = 0
+    return jsonify({'department': d_dict}), 201
 
 
 @departments_bp.route('/departments/<dept_id>', methods=['PATCH'])
@@ -55,13 +84,17 @@ def create_department():
 def update_department(dept_id):
     dept = Department.query.filter_by(id=dept_id, institution_id=g.institution_id).first_or_404()
     data = request.get_json() or {}
-    for field in ('name', 'code'):
+    for field in ('name', 'code', 'description', 'color', 'is_active'):
         if field in data:
             setattr(dept, field, data[field])
     db.session.commit()
     write_audit(g.user_id, g.institution_id, 'update_department', 'department',
                 dept.id, f"Updated department {dept.name}")
-    return jsonify({'department': dept.to_dict()}), 200
+    from app.models.subject import Subject
+    d_dict = dept.to_dict()
+    d_dict['students_count'] = User.query.filter_by(institution_id=g.institution_id, department_id=dept.id, role='student').count()
+    d_dict['subjects_count'] = Subject.query.filter_by(institution_id=g.institution_id, department_id=dept.id).count()
+    return jsonify({'department': d_dict}), 200
 
 
 @departments_bp.route('/departments/<dept_id>', methods=['DELETE'])
@@ -100,8 +133,9 @@ def update_section(section_id):
     section = Section.query.filter_by(id=section_id, institution_id=g.institution_id).first_or_404()
     data = request.get_json() or {}
 
-    if 'name' in data:
-        section.name = data['name']
+    for field in ('name', 'section_code', 'max_students', 'is_active', 'batch_id'):
+        if field in data:
+            setattr(section, field, data[field])
 
     if 'class_teacher_id' in data:
         teacher_id = data['class_teacher_id']
@@ -116,7 +150,9 @@ def update_section(section_id):
     db.session.commit()
     write_audit(g.user_id, g.institution_id, 'update_section', 'section',
                 section.id, f"Updated section {section.name}")
-    return jsonify({'section': section.to_dict()}), 200
+    sd = section.to_dict()
+    sd['students_count'] = SectionStudent.query.filter_by(section_id=section.id).count()
+    return jsonify({'section': sd}), 200
 
 
 @departments_bp.route('/sections/<section_id>', methods=['DELETE'])
