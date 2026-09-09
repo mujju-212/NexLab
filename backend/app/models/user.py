@@ -25,12 +25,20 @@ class User(db.Model):
     semester        = db.Column(db.Integer)        # students only, e.g. 1-12
 
     phone           = db.Column(db.String(15))
+    location        = db.Column(db.String(100), default='Bengaluru, Karnataka')
     profile_pic_url = db.Column(db.Text)
+    bio             = db.Column(db.Text, default='Empowering education through technology.')
+    timezone        = db.Column(db.String(50), default='(GMT+05:30) Asia/Kolkata')
+    language        = db.Column(db.String(50), default='English (India)')
+    two_factor_enabled = db.Column(db.Boolean, default=False)
     is_active       = db.Column(db.Boolean, default=True)
     created_at      = db.Column(db.DateTime, default=datetime.utcnow)
     last_login      = db.Column(db.DateTime)
     force_logout_at = db.Column(db.DateTime)   # set by admin — invalidates all older tokens
     must_change_password = db.Column(db.Boolean, default=False)   # set on temp credentials
+
+    def __init__(self, **kwargs):
+        super().__init__(**kwargs)
 
     def to_dict(self, include_sensitive=False):
         data = {
@@ -47,9 +55,15 @@ class User(db.Model):
             'year_of_study': self.year_of_study,
             'semester': self.semester,
             'phone': self.phone,
+            'location': self.location or 'Bengaluru, Karnataka',
             'profile_pic_url': self.profile_pic_url,
+            'bio': self.bio or 'Empowering education through technology.',
+            'timezone': self.timezone or '(GMT+05:30) Asia/Kolkata',
+            'language': self.language or 'English (India)',
+            'two_factor_enabled': bool(self.two_factor_enabled),
             'is_active': self.is_active,
             'must_change_password': bool(self.must_change_password),
             'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
+            'last_login': self.last_login.isoformat() + 'Z' if self.last_login else None,
         }
         return data

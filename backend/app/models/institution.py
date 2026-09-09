@@ -21,10 +21,14 @@ class Institution(db.Model):
     onboarded_at    = db.Column(db.DateTime, default=datetime.utcnow)
 
     # ── Billing ──────────────────────────────────────────────────────────
-    plan_updated_at     = db.Column(db.DateTime)
-    groq_limit_override = db.Column(db.Integer)         # NULL -> use global default
-    billing_notes       = db.Column(db.Text)            # free-form admin notes
-    billing_email       = db.Column(db.Text)            # separate billing contact
+    plan_updated_at        = db.Column(db.DateTime)
+    groq_limit_override    = db.Column(db.Integer)         # NULL -> use global default
+    billing_notes          = db.Column(db.Text)            # free-form admin notes
+    billing_email          = db.Column(db.Text)            # separate billing contact
+    billing_cycle          = db.Column(db.String(20), default='monthly') # monthly | yearly
+    auto_renewal           = db.Column(db.Boolean, default=True)
+    next_billing_date      = db.Column(db.String(30), default='10 Oct 2026')
+    billing_contact_person = db.Column(db.String(100), default='Institution Admin')
 
     # ── Onboarding workflow ───────────────────────────────────────────────
     # status: pending | active | suspended
@@ -85,6 +89,10 @@ class Institution(db.Model):
             'groq_limit_override':      self.groq_limit_override,
             'billing_notes':            self.billing_notes,
             'billing_email':            self.billing_email,
+            'billing_cycle':            self.billing_cycle or 'monthly',
+            'auto_renewal':             bool(self.auto_renewal) if self.auto_renewal is not None else True,
+            'next_billing_date':        self.next_billing_date or '10 Oct 2026',
+            'billing_contact_person':   self.billing_contact_person or 'Institution Admin',
             'onboarding_status':        self.onboarding_status,
             'onboarding_completed_at':  self.onboarding_completed_at.isoformat() if self.onboarding_completed_at else None,
             'checklist': {
