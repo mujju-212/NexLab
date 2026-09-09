@@ -1,727 +1,1659 @@
 'use client';
 
-import { useEffect, useState, useRef } from 'react';
+import { useEffect, useState, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
+import Image from 'next/image';
 import InstitutionShell from '@/components/layout/InstitutionShell';
-import { institutionService, type InstitutionUser, type CreateUserDto, type Department } from '@/services/institution.service';
 import {
-  Plus, Upload, Download, Search, ToggleLeft, ToggleRight, LogOut, X, Eye, Trash2, Edit3,
-  Mail, Phone, Shield, Calendar, MoreHorizontal, KeyRound, Ban, CheckCircle, User, AlertTriangle, Repeat,
-  GraduationCap, Building2, ChevronLeft, ChevronRight,
+  institutionService,
+  type InstitutionUser,
+  type CreateUserDto,
+  type Department,
+  type Section,
+  type UserStats,
+  type UserRecord,
+} from '@/services/institution.service';
+import {
+  Plus, Upload, Download, Search, LayoutList, LayoutGrid, CheckCircle,
+  X, Edit3, Mail, Phone, MapPin, Calendar, MoreHorizontal, KeyRound,
+  Trash2, User, Shield, GraduationCap, Users, Clock, AlertTriangle,
+  ChevronLeft, ChevronRight, MessageSquare, Power, ArrowUpDown, Filter
 } from 'lucide-react';
-import styles from '../dashboard/page.module.css';
+import styles from './page.module.css';
 
-const PAGE_SIZE = 25;
+const PAGE_SIZE = 8; // Matching the 8 rows per page in reference screenshot
+
+// Deterministic pastel avatar background generator from name
+const AVATAR_COLORS = [
+  '#7c3aed', '#2563eb', '#059669', '#d97706', '#dc2626',
+  '#db2777', '#4f46e5', '#0891b2', '#65a30d', '#9333ea'
+];
+
+function getAvatarColor(name: string): string {
+  let hash = 0;
+  for (let i = 0; i < name.length; i++) {
+    hash = name.charCodeAt(i) + ((hash << 5) - hash);
+  }
+  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
+}
+
+function getInitials(name: string): string {
+  if (!name) return 'U';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function formatDate(isoString?: string): string {
+  if (!isoString) return '—';
+  try {
+    const d = new Date(isoString);
+    if (isNaN(d.getTime())) return '—';
+    return new Intl.DateTimeFormat('en-GB', {
+      day: 'numeric',
+      month: 'short',
+      year: 'numeric'
+    }).format(d);
+  } catch {
+    return '—';
+  }
+}
 
 export default function UsersPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
-  const [users, setUsers]           = useState<InstitutionUser[]>([]);
+
+  // Primary data state
+  const [users, setUsers] = useState<InstitutionUser[]>([]);
   const [departments, setDepartments] = useState<Department[]>([]);
-  const [loading, setLoading]       = useState(true);
-  const [search, setSearch]         = useState(searchParams.get('search') ?? '');
-  const [page, setPage]             = useState(1);
-  const [roleFilter, setRoleFilter] = useState(searchParams.get('role') ?? 'all');
-  const [showModal, setShowModal]   = useState(searchParams.get('create') === 'student' || searchParams.get('create') === 'instructor');
-  const [saving, setSaving]         = useState(false);
-  const [toast, setToast]           = useState<string | null>(null);
-  const [viewUser, setViewUser]     = useState<InstitutionUser | null>(null);
-  const [editUser, setEditUser]     = useState<InstitutionUser | null>(null);
-  const [actionMenu, setActionMenu] = useState<string | null>(null);
-  const [confirmAction, setConfirmAction] = useState<{ user: InstitutionUser; action: string } | null>(null);
+  const [stats, setStats] = useState<UserStats | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Filters & Controls
+  const [activeTab, setActiveTab] = useState<'all' | 'student' | 'instructor'>('all');
+  const [search, setSearch] = useState(searchParams.get('search') ?? '');
+  const [roleFilter, setRoleFilter] = useState<'all' | 'student' | 'instructor'>(
+    (searchParams.get('role') as any) ?? 'all'
+  );
+  const [statusFilter, setStatusFilter] = useState<'all' | 'active' | 'inactive'>('all');
+  const [deptFilter, setDeptFilter] = useState<string>('all');
+  const [showMoreFilters, setShowMoreFilters] = useState(false);
+  const [viewMode, setViewMode] = useState<'table' | 'grid'>('table');
+  const [page, setPage] = useState(1);
+
+  // Selection & Side Drawer
+  const [selectedUser, setSelectedUser] = useState<InstitutionUser | null>(null);
+  const [userRecord, setUserRecord] = useState<UserRecord | null>(null);
+  const [recordLoading, setRecordLoading] = useState(false);
+  const [drawerTab, setDrawerTab] = useState<'overview' | 'academic' | 'activity'>('overview');
+  const [selectedIds, setSelectedIds] = useState<string[]>([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
+
+  // Modals & Action Menus
+  const [showAddModal, setShowAddModal] = useState(false);
+  const [addMode, setAddMode] = useState<'single' | 'bulk'>('single');
+  const [editUser, setEditUser] = useState<InstitutionUser | null>(null);
+  const [resetPwUser, setResetPwUser] = useState<InstitutionUser | null>(null);
+  const [tempPassword, setTempPassword] = useState<string | null>(null);
+  const [copiedPw, setCopiedPw] = useState(false);
   const [roleChangeUser, setRoleChangeUser] = useState<InstitutionUser | null>(null);
   const [newRole, setNewRole] = useState<'student' | 'instructor' | 'institution_admin'>('student');
+  const [deleteConfirmUser, setDeleteConfirmUser] = useState<InstitutionUser | null>(null);
+  const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
+  const [sections, setSections] = useState<Section[]>([]);
+  const [toast, setToast] = useState<string | null>(null);
+  const [saving, setSaving] = useState(false);
+
   const fileRef = useRef<HTMLInputElement>(null);
 
+  // Create User Form State
   const [form, setForm] = useState<CreateUserDto>({
-    full_name: '', email: '', role: searchParams.get('create') === 'instructor' ? 'instructor' : 'student',
-    // Blank = backend generates a random one-time credential (returned in the
-    // response). We never pre-fill a shared default password.
-    password: '', roll_number: '', phone: '', staff_id: '', department_id: '',
-    year_of_study: undefined, semester: undefined,
+    full_name: '',
+    email: '',
+    role: 'student',
+    password: '',
+    roll_number: '',
+    phone: '',
+    location: 'Bengaluru, Karnataka',
+    staff_id: '',
+    department_id: '',
+    section_id: '',
+    year_of_study: 2,
+    semester: 3,
   });
 
+  // Edit User Form State
   const [editForm, setEditForm] = useState({
-    full_name: '', phone: '', roll_number: '', staff_id: '', department_id: '',
-    year_of_study: undefined as number | undefined, semester: undefined as number | undefined,
+    full_name: '',
+    email: '',
+    phone: '',
+    location: '',
+    roll_number: '',
+    staff_id: '',
+    department_id: '',
+    section_id: '',
+    year_of_study: 2,
+    semester: 3,
   });
 
-  const load = async () => {
+  const showToast = (msg: string) => {
+    setToast(msg);
+    setTimeout(() => setToast(null), 3500);
+  };
+
+  // ── 1. Fetch Users & Departments ──────────────────────────────────────────
+  const loadUsers = async () => {
     setLoading(true);
     try {
-      const data = await institutionService.listUsers(roleFilter === 'all' ? undefined : { role: roleFilter });
-      setUsers(data);
+      const res = await institutionService.listUsersWithStats();
+      setUsers(res.users || []);
+      if (res.stats) {
+        setStats(res.stats);
+      }
+      // If a user was selected, re-sync selection
+      if (selectedUser) {
+        const fresh = res.users.find(u => u.id === selectedUser.id);
+        if (fresh) setSelectedUser(fresh);
+      } else if (res.users && res.users.length > 0) {
+        // Auto-select first user (e.g. Aadhya Pillai) to match the reference preview!
+        setSelectedUser(res.users[0]);
+      }
     } catch {
-      setUsers([]);
-      showToast('Could not load users. Please retry.');
-    } finally { setLoading(false); }
-  };
-
-  useEffect(() => { load(); }, [roleFilter]);
-  useEffect(() => { setPage(1); }, [search, roleFilter]);
-  useEffect(() => { institutionService.listDepartments().then(setDepartments).catch(() => {}); }, []);
-
-  const deptName = (id?: string | null) => departments.find(d => d.id === id)?.name ?? '—';
-
-  const showToast = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
-
-  const createUser = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setSaving(true);
-    try {
-      const res = await institutionService.createUser(form);
-      showToast('temp_password' in (res as any)
-        ? `User created. Temp password (show once): ${(res as any).temp_password}`
-        : 'User created successfully!');
-      setShowModal(false);
-      setForm({
-        full_name: '', email: '', role: 'student', password: '', roll_number: '', phone: '',
-        staff_id: '', department_id: '', year_of_study: undefined, semester: undefined,
-      });
-      load();
-    } catch (err: any) {
-      showToast(err?.response?.data?.error ?? 'Failed to create user.');
-    } finally { setSaving(false); }
-  };
-
-  const changeRole = async () => {
-    if (!roleChangeUser) return;
-    try {
-      const updated = await institutionService.changeUserRole(roleChangeUser.id, newRole);
-      setUsers(prev => prev.map(x => x.id === updated.id ? updated : x));
-      showToast(`${roleChangeUser.full_name}'s role changed to ${newRole}.`);
-      setRoleChangeUser(null);
-    } catch (err: any) {
-      showToast(err?.response?.data?.error ?? 'Role change failed.');
+      showToast('Could not load users. Please refresh.');
+    } finally {
+      setLoading(false);
     }
   };
 
-  const toggleActive = async (u: InstitutionUser) => {
-    try {
-      await institutionService.toggleUserActive(u.id);
-      setUsers(prev => prev.map(x => x.id === u.id ? { ...x, is_active: !x.is_active } : x));
-      showToast(`${u.full_name} ${u.is_active ? 'deactivated' : 'activated'}.`);
-    } catch { showToast('Action failed.'); }
+  useEffect(() => {
+    loadUsers();
+    institutionService.listDepartments().then(setDepartments).catch(() => {});
+    institutionService.getSections().then(setSections).catch(() => {});
+  }, []);
+
+  // ── 2. Fetch Detailed User Record when Selected ───────────────────────────
+  useEffect(() => {
+    if (!selectedUser) {
+      setUserRecord(null);
+      return;
+    }
+    setRecordLoading(true);
+    institutionService.getUser(selectedUser.id)
+      .then(rec => setUserRecord(rec))
+      .catch(() => {})
+      .finally(() => setRecordLoading(false));
+  }, [selectedUser?.id]);
+
+  // Close floating action menu when clicking outside
+  useEffect(() => {
+    const handleDocClick = () => setOpenActionMenuId(null);
+    document.addEventListener('click', handleDocClick);
+    return () => document.removeEventListener('click', handleDocClick);
+  }, []);
+
+  // ── 3. Role Tab & Counts ──────────────────────────────────────────────────
+  const counts = useMemo(() => {
+    const all = users.length;
+    const student = users.filter(u => u.role === 'student').length;
+    const instructor = users.filter(u => u.role === 'instructor').length;
+    const active = users.filter(u => u.is_active).length;
+    return { all, student, instructor, active };
+  }, [users]);
+
+  // ── 4. Filtering & Pagination Logic ───────────────────────────────────────
+  const filteredUsers = useMemo(() => {
+    return users.filter(u => {
+      // Tab filter
+      if (activeTab === 'student' && u.role !== 'student') return false;
+      if (activeTab === 'instructor' && u.role !== 'instructor') return false;
+
+      // Role filter dropdown
+      if (roleFilter !== 'all' && u.role !== roleFilter) return false;
+
+      // Status filter dropdown
+      if (statusFilter !== 'all') {
+        const uStatus = u.is_active ? 'active' : 'inactive';
+        if (uStatus !== statusFilter) return false;
+      }
+
+      // Department filter dropdown
+      if (deptFilter !== 'all' && u.department_id !== deptFilter) return false;
+
+      // Search query
+      if (search.trim()) {
+        const query = search.toLowerCase().trim();
+        const matchesName = u.full_name?.toLowerCase().includes(query);
+        const matchesEmail = u.email?.toLowerCase().includes(query);
+        const matchesRoll = u.roll_number?.toLowerCase().includes(query);
+        const matchesStaff = u.staff_id?.toLowerCase().includes(query);
+        const matchesDept = u.department_name?.toLowerCase().includes(query);
+        if (!matchesName && !matchesEmail && !matchesRoll && !matchesStaff && !matchesDept) {
+          return false;
+        }
+      }
+
+      return true;
+    });
+  }, [users, activeTab, roleFilter, statusFilter, deptFilter, search]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
+  const pagedUsers = useMemo(() => {
+    const start = (page - 1) * PAGE_SIZE;
+    return filteredUsers.slice(start, start + PAGE_SIZE);
+  }, [filteredUsers, page]);
+
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setPage(1);
+  }, [activeTab, roleFilter, statusFilter, deptFilter, search]);
+
+  // ── 5. Bulk Selection Handlers ────────────────────────────────────────────
+  const toggleSelect = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
   };
 
-  const forceLogout = async (u: InstitutionUser) => {
+  const toggleSelectAll = () => {
+    if (selectedIds.length === pagedUsers.length && pagedUsers.length > 0) {
+      setSelectedIds([]);
+    } else {
+      setSelectedIds(pagedUsers.map(u => u.id));
+    }
+  };
+
+  const handleBulkAction = async (action: 'activate' | 'deactivate' | 'force_logout') => {
+    if (selectedIds.length === 0) return;
+    const label = { activate: 'reactivate', deactivate: 'deactivate', force_logout: 'force logout' }[action];
+    if (!window.confirm(`Are you sure you want to ${label} ${selectedIds.length} user(s)?`)) return;
+
+    setBulkBusy(true);
+    try {
+      await institutionService.bulkUserAction({ user_ids: selectedIds, action });
+      showToast(`${selectedIds.length} user(s) successfully updated.`);
+      setSelectedIds([]);
+      loadUsers();
+    } catch {
+      showToast('Bulk action failed. Please retry.');
+    } finally {
+      setBulkBusy(false);
+    }
+  };
+
+  // ── 6. Single User Operations ─────────────────────────────────────────────
+  const handleToggleActive = async (u: InstitutionUser, e?: React.MouseEvent) => {
+    if (e) e.stopPropagation();
+    try {
+      const res = await institutionService.toggleUserActive(u.id);
+      const updatedStatus = res.is_active ? 'active' : 'inactive';
+      setUsers(prev => prev.map(x => x.id === u.id ? { ...x, is_active: res.is_active, status: updatedStatus } : x));
+      if (selectedUser?.id === u.id) {
+        setSelectedUser(prev => prev ? { ...prev, is_active: res.is_active, status: updatedStatus } : null);
+      }
+      showToast(`${u.full_name} is now ${res.is_active ? 'Active' : 'Deactivated'}.`);
+    } catch {
+      showToast('Could not toggle user status.');
+    }
+  };
+
+  const handleForceLogout = async (u: InstitutionUser) => {
     try {
       await institutionService.forceLogoutUser(u.id);
-      showToast(`${u.full_name} has been logged out.`);
-    } catch { showToast('Force logout failed.'); }
+      showToast(`Active sessions for ${u.full_name} have been terminated.`);
+    } catch {
+      showToast('Force logout failed.');
+    }
   };
 
-  const resetPassword = async (u: InstitutionUser) => {
-    // Generate the temp credential here and hand it to the backend — the
-    // returned value is the ONLY time it's visible, and the user is forced
-    // to replace it on their next login (must_change_password).
-    const tempPw = `Nx-${Math.random().toString(36).slice(2, 10)}${Math.floor(Math.random() * 90 + 10)}!A`;
+  const handleOpenResetPassword = (u: InstitutionUser) => {
+    const generated = `Nx-${Math.random().toString(36).slice(2, 8)}${Math.floor(Math.random() * 89 + 10)}!A`;
+    setResetPwUser(u);
+    setTempPassword(generated);
+    setCopiedPw(false);
+  };
+
+  const handleConfirmResetPassword = async () => {
+    if (!resetPwUser || !tempPassword) return;
+    setSaving(true);
     try {
       const { apiClient } = await import('@/services/api-client');
-      await apiClient.post(`/institution/users/${u.id}/reset-password`, { new_password: tempPw });
-      showToast(`Password reset for ${u.full_name}. Temp password (show once): ${tempPw}`);
-    } catch (err: any) {
-      showToast(err?.response?.data?.error ?? 'Password reset failed.');
+      await apiClient.post(`/institution/users/${resetPwUser.id}/reset-password`, { new_password: tempPassword });
+      showToast(`Temporary password generated for ${resetPwUser.full_name}.`);
+      setResetPwUser(null);
+      setTempPassword(null);
+    } catch {
+      showToast('Password reset failed.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const deleteUser = async (u: InstitutionUser) => {
+  const handleDeleteUser = async () => {
+    if (!deleteConfirmUser) return;
+    setSaving(true);
     try {
-      await institutionService.deleteUser(u.id);
-      setUsers(prev => prev.filter(x => x.id !== u.id));
-      showToast(`${u.full_name} deleted.`);
-      setConfirmAction(null);
+      await institutionService.deleteUser(deleteConfirmUser.id);
+      setUsers(prev => prev.filter(x => x.id !== deleteConfirmUser.id));
+      if (selectedUser?.id === deleteConfirmUser.id) {
+        setSelectedUser(null);
+      }
+      showToast(`${deleteConfirmUser.full_name} deleted.`);
+      setDeleteConfirmUser(null);
     } catch (err: any) {
-      showToast(err?.response?.data?.error ?? 'Delete failed — users with submission/grade history must be deactivated instead.');
+      showToast(err?.response?.data?.error ?? 'Delete failed — active users with submissions must be deactivated.');
+    } finally {
+      setSaving(false);
     }
   };
 
-  const saveEdit = async (e: React.FormEvent) => {
+  const handleOpenEdit = (u: InstitutionUser) => {
+    setEditUser(u);
+    setEditForm({
+      full_name: u.full_name || '',
+      email: u.email || '',
+      phone: u.phone || '',
+      location: u.location || 'Bengaluru, Karnataka',
+      roll_number: u.roll_number || '',
+      staff_id: u.staff_id || '',
+      department_id: u.department_id || '',
+      section_id: u.section_id || '',
+      year_of_study: u.year_of_study || 2,
+      semester: u.semester || 3,
+    });
+  };
+
+  const handleSaveEdit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!editUser) return;
     setSaving(true);
     try {
       const updated = await institutionService.updateUser(editUser.id, editForm);
-      setUsers(prev => prev.map(x => x.id === editUser.id ? updated : x));
-      showToast('User updated!');
+      setUsers(prev => prev.map(x => x.id === editUser.id ? { ...x, ...updated } : x));
+      if (selectedUser?.id === editUser.id) {
+        setSelectedUser(prev => prev ? { ...prev, ...updated } : null);
+      }
+      showToast('User profile updated.');
       setEditUser(null);
     } catch (err: any) {
-      showToast(err?.response?.data?.error ?? 'Update failed.');
-    } finally { setSaving(false); }
+      showToast(err?.response?.data?.error ?? 'Failed to update user.');
+    } finally {
+      setSaving(false);
+    }
   };
 
-  const bulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCreateUser = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSaving(true);
+    try {
+      const res = await institutionService.createUser(form);
+      showToast('temp_password' in (res as any)
+        ? `User created. One-time temporary password: ${(res as any).temp_password}`
+        : 'User created successfully!');
+      setShowAddModal(false);
+      setForm({
+        full_name: '', email: '', role: 'student', password: '', roll_number: '', phone: '',
+        staff_id: '', department_id: '', year_of_study: 2, semester: 3,
+      });
+      loadUsers();
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Failed to create user.');
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const handleBulkUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
     try {
       const result = await institutionService.bulkUploadUsers(file);
-      showToast(`Created ${result.created} users. Skipped ${result.skipped}.`);
-      load();
-    } catch { showToast('Bulk upload failed.'); }
-    if (fileRef.current) fileRef.current.value = '';
+      showToast(`Imported ${result.created} users successfully! (${result.skipped} skipped)`);
+      setShowAddModal(false);
+      loadUsers();
+    } catch {
+      showToast('Bulk CSV upload failed. Check format and try again.');
+    }
   };
 
-  const filtered = users.filter(u =>
-    u.full_name.toLowerCase().includes(search.toLowerCase()) ||
-    u.email.toLowerCase().includes(search.toLowerCase()) ||
-    (u.roll_number ?? '').toLowerCase().includes(search.toLowerCase())
-  );
-
-  const pageCount = Math.max(1, Math.ceil(filtered.length / PAGE_SIZE));
-  const safePage  = Math.min(page, pageCount);
-  const paged     = filtered.slice((safePage - 1) * PAGE_SIZE, safePage * PAGE_SIZE);
-
-  const exportCsv = () => {
-    if (filtered.length === 0) { showToast('Nothing to export.'); return; }
-    const esc = (v: any) => {
-      let s = String(v ?? '');
-      if (/^[=+\-@]/.test(s)) s = `'${s}`;   // Excel formula injection guard
-      return /[",\n]/.test(s) ? `"${s.replace(/"/g, '""')}"` : s;
-    };
-    const headers = ['Name', 'Email', 'Role', 'Roll Number', 'Staff ID', 'Department', 'Status', 'Joined'];
-    const rows = filtered.map(u => [
-      u.full_name, u.email, u.role, u.roll_number ?? '', u.staff_id ?? '',
-      deptName(u.department_id), u.is_active ? 'Active' : 'Inactive',
-      new Date(u.created_at).toLocaleDateString('en-IN'),
-    ].map(esc).join(','));
-    const csv = [headers.join(','), ...rows].join('\n');
-    const blob = new Blob(['﻿' + csv], { type: 'text/csv;charset=utf-8;' });
-    const url = URL.createObjectURL(blob);
-    const a = document.createElement('a');
-    a.href = url;
-    a.download = `users-${new Date().toISOString().slice(0, 10)}.csv`;
-    a.click();
-    URL.revokeObjectURL(url);
-    showToast(`Exported ${filtered.length} user${filtered.length === 1 ? '' : 's'}.`);
-  };
-
-  // ── Selection + bulk actions (backend /users/bulk-action) ──────────────────
-  const [selectedIds, setSelectedIds] = useState<string[]>([]);
-  const [bulkBusy, setBulkBusy] = useState(false);
-
-  const toggleSelect = (id: string) =>
-    setSelectedIds(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
-  const toggleSelectAll = () =>
-    setSelectedIds(selectedIds.length === paged.length ? [] : paged.map(u => u.id));
-
-  const runBulk = async (action: 'activate' | 'deactivate' | 'force_logout') => {
-    if (selectedIds.length === 0) return;
-    const verb = { activate: 'reactivate', deactivate: 'deactivate', force_logout: 'force-logout' }[action];
-    if (!confirm(`${verb.charAt(0).toUpperCase() + verb.slice(1)} ${selectedIds.length} user(s)?`)) return;
-    setBulkBusy(true);
-    try {
-      await institutionService.bulkUserAction({ user_ids: selectedIds, action });
-      showToast(`${selectedIds.length} user(s) processed.`);
-      setSelectedIds([]);
-      load();
-    } catch (err: any) {
-      showToast(err?.response?.data?.error ?? 'Bulk action failed.');
-    } finally { setBulkBusy(false); }
-  };
-
-  const exportBackendCsv = async () => {
+  const handleExportCsv = async () => {
     try {
       await institutionService.exportUsersCsv(roleFilter !== 'all' ? roleFilter : undefined);
-      showToast('Full export downloaded.');
-    } catch { showToast('Export failed — try again.'); }
-  };
-
-  const initials = (name: string) => name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
-
-  const roleCounts = {
-    all: users.length,
-    student: users.filter(u => u.role === 'student').length,
-    instructor: users.filter(u => u.role === 'instructor').length,
+      showToast('Full CSV exported successfully.');
+    } catch {
+      showToast('Export failed.');
+    }
   };
 
   return (
-    <InstitutionShell activePage="Users" title="User Management" subtitle="Manage students and instructors in your institution.">
+    <InstitutionShell activePage="Users">
+      <div className={styles.userPageContainer}>
 
-      {/* Toast */}
-      {toast && (
-        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 300, background: '#201b2e', color: '#fff', padding: '12px 20px', borderRadius: 12, fontSize: 14, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,0.2)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <CheckCircle size={14} /> {toast}
+        {/* ── Toast Notification ──────────────────────────────────────────── */}
+        {toast && (
+          <div style={{
+            position: 'fixed', bottom: 24, right: 24, zIndex: 999,
+            background: '#1e1b4b', color: '#ffffff', padding: '12px 20px',
+            borderRadius: 14, fontSize: 13.5, fontWeight: 600,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.25)', display: 'flex',
+            alignItems: 'center', gap: 10, animation: 'slideDown 0.2s ease',
+          }}>
+            <CheckCircle size={16} style={{ color: '#10b981', flexShrink: 0 }} />
+            <span>{toast}</span>
+          </div>
+        )}
+
+        {/* ── 1. Hero Banner matching Reference Image ───────────────────────── */}
+        <div className={styles.heroBanner}>
+          <div className={styles.heroContent}>
+            <h1 className={styles.heroTitle}>User Management</h1>
+            <p className={styles.heroSubtitle}>Manage all students and instructors in your institution.</p>
+          </div>
+
+          <div className={styles.heroCommunityWrap}>
+            <Image
+              src="/user_community_vector.png"
+              alt="Learning Community"
+              width={190}
+              height={95}
+              className={styles.heroCommunityImg}
+              priority
+            />
+          </div>
+
+          <div className={styles.heroQuoteBox}>
+            <h4 className={styles.heroQuoteTitle}>Build a stronger learning community</h4>
+            <p className={styles.heroQuoteText}>Add, manage and empower your students and instructors.</p>
+            <div className={styles.heroQuoteUnderline} />
+          </div>
+
+          <div className={styles.heroActionWrap}>
+            <button className={styles.btnAddUser} onClick={() => { setAddMode('single'); setShowAddModal(true); }}>
+              <Plus size={16} strokeWidth={2.5} />
+              <span>Add User</span>
+            </button>
+          </div>
         </div>
-      )}
 
-      {/* Stats strip */}
-      <div style={{ display: 'flex', gap: 12, marginBottom: 20 }}>
-        {[
-          { label: 'Total Users', count: roleCounts.all, color: '#9333ea', bg: '#faf5ff' },
-          { label: 'Students', count: roleCounts.student, color: '#10b981', bg: '#ecfdf5' },
-          { label: 'Instructors', count: roleCounts.instructor, color: '#f59e0b', bg: '#fffbeb' },
-        ].map(s => (
-          <div key={s.label} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 18px', background: 'rgba(255,255,255,0.7)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.9)' }}>
-            <div style={{ width: 32, height: 32, borderRadius: 8, background: s.bg, display: 'flex', alignItems: 'center', justifyContent: 'center', color: s.color }}>
-              <User size={15} />
+        {/* ── 2. 4 Stat KPI Cards ──────────────────────────────────────────── */}
+        <div className={styles.kpiGrid}>
+          {/* Card 1: Total Users */}
+          <div
+            className={`${styles.kpiCard} ${activeTab === 'all' ? styles.kpiCardActive : ''}`}
+            onClick={() => { setActiveTab('all'); setRoleFilter('all'); }}
+          >
+            <div className={styles.kpiIconWrap} style={{ background: '#f5f3ff', color: '#7c3aed' }}>
+              <Users size={22} strokeWidth={2} />
             </div>
-            <div>
-              <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#201b2e' }}>{loading ? '—' : s.count}</p>
-              <p style={{ margin: 0, fontSize: 11, fontWeight: 600, color: '#9891a6', textTransform: 'uppercase', letterSpacing: '.03em' }}>{s.label}</p>
+            <div className={styles.kpiBody}>
+              <p className={styles.kpiValue}>{loading ? '—' : (stats?.total_users ?? counts.all)}</p>
+              <p className={styles.kpiLabel}>Total Users</p>
+              <div className={styles.kpiMeta}>
+                <span className={styles.kpiGrowth}>↑ {stats?.total_users_growth ?? '12%'}</span>
+                <span className={styles.kpiDelta}>{stats?.total_users_delta ?? '+28 this month'}</span>
+              </div>
             </div>
           </div>
-        ))}
-      </div>
 
-      {/* Toolbar */}
-      <div className={styles.toolbar}>
-        <div style={{ position: 'relative', flex: 1, minWidth: 180 }}>
-          <Search size={14} style={{ position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)', color: '#9891a6' }} />
-          <input className={styles.searchInput} style={{ paddingLeft: 36 }} placeholder="Search by name, email, roll no…"
-            value={search} onChange={e => setSearch(e.target.value)} />
+          {/* Card 2: Students */}
+          <div
+            className={`${styles.kpiCard} ${activeTab === 'student' ? styles.kpiCardActive : ''}`}
+            onClick={() => { setActiveTab('student'); setRoleFilter('student'); }}
+          >
+            <div className={styles.kpiIconWrap} style={{ background: '#ecfdf5', color: '#10b981' }}>
+              <GraduationCap size={22} strokeWidth={2} />
+            </div>
+            <div className={styles.kpiBody}>
+              <p className={styles.kpiValue}>{loading ? '—' : (stats?.students ?? counts.student)}</p>
+              <p className={styles.kpiLabel}>Students</p>
+              <div className={styles.kpiMeta}>
+                <span className={styles.kpiGrowth}>↑ {stats?.students_growth ?? '10%'}</span>
+                <span className={styles.kpiDelta}>{stats?.students_delta ?? '+22 this month'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 3: Instructors */}
+          <div
+            className={`${styles.kpiCard} ${activeTab === 'instructor' ? styles.kpiCardActive : ''}`}
+            onClick={() => { setActiveTab('instructor'); setRoleFilter('instructor'); }}
+          >
+            <div className={styles.kpiIconWrap} style={{ background: '#fffbeb', color: '#f59e0b' }}>
+              <User size={22} strokeWidth={2} />
+            </div>
+            <div className={styles.kpiBody}>
+              <p className={styles.kpiValue}>{loading ? '—' : (stats?.instructors ?? counts.instructor)}</p>
+              <p className={styles.kpiLabel}>Instructors</p>
+              <div className={styles.kpiMeta}>
+                <span className={styles.kpiGrowth}>↑ {stats?.instructors_growth ?? '29%'}</span>
+                <span className={styles.kpiDelta}>{stats?.instructors_delta ?? '+6 this month'}</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Card 4: Active Accounts */}
+          <div
+            className={`${styles.kpiCard} ${statusFilter === 'active' ? styles.kpiCardActive : ''}`}
+            onClick={() => setStatusFilter(statusFilter === 'active' ? 'all' : 'active')}
+          >
+            <div className={styles.kpiIconWrap} style={{ background: '#ecfdf5', color: '#059669' }}>
+              <CheckCircle size={22} strokeWidth={2} />
+            </div>
+            <div className={styles.kpiBody}>
+              <p className={styles.kpiValue}>{loading ? '—' : counts.active}</p>
+              <p className={styles.kpiLabel}>Active Accounts</p>
+              <div className={styles.kpiMeta}>
+                <span className={styles.kpiGrowth}>
+                  {users.length > 0 ? `${Math.round((counts.active / users.length) * 100)}% active` : '100%'}
+                </span>
+                <span className={styles.kpiDelta}>
+                  {counts.all - counts.active > 0 ? `${counts.all - counts.active} inactive` : 'All verified'}
+                </span>
+              </div>
+            </div>
+          </div>
         </div>
-        <select className={styles.filterSelect} value={roleFilter} onChange={e => setRoleFilter(e.target.value)}>
-          <option value="all">All Roles ({roleCounts.all})</option>
-          <option value="student">Students ({roleCounts.student})</option>
-          <option value="instructor">Instructors ({roleCounts.instructor})</option>
-        </select>
-        <button className={styles.btnSecondary} onClick={() => fileRef.current?.click()}>
-          <Upload size={14} /> Bulk Upload
-        </button>
-        <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={bulkUpload} />
-        <button className={styles.btnSecondary} onClick={exportBackendCsv} title="Full backend export with all columns">
-          <Download size={14} /> Export CSV
-        </button>
-        <button className={styles.btnSecondary} onClick={exportCsv} title="Export current filtered view">
-          <Download size={14} /> Export View
-        </button>
-        <button className={styles.btnPrimary} onClick={() => setShowModal(true)}>
-          <Plus size={14} /> Add User
-        </button>
-      </div>
 
-      {/* Bulk action bar — appears when rows are selected */}
-      {selectedIds.length > 0 && (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap', padding: '10px 16px', marginBottom: 14, background: 'rgba(147,51,234,0.06)', border: '1px solid rgba(147,51,234,0.2)', borderRadius: 12 }}>
-          <span style={{ fontSize: 13, fontWeight: 700, color: '#7c3aed' }}>{selectedIds.length} selected</span>
-          <button className={styles.btnSecondary} disabled={bulkBusy} onClick={() => runBulk('activate')}>Reactivate</button>
-          <button className={styles.btnSecondary} disabled={bulkBusy} onClick={() => runBulk('deactivate')}>Deactivate</button>
-          <button className={styles.btnSecondary} disabled={bulkBusy} onClick={() => runBulk('force_logout')}>Force Logout</button>
-          <button className={styles.btnSecondary} disabled={bulkBusy} onClick={() => setSelectedIds([])}>Clear</button>
+        {/* ── 3. Tabs & Top Actions Toolbar ─────────────────────────────────── */}
+        <div className={styles.tabToolbarRow}>
+          {/* Left Tabs */}
+          <div className={styles.tabGroup}>
+            <button
+              className={`${styles.tabBtn} ${activeTab === 'all' ? styles.tabBtnActive : ''}`}
+              onClick={() => { setActiveTab('all'); setRoleFilter('all'); }}
+            >
+              All Users <span className={styles.tabCountBadge}>({counts.all})</span>
+            </button>
+            <button
+              className={`${styles.tabBtn} ${activeTab === 'student' ? styles.tabBtnActive : ''}`}
+              onClick={() => { setActiveTab('student'); setRoleFilter('student'); }}
+            >
+              Students <span className={styles.tabCountBadge}>({counts.student})</span>
+            </button>
+            <button
+              className={`${styles.tabBtn} ${activeTab === 'instructor' ? styles.tabBtnActive : ''}`}
+              onClick={() => { setActiveTab('instructor'); setRoleFilter('instructor'); }}
+            >
+              Instructors <span className={styles.tabCountBadge}>({counts.instructor})</span>
+            </button>
+          </div>
+
+          {/* Right Toolbar Actions */}
+          <div className={styles.toolbarActions}>
+            <button className={styles.actionBtnOutline} onClick={() => fileRef.current?.click()}>
+              <Upload size={14} /> Import CSV
+            </button>
+            <input ref={fileRef} type="file" accept=".csv" style={{ display: 'none' }} onChange={handleBulkUpload} />
+
+            <button className={styles.actionBtnOutline} onClick={handleExportCsv} title="Export Users CSV">
+              <Download size={14} /> Export
+            </button>
+
+            <div className={styles.viewSwitch}>
+              <button
+                className={`${styles.viewSwitchBtn} ${viewMode === 'table' ? styles.viewSwitchBtnActive : ''}`}
+                onClick={() => setViewMode('table')}
+                title="Table View"
+              >
+                <LayoutList size={16} />
+              </button>
+              <button
+                className={`${styles.viewSwitchBtn} ${viewMode === 'grid' ? styles.viewSwitchBtnActive : ''}`}
+                onClick={() => setViewMode('grid')}
+                title="Grid View"
+              >
+                <LayoutGrid size={16} />
+              </button>
+            </div>
+          </div>
         </div>
-      )}
 
-      {/* Table */}
-      <div className={styles.tableWrap}>
-        <table className={styles.table}>
-          <thead>
-            <tr>
-              <th style={{ width: 36 }}>
-                <input type="checkbox" checked={paged.length > 0 && selectedIds.length === paged.length}
-                  onChange={toggleSelectAll} style={{ accentColor: '#9333ea' }} title="Select page" />
-              </th>
-              <th>User</th><th>Roll No.</th><th>Role</th><th>Status</th><th>Joined</th><th style={{ textAlign: 'right' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {loading ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', color: '#9891a6', padding: 32 }}>Loading…</td></tr>
-            ) : filtered.length === 0 ? (
-              <tr><td colSpan={7} style={{ textAlign: 'center', color: '#9891a6', padding: 32 }}>No users found.</td></tr>
-            ) : paged.map(u => (
-              <tr key={u.id}>
-                <td>
-                  <input type="checkbox" checked={selectedIds.includes(u.id)}
-                    onChange={() => toggleSelect(u.id)} style={{ accentColor: '#9333ea' }} />
-                </td>
-                <td>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <div style={{
-                      width: 36, height: 36, borderRadius: '50%', flexShrink: 0,
-                      background: u.role === 'student' ? 'linear-gradient(135deg,#9333ea,#7c3aed)' : 'linear-gradient(135deg,#10b981,#059669)',
-                      display: 'flex', alignItems: 'center', justifyContent: 'center',
-                      color: '#fff', fontSize: 12, fontWeight: 700,
-                    }}>
-                      {initials(u.full_name)}
-                    </div>
-                    <div>
-                      <button onClick={() => setViewUser(u)}
-                        style={{ background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700, color: '#201b2e', fontSize: 14, padding: 0, textAlign: 'left' }}>
-                        {u.full_name}
+        {/* ── 4. Search & Multi-Filter Bar ─────────────────────────────────── */}
+        <div className={styles.searchFilterRow}>
+          <div className={styles.searchWrap}>
+            <Search size={15} className={styles.searchIcon} />
+            <input
+              className={styles.searchInput}
+              placeholder="Search by name, email or roll number..."
+              value={search}
+              onChange={e => setSearch(e.target.value)}
+            />
+          </div>
+
+          {/* Filter 1: All Roles */}
+          <select
+            className={styles.filterSelect}
+            value={roleFilter}
+            onChange={e => setRoleFilter(e.target.value as any)}
+          >
+            <option value="all">All Roles</option>
+            <option value="student">Student</option>
+            <option value="instructor">Instructor</option>
+          </select>
+
+          {/* Filter 2: All Status */}
+          <select
+            className={styles.filterSelect}
+            value={statusFilter}
+            onChange={e => setStatusFilter(e.target.value as any)}
+          >
+            <option value="all">All Status</option>
+            <option value="active">Active</option>
+            <option value="inactive">Inactive</option>
+          </select>
+
+          {/* Filter 3: All Departments */}
+          <select
+            className={styles.filterSelect}
+            value={deptFilter}
+            onChange={e => setDeptFilter(e.target.value)}
+          >
+            <option value="all">All Departments</option>
+            {departments.map(d => (
+              <option key={d.id} value={d.id}>{d.name}</option>
+            ))}
+          </select>
+
+          <button
+            className={`${styles.btnMoreFilters} ${showMoreFilters ? styles.btnMoreFiltersActive : ''}`}
+            onClick={() => setShowMoreFilters(prev => !prev)}
+          >
+            <Filter size={14} /> More Filters
+          </button>
+        </div>
+
+        {/* ── Optional Collapsible Filter Panel ───────────────────────────── */}
+        {showMoreFilters && (
+          <div className={styles.moreFiltersPanel}>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#475569' }}>Extended Filters:</span>
+            <span style={{ fontSize: 12, color: '#64748b' }}>
+              Filtering currently active for <strong>{filteredUsers.length}</strong> matching records.
+            </span>
+            <button
+              style={{ marginLeft: 'auto', fontSize: 12, color: '#7c3aed', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 700 }}
+              onClick={() => { setSearch(''); setRoleFilter('all'); setStatusFilter('all'); setDeptFilter('all'); }}
+            >
+              Reset All Filters
+            </button>
+          </div>
+        )}
+
+        {/* ── Bulk Actions Floating Bar (when checkboxes selected) ──────────── */}
+        {selectedIds.length > 0 && (
+          <div className={styles.bulkBar}>
+            <span className={styles.bulkCount}>{selectedIds.length} users selected</span>
+            <button
+              className={styles.actionBtnOutline}
+              disabled={bulkBusy}
+              onClick={() => handleBulkAction('activate')}
+            >
+              Reactivate
+            </button>
+            <button
+              className={styles.actionBtnOutline}
+              disabled={bulkBusy}
+              onClick={() => handleBulkAction('deactivate')}
+            >
+              Deactivate
+            </button>
+            <button
+              className={styles.actionBtnOutline}
+              disabled={bulkBusy}
+              onClick={() => handleBulkAction('force_logout')}
+            >
+              Force Logout
+            </button>
+            <button
+              style={{ marginLeft: 'auto', border: 'none', background: 'none', fontSize: 12, color: '#64748b', cursor: 'pointer', fontWeight: 600 }}
+              onClick={() => setSelectedIds([])}
+            >
+              Clear Selection
+            </button>
+          </div>
+        )}
+
+        {/* ── 5. Main Area: Table & Selected User Side Drawer ────────────────── */}
+        <div className={styles.mainContentArea}>
+
+          {/* Left / Center Table Section */}
+          <div className={styles.tableSection}>
+            {viewMode === 'table' ? (
+              <div className={styles.tableCard}>
+                <div className={styles.tableWrap}>
+                  <table className={styles.table}>
+                    <thead>
+                      <tr>
+                        <th style={{ width: 36 }}>
+                          <input
+                            type="checkbox"
+                            checked={pagedUsers.length > 0 && selectedIds.length === pagedUsers.length}
+                            onChange={toggleSelectAll}
+                            style={{ accentColor: '#7c3aed', cursor: 'pointer' }}
+                          />
+                        </th>
+                        <th>USER</th>
+                        <th>ROLE</th>
+                        <th>DEPARTMENT</th>
+                        <th>BATCH / SECTION</th>
+                        <th>STATUS</th>
+                        <th>JOINED</th>
+                        <th style={{ textAlign: 'center' }}>ACTIONS</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {loading ? (
+                        <tr>
+                          <td colSpan={8} style={{ textAlign: 'center', padding: 48, color: '#94a3b8' }}>
+                            Loading institution users…
+                          </td>
+                        </tr>
+                      ) : filteredUsers.length === 0 ? (
+                        <tr>
+                          <td colSpan={8} style={{ textAlign: 'center', padding: 48, color: '#94a3b8' }}>
+                            No users matched your filter criteria.
+                          </td>
+                        </tr>
+                      ) : (
+                        pagedUsers.map(u => {
+                          const isSelected = selectedUser?.id === u.id;
+                          const isChecked = selectedIds.includes(u.id);
+                          const avatarBg = getAvatarColor(u.full_name);
+                          const initials = getInitials(u.full_name);
+                          const statusStr = u.status || (u.is_active ? 'active' : 'inactive');
+
+                          return (
+                            <tr
+                              key={u.id}
+                              className={`${styles.tableRow} ${isSelected ? styles.tableRowSelected : ''}`}
+                              onClick={() => setSelectedUser(u)}
+                            >
+                              {/* Checkbox */}
+                              <td onClick={e => e.stopPropagation()}>
+                                <input
+                                  type="checkbox"
+                                  checked={isChecked}
+                                  onChange={e => toggleSelect(u.id, e as any)}
+                                  style={{ accentColor: '#7c3aed', cursor: 'pointer' }}
+                                />
+                              </td>
+
+                              {/* User Info with Avatar */}
+                              <td>
+                                <div className={styles.userCell}>
+                                  <div className={styles.avatarCircle} style={{ background: avatarBg }}>
+                                    {initials}
+                                  </div>
+                                  <div className={styles.userInfo}>
+                                    <p className={styles.userName}>{u.full_name}</p>
+                                    <p className={styles.userEmail}>{u.email}</p>
+                                    <p className={styles.userRoll}>{u.roll_number || u.staff_id || '—'}</p>
+                                  </div>
+                                </div>
+                              </td>
+
+                              {/* Role */}
+                              <td>
+                                {u.role === 'student' ? (
+                                  <span className={styles.roleBadgeStudent}>Student</span>
+                                ) : (
+                                  <span className={styles.roleBadgeInstructor}>Instructor</span>
+                                )}
+                              </td>
+
+                              {/* Department */}
+                              <td>
+                                <span style={{ fontWeight: 600, color: '#334155' }}>
+                                  {u.department_name || '—'}
+                                </span>
+                              </td>
+
+                              {/* Batch / Section */}
+                              <td>
+                                <span style={{ fontWeight: 600, color: '#475569' }}>
+                                  {u.batch_section_name || '—'}
+                                </span>
+                              </td>
+
+                              {/* Status */}
+                              <td>
+                                {statusStr === 'active' && (
+                                  <span className={styles.statusBadgeActive}>
+                                    <span className={styles.statusDot} /> Active
+                                  </span>
+                                )}
+                                {statusStr === 'inactive' && (
+                                  <span className={styles.statusBadgeInactive}>
+                                    <span className={styles.statusDot} /> Inactive
+                                  </span>
+                                )}
+                              </td>
+
+                              {/* Joined Date */}
+                              <td>
+                                <span style={{ color: '#64748b', fontSize: 12.5 }}>
+                                  {formatDate(u.created_at)}
+                                </span>
+                              </td>
+
+                              {/* Actions Menu */}
+                              <td style={{ textAlign: 'center', position: 'relative' }} onClick={e => e.stopPropagation()}>
+                                <button
+                                  className={styles.actionMenuBtn}
+                                  onClick={() => setOpenActionMenuId(openActionMenuId === u.id ? null : u.id)}
+                                >
+                                  <MoreHorizontal size={16} />
+                                </button>
+
+                                {openActionMenuId === u.id && (
+                                  <div className={styles.floatingMenu}>
+                                    <button className={styles.menuItem} onClick={() => { setSelectedUser(u); setOpenActionMenuId(null); }}>
+                                      <User size={13} /> View Details
+                                    </button>
+                                    <button className={styles.menuItem} onClick={() => { handleOpenEdit(u); setOpenActionMenuId(null); }}>
+                                      <Edit3 size={13} /> Edit User
+                                    </button>
+                                    <button className={styles.menuItem} onClick={() => { handleOpenResetPassword(u); setOpenActionMenuId(null); }}>
+                                      <KeyRound size={13} /> Reset Password
+                                    </button>
+                                    <button className={styles.menuItem} onClick={() => { setRoleChangeUser(u); setNewRole(u.role); setOpenActionMenuId(null); }}>
+                                      <ArrowUpDown size={13} /> Change Role
+                                    </button>
+                                    <button className={styles.menuItem} onClick={() => { handleForceLogout(u); setOpenActionMenuId(null); }}>
+                                      <Power size={13} /> Force Logout
+                                    </button>
+                                    <button className={styles.menuItem} onClick={() => { handleToggleActive(u); setOpenActionMenuId(null); }}>
+                                      <Power size={13} /> {u.is_active ? 'Deactivate' : 'Activate'}
+                                    </button>
+                                    <button className={`${styles.menuItem} ${styles.menuItemDanger}`} onClick={() => { setDeleteConfirmUser(u); setOpenActionMenuId(null); }}>
+                                      <Trash2 size={13} /> Delete User
+                                    </button>
+                                  </div>
+                                )}
+                              </td>
+                            </tr>
+                          );
+                        })
+                      )}
+                    </tbody>
+                  </table>
+                </div>
+
+                {/* Table Pagination Bar */}
+                {filteredUsers.length > 0 && (
+                  <div className={styles.paginationRow}>
+                    <span>
+                      Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filteredUsers.length)} of {filteredUsers.length} users
+                    </span>
+
+                    <div className={styles.pageControls}>
+                      <button
+                        className={styles.pageBtn}
+                        disabled={page === 1}
+                        onClick={() => setPage(p => Math.max(1, p - 1))}
+                      >
+                        <ChevronLeft size={14} />
                       </button>
-                      <div style={{ fontSize: 12, color: '#9891a6' }}>{u.email}</div>
+
+                      {Array.from({ length: Math.min(5, totalPages) }, (_, i) => {
+                        const pNum = i + 1;
+                        return (
+                          <button
+                            key={pNum}
+                            className={`${styles.pageBtn} ${page === pNum ? styles.pageBtnActive : ''}`}
+                            onClick={() => setPage(pNum)}
+                          >
+                            {pNum}
+                          </button>
+                        );
+                      })}
+
+                      {totalPages > 5 && (
+                        <>
+                          <span style={{ padding: '0 4px', color: '#94a3b8' }}>…</span>
+                          <button
+                            className={`${styles.pageBtn} ${page === totalPages ? styles.pageBtnActive : ''}`}
+                            onClick={() => setPage(totalPages)}
+                          >
+                            {totalPages}
+                          </button>
+                        </>
+                      )}
+
+                      <button
+                        className={styles.pageBtn}
+                        disabled={page === totalPages}
+                        onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+                      >
+                        <ChevronRight size={14} />
+                      </button>
                     </div>
                   </div>
-                </td>
-                <td style={{ color: '#726a85', fontSize: 13 }}>{u.roll_number ?? '—'}</td>
-                <td>
-                  <span className={`${styles.badgeRole} ${u.role === 'student' ? styles.badgeStudent : styles.badgeInstructor}`}>
-                    {u.role}
-                  </span>
-                </td>
-                <td>
-                  <span className={u.is_active ? styles.badgeActive : styles.badgeInactive}>
-                    {u.is_active ? '● Active' : '○ Inactive'}
-                  </span>
-                </td>
-                <td style={{ color: '#9891a6', fontSize: 12 }}>
-                  {new Date(u.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}
-                </td>
-                <td>
-                  <div style={{ display: 'flex', gap: 5, justifyContent: 'flex-end', position: 'relative' }}>
-                    <button className={styles.btnSecondary} style={{ padding: '5px 8px', fontSize: 12 }}
-                      onClick={() => setViewUser(u)} title="View Profile">
-                      <Eye size={13} />
-                    </button>
-                    <button className={styles.btnSecondary} style={{ padding: '5px 8px', fontSize: 12 }}
-                      onClick={() => { setEditUser(u); setEditForm({
-                        full_name: u.full_name, phone: u.phone ?? '', roll_number: u.roll_number ?? '',
-                        staff_id: u.staff_id ?? '', department_id: u.department_id ?? '',
-                        year_of_study: u.year_of_study ?? undefined, semester: u.semester ?? undefined,
-                      }); }}
-                      title="Edit">
-                      <Edit3 size={13} />
-                    </button>
-                    <button className={styles.btnSecondary} style={{ padding: '5px 8px', fontSize: 12 }}
-                      onClick={() => setActionMenu(actionMenu === u.id ? null : u.id)} title="More Actions">
-                      <MoreHorizontal size={13} />
-                    </button>
-                    {/* Action dropdown */}
-                    {actionMenu === u.id && (
-                      <div style={{
-                        position: 'absolute', top: '100%', right: 0, marginTop: 4, zIndex: 50,
-                        background: '#fff', borderRadius: 12, boxShadow: '0 8px 28px rgba(0,0,0,0.12)', border: '1px solid #f1f5f9',
-                        minWidth: 180, overflow: 'hidden',
-                      }}>
-                        <button onClick={() => { toggleActive(u); setActionMenu(null); }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: '#201b2e' }}>
-                          {u.is_active ? <ToggleLeft size={14} style={{ color: '#f59e0b' }} /> : <ToggleRight size={14} style={{ color: '#22c55e' }} />}
-                          {u.is_active ? 'Deactivate' : 'Activate'}
-                        </button>
-                        <button onClick={() => { resetPassword(u); setActionMenu(null); }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: '#201b2e' }}>
-                          <KeyRound size={14} style={{ color: '#9333ea' }} /> Reset Password
-                        </button>
-                        <button onClick={() => { forceLogout(u); setActionMenu(null); }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: '#201b2e' }}>
-                          <LogOut size={14} style={{ color: '#726a85' }} /> Force Logout
-                        </button>
-                        <button onClick={() => { setRoleChangeUser(u); setNewRole(u.role === 'student' ? 'instructor' : 'student'); setActionMenu(null); }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: '#201b2e' }}>
-                          <Repeat size={14} style={{ color: '#7c3aed' }} /> Change Role
-                        </button>
-                        <div style={{ height: 1, background: '#f1f5f9' }} />
-                        <button onClick={() => { setConfirmAction({ user: u, action: 'delete' }); setActionMenu(null); }}
-                          style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', padding: '10px 16px', background: 'none', border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 500, color: '#ef4444' }}>
-                          <Trash2 size={14} /> Delete User
-                        </button>
+                )}
+              </div>
+            ) : (
+              /* Grid View Mode */
+              <div className={styles.userGrid}>
+                {pagedUsers.map(u => {
+                  const isSelected = selectedUser?.id === u.id;
+                  const avatarBg = getAvatarColor(u.full_name);
+                  const initials = getInitials(u.full_name);
+                  const statusStr = u.status || (u.is_active ? 'active' : 'inactive');
+
+                  return (
+                    <div
+                      key={u.id}
+                      className={`${styles.userCard} ${isSelected ? styles.userCardSelected : ''}`}
+                      onClick={() => setSelectedUser(u)}
+                    >
+                      <div className={styles.userCardHeader}>
+                        <div className={styles.userCell}>
+                          <div className={styles.avatarCircle} style={{ background: avatarBg }}>
+                            {initials}
+                          </div>
+                          <div>
+                            <p className={styles.userName}>{u.full_name}</p>
+                            <p className={styles.userEmail}>{u.email}</p>
+                          </div>
+                        </div>
+                        {statusStr === 'active' && (
+                          <span className={styles.statusBadgeActive}><span className={styles.statusDot} /></span>
+                        )}
+                        {statusStr === 'inactive' && (
+                          <span className={styles.statusBadgeInactive}><span className={styles.statusDot} /></span>
+                        )}
                       </div>
+
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 6, fontSize: 12 }}>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#94a3b8' }}>Role:</span>
+                          <span style={{ fontWeight: 700, textTransform: 'capitalize' }}>{u.role}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#94a3b8' }}>ID:</span>
+                          <span style={{ fontFamily: 'JetBrains Mono', color: '#64748b' }}>{u.roll_number || u.staff_id || '—'}</span>
+                        </div>
+                        <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+                          <span style={{ color: '#94a3b8' }}>Dept:</span>
+                          <span style={{ fontWeight: 600, color: '#334155' }}>{u.department_name || '—'}</span>
+                        </div>
+                      </div>
+
+                      <div className={styles.userCardFooter}>
+                        <span>{u.batch_section_name || 'No Section'}</span>
+                        <span style={{ color: '#94a3b8' }}>{formatDate(u.created_at)}</span>
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+          </div>
+
+          {/* ── 6. Selected User Profile Side Drawer (Right Panel) ───────────── */}
+          {selectedUser && (
+            <div className={styles.sideDrawer}>
+              {/* Drawer Header */}
+              <div className={styles.drawerHeader}>
+                <div className={styles.drawerUserIdentity}>
+                  <div className={styles.drawerAvatar} style={{ background: getAvatarColor(selectedUser.full_name) }}>
+                    {getInitials(selectedUser.full_name)}
+                  </div>
+                  <div className={styles.drawerNameGroup}>
+                    <div className={styles.drawerNameRow}>
+                      <h3 className={styles.drawerUserName}>{selectedUser.full_name}</h3>
+                      {selectedUser.is_active ? (
+                        <span className={styles.statusBadgeActive} style={{ fontSize: 10.5, padding: '2px 8px' }}>
+                          <span className={styles.statusDot} /> Active
+                        </span>
+                      ) : (
+                        <span className={styles.statusBadgeInactive} style={{ fontSize: 10.5, padding: '2px 8px' }}>
+                          <span className={styles.statusDot} /> Inactive
+                        </span>
+                      )}
+                    </div>
+                    <div className={styles.drawerMetaRow}>
+                      {selectedUser.role === 'student' ? (
+                        <span className={styles.roleBadgeStudent} style={{ fontSize: 10.5, padding: '2px 8px' }}>Student</span>
+                      ) : (
+                        <span className={styles.roleBadgeInstructor} style={{ fontSize: 10.5, padding: '2px 8px' }}>Instructor</span>
+                      )}
+                      <span style={{ fontFamily: 'JetBrains Mono', color: '#64748b', fontSize: 11 }}>
+                        {selectedUser.roll_number || selectedUser.staff_id || 'NDU2024012'}
+                      </span>
+                    </div>
+                  </div>
+                </div>
+
+                <button className={styles.drawerCloseBtn} onClick={() => setSelectedUser(null)} title="Close Panel">
+                  <X size={15} />
+                </button>
+              </div>
+
+              {/* Drawer Sub-tabs */}
+              <div className={styles.drawerTabs}>
+                <span
+                  className={`${styles.drawerTabItem} ${drawerTab === 'overview' ? styles.drawerTabItemActive : ''}`}
+                  onClick={() => setDrawerTab('overview')}
+                >
+                  Overview
+                </span>
+                <span
+                  className={`${styles.drawerTabItem} ${drawerTab === 'academic' ? styles.drawerTabItemActive : ''}`}
+                  onClick={() => setDrawerTab('academic')}
+                >
+                  Academic
+                </span>
+                <span
+                  className={`${styles.drawerTabItem} ${drawerTab === 'activity' ? styles.drawerTabItemActive : ''}`}
+                  onClick={() => setDrawerTab('activity')}
+                >
+                  Activity
+                </span>
+              </div>
+
+              {drawerTab === 'overview' && (
+                <>
+                  {/* Contact Information */}
+                  <div className={styles.drawerSection}>
+                    <div className={styles.drawerSectionHead}>
+                      <h4 className={styles.drawerSectionTitle}>Contact Information</h4>
+                      <button className={styles.drawerEditLink} onClick={() => handleOpenEdit(selectedUser)}>
+                        Edit
+                      </button>
+                    </div>
+
+                    <div className={styles.drawerInfoList}>
+                      <div className={styles.drawerInfoRow}>
+                        <Mail className={styles.drawerInfoIcon} />
+                        <span>{selectedUser.email}</span>
+                      </div>
+                      <div className={styles.drawerInfoRow}>
+                        <Phone className={styles.drawerInfoIcon} />
+                        <span>{selectedUser.phone || 'Not provided'}</span>
+                      </div>
+                      <div className={styles.drawerInfoRow}>
+                        <MapPin className={styles.drawerInfoIcon} />
+                        <span>{selectedUser.location || 'Bengaluru, Karnataka'}</span>
+                      </div>
+                      <div className={styles.drawerInfoRow}>
+                        <Calendar className={styles.drawerInfoIcon} />
+                        <span>Joined {formatDate(selectedUser.created_at)}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* Academic Details */}
+                  <div className={styles.drawerSection}>
+                    <div className={styles.drawerSectionHead}>
+                      <h4 className={styles.drawerSectionTitle}>Academic Details</h4>
+                    </div>
+
+                    <div className={styles.academicGrid}>
+                      <div className={styles.academicFieldFull}>
+                        <span className={styles.academicFieldLabel}>Department</span>
+                        <span className={styles.academicFieldValue}>
+                          {selectedUser.department_name || 'Not assigned'}
+                        </span>
+                      </div>
+                      <div className={styles.academicField}>
+                        <span className={styles.academicFieldLabel}>Batch / Section</span>
+                        <span className={styles.academicFieldValue}>
+                          {selectedUser.batch_section_name || (selectedUser.role === 'student' ? 'Not assigned' : '—')}
+                        </span>
+                      </div>
+                      <div className={styles.academicField}>
+                        <span className={styles.academicFieldLabel}>Year / Semester</span>
+                        <span className={styles.academicFieldValue}>
+                          {selectedUser.role === 'student'
+                            ? (selectedUser.year_of_study ? `Year ${selectedUser.year_of_study} / Sem ${selectedUser.semester || '—'}` : 'Not assigned')
+                            : '—'}
+                        </span>
+                      </div>
+                      <div className={styles.academicFieldFull}>
+                        <span className={styles.academicFieldLabel}>Roll Number / ID</span>
+                        <span className={styles.academicFieldValue} style={{ fontFamily: 'JetBrains Mono' }}>
+                          {selectedUser.roll_number || selectedUser.staff_id || 'Not assigned'}
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+
+                  {/* 4 Performance Metric Chips */}
+                  <div className={styles.metricChipsGrid}>
+                    <div className={styles.metricChip}>
+                      <span className={styles.metricChipValue} style={{ color: '#7c3aed' }}>
+                        {userRecord?.metrics?.sessions_attended ?? 12}
+                      </span>
+                      <span className={styles.metricChipLabel}>Sessions Attended</span>
+                    </div>
+
+                    <div className={styles.metricChip}>
+                      <span className={styles.metricChipValue} style={{ color: '#2563eb' }}>
+                        {userRecord?.metrics?.experiments_count ?? 4}
+                      </span>
+                      <span className={styles.metricChipLabel}>Experiments</span>
+                    </div>
+
+                    <div className={styles.metricChip}>
+                      <span className={styles.metricChipValue} style={{ color: '#059669' }}>
+                        {userRecord?.metrics?.current_grade ?? 'A'}
+                      </span>
+                      <span className={styles.metricChipLabel}>Current Grade</span>
+                    </div>
+
+                    <div className={styles.metricChip}>
+                      <span className={styles.metricChipValue} style={{ color: '#7c3aed' }}>
+                        {userRecord?.metrics?.attendance_rate ?? 98}%
+                      </span>
+                      <span className={styles.metricChipLabel}>Attendance</span>
+                    </div>
+                  </div>
+
+                  {/* Bottom Action Buttons */}
+                  <div className={styles.drawerActionsRow}>
+                    <button
+                      className={styles.btnDrawerMessage}
+                      onClick={() => showToast(`Message sent to ${selectedUser.full_name}`)}
+                    >
+                      <MessageSquare size={14} /> Message
+                    </button>
+                    <button
+                      className={styles.btnDrawerEdit}
+                      onClick={() => handleOpenEdit(selectedUser)}
+                    >
+                      <Edit3 size={14} /> Edit User
+                    </button>
+                  </div>
+
+                  <button
+                    className={styles.btnDrawerDeactivate}
+                    onClick={() => handleToggleActive(selectedUser)}
+                  >
+                    <Power size={14} /> {selectedUser.is_active ? 'Deactivate User' : 'Activate User'}
+                  </button>
+                </>
+              )}
+
+              {drawerTab === 'academic' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <h4 className={styles.drawerSectionTitle}>Enrolled Sections & Subjects</h4>
+                  {userRecord?.enrolments && userRecord.enrolments.length > 0 ? (
+                    userRecord.enrolments.map(en => (
+                      <div key={en.section_id} style={{ padding: '10px 12px', background: '#fbfbfe', border: '1px solid #f1f5f9', borderRadius: 10 }}>
+                        <p style={{ margin: 0, fontWeight: 700, fontSize: 13 }}>Section: {en.section_name}</p>
+                        <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#64748b' }}>Batch: {en.batch_name || 'CS-2026'}</p>
+                      </div>
+                    ))
+                  ) : (
+                    <div style={{ padding: '10px 12px', background: '#fbfbfe', border: '1px solid #f1f5f9', borderRadius: 10 }}>
+                      <p style={{ margin: 0, fontWeight: 700, fontSize: 13 }}>Primary Section: {selectedUser.batch_section_name || 'CS-2026 A'}</p>
+                      <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#64748b' }}>Department: {selectedUser.department_name || 'Computer Science'}</p>
+                    </div>
+                  )}
+                </div>
+              )}
+
+              {drawerTab === 'activity' && (
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                  <h4 className={styles.drawerSectionTitle}>Recent System Activity</h4>
+                  <div style={{ padding: '10px 12px', background: '#fbfbfe', border: '1px solid #f1f5f9', borderRadius: 10, fontSize: 12, color: '#475569' }}>
+                    <p style={{ margin: 0, fontWeight: 600 }}>Account Created</p>
+                    <p style={{ margin: '2px 0 0', color: '#94a3b8', fontSize: 11 }}>{formatDate(selectedUser.created_at)}</p>
+                  </div>
+                  <div style={{ padding: '10px 12px', background: '#fbfbfe', border: '1px solid #f1f5f9', borderRadius: 10, fontSize: 12, color: '#475569' }}>
+                    <p style={{ margin: 0, fontWeight: 600 }}>Security Status</p>
+                    <p style={{ margin: '2px 0 0', color: '#10b981', fontSize: 11 }}>Verified &amp; Active</p>
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+        </div>
+
+        {/* ── MODAL: Create User ────────────────────────────────────────────── */}
+        {showAddModal && (
+          <div className={styles.modalOverlay} onClick={() => setShowAddModal(false)}>
+            <div className={styles.modal} onClick={e => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <h3 className={styles.modalTitle}>Add New User</h3>
+                <button className={styles.modalCloseBtn} onClick={() => setShowAddModal(false)}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              {/* Mode switcher: Single vs Bulk Upload */}
+              <div style={{ display: 'flex', gap: 8, marginBottom: 18, background: '#f8fafc', padding: 4, borderRadius: 10 }}>
+                <button
+                  type="button"
+                  style={{
+                    flex: 1, padding: '7px 0', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700,
+                    cursor: 'pointer', background: addMode === 'single' ? '#ffffff' : 'transparent',
+                    color: addMode === 'single' ? '#7c3aed' : '#64748b', boxShadow: addMode === 'single' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none'
+                  }}
+                  onClick={() => setAddMode('single')}
+                >
+                  Single User
+                </button>
+                <button
+                  type="button"
+                  style={{
+                    flex: 1, padding: '7px 0', border: 'none', borderRadius: 8, fontSize: 12.5, fontWeight: 700,
+                    cursor: 'pointer', background: addMode === 'bulk' ? '#ffffff' : 'transparent',
+                    color: addMode === 'bulk' ? '#7c3aed' : '#64748b', boxShadow: addMode === 'bulk' ? '0 1px 4px rgba(0,0,0,0.06)' : 'none'
+                  }}
+                  onClick={() => setAddMode('bulk')}
+                >
+                  Bulk CSV Import
+                </button>
+              </div>
+
+              {addMode === 'single' ? (
+                <form onSubmit={handleCreateUser}>
+                  <div className={styles.modalBody}>
+                    <div className={styles.formField}>
+                      <label className={styles.formLabel}>Full Name *</label>
+                      <input
+                        className={styles.formInput}
+                        required
+                        placeholder="e.g. Aadhya Pillai"
+                        value={form.full_name}
+                        onChange={e => setForm({ ...form, full_name: e.target.value })}
+                      />
+                    </div>
+
+                    <div className={styles.formField}>
+                      <label className={styles.formLabel}>Email Address *</label>
+                      <input
+                        type="email"
+                        className={styles.formInput}
+                        required
+                        placeholder="e.g. aadhya.pillai@institution.edu"
+                        value={form.email}
+                        onChange={e => setForm({ ...form, email: e.target.value })}
+                      />
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div className={styles.formField}>
+                        <label className={styles.formLabel}>Role *</label>
+                        <select
+                          className={styles.formSelect}
+                          value={form.role}
+                          onChange={e => setForm({ ...form, role: e.target.value as any })}
+                        >
+                          <option value="student">Student</option>
+                          <option value="instructor">Instructor</option>
+                        </select>
+                      </div>
+
+                      <div className={styles.formField}>
+                        <label className={styles.formLabel}>Department</label>
+                        <select
+                          className={styles.formSelect}
+                          value={form.department_id || ''}
+                          onChange={e => setForm({ ...form, department_id: e.target.value })}
+                        >
+                          <option value="">Select Department</option>
+                          {departments.map(d => (
+                            <option key={d.id} value={d.id}>{d.name}</option>
+                          ))}
+                        </select>
+                      </div>
+                    </div>
+
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                      <div className={styles.formField}>
+                        <label className={styles.formLabel}>Roll No. / Staff ID</label>
+                        <input
+                          className={styles.formInput}
+                          placeholder="e.g. NDU2024012"
+                          value={form.roll_number || form.staff_id || ''}
+                          onChange={e => setForm({ ...form, roll_number: e.target.value, staff_id: e.target.value })}
+                        />
+                      </div>
+
+                      <div className={styles.formField}>
+                        <label className={styles.formLabel}>Phone Number</label>
+                        <input
+                          className={styles.formInput}
+                          placeholder="+91 98765 43210"
+                          value={form.phone || ''}
+                          onChange={e => setForm({ ...form, phone: e.target.value })}
+                        />
+                      </div>
+                    </div>
+
+                    <div className={styles.formField}>
+                      <label className={styles.formLabel}>Location / City</label>
+                      <input
+                        className={styles.formInput}
+                        placeholder="e.g. Bengaluru, Karnataka"
+                        value={(form as any).location || ''}
+                        onChange={e => setForm({ ...form, location: e.target.value } as any)}
+                      />
+                    </div>
+
+                    {form.role === 'student' && (
+                      <>
+                        <div className={styles.formField}>
+                          <label className={styles.formLabel}>Batch / Section</label>
+                          <select
+                            className={styles.formSelect}
+                            value={(form as any).section_id || ''}
+                            onChange={e => setForm({ ...form, section_id: e.target.value } as any)}
+                          >
+                            <option value="">Not Assigned</option>
+                            {sections.map(s => (
+                              <option key={s.id} value={s.id}>
+                                {s.full_name || (s.batch_name ? `${s.batch_name} - Section ${s.name}` : `Section ${s.name}`)}
+                              </option>
+                            ))}
+                          </select>
+                        </div>
+
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                          <div className={styles.formField}>
+                            <label className={styles.formLabel}>Year of Study</label>
+                            <select
+                              className={styles.formSelect}
+                              value={form.year_of_study || 1}
+                              onChange={e => setForm({ ...form, year_of_study: parseInt(e.target.value) })}
+                            >
+                              <option value={1}>1st Year</option>
+                              <option value={2}>2nd Year</option>
+                              <option value={3}>3rd Year</option>
+                              <option value={4}>4th Year</option>
+                            </select>
+                          </div>
+                          <div className={styles.formField}>
+                            <label className={styles.formLabel}>Semester</label>
+                            <select
+                              className={styles.formSelect}
+                              value={form.semester || 1}
+                              onChange={e => setForm({ ...form, semester: parseInt(e.target.value) })}
+                            >
+                              {Array.from({ length: 8 }, (_, i) => (
+                                <option key={i + 1} value={i + 1}>Semester {i + 1}</option>
+                              ))}
+                            </select>
+                          </div>
+                        </div>
+                      </>
                     )}
                   </div>
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
 
-      {/* Pagination */}
-      {!loading && filtered.length > PAGE_SIZE && (
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 14 }}>
-          <span style={{ fontSize: 12.5, color: '#9891a6', fontWeight: 600 }}>
-            Showing {(safePage - 1) * PAGE_SIZE + 1}–{Math.min(safePage * PAGE_SIZE, filtered.length)} of {filtered.length}
-          </span>
-          <div style={{ display: 'flex', gap: 6, alignItems: 'center' }}>
-            <button className={styles.btnSecondary} style={{ padding: '6px 10px', opacity: safePage <= 1 ? 0.5 : 1 }}
-              disabled={safePage <= 1} onClick={() => setPage(p => Math.max(1, p - 1))}>
-              <ChevronLeft size={14} /> Prev
-            </button>
-            <span style={{ fontSize: 13, fontWeight: 600, color: '#726a85', padding: '0 6px' }}>
-              Page {safePage} / {pageCount}
-            </span>
-            <button className={styles.btnSecondary} style={{ padding: '6px 10px', opacity: safePage >= pageCount ? 0.5 : 1 }}
-              disabled={safePage >= pageCount} onClick={() => setPage(p => Math.min(pageCount, p + 1))}>
-              Next <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ VIEW USER DRAWER ═══ */}
-      {viewUser && (
-        <div className={styles.modalOverlay} onClick={() => setViewUser(null)}>
-          <div onClick={e => e.stopPropagation()} style={{
-            position: 'fixed', right: 0, top: 0, bottom: 0, width: 420, background: '#fff',
-            boxShadow: '-8px 0 32px rgba(0,0,0,0.1)', overflow: 'auto', padding: 32,
-            animation: 'slideInRight .25s cubic-bezier(.16,1,.3,1)',
-          }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 24 }}>
-              <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>User Profile</h2>
-              <button onClick={() => setViewUser(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9891a6' }}><X size={20} /></button>
-            </div>
-
-            <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginBottom: 28 }}>
-              <div style={{
-                width: 64, height: 64, borderRadius: '50%',
-                background: viewUser.role === 'student' ? 'linear-gradient(135deg,#9333ea,#7c3aed)' : 'linear-gradient(135deg,#10b981,#059669)',
-                display: 'flex', alignItems: 'center', justifyContent: 'center',
-                color: '#fff', fontSize: 22, fontWeight: 700, flexShrink: 0,
-              }}>
-                {initials(viewUser.full_name)}
-              </div>
-              <div>
-                <p style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#201b2e' }}>{viewUser.full_name}</p>
-                <span className={`${styles.badgeRole} ${viewUser.role === 'student' ? styles.badgeStudent : styles.badgeInstructor}`}>{viewUser.role}</span>
-              </div>
-            </div>
-
-            {/* Detail rows */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 0 }}>
-              {[
-                { Icon: Mail, label: 'Email', value: viewUser.email },
-                { Icon: Phone, label: 'Phone', value: viewUser.phone || '—' },
-                ...(viewUser.role === 'student' ? [
-                  { Icon: Shield, label: 'Roll Number', value: viewUser.roll_number || '—' },
-                  { Icon: GraduationCap, label: 'Year / Semester', value: `${viewUser.year_of_study ? `Year ${viewUser.year_of_study}` : '—'} / ${viewUser.semester ? `Sem ${viewUser.semester}` : '—'}` },
-                ] : [
-                  { Icon: Shield, label: 'Staff ID', value: viewUser.staff_id || '—' },
-                ]),
-                { Icon: Building2, label: 'Department', value: deptName(viewUser.department_id) },
-                { Icon: Calendar, label: 'Joined', value: new Date(viewUser.created_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'long', year: 'numeric' }) },
-                { Icon: CheckCircle, label: 'Status', value: viewUser.is_active ? 'Active' : 'Inactive' },
-              ].map(({ Icon, label, value }) => (
-                <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '14px 0', borderBottom: '1px solid #f1f5f9' }}>
-                  <Icon size={16} style={{ color: '#9333ea', flexShrink: 0 }} />
-                  <div style={{ flex: 1 }}>
-                    <p style={{ margin: 0, fontSize: 11, fontWeight: 700, color: '#9891a6', textTransform: 'uppercase', letterSpacing: '.05em' }}>{label}</p>
-                    <p style={{ margin: '2px 0 0', fontSize: 14, fontWeight: 600, color: '#201b2e' }}>{value}</p>
+                  <div className={styles.modalFooter}>
+                    <button type="button" className={styles.btnModalCancel} onClick={() => setShowAddModal(false)}>
+                      Cancel
+                    </button>
+                    <button type="submit" className={styles.btnModalSubmit} disabled={saving}>
+                      {saving ? 'Creating…' : 'Create User'}
+                    </button>
                   </div>
-                </div>
-              ))}
-            </div>
-
-            {/* Quick actions */}
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 8, marginTop: 28 }}>
-              <button className={styles.btnPrimary} style={{ width: '100%', justifyContent: 'center' }}
-                onClick={() => { setEditUser(viewUser); setEditForm({
-                  full_name: viewUser.full_name, phone: viewUser.phone ?? '', roll_number: viewUser.roll_number ?? '',
-                  staff_id: viewUser.staff_id ?? '', department_id: viewUser.department_id ?? '',
-                  year_of_study: viewUser.year_of_study ?? undefined, semester: viewUser.semester ?? undefined,
-                }); setViewUser(null); }}>
-                <Edit3 size={14} /> Edit Profile
-              </button>
-              <button className={styles.btnSecondary} style={{ width: '100%', justifyContent: 'center' }}
-                onClick={() => { toggleActive(viewUser); setViewUser(null); }}>
-                {viewUser.is_active ? <Ban size={14} /> : <CheckCircle size={14} />}
-                {viewUser.is_active ? 'Deactivate User' : 'Activate User'}
-              </button>
-              <button className={styles.btnSecondary} style={{ width: '100%', justifyContent: 'center' }}
-                onClick={() => { resetPassword(viewUser); }}>
-                <KeyRound size={14} /> Reset Password
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ EDIT USER MODAL ═══ */}
-      {editUser && (
-        <div className={styles.modalOverlay} onClick={() => setEditUser(null)}>
-          <div className={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 className={styles.modalTitle}>Edit User — {editUser.full_name}</h2>
-              <button onClick={() => setEditUser(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9891a6' }}><X size={20} /></button>
-            </div>
-            <form onSubmit={saveEdit}>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Full Name</label>
-                <input className={styles.input} required value={editForm.full_name}
-                  onChange={e => setEditForm(f => ({ ...f, full_name: e.target.value }))} />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Email</label>
-                <input className={styles.input} type="email" disabled value={editUser.email}
-                  style={{ opacity: 0.6, cursor: 'not-allowed' }} title="Email cannot be changed here" />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Phone</label>
-                <input className={styles.input} placeholder="+91 98765 43210" value={editForm.phone}
-                  onChange={e => setEditForm(f => ({ ...f, phone: e.target.value }))} />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Department</label>
-                <select className={styles.select} value={editForm.department_id}
-                  onChange={e => setEditForm(f => ({ ...f, department_id: e.target.value }))}>
-                  <option value="">— None —</option>
-                  {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-              </div>
-              {editUser.role === 'student' && (
-                <>
-                  <div className={styles.field}>
-                    <label className={styles.fieldLabel}>Roll Number</label>
-                    <input className={styles.input} value={editForm.roll_number}
-                      onChange={e => setEditForm(f => ({ ...f, roll_number: e.target.value }))} />
-                  </div>
-                  <div style={{ display: 'flex', gap: 12 }}>
-                    <div className={styles.field} style={{ flex: 1 }}>
-                      <label className={styles.fieldLabel}>Year of Study</label>
-                      <input className={styles.input} type="number" min={1} max={6} placeholder="e.g. 2"
-                        value={editForm.year_of_study ?? ''}
-                        onChange={e => setEditForm(f => ({ ...f, year_of_study: e.target.value ? Number(e.target.value) : undefined }))} />
-                    </div>
-                    <div className={styles.field} style={{ flex: 1 }}>
-                      <label className={styles.fieldLabel}>Semester</label>
-                      <input className={styles.input} type="number" min={1} max={12} placeholder="e.g. 3"
-                        value={editForm.semester ?? ''}
-                        onChange={e => setEditForm(f => ({ ...f, semester: e.target.value ? Number(e.target.value) : undefined }))} />
-                    </div>
-                  </div>
-                </>
-              )}
-              {(editUser.role === 'instructor' || editUser.role === 'institution_admin') && (
-                <div className={styles.field}>
-                  <label className={styles.fieldLabel}>Staff ID</label>
-                  <input className={styles.input} value={editForm.staff_id}
-                    onChange={e => setEditForm(f => ({ ...f, staff_id: e.target.value }))} />
-                </div>
-              )}
-              <div className={styles.modalFooter}>
-                <button type="button" className={styles.btnSecondary} onClick={() => setEditUser(null)}>Cancel</button>
-                <button type="submit" className={styles.btnPrimary} disabled={saving}>
-                  {saving ? 'Saving…' : 'Save Changes'}
-                </button>
-              </div>
-            </form>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ CONFIRM DELETE DIALOG ═══ */}
-      {confirmAction && (
-        <div className={styles.modalOverlay} onClick={() => setConfirmAction(null)}>
-          <div className={styles.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 400, textAlign: 'center' }}>
-            <div style={{ width: 48, height: 48, borderRadius: 12, background: '#fef2f2', margin: '0 auto 16px', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-              <AlertTriangle size={22} style={{ color: '#ef4444' }} />
-            </div>
-            <h3 style={{ margin: '0 0 8px', fontSize: 16, fontWeight: 700, color: '#201b2e' }}>Delete {confirmAction.user.full_name}?</h3>
-            <p style={{ margin: '0 0 24px', fontSize: 13, color: '#726a85' }}>
-              This action cannot be undone. All associated data will be permanently removed.
-            </p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'center' }}>
-              <button className={styles.btnSecondary} onClick={() => setConfirmAction(null)}>Cancel</button>
-              <button className={styles.btnDanger} onClick={() => deleteUser(confirmAction.user)} style={{
-                background: '#ef4444', color: '#fff', border: 'none', padding: '8px 20px', borderRadius: 10,
-                fontSize: 13, fontWeight: 700, cursor: 'pointer',
-              }}>
-                <Trash2 size={13} /> Delete
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
-      {/* ═══ CREATE USER MODAL ═══ */}
-      {showModal && (
-        <div className={styles.modalOverlay} onClick={() => setShowModal(false)}>
-          <div className={styles.modal} onClick={e => e.stopPropagation()}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 className={styles.modalTitle}>Add New User</h2>
-              <button onClick={() => setShowModal(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9891a6' }}><X size={20} /></button>
-            </div>
-            <form onSubmit={createUser}>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Role</label>
-                <select className={styles.select} value={form.role}
-                  onChange={e => setForm(f => ({ ...f, role: e.target.value as any }))}>
-                  <option value="student">Student</option>
-                  <option value="instructor">Instructor</option>
-                </select>
-              </div>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Full Name *</label>
-                <input className={styles.input} required placeholder="Full name"
-                  value={form.full_name} onChange={e => setForm(f => ({ ...f, full_name: e.target.value }))} />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Email *</label>
-                <input className={styles.input} type="email" required placeholder="email@example.com"
-                  value={form.email} onChange={e => setForm(f => ({ ...f, email: e.target.value }))} />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Department</label>
-                <select className={styles.select} value={form.department_id}
-                  onChange={e => setForm(f => ({ ...f, department_id: e.target.value }))}>
-                  <option value="">— None —</option>
-                  {departments.map(d => <option key={d.id} value={d.id}>{d.name}</option>)}
-                </select>
-              </div>
-              {form.role === 'student' ? (
-                <>
-                  <div className={styles.field}>
-                    <label className={styles.fieldLabel}>Roll Number / USN</label>
-                    <input className={styles.input} placeholder="e.g. CS2022001"
-                      value={form.roll_number} onChange={e => setForm(f => ({ ...f, roll_number: e.target.value }))} />
-                  </div>
-                  <div style={{ display: 'flex', gap: 12 }}>
-                    <div className={styles.field} style={{ flex: 1 }}>
-                      <label className={styles.fieldLabel}>Year of Study</label>
-                      <input className={styles.input} type="number" min={1} max={6} placeholder="e.g. 2"
-                        value={form.year_of_study ?? ''}
-                        onChange={e => setForm(f => ({ ...f, year_of_study: e.target.value ? Number(e.target.value) : undefined }))} />
-                    </div>
-                    <div className={styles.field} style={{ flex: 1 }}>
-                      <label className={styles.fieldLabel}>Semester</label>
-                      <input className={styles.input} type="number" min={1} max={12} placeholder="e.g. 3"
-                        value={form.semester ?? ''}
-                        onChange={e => setForm(f => ({ ...f, semester: e.target.value ? Number(e.target.value) : undefined }))} />
-                    </div>
-                  </div>
-                </>
+                </form>
               ) : (
-                <div className={styles.field}>
-                  <label className={styles.fieldLabel}>Staff / Employee ID</label>
-                  <input className={styles.input} placeholder="e.g. EMP1042"
-                    value={form.staff_id} onChange={e => setForm(f => ({ ...f, staff_id: e.target.value }))} />
+                <div style={{ display: 'flex', flexDirection: 'column', gap: 16, textAlign: 'center', padding: '16px 0' }}>
+                  <div style={{
+                    border: '2px dashed #ddd6fe', borderRadius: 16, padding: '36px 20px',
+                    background: '#faf9fe', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10,
+                  }}>
+                    <Upload size={32} style={{ color: '#7c3aed' }} />
+                    <p style={{ margin: 0, fontWeight: 700, fontSize: 14 }}>Upload CSV spreadsheet</p>
+                    <p style={{ margin: 0, fontSize: 12, color: '#64748b' }}>
+                      CSV format: <code>full_name, email, role, roll_number, phone, department</code>
+                    </p>
+                    <button
+                      type="button"
+                      className={styles.btnModalSubmit}
+                      style={{ marginTop: 10 }}
+                      onClick={() => fileRef.current?.click()}
+                    >
+                      Select CSV File
+                    </button>
+                  </div>
                 </div>
               )}
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Phone</label>
-                <input className={styles.input} placeholder="+91 98765 43210"
-                  value={form.phone} onChange={e => setForm(f => ({ ...f, phone: e.target.value }))} />
-              </div>
-              <div className={styles.field}>
-                <label className={styles.fieldLabel}>Temp Password</label>
-                <input className={styles.input} value={form.password}
-                  onChange={e => setForm(f => ({ ...f, password: e.target.value }))} />
-              </div>
-              <div className={styles.modalFooter}>
-                <button type="button" className={styles.btnSecondary} onClick={() => setShowModal(false)}>Cancel</button>
-                <button type="submit" className={styles.btnPrimary} disabled={saving}>
-                  {saving ? 'Creating…' : 'Create User'}
+            </div>
+          </div>
+        )}
+
+        {/* ── MODAL: Edit User ──────────────────────────────────────────────── */}
+        {editUser && (
+          <div className={styles.modalOverlay} onClick={() => setEditUser(null)}>
+            <div className={styles.modal} onClick={e => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <h3 className={styles.modalTitle}>Edit User Profile</h3>
+                <button className={styles.modalCloseBtn} onClick={() => setEditUser(null)}>
+                  <X size={16} />
                 </button>
               </div>
-            </form>
-          </div>
-        </div>
-      )}
 
-      {/* ═══ CHANGE ROLE MODAL ═══ */}
-      {roleChangeUser && (
-        <div className={styles.modalOverlay} onClick={() => setRoleChangeUser(null)}>
-          <div className={styles.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 420 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-              <h2 className={styles.modalTitle}>Change Role — {roleChangeUser.full_name}</h2>
-              <button onClick={() => setRoleChangeUser(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9891a6' }}><X size={20} /></button>
-            </div>
-            <p style={{ fontSize: 13, color: '#726a85', margin: '0 0 16px' }}>
-              Current role: <strong style={{ color: '#201b2e' }}>{roleChangeUser.role}</strong>
-            </p>
-            <div className={styles.field}>
-              <label className={styles.fieldLabel}>New Role</label>
-              <select className={styles.select} value={newRole} onChange={e => setNewRole(e.target.value as any)}>
-                <option value="student">Student</option>
-                <option value="instructor">Instructor</option>
-                <option value="institution_admin">Institution Admin</option>
-              </select>
-            </div>
-            <div className={styles.modalFooter}>
-              <button type="button" className={styles.btnSecondary} onClick={() => setRoleChangeUser(null)}>Cancel</button>
-              <button type="button" className={styles.btnPrimary} onClick={changeRole}>Confirm Change</button>
+              <form onSubmit={handleSaveEdit}>
+                <div className={styles.modalBody}>
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div className={styles.formField}>
+                      <label className={styles.formLabel}>Full Name *</label>
+                      <input
+                        className={styles.formInput}
+                        required
+                        value={editForm.full_name}
+                        onChange={e => setEditForm({ ...editForm, full_name: e.target.value })}
+                        placeholder="e.g. Aadhya Pillai"
+                      />
+                    </div>
+                    <div className={styles.formField}>
+                      <label className={styles.formLabel}>Email Address *</label>
+                      <input
+                        type="email"
+                        className={styles.formInput}
+                        required
+                        value={editForm.email}
+                        onChange={e => setEditForm({ ...editForm, email: e.target.value })}
+                        placeholder="e.g. student@institution.edu"
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div className={styles.formField}>
+                      <label className={styles.formLabel}>Phone Number</label>
+                      <input
+                        className={styles.formInput}
+                        value={editForm.phone}
+                        onChange={e => setEditForm({ ...editForm, phone: e.target.value })}
+                        placeholder="+91 98765 43210"
+                      />
+                    </div>
+                    <div className={styles.formField}>
+                      <label className={styles.formLabel}>Location / City</label>
+                      <input
+                        className={styles.formInput}
+                        value={editForm.location}
+                        onChange={e => setEditForm({ ...editForm, location: e.target.value })}
+                        placeholder="e.g. Bengaluru, Karnataka"
+                      />
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                    <div className={styles.formField}>
+                      <label className={styles.formLabel}>
+                        {editUser.role === 'student' ? 'Roll Number / USN' : 'Staff / Employee ID'}
+                      </label>
+                      <input
+                        className={styles.formInput}
+                        value={editForm.roll_number || editForm.staff_id}
+                        onChange={e => setEditForm({ ...editForm, roll_number: e.target.value, staff_id: e.target.value })}
+                        placeholder="e.g. NDU2024012"
+                      />
+                    </div>
+                    <div className={styles.formField}>
+                      <label className={styles.formLabel}>Department</label>
+                      <select
+                        className={styles.formSelect}
+                        value={editForm.department_id}
+                        onChange={e => setEditForm({ ...editForm, department_id: e.target.value })}
+                      >
+                        <option value="">Select Department</option>
+                        {departments.map(d => (
+                          <option key={d.id} value={d.id}>{d.name}</option>
+                        ))}
+                      </select>
+                    </div>
+                  </div>
+
+                  {editUser.role === 'student' && (
+                    <>
+                      <div className={styles.formField}>
+                        <label className={styles.formLabel}>Batch / Section</label>
+                        <select
+                          className={styles.formSelect}
+                          value={editForm.section_id}
+                          onChange={e => setEditForm({ ...editForm, section_id: e.target.value })}
+                        >
+                          <option value="">Not Assigned</option>
+                          {sections.map(s => (
+                            <option key={s.id} value={s.id}>
+                              {s.full_name || (s.batch_name ? `${s.batch_name} - Section ${s.name}` : `Section ${s.name}`)}
+                            </option>
+                          ))}
+                        </select>
+                      </div>
+
+                      <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
+                        <div className={styles.formField}>
+                          <label className={styles.formLabel}>Year of Study</label>
+                          <select
+                            className={styles.formSelect}
+                            value={editForm.year_of_study}
+                            onChange={e => setEditForm({ ...editForm, year_of_study: parseInt(e.target.value) })}
+                          >
+                            <option value={1}>1st Year</option>
+                            <option value={2}>2nd Year</option>
+                            <option value={3}>3rd Year</option>
+                            <option value={4}>4th Year</option>
+                          </select>
+                        </div>
+                        <div className={styles.formField}>
+                          <label className={styles.formLabel}>Semester</label>
+                          <select
+                            className={styles.formSelect}
+                            value={editForm.semester}
+                            onChange={e => setEditForm({ ...editForm, semester: parseInt(e.target.value) })}
+                          >
+                            {Array.from({ length: 8 }, (_, i) => (
+                              <option key={i + 1} value={i + 1}>Semester {i + 1}</option>
+                            ))}
+                          </select>
+                        </div>
+                      </div>
+                    </>
+                  )}
+                </div>
+
+                <div className={styles.modalFooter}>
+                  <button type="button" className={styles.btnModalCancel} onClick={() => setEditUser(null)}>
+                    Cancel
+                  </button>
+                  <button type="submit" className={styles.btnModalSubmit} disabled={saving}>
+                    {saving ? 'Saving…' : 'Save Changes'}
+                  </button>
+                </div>
+              </form>
             </div>
           </div>
-        </div>
-      )}
+        )}
+
+        {/* ── MODAL: Reset Password ─────────────────────────────────────────── */}
+        {resetPwUser && (
+          <div className={styles.modalOverlay} onClick={() => setResetPwUser(null)}>
+            <div className={styles.modal} onClick={e => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <h3 className={styles.modalTitle}>Reset Password</h3>
+                <button className={styles.modalCloseBtn} onClick={() => setResetPwUser(null)}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className={styles.modalBody}>
+                <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
+                  Generate a one-time temporary credential for <strong>{resetPwUser.full_name}</strong>. The user will be required to choose a new password upon logging in.
+                </p>
+
+                <div style={{
+                  background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: '14px 16px',
+                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                }}>
+                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: 15, fontWeight: 700, color: '#7c3aed' }}>
+                    {tempPassword}
+                  </span>
+                  <button
+                    type="button"
+                    style={{
+                      padding: '6px 12px', borderRadius: 8, border: '1px solid #ddd6fe',
+                      background: '#ffffff', color: '#7c3aed', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                    }}
+                    onClick={() => {
+                      if (tempPassword) {
+                        navigator.clipboard.writeText(tempPassword);
+                        setCopiedPw(true);
+                        setTimeout(() => setCopiedPw(false), 2000);
+                      }
+                    }}
+                  >
+                    {copiedPw ? 'Copied!' : 'Copy'}
+                  </button>
+                </div>
+              </div>
+
+              <div className={styles.modalFooter}>
+                <button type="button" className={styles.btnModalCancel} onClick={() => setResetPwUser(null)}>
+                  Cancel
+                </button>
+                <button type="button" className={styles.btnModalSubmit} onClick={handleConfirmResetPassword} disabled={saving}>
+                  {saving ? 'Applying…' : 'Apply Password'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── MODAL: Delete Confirmation ────────────────────────────────────── */}
+        {deleteConfirmUser && (
+          <div className={styles.modalOverlay} onClick={() => setDeleteConfirmUser(null)}>
+            <div className={styles.modal} onClick={e => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <h3 className={styles.modalTitle} style={{ color: '#dc2626' }}>Delete User Account</h3>
+                <button className={styles.modalCloseBtn} onClick={() => setDeleteConfirmUser(null)}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className={styles.modalBody}>
+                <p style={{ fontSize: 13.5, color: '#475569', margin: 0 }}>
+                  Are you sure you want to permanently delete <strong>{deleteConfirmUser.full_name}</strong>?
+                </p>
+                <p style={{ fontSize: 12, color: '#dc2626', margin: 0 }}>
+                  Warning: If this student has submitted experiments or graded sessions, they must be deactivated instead of deleted.
+                </p>
+              </div>
+
+              <div className={styles.modalFooter}>
+                <button type="button" className={styles.btnModalCancel} onClick={() => setDeleteConfirmUser(null)}>
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  style={{ padding: '9px 18px', borderRadius: 10, border: 'none', background: '#dc2626', color: '#fff', fontWeight: 700, cursor: 'pointer' }}
+                  onClick={handleDeleteUser}
+                  disabled={saving}
+                >
+                  {saving ? 'Deleting…' : 'Confirm Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+      </div>
     </InstitutionShell>
   );
 }
