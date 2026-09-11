@@ -1,0 +1,248 @@
+/* Student Announcements Hub Stylesheet */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+  max-width: 1000px;
+  margin: 0 auto;
+  padding-bottom: 60px;
+}
+
+.headerRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.headerTitle {
+  font-family: 'Space Grotesk', -apple-system, sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0 0 4px;
+}
+
+.headerSub {
+  font-size: 13.5px;
+  color: #6b7280;
+  margin: 0;
+}
+
+.filterChips {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.filterChip {
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 6px 14px;
+  border-radius: 10px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #4b5563;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.filterChip:hover {
+  background: #f9fafb;
+}
+
+.filterChipActive {
+  background: #7c3aed !important;
+  color: #ffffff !important;
+  border-color: #6d28d9 !important;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
+}
+
+.announcementsList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.announcementCard {
+  background: #ffffff;
+  border: 1px solid #ede8f5;
+  border-radius: 16px;
+  padding: 20px 24px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+  position: relative;
+}
+
+.announcementCard:hover {
+  box-shadow: 0 6px 16px rgba(124, 58, 237, 0.05);
+  border-color: #ddd6ee;
+}
+
+.unreadDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: #7c3aed;
+  position: absolute;
+  top: 20px;
+  right: 20px;
+}
+
+.cardTopRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.authorMeta {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.authorAvatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  color: #ffffff;
+  font-size: 12px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.authorName {
+  font-size: 13px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+}
+
+.sentTime {
+  font-size: 11.5px;
+  color: #9ca3af;
+  margin: 1px 0 0;
+}
+
+.badgeRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.priorityBadge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 6px;
+}
+
+.priorityUrgent {
+  background: #fee2e2;
+  color: #b91c1c;
+  border: 1px solid #fca5a5;
+}
+
+.priorityImportant {
+  background: #fef2f2;
+  color: #dc2626;
+  border: 1px solid #fecaca;
+}
+
+.priorityNormal {
+  background: #f3f4f6;
+  color: #4b5563;
+}
+
+.cardTitle {
+  font-size: 16px;
+  font-weight: 700;
+  color: #111827;
+  margin: 0;
+}
+
+.cardMessage {
+  font-size: 13.5px;
+  color: #4b5563;
+  line-height: 1.55;
+  margin: 0;
+  white-space: pre-wrap;
+}
+
+.attachmentPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #f9fafb;
+  border: 1px solid #e5e7eb;
+  padding: 8px 14px;
+  border-radius: 10px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #374151;
+  text-decoration: none;
+  width: fit-content;
+  transition: all 0.15s ease;
+}
+
+.attachmentPill:hover {
+  background: #faf5ff;
+  border-color: #c4b5fd;
+  color: #7c3aed;
+}
+
+.cardBottomRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-top: 10px;
+  border-top: 1px solid #f3f4f6;
+}
+
+.bottomActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.actionBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12.5px;
+  font-weight: 600;
+  padding: 5px 10px;
+  border-radius: 8px;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #4b5563;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.actionBtn:hover {
+  background: #f9fafb;
+  color: #111827;
+}
+
+.actionBtnActive {
+  background: #faf5ff !important;
+  border-color: #c4b5fd !important;
+  color: #7c3aed !important;
+}
+
+.actionBtnLiked {
+  background: #fef2f2 !important;
+  border-color: #fecaca !important;
+  color: #dc2626 !important;
+}
