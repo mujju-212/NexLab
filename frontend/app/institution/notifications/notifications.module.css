@@ -1,0 +1,861 @@
+/* ==========================================================================
+   NexLab Notifications Page Stylesheet
+   Pixel-matched to the executive institution notifications reference mockup.
+   ========================================================================== */
+
+.pageContainer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding-bottom: 60px;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #1e1b4b;
+}
+
+/* ── Breadcrumbs ─────────────────────────────────────────────────────────── */
+.breadcrumbRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #8a829e;
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.breadcrumbLink {
+  color: #7c3aed;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.breadcrumbLink:hover {
+  text-decoration: underline;
+}
+
+.breadcrumbSeparator {
+  color: #c4b5fd;
+}
+
+.breadcrumbCurrent {
+  color: #475569;
+  font-weight: 600;
+}
+
+/* ── Top Header Row with Banner Card ─────────────────────────────────────── */
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.titleGroup {
+  display: flex;
+  flex-direction: column;
+  max-width: 600px;
+}
+
+.pageTitle {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.02em;
+}
+
+.pageSubtitle {
+  font-size: 13.5px;
+  color: #64748b;
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+/* Stay Informed Banner Card */
+.stayInformedCard {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  border: 1px solid #ddd6fe;
+  border-radius: 14px;
+  padding: 12px 20px;
+  max-width: 440px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.06);
+}
+
+.stayInformedIconBox {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #7c3aed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.12);
+}
+
+.stayInformedText {
+  display: flex;
+  flex-direction: column;
+}
+
+.stayInformedTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 2px 0;
+}
+
+.stayInformedDesc {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.35;
+}
+
+.bannerBellIllustration {
+  position: absolute;
+  right: -8px;
+  bottom: -10px;
+  opacity: 0.25;
+  color: #7c3aed;
+  pointer-events: none;
+}
+
+/* ── Tab Navigation ─────────────────────────────────────────────────────── */
+.tabsRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 24px;
+  overflow-x: auto;
+  padding-bottom: 1px;
+}
+
+.tabItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.tabItem:hover {
+  color: #7c3aed;
+  background: #fbfbfe;
+  border-radius: 8px 8px 0 0;
+}
+
+.tabItemActive {
+  color: #7c3aed !important;
+  border-bottom-color: #7c3aed !important;
+  background: #f5f3ff !important;
+  border-radius: 8px 8px 0 0;
+}
+
+/* ── Content Grid Layout ────────────────────────────────────────────────── */
+.contentGrid {
+  display: grid;
+  grid-template-columns: 2.15fr 1fr;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.leftColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+.rightColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+}
+
+/* ── General Section Card ───────────────────────────────────────────────── */
+.sectionCard {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  padding: 22px 26px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 18px;
+  gap: 16px;
+}
+
+.cardHeaderTitleGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.cardTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 3px 0;
+}
+
+.cardSubtitle {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+.resetBtn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 7px 14px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.resetBtn:hover {
+  background: #f8fafc;
+  color: #334155;
+  border-color: #cbd5e1;
+}
+
+/* ── Notification Channels Row ──────────────────────────────────────────── */
+.channelsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 14px;
+}
+
+.channelCard {
+  position: relative;
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 16px 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  cursor: pointer;
+  transition: all 0.18s ease;
+}
+
+.channelCard:hover {
+  border-color: #cbd5e1;
+  background: #fafbff;
+  transform: translateY(-1px);
+}
+
+.channelCardActive {
+  border-color: #7c3aed !important;
+  background: #ffffff !important;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.08);
+}
+
+.channelTopRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.channelIconBox {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.channelIconPurple {
+  background: #f3e8ff;
+  color: #7c3aed;
+}
+
+.channelIconBlue {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
+.channelIconGray {
+  background: #f1f5f9;
+  color: #64748b;
+}
+
+.channelCheckBadge {
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #7c3aed;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+
+.channelEmptyCircle {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1.5px solid #cbd5e1;
+}
+
+.channelTitle {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0;
+}
+
+.channelDesc {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.35;
+}
+
+/* ── Notification Preferences Categories (Accordions) ───────────────────── */
+.categoriesContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.categoryCard {
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  overflow: hidden;
+  background: #ffffff;
+  transition: border-color 0.15s ease;
+}
+
+.categoryCard:hover {
+  border-color: #e2e8f0;
+}
+
+.categoryHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  background: #fafbff;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+
+.categoryHeader:hover {
+  background: #f5f3ff;
+}
+
+.categoryHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.categoryIconBox {
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
+  background: #ede9fe;
+  color: #7c3aed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.categoryTitleGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.categoryTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0;
+}
+
+.categorySubtitle {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 1px 0 0 0;
+}
+
+.categoryHeaderRight {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.categoryCountBadge {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.categoryChevron {
+  color: #64748b;
+  transition: transform 0.2s ease;
+}
+
+.categoryBody {
+  display: flex;
+  flex-direction: column;
+  padding: 8px 18px 12px 18px;
+  background: #ffffff;
+}
+
+.eventRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 0;
+  border-bottom: 1px solid #f8fafc;
+  gap: 16px;
+}
+
+.eventRow:last-child {
+  border-bottom: none;
+}
+
+.eventLeft {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  flex: 1;
+  min-width: 0;
+}
+
+.eventIcon {
+  color: #64748b;
+  margin-top: 3px;
+  flex-shrink: 0;
+}
+
+.eventInfo {
+  display: flex;
+  flex-direction: column;
+}
+
+.eventTitle {
+  font-size: 13px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0;
+}
+
+.eventDesc {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 2px 0 0 0;
+}
+
+.eventRight {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  flex-shrink: 0;
+}
+
+.channelCheckboxes {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.checkboxLabel {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  font-weight: 500;
+  color: #475569;
+  cursor: pointer;
+}
+
+.checkboxInput {
+  width: 15px;
+  height: 15px;
+  border-radius: 4px;
+  accent-color: #7c3aed;
+  cursor: pointer;
+}
+
+/* iOS-style Pill Toggle Switch */
+.toggleSwitch {
+  width: 44px;
+  height: 24px;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+}
+
+.toggleSwitchOn {
+  background: #7c3aed;
+}
+
+.toggleSwitchOff {
+  background: #e2e8f0;
+}
+
+.toggleSlider {
+  position: absolute;
+  top: 2px;
+  width: 20px;
+  height: 20px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: left 0.2s ease;
+}
+
+.toggleSliderOn {
+  left: 22px;
+}
+
+.toggleSliderOff {
+  left: 2px;
+}
+
+/* Bottom Save Button */
+.savePreferencesRow {
+  display: flex;
+  justify-content: flex-end;
+  margin-top: 18px;
+}
+
+.savePreferencesBtn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 22px;
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.25);
+  transition: all 0.18s ease;
+}
+
+.savePreferencesBtn:hover {
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
+/* ── Right Column: Test Notifications Card ──────────────────────────────── */
+.testChannelTabs {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  background: #f1f5f9;
+  padding: 3px;
+  border-radius: 8px;
+  margin-bottom: 16px;
+}
+
+.testChannelTab {
+  padding: 6px 0;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+}
+
+.testChannelTabActive {
+  background: #7c3aed;
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(124, 58, 237, 0.3);
+}
+
+.testInputGroup {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 16px;
+}
+
+.testInputLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.testInputWrapper {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 9px 12px;
+}
+
+.testInput {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13px;
+  color: #1e293b;
+  width: 100%;
+}
+
+.sendTestBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  padding: 10px 18px;
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
+  transition: all 0.15s ease;
+  width: 100%;
+}
+
+.sendTestBtn:hover {
+  opacity: 0.95;
+  transform: translateY(-1px);
+}
+
+.sendTestBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+  transform: none;
+}
+
+/* ── Right Column: Recent Notifications Card ────────────────────────────── */
+.recentNotifList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.recentNotifItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  padding: 6px 0;
+  border-bottom: 1px solid #f8fafc;
+}
+
+.recentNotifItem:last-child {
+  border-bottom: none;
+}
+
+.recentNotifIconBox {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.recentNotifIconPurple {
+  background: #f3e8ff;
+  color: #7c3aed;
+}
+
+.recentNotifIconGreen {
+  background: #dcfce7;
+  color: #16a34a;
+}
+
+.recentNotifIconBlue {
+  background: #e0f2fe;
+  color: #0284c7;
+}
+
+.recentNotifIconRed {
+  background: #fee2e2;
+  color: #dc2626;
+}
+
+.recentNotifIconOrange {
+  background: #ffedd5;
+  color: #ea580c;
+}
+
+.recentNotifContent {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.recentNotifTitle {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+  line-height: 1.3;
+}
+
+.recentNotifMsg {
+  font-size: 11.5px;
+  color: #64748b;
+  margin-top: 1px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.recentNotifTime {
+  font-size: 11px;
+  color: #94a3b8;
+  white-space: nowrap;
+  margin-left: 8px;
+}
+
+.viewAllLink {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c3aed;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.viewAllLink:hover {
+  text-decoration: underline;
+}
+
+/* ── Right Column: Success Card ─────────────────────────────────────────── */
+.successCard {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  border-radius: 14px;
+  padding: 16px 20px;
+}
+
+.successIconCircle {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #10b981;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.successTitle {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #065f46;
+  margin: 0 0 2px 0;
+}
+
+.successDesc {
+  font-size: 11.5px;
+  color: #047857;
+  margin: 0;
+  line-height: 1.35;
+}
+
+/* Toast */
+.toastNotice {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  background: #1e1b4b;
+  color: #ffffff;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+/* Responsive */
+@media (max-width: 1140px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+  .channelsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .channelsGrid {
+    grid-template-columns: 1fr;
+  }
+  .eventRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+  .eventRight {
+    width: 100%;
+    justify-content: space-between;
+  }
+}

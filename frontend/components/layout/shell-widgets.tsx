@@ -47,7 +47,7 @@ export function ShellNotifications({ buttonClass, dotClass }: { buttonClass?: st
   const [loading, setLoading] = useState(false);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  const refresh = useCallback(async () => {
+  const refreshFull = useCallback(async () => {
     try {
       const res = await notificationService.list();
       setRows(res.notifications ?? []);
@@ -55,12 +55,34 @@ export function ShellNotifications({ buttonClass, dotClass }: { buttonClass?: st
     } catch { /* silent */ }
   }, []);
 
-  // Initial load + 30s badge poll
+  const refreshUnread = useCallback(async () => {
+    try {
+      const count = await notificationService.unreadCount();
+      setUnread(count);
+    } catch { /* silent */ }
+  }, []);
+
+  const refresh = refreshFull;
+
+  // Initial load + 30s badge poll (lightweight unreadCount if closed)
   useEffect(() => {
-    refresh();
-    const t = setInterval(refresh, 30_000);
+    refreshUnread();
+    const t = setInterval(() => {
+      if (open) {
+        refreshFull();
+      } else {
+        refreshUnread();
+      }
+    }, 30_000);
     return () => clearInterval(t);
-  }, [refresh]);
+  }, [open, refreshUnread, refreshFull]);
+
+  // When opening dropdown, fetch full list immediately
+  useEffect(() => {
+    if (open) {
+      refreshFull();
+    }
+  }, [open, refreshFull]);
 
   // Real-time socket listeners for instant notification delivery
   useEffect(() => {
