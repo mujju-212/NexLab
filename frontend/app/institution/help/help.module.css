@@ -1,0 +1,1141 @@
+/* ==========================================================================
+   NexLab Help & FAQ Stylesheet
+   Pixel-matched to the executive institution help & FAQ reference mockup.
+   ========================================================================== */
+
+.pageContainer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding-bottom: 60px;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #1e1b4b;
+}
+
+/* ── Breadcrumbs ─────────────────────────────────────────────────────────── */
+.breadcrumbRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #8a829e;
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.breadcrumbLink {
+  color: #7c3aed;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.breadcrumbLink:hover {
+  text-decoration: underline;
+}
+
+.breadcrumbSeparator {
+  color: #c4b5fd;
+}
+
+.breadcrumbCurrent {
+  color: #475569;
+  font-weight: 600;
+}
+
+/* ── Top Header Row with Banner Card ─────────────────────────────────────── */
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.titleGroup {
+  display: flex;
+  flex-direction: column;
+  max-width: 600px;
+}
+
+.pageTitle {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.02em;
+}
+
+.pageSubtitle {
+  font-size: 13.5px;
+  color: #64748b;
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+/* Top Right Support Robot Banner Card */
+.supportBannerCard {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
+  border: 1px solid #ddd6fe;
+  border-radius: 14px;
+  padding: 10px 18px;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.06);
+  position: relative;
+  overflow: hidden;
+}
+
+.supportBannerText {
+  display: flex;
+  flex-direction: column;
+}
+
+.supportBannerTitle {
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #7c3aed;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin: 0 0 2px 0;
+}
+
+.supportBannerHeadline {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 2px 0;
+}
+
+.supportBannerSub {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+.robotIllustrationBox {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.robotSpeechBubble {
+  background: #7c3aed;
+  color: #ffffff;
+  padding: 3px 8px;
+  border-radius: 8px;
+  font-size: 10px;
+  font-weight: 600;
+  white-space: nowrap;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.2);
+}
+
+.robotAvatar {
+  width: 44px;
+  height: 44px;
+  border-radius: 12px;
+  background: #ffffff;
+  color: #7c3aed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.15);
+}
+
+/* ── Tabs Row ───────────────────────────────────────────────────────────── */
+.tabsRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 24px;
+  overflow-x: auto;
+  padding-bottom: 1px;
+}
+
+.tabItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 18px;
+  font-size: 13.5px;
+  font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  border-bottom: 2.5px solid transparent;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.tabItem:hover {
+  color: #7c3aed;
+  background: #fbfbfe;
+  border-radius: 8px 8px 0 0;
+}
+
+.tabItemActive {
+  color: #7c3aed !important;
+  border-bottom-color: #7c3aed !important;
+  background: #f5f3ff !important;
+  border-radius: 8px 8px 0 0;
+}
+
+/* ── Content Grid Layout ────────────────────────────────────────────────── */
+.contentGrid {
+  display: grid;
+  grid-template-columns: 2.15fr 1fr;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.leftColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.rightColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── Search Hero Card ───────────────────────────────────────────────────── */
+.searchHeroCard {
+  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 60%, #e0e7ff 100%);
+  border: 1px solid #ddd6fe;
+  border-radius: 18px;
+  padding: 26px 30px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 16px rgba(124, 58, 237, 0.06);
+}
+
+.searchHeroContent {
+  display: flex;
+  flex-direction: column;
+  max-width: 600px;
+  position: relative;
+  z-index: 1;
+}
+
+.searchHeroTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 4px 0;
+}
+
+.searchHeroSubtitle {
+  font-size: 13px;
+  color: #64748b;
+  margin: 0 0 18px 0;
+}
+
+.searchBarWrapper {
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1.5px solid #c4b5fd;
+  border-radius: 12px;
+  padding: 4px 4px 4px 14px;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
+  margin-bottom: 14px;
+  transition: border-color 0.15s ease;
+}
+
+.searchBarWrapper:focus-within {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+.searchIcon {
+  color: #7c3aed;
+  margin-right: 10px;
+  flex-shrink: 0;
+}
+
+.searchInput {
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13.5px;
+  color: #1e293b;
+  width: 100%;
+}
+
+.searchSubmitBtn {
+  padding: 9px 22px;
+  background: #7c3aed;
+  color: #ffffff;
+  border: none;
+  border-radius: 9px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.searchSubmitBtn:hover {
+  background: #6d28d9;
+}
+
+.popularSearchesRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  flex-wrap: wrap;
+  font-size: 12px;
+}
+
+.popularLabel {
+  color: #64748b;
+  font-weight: 600;
+}
+
+.popularTag {
+  padding: 4px 12px;
+  background: rgba(255, 255, 255, 0.85);
+  border: 1px solid #ddd6fe;
+  border-radius: 16px;
+  color: #6b21a8;
+  cursor: pointer;
+  font-size: 11.5px;
+  font-weight: 600;
+  transition: all 0.15s ease;
+}
+
+.popularTag:hover {
+  background: #7c3aed;
+  color: #ffffff;
+  border-color: #7c3aed;
+  transform: translateY(-1px);
+}
+
+/* 3D Document Illustration on Search Card */
+.searchIllustrationBox {
+  position: absolute;
+  right: 24px;
+  top: 50%;
+  transform: translateY(-50%);
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  opacity: 0.85;
+  pointer-events: none;
+}
+
+/* ── Card: Browse Help Topics ───────────────────────────────────────────── */
+.sectionCard {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  padding: 24px 26px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.cardTitleGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.cardTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 16.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 3px 0;
+}
+
+.cardSubtitle {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+.viewAllLink {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c3aed;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.viewAllLink:hover {
+  text-decoration: underline;
+}
+
+/* 6 Topic Cards Grid */
+.topicsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 16px;
+}
+
+.topicCard {
+  border: 1.5px solid #f1f5f9;
+  border-radius: 14px;
+  padding: 18px 16px;
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  position: relative;
+}
+
+.topicCard:hover {
+  border-color: #c4b5fd;
+  background: #fafbff;
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.08);
+}
+
+.topicCardActive {
+  border-color: #7c3aed !important;
+  background: #f5f3ff !important;
+}
+
+.topicIconBox {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #ede9fe;
+  color: #7c3aed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.topicText {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  min-width: 0;
+}
+
+.topicTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 2px 0;
+}
+
+.topicDesc {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0 0 6px 0;
+  line-height: 1.35;
+}
+
+.topicArticleCount {
+  font-size: 11px;
+  color: #7c3aed;
+  font-weight: 600;
+}
+
+.topicChevron {
+  color: #94a3b8;
+  margin-top: 10px;
+  flex-shrink: 0;
+}
+
+/* ── Card: Frequently Asked Questions ───────────────────────────────────── */
+.faqHeaderRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.categorySelectDropdown {
+  padding: 6px 14px;
+  border: 1px solid #cbd5e1;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  background: #ffffff;
+  cursor: pointer;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.categorySelectDropdown:focus {
+  border-color: #7c3aed;
+}
+
+.faqList {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid #f1f5f9;
+  border-radius: 14px;
+  overflow: hidden;
+}
+
+.faqItem {
+  border-bottom: 1px solid #f1f5f9;
+  background: #ffffff;
+  transition: background 0.15s ease;
+}
+
+.faqItem:last-child {
+  border-bottom: none;
+}
+
+.faqQuestionRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 16px 20px;
+  cursor: pointer;
+  user-select: none;
+  gap: 14px;
+}
+
+.faqQuestionRow:hover {
+  background: #fafbff;
+}
+
+.faqQuestionLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex: 1;
+}
+
+.faqCategoryIconBox {
+  width: 28px;
+  height: 28px;
+  border-radius: 7px;
+  background: #f3e8ff;
+  color: #7c3aed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.faqQuestionText {
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0;
+}
+
+.faqAnswerBody {
+  padding: 0 20px 18px 60px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.faqAnswerText {
+  font-size: 13px;
+  color: #475569;
+  line-height: 1.55;
+  margin: 0;
+}
+
+.faqFeedbackRow {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  font-size: 11.5px;
+  color: #64748b;
+  padding-top: 6px;
+  border-top: 1px dashed #e2e8f0;
+}
+
+.rateBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  background: #ffffff;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.rateBtn:hover {
+  border-color: #7c3aed;
+  color: #7c3aed;
+}
+
+/* ── Right Column: Cards ────────────────────────────────────────────────── */
+.sideSectionCard {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  padding: 22px 24px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+}
+
+.onlineBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 8px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #059669;
+  border-radius: 10px;
+  font-size: 10.5px;
+  font-weight: 700;
+}
+
+.channelsList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  margin-top: 14px;
+}
+
+.channelItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 0;
+  border-bottom: 1px solid #f8fafc;
+  gap: 12px;
+}
+
+.channelItem:last-child {
+  border-bottom: none;
+}
+
+.channelLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.channelIconBox {
+  width: 34px;
+  height: 34px;
+  border-radius: 9px;
+  background: #ede9fe;
+  color: #7c3aed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.channelTitle {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 2px 0;
+}
+
+.channelSub {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+.channelBtn {
+  padding: 6px 14px;
+  border: 1.5px solid #7c3aed;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #7c3aed;
+  font-size: 11.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.channelBtn:hover {
+  background: #7c3aed;
+  color: #ffffff;
+}
+
+.supportHoursBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 10px;
+  padding: 12px 14px;
+  margin-top: 10px;
+}
+
+.supportHoursIcon {
+  color: #7c3aed;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.supportHoursDetails {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.supportHoursRow {
+  display: flex;
+  justify-content: space-between;
+  font-size: 11.5px;
+}
+
+.supportHoursDays {
+  color: #1e1b4b;
+  font-weight: 600;
+}
+
+.supportHoursTimes {
+  color: #475569;
+  font-weight: 500;
+}
+
+.supportResponseTime {
+  font-size: 11px;
+  color: #64748b;
+  margin-top: 4px;
+}
+
+/* Helpful Resources Card */
+.resourcesList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.resourceItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  padding: 8px 10px;
+  border-radius: 9px;
+  cursor: pointer;
+  transition: background 0.15s ease;
+}
+
+.resourceItem:hover {
+  background: #fafbff;
+}
+
+.resourceIconBox {
+  width: 30px;
+  height: 30px;
+  border-radius: 7px;
+  background: #ede9fe;
+  color: #7c3aed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.resourceTitle {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+}
+
+.resourceDesc {
+  font-size: 11px;
+  color: #64748b;
+}
+
+/* Still Need Help Purple Card */
+.stillNeedHelpCard {
+  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 50%, #5b21b6 100%);
+  border-radius: 16px;
+  padding: 22px 24px;
+  color: #ffffff;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+  box-shadow: 0 6px 20px rgba(124, 58, 237, 0.25);
+}
+
+.stillNeedHelpIconCircle {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: rgba(255, 255, 255, 0.2);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  backdrop-filter: blur(4px);
+}
+
+.stillNeedHelpTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  margin: 0 0 4px 0;
+}
+
+.stillNeedHelpDesc {
+  font-size: 12px;
+  color: #ddd6fe;
+  margin: 0 0 16px 0;
+  line-height: 1.4;
+}
+
+.contactSupportBtn {
+  padding: 9px 22px;
+  background: #ffffff;
+  color: #6d28d9;
+  border: none;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.15);
+}
+
+.contactSupportBtn:hover {
+  background: #f5f3ff;
+  transform: translateY(-1px);
+}
+
+/* ── Modals ─────────────────────────────────────────────────────────────── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modalCard {
+  background: #ffffff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 520px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalScale 0.2s ease-out;
+}
+
+@keyframes modalScale {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.modalTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0;
+}
+
+.modalCloseBtn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+}
+
+.modalCloseBtn:hover {
+  background: #f1f5f9;
+  color: #1e1b4b;
+}
+
+.modalBody {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.textInput {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: #1e293b;
+  outline: none;
+}
+
+.textInput:focus {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.1);
+}
+
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #f1f5f9;
+}
+
+.cancelBtn {
+  padding: 8px 16px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+}
+
+.saveModalBtn {
+  padding: 8px 18px;
+  background: #7c3aed;
+  border: none;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
+}
+
+.saveModalBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Toast */
+.toastNotice {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  background: #1e1b4b;
+  color: #ffffff;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 1140px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+  .topicsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 768px) {
+  .topicsGrid {
+    grid-template-columns: 1fr;
+  }
+  .headerRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .searchIllustrationBox {
+    display: none;
+  }
+}
+
+/* ── Interactive Live Chat Styles ────────────────────────────────────────── */
+.chatContainer {
+  display: flex;
+  flex-direction: column;
+  height: 380px;
+  background: #f8fafc;
+  border-radius: 12px;
+  padding: 14px;
+  overflow-y: auto;
+  gap: 12px;
+}
+
+.chatBubble {
+  max-width: 82%;
+  padding: 10px 14px;
+  border-radius: 14px;
+  font-size: 13px;
+  line-height: 1.5;
+}
+
+.botBubble {
+  align-self: flex-start;
+  background: #ffffff;
+  color: #1e1b4b;
+  border: 1px solid #e2e8f0;
+  border-bottom-left-radius: 4px;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.04);
+}
+
+.userBubble {
+  align-self: flex-end;
+  background: #7c3aed;
+  color: #ffffff;
+  border-bottom-right-radius: 4px;
+}
+
+.chatInputRow {
+  display: flex;
+  gap: 8px;
+  margin-top: 10px;
+}
+
+.chatSendBtn {
+  background: #7c3aed;
+  color: #ffffff;
+  border: none;
+  border-radius: 8px;
+  padding: 0 16px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background 0.15s ease;
+}
+
+.chatSendBtn:hover {
+  background: #6d28d9;
+}
+
+/* ── Tickets List in Modal ───────────────────────────────────────────────── */
+.ticketsList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  max-height: 380px;
+  overflow-y: auto;
+}
+
+.ticketItemCard {
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+  background: #ffffff;
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.ticketItemHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.ticketItemNumber {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 12px;
+  font-weight: 700;
+  color: #7c3aed;
+}
+
+.ticketBadge {
+  font-size: 10px;
+  padding: 2px 7px;
+  border-radius: 6px;
+  font-weight: 700;
+  text-transform: uppercase;
+}
+
+.badgeOpen {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.badgeResolved {
+  background: #ecfdf5;
+  color: #059669;
+}
+
+.badgeProgress {
+  background: #ede9fe;
+  color: #6d28d9;
+}
+

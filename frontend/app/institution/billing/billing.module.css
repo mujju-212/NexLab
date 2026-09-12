@@ -1,0 +1,1352 @@
+/* ==========================================================================
+   NexLab Billing & Plan Stylesheet
+   Pixel-matched to the executive institution billing & plan reference mockup.
+   ========================================================================== */
+
+.pageContainer {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 1440px;
+  margin: 0 auto;
+  padding-bottom: 60px;
+  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  color: #1e1b4b;
+}
+
+/* ── Breadcrumbs ─────────────────────────────────────────────────────────── */
+.breadcrumbRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: #8a829e;
+  margin-bottom: 10px;
+  font-weight: 500;
+}
+
+.breadcrumbLink {
+  color: #7c3aed;
+  text-decoration: none;
+  cursor: pointer;
+}
+
+.breadcrumbLink:hover {
+  text-decoration: underline;
+}
+
+.breadcrumbSeparator {
+  color: #c4b5fd;
+}
+
+.breadcrumbCurrent {
+  color: #475569;
+  font-weight: 600;
+}
+
+/* ── Top Header Row with Banner Card ─────────────────────────────────────── */
+.headerRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+  margin-bottom: 20px;
+}
+
+.titleGroup {
+  display: flex;
+  flex-direction: column;
+  max-width: 600px;
+}
+
+.pageTitle {
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-size: 26px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 4px 0;
+  letter-spacing: -0.02em;
+}
+
+.pageSubtitle {
+  font-size: 13.5px;
+  color: #64748b;
+  margin: 0;
+  font-weight: 500;
+  line-height: 1.45;
+}
+
+/* Amber/Lavender Upgrade Banner Card */
+.upgradeBannerCard {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 45%, #ede9fe 100%);
+  border: 1px solid #fde68a;
+  border-radius: 14px;
+  padding: 12px 20px;
+  box-shadow: 0 2px 8px rgba(245, 158, 11, 0.08);
+  flex-shrink: 0;
+}
+
+.upgradeBannerLeft {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+}
+
+.upgradeCrownIconBox {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  background: #ffffff;
+  color: #d97706;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  box-shadow: 0 2px 6px rgba(217, 119, 6, 0.15);
+  flex-shrink: 0;
+}
+
+.upgradeBannerText {
+  display: flex;
+  flex-direction: column;
+}
+
+.upgradeBannerTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 13.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 2px 0;
+}
+
+.upgradeBannerDesc {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+.upgradeBannerBtn {
+  padding: 8px 18px;
+  background: #7c3aed;
+  color: #ffffff;
+  border: none;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
+}
+
+.upgradeBannerBtn:hover {
+  background: #6d28d9;
+  transform: translateY(-1px);
+}
+
+/* ── Sub-Navigation Tabs Row ────────────────────────────────────────────── */
+.tabsRow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin-bottom: 24px;
+  overflow-x: auto;
+  padding-bottom: 4px;
+}
+
+.tabItem {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #64748b;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  white-space: nowrap;
+}
+
+.tabItem:hover {
+  color: #7c3aed;
+  border-color: #c4b5fd;
+  background: #fafbff;
+}
+
+.tabItemActive {
+  background: #7c3aed !important;
+  color: #ffffff !important;
+  border-color: #7c3aed !important;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
+}
+
+/* ── Content Grid Layout ────────────────────────────────────────────────── */
+.contentGrid {
+  display: grid;
+  grid-template-columns: 2.15fr 1fr;
+  gap: 24px;
+  align-items: flex-start;
+}
+
+.leftColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.rightColumn {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* ── Top Dual Cards Row (Current Plan + Plan Usage) ──────────────────────── */
+.topDualRow {
+  display: grid;
+  grid-template-columns: 1.15fr 1fr;
+  gap: 20px;
+}
+
+/* Current Plan Purple Hero Card */
+.currentPlanCard {
+  background: linear-gradient(135deg, #7c3aed 0%, #5b21b6 50%, #4c1d95 100%);
+  border-radius: 16px;
+  padding: 24px;
+  color: #ffffff;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.2);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  min-height: 230px;
+}
+
+.planCardTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  z-index: 1;
+}
+
+.planBadgeAndTitle {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.currentPlanBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  font-size: 11.5px;
+  font-weight: 700;
+  color: #fef08a;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.planTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 24px;
+  font-weight: 700;
+  color: #ffffff;
+  margin: 0;
+}
+
+.planDesc {
+  font-size: 12.5px;
+  color: #ddd6fe;
+  margin: 2px 0 0 0;
+  max-width: 280px;
+  line-height: 1.4;
+}
+
+.planPriceCol {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+}
+
+.planPrice {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 20px;
+  font-weight: 700;
+  color: #ffffff;
+}
+
+.planPricePeriod {
+  font-size: 12px;
+  color: #ddd6fe;
+  font-weight: 500;
+}
+
+.planBillingDate {
+  font-size: 11px;
+  color: #c4b5fd;
+  margin-top: 4px;
+}
+
+.planStatusRow {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 12px 0 16px 0;
+  z-index: 1;
+}
+
+.activeStatusPill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 9px;
+  background: rgba(16, 185, 129, 0.2);
+  border: 1px solid rgba(52, 211, 153, 0.4);
+  color: #a7f3d0;
+  border-radius: 12px;
+  font-size: 11.5px;
+  font-weight: 600;
+}
+
+.planCardActions {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  z-index: 1;
+}
+
+.managePlanBtn {
+  padding: 8px 18px;
+  background: #ffffff;
+  color: #5b21b6;
+  border: none;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.managePlanBtn:hover {
+  background: #f5f3ff;
+  transform: translateY(-1px);
+}
+
+.upgradePlanActionBtn {
+  padding: 8px 18px;
+  background: rgba(255, 255, 255, 0.15);
+  color: #ffffff;
+  border: 1px solid rgba(255, 255, 255, 0.25);
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  backdrop-filter: blur(4px);
+}
+
+.upgradePlanActionBtn:hover {
+  background: rgba(255, 255, 255, 0.25);
+  transform: translateY(-1px);
+}
+
+.planWatermarkCrown {
+  position: absolute;
+  right: -10px;
+  bottom: -15px;
+  color: #ffffff;
+  opacity: 0.12;
+  pointer-events: none;
+}
+
+/* Plan Usage Card */
+.planUsageCard {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  padding: 22px 24px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+}
+
+.usageHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 18px;
+}
+
+.usageTitleGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.usageTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 2px 0;
+}
+
+.usageResetSub {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+.viewDetailedUsageLink {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c3aed;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.viewDetailedUsageLink:hover {
+  text-decoration: underline;
+}
+
+.usageMetersList {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.usageMeterItem {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.meterIconBox {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  background: #f5f3ff;
+  color: #7c3aed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.meterContent {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  gap: 5px;
+}
+
+.meterLabelsRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 12.5px;
+}
+
+.meterLabel {
+  font-weight: 600;
+  color: #334155;
+}
+
+.meterFraction {
+  font-weight: 700;
+  color: #1e1b4b;
+}
+
+.meterLimit {
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.meterProgressBarBg {
+  width: 100%;
+  height: 6px;
+  border-radius: 3px;
+  background: #f1f5f9;
+  overflow: hidden;
+}
+
+.meterProgressBarFill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed 0%, #9333ea 100%);
+  border-radius: 3px;
+  transition: width 0.4s ease;
+}
+
+.meterPercent {
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+  width: 34px;
+  text-align: right;
+  flex-shrink: 0;
+}
+
+/* ── Card: Choose the Right Plan ────────────────────────────────────────── */
+.plansMatrixCard {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  padding: 24px 26px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+}
+
+.matrixHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 22px;
+  flex-wrap: wrap;
+  gap: 16px;
+}
+
+.matrixTitleGroup {
+  display: flex;
+  flex-direction: column;
+}
+
+.matrixTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 16.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 3px 0;
+}
+
+.matrixSubtitle {
+  font-size: 12.5px;
+  color: #64748b;
+  margin: 0;
+}
+
+/* Monthly / Yearly Toggle Pill */
+.cycleToggleContainer {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.cycleTogglePill {
+  display: flex;
+  align-items: center;
+  background: #f1f5f9;
+  padding: 3px;
+  border-radius: 20px;
+}
+
+.cycleToggleBtn {
+  padding: 5px 14px;
+  border-radius: 16px;
+  border: none;
+  background: transparent;
+  font-size: 12px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.cycleToggleBtnActive {
+  background: #7c3aed;
+  color: #ffffff;
+  box-shadow: 0 1px 4px rgba(124, 58, 237, 0.25);
+}
+
+.saveBadge {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  border-radius: 12px;
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 700;
+}
+
+/* 3 Columns Plan Grid */
+.planColsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 18px;
+  align-items: stretch;
+}
+
+.planColCard {
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 22px 20px;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  background: #ffffff;
+  position: relative;
+  transition: all 0.18s ease;
+}
+
+.planColCard:hover {
+  border-color: #cbd5e1;
+  transform: translateY(-2px);
+  box-shadow: 0 6px 18px rgba(0, 0, 0, 0.04);
+}
+
+.planColFeatured {
+  border-color: #7c3aed !important;
+  background: #ffffff !important;
+  box-shadow: 0 6px 22px rgba(124, 58, 237, 0.1);
+}
+
+.popularBadge {
+  position: absolute;
+  top: -11px;
+  left: 50%;
+  transform: translateX(-50%);
+  background: #7c3aed;
+  color: #ffffff;
+  padding: 2px 10px;
+  border-radius: 12px;
+  font-size: 10.5px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.25);
+}
+
+.planColTop {
+  display: flex;
+  flex-direction: column;
+}
+
+.planColIconBox {
+  width: 38px;
+  height: 38px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+}
+
+.planColIconPurple {
+  background: #f3e8ff;
+  color: #7c3aed;
+}
+
+.planColIconGold {
+  background: #fef3c7;
+  color: #d97706;
+}
+
+.planColName {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 4px 0;
+}
+
+.planColSubtitle {
+  font-size: 11.5px;
+  color: #64748b;
+  margin: 0 0 16px 0;
+  line-height: 1.35;
+  min-height: 32px;
+}
+
+.planColPriceBox {
+  display: flex;
+  align-items: baseline;
+  gap: 4px;
+  margin-bottom: 18px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.planColPriceAmount {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 22px;
+  font-weight: 700;
+  color: #1e1b4b;
+}
+
+.planColPricePeriod {
+  font-size: 12px;
+  color: #64748b;
+}
+
+.planFeaturesList {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  margin-bottom: 22px;
+  list-style: none;
+  padding: 0;
+}
+
+.planFeatureItem {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  color: #334155;
+}
+
+.planFeatureCheck {
+  color: #7c3aed;
+  flex-shrink: 0;
+}
+
+.selectPlanBtn {
+  width: 100%;
+  padding: 9px 0;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+  border: 1.5px solid #7c3aed;
+  background: #ffffff;
+  color: #7c3aed;
+}
+
+.selectPlanBtn:hover {
+  background: #f5f3ff;
+}
+
+.currentPlanBtn {
+  width: 100%;
+  padding: 9px 0;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  border: none;
+  background: #7c3aed;
+  color: #ffffff;
+  cursor: default;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
+}
+
+.contactSalesBtn {
+  width: 100%;
+  padding: 9px 0;
+  border-radius: 9px;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-align: center;
+  border: 1.5px solid #cbd5e1;
+  background: #ffffff;
+  color: #334155;
+}
+
+.contactSalesBtn:hover {
+  border-color: #7c3aed;
+  color: #7c3aed;
+  background: #fbfbfe;
+}
+
+/* ── Card: Recent Invoices ──────────────────────────────────────────────── */
+.invoicesCard {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  padding: 22px 26px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+}
+
+.invoicesHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.invoicesTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0;
+}
+
+.viewAllLink {
+  font-size: 12px;
+  font-weight: 600;
+  color: #7c3aed;
+  background: none;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.viewAllLink:hover {
+  text-decoration: underline;
+}
+
+.invoicesTable {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12.5px;
+}
+
+.invoicesTable th {
+  text-align: left;
+  padding: 10px 12px;
+  color: #64748b;
+  font-weight: 600;
+  border-bottom: 1.5px solid #f1f5f9;
+  font-size: 11.5px;
+  text-transform: uppercase;
+  letter-spacing: 0.02em;
+}
+
+.invoicesTable td {
+  padding: 12px 12px;
+  border-bottom: 1px solid #f8fafc;
+  color: #1e1b4b;
+}
+
+.invoicesTable tr:last-child td {
+  border-bottom: none;
+}
+
+.invoicesTable tr:hover td {
+  background: #fafbff;
+}
+
+.invoiceNumber {
+  font-weight: 600;
+  color: #1e1b4b;
+}
+
+.paidStatusBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 2px 8px;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #059669;
+  border-radius: 12px;
+  font-size: 11px;
+  font-weight: 600;
+}
+
+.downloadInvoiceBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: transparent;
+  border: none;
+  color: #7c3aed;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.downloadInvoiceBtn:hover {
+  background: #f3e8ff;
+}
+
+/* ── Right Column: Cards ────────────────────────────────────────────────── */
+.sideSectionCard {
+  background: #ffffff;
+  border-radius: 16px;
+  border: 1px solid #f1f5f9;
+  padding: 20px 22px;
+  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+}
+
+.sideCardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 16px;
+}
+
+.sideCardTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 14.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0;
+}
+
+.editBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 4px 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #64748b;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.editBtn:hover {
+  border-color: #7c3aed;
+  color: #7c3aed;
+  background: #fafbff;
+}
+
+/* Billing Info Fields */
+.billingInfoList {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.billingInfoItem {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.infoIconBox {
+  color: #64748b;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.infoContent {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+}
+
+.infoLabel {
+  font-size: 11px;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.infoValue {
+  font-size: 12.5px;
+  color: #1e1b4b;
+  font-weight: 600;
+  line-height: 1.35;
+}
+
+/* Payment Methods Card */
+.addCardBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 4px 10px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 7px;
+  font-size: 11.5px;
+  font-weight: 600;
+  color: #7c3aed;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.addCardBtn:hover {
+  border-color: #7c3aed;
+  background: #f5f3ff;
+}
+
+.cardTile {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 10px 14px;
+  margin-bottom: 14px;
+  background: #fafbff;
+}
+
+.cardTileLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.cardBrandBadge {
+  background: #1e293b;
+  color: #ffffff;
+  font-size: 10px;
+  font-weight: 800;
+  padding: 3px 6px;
+  border-radius: 4px;
+  letter-spacing: 0.05em;
+}
+
+.cardDetails {
+  display: flex;
+  flex-direction: column;
+}
+
+.cardMask {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+}
+
+.cardExpiry {
+  font-size: 11px;
+  color: #64748b;
+}
+
+.cardTileRight {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.defaultPill {
+  background: #ecfdf5;
+  color: #059669;
+  border: 1px solid #a7f3d0;
+  font-size: 10.5px;
+  font-weight: 700;
+  padding: 2px 7px;
+  border-radius: 10px;
+}
+
+/* Auto-Renewal Box */
+.autoRenewalBox {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 10px;
+  padding: 12px 14px;
+}
+
+.autoRenewalLeft {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.autoRenewalIconBox {
+  color: #7c3aed;
+  margin-top: 2px;
+  flex-shrink: 0;
+}
+
+.autoRenewalText {
+  display: flex;
+  flex-direction: column;
+}
+
+.autoRenewalTitle {
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0 0 2px 0;
+}
+
+.autoRenewalDesc {
+  font-size: 11px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.35;
+}
+
+/* Pill Toggle Switch */
+.toggleSwitch {
+  width: 42px;
+  height: 22px;
+  border-radius: 11px;
+  border: none;
+  cursor: pointer;
+  position: relative;
+  transition: background 0.2s ease;
+  flex-shrink: 0;
+}
+
+.toggleSwitchOn {
+  background: #7c3aed;
+}
+
+.toggleSwitchOff {
+  background: #e2e8f0;
+}
+
+.toggleSlider {
+  position: absolute;
+  top: 2px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: #ffffff;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.2);
+  transition: left 0.2s ease;
+}
+
+.toggleSliderOn {
+  left: 22px;
+}
+
+.toggleSliderOff {
+  left: 2px;
+}
+
+/* Quick Actions Card */
+.quickActionsList {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.quickActionItem {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 10px 12px;
+  border-radius: 9px;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  color: #1e1b4b;
+  font-size: 12.5px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.quickActionItem:hover {
+  background: #f3e8ff;
+  border-color: #ddd6fe;
+  color: #7c3aed;
+  transform: translateX(2px);
+}
+
+.quickActionLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.quickActionIcon {
+  color: #7c3aed;
+}
+
+/* ── Modals ─────────────────────────────────────────────────────────────── */
+.modalOverlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.5);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+}
+
+.modalCard {
+  background: #ffffff;
+  border-radius: 16px;
+  width: 100%;
+  max-width: 500px;
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.2);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  animation: modalScale 0.2s ease-out;
+}
+
+@keyframes modalScale {
+  from { opacity: 0; transform: scale(0.96); }
+  to { opacity: 1; transform: scale(1); }
+}
+
+.modalHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 18px 24px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.modalTitle {
+  font-family: 'Space Grotesk', sans-serif;
+  font-size: 16px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0;
+}
+
+.modalCloseBtn {
+  background: none;
+  border: none;
+  color: #94a3b8;
+  cursor: pointer;
+  padding: 4px;
+  border-radius: 6px;
+  transition: all 0.15s ease;
+}
+
+.modalCloseBtn:hover {
+  background: #f1f5f9;
+  color: #1e1b4b;
+}
+
+.modalBody {
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.formField {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.fieldLabel {
+  font-size: 12px;
+  font-weight: 600;
+  color: #475569;
+}
+
+.textInput {
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 9px 12px;
+  font-size: 13px;
+  color: #1e293b;
+  outline: none;
+  transition: border-color 0.15s ease;
+}
+
+.textInput:focus {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.1);
+}
+
+.modalFooter {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 10px;
+  padding: 16px 24px;
+  background: #f8fafc;
+  border-top: 1px solid #f1f5f9;
+}
+
+.cancelBtn {
+  padding: 8px 16px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+}
+
+.saveModalBtn {
+  padding: 8px 18px;
+  background: #7c3aed;
+  border: none;
+  border-radius: 8px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #ffffff;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
+}
+
+.saveModalBtn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
+
+/* Toast */
+.toastNotice {
+  position: fixed;
+  bottom: 24px;
+  right: 24px;
+  z-index: 1000;
+  background: #1e1b4b;
+  color: #ffffff;
+  padding: 12px 20px;
+  border-radius: 12px;
+  font-size: 13.5px;
+  font-weight: 600;
+  box-shadow: 0 8px 24px rgba(0, 0, 0, 0.2);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  animation: slideUp 0.2s ease-out;
+}
+
+@keyframes slideUp {
+  from { opacity: 0; transform: translateY(12px) scale(0.98); }
+  to { opacity: 1; transform: translateY(0) scale(1); }
+}
+
+.spin {
+  animation: spin 1s linear infinite;
+}
+
+@keyframes spin {
+  from { transform: rotate(0deg); }
+  to { transform: rotate(360deg); }
+}
+
+/* Responsive */
+@media (max-width: 1140px) {
+  .contentGrid {
+    grid-template-columns: 1fr;
+  }
+  .topDualRow {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 768px) {
+  .planColsGrid {
+    grid-template-columns: 1fr;
+  }
+  .headerRow {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+  .upgradeBannerCard {
+    width: 100%;
+  }
+}

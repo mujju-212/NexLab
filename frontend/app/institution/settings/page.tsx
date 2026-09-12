@@ -1,6 +1,7 @@
 'use client';
 
 import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { useAuthStore } from '@/store/auth-store';
 import { apiClient } from '@/services/api-client';
@@ -64,12 +65,32 @@ function Toggle({ on, onClick, disabled }: { on: boolean; onClick: () => void; d
 const fmtNum = (n: number | null | undefined) => (n == null ? '—' : n.toLocaleString());
 
 export default function SettingsPage() {
+  const router = useRouter();
   const { user, setUser } = useAuthStore();
-  const [tab, setTab] = useState<Tab>('profile');
+  const [tab, setTab] = useState<Tab>('plan');
   const [toast, setToast] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [notifSaving, setNotifSaving] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
+
+  // Check URL parameters for tab on mount
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const tabParam = params.get('tab');
+      if (tabParam === 'notifications') {
+        router.push('/institution/notifications');
+      } else if (tabParam === 'profile') {
+        router.push('/institution/profile');
+      } else if (tabParam === 'plan') {
+        router.push('/institution/billing');
+      } else if (tabParam === 'ai') {
+        router.push('/institution/ai-usage');
+      } else if (tabParam === 'help') {
+        router.push('/institution/help');
+      }
+    }
+  }, [router]);
 
   // Profile form
   const [profileForm, setProfileForm] = useState({
@@ -243,7 +264,21 @@ export default function SettingsPage() {
       {/* Tab navigation */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 28, background: 'rgba(255,255,255,0.5)', borderRadius: 14, padding: 4, border: '1px solid rgba(255,255,255,0.8)', width: 'fit-content' }}>
         {TABS.map(t => (
-          <button key={t.id} onClick={() => setTab(t.id)}
+          <button key={t.id} onClick={() => {
+            if (t.id === 'notifications') {
+              router.push('/institution/notifications');
+            } else if (t.id === 'profile') {
+              router.push('/institution/profile');
+            } else if (t.id === 'plan') {
+              router.push('/institution/billing');
+            } else if (t.id === 'ai') {
+              router.push('/institution/ai-usage');
+            } else if (t.id === 'help') {
+              router.push('/institution/help');
+            } else {
+              setTab(t.id);
+            }
+          }}
             style={{
               display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10,
               border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
