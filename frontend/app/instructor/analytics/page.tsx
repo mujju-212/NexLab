@@ -45,16 +45,45 @@ export default function InstructorAnalyticsPage() {
   const [loading, setLoading] = useState(false);
   const [toast, setToast] = useState<string | null>(null);
 
+  const [mounted, setMounted] = useState(false);
+
   const toast3 = useCallback((m: string) => { setToast(m); setTimeout(() => setToast(null), 3000); }, []);
 
-  // Load sections for filter
+  // Trajectory: load roster for the student picker — lightweight /roster endpoint
+  const loadRoster = useCallback(async () => {
+    try {
+      const data = await experienceService.analyticsRoster();
+      const r = (data.roster || []).map(x => ({
+        student_id: x.student_id,
+        full_name: `${x.full_name}${x.roll_number ? ` (${x.roll_number})` : ''}`,
+      }));
+      setRoster(r);
+      return r;
+    } catch { return []; }
+  }, []);
+
+  const pickTrajectoryStudent = useCallback(async (sid: string) => {
+    setTrajectoryStudent(sid);
+    if (!sid) { setTrajectory(null); return; }
+    setLoading(true);
+    try { setTrajectory(await experienceService.analyticsTrajectory(sid)); }
+    catch (e: any) { toast3(errText(e)); } finally { setLoading(false); }
+  }, [toast3]);
+
+  // Load sections for filter & roster on mount
   useEffect(() => {
+    setMounted(true);
     sessionService.getSectionSubjects().then(res => {
       const list = (res.section_subjects ?? []) as SectionLite[];
       setSections(list);
       if (list.length === 1) setSsId(list[0].section_subject_id);
     }).catch(() => {});
-  }, []);
+    loadRoster().then(r => {
+      if (r.length > 0) {
+        pickTrajectoryStudent(r[0].student_id);
+      }
+    });
+  }, [loadRoster, pickTrajectoryStudent]);
 
   const params = () => (ssId ? { section_subject_id: ssId } : {});
 
@@ -102,22 +131,6 @@ export default function InstructorAnalyticsPage() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [tab, ssId]);
 
-  // Trajectory: load roster for the student picker — lightweight /roster endpoint
-  // (was calling the full integrity aggregation just to fill a dropdown)
-  const loadRoster = async () => {
-    try {
-      const data = await experienceService.analyticsRoster();
-      setRoster((data.roster || []).map(r => ({ student_id: r.student_id, full_name: r.full_name })));
-    } catch { /* ignore */ }
-  };
-
-  const pickTrajectoryStudent = async (sid: string) => {
-    setTrajectoryStudent(sid);
-    if (!sid) { setTrajectory(null); return; }
-    setLoading(true);
-    try { setTrajectory(await experienceService.analyticsTrajectory(sid)); }
-    catch (e: any) { toast3(errText(e)); } finally { setLoading(false); }
-  };
 
   // Quality donut data — memoized, only recomputed when experiments change
   const qualityDonut = useMemo(() => {

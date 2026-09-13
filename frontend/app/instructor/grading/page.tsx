@@ -3,12 +3,12 @@
 import { useCallback, useEffect, useState } from 'react';
 import {
   ClipboardCheck, CheckCircle2, History, MessageSquare, Lock, Save, X,
-  Sparkles, Loader2, TrendingUp,
+  Sparkles, Loader2, TrendingUp, FileCheck, Award,
 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import { experimentService } from '@/services/experiment.service';
 import { submissionService } from '@/services/submission.service';
-import { experienceService } from '@/services/experience.service';
+import { experienceService, type InstructorExam, type ExamAttemptRow } from '@/services/experience.service';
 import styles from '../shared.module.css';
 
 interface ExpOption { id: string; title: string; exp_number: number }
@@ -67,6 +67,16 @@ export default function GradingPage() {
   const [replay, setReplay] = useState<{ student: string; versions: ReplayVersion[] } | null>(null);
   const [replayIdx, setReplayIdx] = useState(0);
 
+  // grading mode tab
+  const [gradingMode, setGradingMode] = useState<'submissions' | 'exams'>('submissions');
+
+  // exam grading state
+  const [examList, setExamList] = useState<InstructorExam[]>([]);
+  const [selectedExam, setSelectedExam] = useState('');
+  const [examAttempts, setExamAttempts] = useState<ExamAttemptRow[]>([]);
+  const [selectedExamData, setSelectedExamData] = useState<InstructorExam | null>(null);
+  const [loadingExams, setLoadingExams] = useState(false);
+
   const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
   useEffect(() => {
@@ -76,6 +86,12 @@ export default function GradingPage() {
         if ((exps as ExpOption[]).length > 0) setSelectedExp((exps as ExpOption[])[0].id);
       })
       .catch(() => setExperiments([]));
+    experienceService.listExams()
+      .then(exams => {
+        setExamList(exams);
+        if (exams.length > 0) setSelectedExam(exams[0].id);
+      })
+      .catch(() => setExamList([]));
   }, []);
 
   const loadSubmissions = useCallback(async (expId: string) => {
@@ -89,6 +105,23 @@ export default function GradingPage() {
   }, []);
 
   useEffect(() => { loadSubmissions(selectedExp); }, [selectedExp, loadSubmissions]);
+
+  const loadExamAttempts = useCallback(async (examId: string) => {
+    if (!examId) return;
+    setLoadingExams(true);
+    try {
+      const res = await experienceService.getExamAttempts(examId);
+      setExamAttempts(res.attempts ?? []);
+      setSelectedExamData(res.exam ?? null);
+    } catch {
+      setExamAttempts([]);
+      setSelectedExamData(null);
+    } finally {
+      setLoadingExams(false);
+    }
+  }, []);
+
+  useEffect(() => { if (selectedExam) loadExamAttempts(selectedExam); }, [selectedExam, loadExamAttempts]);
 
   const openGrade = (sub: SubmissionRow) => {
     setGrading(sub);
@@ -169,6 +202,43 @@ export default function GradingPage() {
 
       {toast && <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 300, background: '#111827', color: '#fff', padding: '12px 20px', borderRadius: 12, fontSize: 14, fontWeight: 600 }}>{toast}</div>}
 
+      {/* Grading mode tabs */}
+      <div style={{ display: 'flex', gap: 4, marginBottom: 16, background: '#f1f5f9', borderRadius: 10, padding: 3, width: 'fit-content' }}>
+        <button
+          onClick={() => setGradingMode('submissions')}
+          style={{
+            padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+            border: 'none', cursor: 'pointer',
+            background: gradingMode === 'submissions' ? '#fff' : 'transparent',
+            color: gradingMode === 'submissions' ? '#0f172a' : '#64748b',
+            boxShadow: gradingMode === 'submissions' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}
+        >
+          <ClipboardCheck size={14} /> Lab Submissions
+        </button>
+        <button
+          onClick={() => setGradingMode('exams')}
+          style={{
+            padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+            border: 'none', cursor: 'pointer',
+            background: gradingMode === 'exams' ? '#fff' : 'transparent',
+            color: gradingMode === 'exams' ? '#0f172a' : '#64748b',
+            boxShadow: gradingMode === 'exams' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}
+        >
+          <FileCheck size={14} /> Exam Scores
+          {examList.length > 0 && (
+            <span style={{ fontSize: 11, background: '#ede9fe', color: '#7c3aed', padding: '1px 7px', borderRadius: 10, fontWeight: 700 }}>
+              {examList.length}
+            </span>
+          )}
+        </button>
+      </div>
+
+      {gradingMode === 'submissions' && (
+        <>
       <div className={styles.actionRow}>
         <select className={styles.select} style={{ maxWidth: 380 }} value={selectedExp}
           onChange={e => setSelectedExp(e.target.value)}>
@@ -384,6 +454,118 @@ export default function GradingPage() {
             )}
           </div>
         </div>
+      )}
+
+        </>
+      )}
+
+      {gradingMode === 'exams' && (
+        <>
+          <div className={styles.actionRow}>
+            <select className={styles.select} style={{ maxWidth: 380 }} value={selectedExam}
+              onChange={e => setSelectedExam(e.target.value)}>
+              {examList.length === 0 && <option value="">No exams found</option>}
+              {examList.map(e => <option key={e.id} value={e.id}>{e.title} ({e.exam_type.toUpperCase()})</option>)}
+            </select>
+            <span className={styles.sectionSub}>
+              {loadingExams ? 'Loading…' : `${examAttempts.length} attempt${examAttempts.length === 1 ? '' : 's'}`}
+              {selectedExamData && selectedExamData.grade_weight > 0 && (
+                <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, background: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: 6 }}>
+                  {Math.round(selectedExamData.grade_weight * 100)}% of final grade
+                </span>
+              )}
+            </span>
+          </div>
+
+          <div className={styles.sectionCard}>
+            {!selectedExam ? (
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <FileCheck size={30} color="#d8b4fe" style={{ marginBottom: 8 }} />
+                <p className={styles.sectionSub}>No exams created yet. Create exams from the Experiments page.</p>
+              </div>
+            ) : loadingExams ? (
+              <p className={styles.sectionSub}>Loading exam attempts…</p>
+            ) : examAttempts.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <FileCheck size={30} color="#d8b4fe" style={{ marginBottom: 8 }} />
+                <p className={styles.sectionSub}>No students have attempted this exam yet.</p>
+              </div>
+            ) : (
+              <>
+                {/* Exam summary stats */}
+                <div style={{ display: 'flex', gap: 16, marginBottom: 16, flexWrap: 'wrap' }}>
+                  {(() => {
+                    const submitted = examAttempts.filter(a => a.status === 'submitted' || a.status === 'expired');
+                    const scores = submitted.map(a => a.score ?? 0).filter(s => s > 0);
+                    const avg = scores.length > 0 ? scores.reduce((a, b) => a + b, 0) / scores.length : 0;
+                    const passed = submitted.filter(a => a.passed).length;
+                    return (
+                      <>
+                        <div style={{ background: '#f8fafc', borderRadius: 10, padding: '10px 18px', fontSize: 13 }}>
+                          <span style={{ color: '#64748b', fontWeight: 500 }}>Average: </span>
+                          <strong style={{ color: '#0f172a' }}>{avg.toFixed(1)}%</strong>
+                        </div>
+                        <div style={{ background: '#f0fdf4', borderRadius: 10, padding: '10px 18px', fontSize: 13 }}>
+                          <span style={{ color: '#64748b', fontWeight: 500 }}>Passed: </span>
+                          <strong style={{ color: '#059669' }}>{passed}/{submitted.length}</strong>
+                        </div>
+                        <div style={{ background: '#faf5ff', borderRadius: 10, padding: '10px 18px', fontSize: 13 }}>
+                          <span style={{ color: '#64748b', fontWeight: 500 }}>In Progress: </span>
+                          <strong style={{ color: '#7c3aed' }}>{examAttempts.filter(a => a.status === 'in_progress').length}</strong>
+                        </div>
+                      </>
+                    );
+                  })()}
+                </div>
+
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Student</th><th>Status</th><th>Score</th><th>Points</th><th>Passed</th><th>Submitted</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {examAttempts.map(att => (
+                      <tr key={att.attempt_id}>
+                        <td>
+                          <div className={styles.tdStrong}>{att.student_name}</div>
+                          <div style={{ fontSize: 12, color: '#9ca3af' }}>{att.student_email}</div>
+                        </td>
+                        <td>
+                          <span className={`${styles.pill} ${
+                            att.status === 'submitted' ? styles.pillGreen
+                            : att.status === 'expired' ? styles.pillAmber
+                            : styles.pillBlue
+                          }`}>
+                            {att.status}
+                          </span>
+                        </td>
+                        <td style={{ fontWeight: 700, fontSize: 14, color: '#0f172a' }}>
+                          {att.score !== null ? `${att.score.toFixed(1)}%` : '—'}
+                        </td>
+                        <td style={{ fontSize: 13, color: '#6b7280' }}>
+                          {att.total_points}/{att.max_points}
+                        </td>
+                        <td>
+                          {att.status === 'in_progress' ? (
+                            <span style={{ fontSize: 12, color: '#94a3b8' }}>—</span>
+                          ) : att.passed ? (
+                            <span style={{ color: '#059669', fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Award size={14} /> Pass
+                            </span>
+                          ) : (
+                            <span style={{ color: '#dc2626', fontWeight: 700 }}>Fail</span>
+                          )}
+                        </td>
+                        <td style={{ fontSize: 13, color: '#6b7280' }}>{fmt(att.submitted_at)}</td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </>
+            )}
+          </div>
+        </>
       )}
 
       <p className={styles.sectionSub} style={{ marginTop: 12, display: 'flex', gap: 6, alignItems: 'center' }}>

@@ -85,6 +85,66 @@ export interface QuizStartResponse {
   server_now: string;
 }
 
+// ── Exam types ───────────────────────────────────────────────────────────────
+
+export interface StudentExam {
+  id: string;
+  title: string;
+  description?: string;
+  exam_type: 'mcq' | 'coding' | 'mixed';
+  subject_id: string;
+  available_from: string | null;
+  due_at: string | null;
+  duration_minutes: number;
+  max_attempts: number;
+  pass_threshold: number;
+  question_count: number;
+  window_state: 'upcoming' | 'open' | 'closed';
+  attempts_used: number;
+  attempts_remaining: number;
+  latest_status: string | null;
+  best_score: number | null;
+  has_in_progress: boolean;
+}
+
+export interface StudentExamDetail {
+  exam: Record<string, any>;
+  server_now: string;
+  attempts_used: number;
+  attempts_remaining: number;
+  can_start: boolean;
+  in_progress_attempt: Record<string, any> | null;
+  latest_attempt: Record<string, any> | null;
+}
+
+export interface ExamStartResponse {
+  attempt: Record<string, any>;
+  exam: Record<string, any>;
+  questions: Record<string, any>[];
+  answers: Record<string, any>;
+  expires_at: string;
+  server_now: string;
+  resumed: boolean;
+}
+
+export interface ExamSubmitResponse {
+  attempt: Record<string, any>;
+  score: number;
+  passed: boolean;
+  status: string;
+  already_submitted?: boolean;
+}
+
+export interface ExamResultResponse {
+  attempt: Record<string, any>;
+  exam: { id: string; title: string; pass_threshold: number; exam_type: string };
+  score: number;
+  passed: boolean;
+  total_points: number;
+  max_points: number;
+  review: Record<string, any>[];
+}
+
 // In-memory cache to eliminate redundant network waterfalls on tab switching
 const memoryCache = new Map<string, { data: unknown; expiresAt: number }>();
 
@@ -267,4 +327,57 @@ export const studentService = {
     const { data } = await apiClient.get<{ pdf_url: string }>(`/student/lab-record/${subjectId}/download`);
     return data.pdf_url;
   },
+
+  // ── Student Announcements & Engagement ─────────────────────────────────────
+  async getAnnouncements(): Promise<{ announcements: any[]; unread_count: number; total: number }> {
+    const { data } = await apiClient.get('/student/announcements');
+    return data;
+  },
+
+  async markAnnouncementRead(id: string): Promise<{ is_read: boolean; views_count: number }> {
+    const { data } = await apiClient.post(`/student/announcements/${id}/read`);
+    return data;
+  },
+
+  async toggleAnnouncementLike(id: string): Promise<{ liked: boolean; likes_count: number }> {
+    const { data } = await apiClient.post(`/student/announcements/${id}/like`);
+    return data;
+  },
+
+  // ── Exams ──────────────────────────────────────────────────────────────────
+  // GET /api/student/exams
+  async getExams(): Promise<StudentExam[]> {
+    const { data } = await apiClient.get<{ exams: StudentExam[]; count: number; server_now: string }>('/student/exams');
+    return data.exams;
+  },
+
+  // GET /api/student/exams/<examId>
+  async getExamDetail(examId: string): Promise<StudentExamDetail> {
+    const { data } = await apiClient.get<StudentExamDetail>(`/student/exams/${examId}`);
+    return data;
+  },
+
+  // POST /api/student/exams/<examId>/start
+  async startExam(examId: string): Promise<ExamStartResponse> {
+    const { data } = await apiClient.post<ExamStartResponse>(`/student/exams/${examId}/start`);
+    return data;
+  },
+
+  // POST /api/student/exams/<examId>/attempt/<attemptId>/save
+  async saveExamAttempt(examId: string, attemptId: string, answers: Record<string, any>): Promise<void> {
+    await apiClient.post(`/student/exams/${examId}/attempt/${attemptId}/save`, { answers });
+  },
+
+  // POST /api/student/exams/<examId>/attempt/<attemptId>/submit
+  async submitExamAttempt(examId: string, attemptId: string, answers: Record<string, any>): Promise<ExamSubmitResponse> {
+    const { data } = await apiClient.post<ExamSubmitResponse>(`/student/exams/${examId}/attempt/${attemptId}/submit`, { answers });
+    return data;
+  },
+
+  // GET /api/student/exams/<examId>/result
+  async getExamResult(examId: string): Promise<ExamResultResponse> {
+    const { data } = await apiClient.get<ExamResultResponse>(`/student/exams/${examId}/result`);
+    return data;
+  },
 };
+

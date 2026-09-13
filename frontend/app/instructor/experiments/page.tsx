@@ -9,12 +9,13 @@ import {
   ChevronRight, Copy, Search, MoreHorizontal, ArrowRight,
   Code, BarChart3, Database, Boxes, LayoutGrid, List, FileCode,
   Upload, Star, X, Check, Users, Clock, Layers, GitBranch, Network,
-  Settings, HelpCircle, Save, ShieldCheck, CheckSquare
+  Settings, HelpCircle, Save, ShieldCheck, CheckSquare,
+  FileCheck, Award, Eye, CalendarClock
 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import { experimentService } from '@/services/experiment.service';
 import { sessionService } from '@/services/session.service';
-import { experienceService } from '@/services/experience.service';
+import { experienceService, type InstructorExam } from '@/services/experience.service';
 import SubjectIconPicker from '@/components/ui/SubjectIconPicker';
 import { getSubjectIconDef } from '@/lib/subject-icons';
 import styles from './experiments.module.css';
@@ -92,7 +93,7 @@ export default function ExperimentsPage() {
 
   // Navigation & View State
   const [activeTab, setActiveTab] = useState<'subjects' | 'experiments'>('subjects');
-  const [subjectSubTab, setSubjectSubTab] = useState<'experiments' | 'settings'>('experiments');
+  const [subjectSubTab, setSubjectSubTab] = useState<'experiments' | 'exams' | 'settings'>('experiments');
   const [viewMode, setViewMode] = useState<'grid' | 'list'>('list');
 
   // Search & Filter State
@@ -123,6 +124,19 @@ export default function ExperimentsPage() {
   const [toast, setToast] = useState<string | null>(null);
   const [busyId, setBusyId] = useState<string | null>(null);
   const [showTemplateModal, setShowTemplateModal] = useState(false);
+
+  // Exam state
+  const [subjectExams, setSubjectExams] = useState<InstructorExam[]>([]);
+  const [loadingExams, setLoadingExams] = useState(false);
+  const [showCreateExamModal, setShowCreateExamModal] = useState(false);
+  const [newExamTitle, setNewExamTitle] = useState('');
+  const [newExamType, setNewExamType] = useState<'mcq' | 'coding' | 'mixed'>('mcq');
+  const [newExamDuration, setNewExamDuration] = useState('30');
+  const [newExamMaxAttempts, setNewExamMaxAttempts] = useState('1');
+  const [newExamPassThreshold, setNewExamPassThreshold] = useState('40');
+  const [newExamDescription, setNewExamDescription] = useState('');
+  const [newExamWeight, setNewExamWeight] = useState('0');
+  const [creatingExam, setCreatingExam] = useState(false);
 
   const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
@@ -159,6 +173,19 @@ export default function ExperimentsPage() {
     }
   }, []);
 
+  // Fetch exams belonging to a specific subject
+  const loadSubjectExams = useCallback(async (subjId: string) => {
+    setLoadingExams(true);
+    try {
+      const res = await experienceService.listExams(subjId);
+      setSubjectExams(res);
+    } catch {
+      setSubjectExams([]);
+    } finally {
+      setLoadingExams(false);
+    }
+  }, []);
+
   // Sync deep link query param ?subject_id=
   useEffect(() => {
     const sid = searchParams.get('subject_id');
@@ -171,9 +198,10 @@ export default function ExperimentsPage() {
         setEditDescription(match.description || '');
         setEditIcon(match.icon || match.subject_icon || 'datastruct');
         loadSubjectExperiments(match.subject_id);
+        loadSubjectExams(match.subject_id);
       }
     }
-  }, [searchParams, subjects, loadSubjectExperiments]);
+  }, [searchParams, subjects, loadSubjectExperiments, loadSubjectExams]);
 
   const selectSubjectCard = (sub: SectionSubject) => {
     setSelectedSubject(sub);
@@ -183,6 +211,7 @@ export default function ExperimentsPage() {
     setEditIcon(sub.icon || sub.subject_icon || 'datastruct');
     setSubjectSubTab('experiments');
     loadSubjectExperiments(sub.subject_id);
+    loadSubjectExams(sub.subject_id);
 
     const url = new URL(window.location.href);
     url.searchParams.set('subject_id', sub.subject_id);
@@ -272,7 +301,59 @@ export default function ExperimentsPage() {
     }
   };
 
-  // Base list of experiments
+  const handleCreateExam = async () => {
+    if (!selectedSubject || !newExamTitle.trim()) return;
+    setCreatingExam(true);
+    try {
+      await experienceService.createExam({
+        title: newExamTitle.trim(),
+        subject_id: selectedSubject.subject_id,
+        description: newExamDescription || undefined,
+        exam_type: newExamType,
+        duration_minutes: parseInt(newExamDuration) || 30,
+        max_attempts: parseInt(newExamMaxAttempts) || 1,
+        pass_threshold: parseInt(newExamPassThreshold) || 40,
+        grade_weight: parseFloat(newExamWeight) / 100 || 0,
+      });
+      toast3('Exam created! Add questions to publish.');
+      setShowCreateExamModal(false);
+      setNewExamTitle(''); setNewExamDescription(''); setNewExamType('mcq');
+      setNewExamDuration('30'); setNewExamMaxAttempts('1'); setNewExamPassThreshold('40');
+      setNewExamWeight('0');
+      loadSubjectExams(selectedSubject.subject_id);
+    } catch {
+      toast3('Failed to create exam.');
+    } finally {
+      setCreatingExam(false);
+    }
+  };
+
+  const toggleExamPublish = async (exam: InstructorExam) => {
+    setBusyId(exam.id);
+    try {
+      await experienceService.updateExam(exam.id, { is_published: !exam.is_published });
+      toast3(exam.is_published ? 'Exam unpublished.' : 'Exam published to students.');
+      if (selectedSubject) loadSubjectExams(selectedSubject.subject_id);
+    } catch {
+      toast3('Could not update exam status.');
+    } finally {
+      setBusyId(null);
+    }
+  };
+
+  const removeExam = async (exam: InstructorExam) => {
+    if (!window.confirm(`Delete exam "${exam.title}"? All questions and student attempts will be lost.`)) return;
+    setBusyId(exam.id);
+    try {
+      await experienceService.deleteExam(exam.id);
+      toast3('Exam deleted.');
+      if (selectedSubject) loadSubjectExams(selectedSubject.subject_id);
+    } catch {
+      toast3('Could not delete exam.');
+    } finally {
+      setBusyId(null);
+    }
+  };
   const baseExperimentsList = useMemo(() => {
     if (selectedSubject) {
       if (subjectExperiments.length > 0) return subjectExperiments;
@@ -835,7 +916,7 @@ export default function ExperimentsPage() {
               </div>
             </div>
 
-            {/* 2. Navigation Sub-Tabs Bar (EXACTLY 2 TABS: Experiments & Settings) */}
+            {/* 2. Navigation Sub-Tabs Bar (Experiments, Exams & Settings) */}
             <div className={styles.subjectNavTabs}>
               <div className={styles.subjectTabList}>
                 <button
@@ -845,6 +926,13 @@ export default function ExperimentsPage() {
                   Experiments ({filteredExperiments.length})
                 </button>
                 <button
+                  className={`${styles.subjectTab} ${subjectSubTab === 'exams' ? styles.subjectTabActive : ''}`}
+                  onClick={() => setSubjectSubTab('exams')}
+                >
+                  <FileCheck size={15} style={{ display: 'inline', marginRight: 6 }} />
+                  Exams ({subjectExams.length})
+                </button>
+                <button
                   className={`${styles.subjectTab} ${subjectSubTab === 'settings' ? styles.subjectTabActive : ''}`}
                   onClick={() => setSubjectSubTab('settings')}
                 >
@@ -852,12 +940,22 @@ export default function ExperimentsPage() {
                 </button>
               </div>
 
-              <button
-                className={styles.newExpBtn}
-                onClick={() => router.push(`/instructor/experiments/new?subject_id=${selectedSubject.subject_id}`)}
-              >
-                <Plus size={15} strokeWidth={2.5} /> New Experiment
-              </button>
+              <div style={{ display: 'flex', gap: 8 }}>
+                {subjectSubTab === 'exams' && (
+                  <button
+                    className={styles.newExpBtn}
+                    onClick={() => setShowCreateExamModal(true)}
+                  >
+                    <Plus size={15} strokeWidth={2.5} /> New Exam
+                  </button>
+                )}
+                <button
+                  className={styles.newExpBtn}
+                  onClick={() => router.push(`/instructor/experiments/new?subject_id=${selectedSubject.subject_id}`)}
+                >
+                  <Plus size={15} strokeWidth={2.5} /> New Experiment
+                </button>
+              </div>
             </div>
 
             {/* 3. SUB TAB 1 CONTENT: EXPERIMENTS LIST & ANALYTICS */}
@@ -1094,6 +1192,143 @@ export default function ExperimentsPage() {
               </div>
             )}
 
+            {/* 3b. SUB TAB: EXAMS */}
+            {subjectSubTab === 'exams' && (
+              <div style={{ padding: '0 0 20px 0' }}>
+                {loadingExams ? (
+                  <div style={{ textAlign: 'center', padding: 40, color: '#94a3b8' }}>Loading exams…</div>
+                ) : subjectExams.length === 0 ? (
+                  <div style={{
+                    textAlign: 'center', padding: '48px 24px',
+                    background: '#f8fafc', borderRadius: 16, border: '1px dashed #e2e8f0',
+                  }}>
+                    <FileCheck size={36} strokeWidth={1.5} color="#c4b5fd" style={{ marginBottom: 12 }} />
+                    <h3 style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', margin: '0 0 6px' }}>No Exams Yet</h3>
+                    <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 16px', maxWidth: 360, marginInline: 'auto' }}>
+                      Create timed MCQ or coding exams for this subject. Exams are graded automatically and contribute to the student&apos;s final grade.
+                    </p>
+                    <button className={styles.newExpBtn} onClick={() => setShowCreateExamModal(true)}>
+                      <Plus size={15} strokeWidth={2.5} /> Create First Exam
+                    </button>
+                  </div>
+                ) : (
+                  <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(320px, 1fr))', gap: 16 }}>
+                    {subjectExams.map((exam) => {
+                      const typeLabel = exam.exam_type === 'mcq' ? 'MCQ' : exam.exam_type === 'coding' ? 'Coding' : 'Mixed';
+                      return (
+                        <div
+                          key={exam.id}
+                          style={{
+                            background: '#fff', borderRadius: 14, padding: '18px 20px',
+                            border: `1px solid ${exam.is_published ? '#ddd6fe' : '#e2e8f0'}`,
+                            display: 'flex', flexDirection: 'column', gap: 10,
+                            transition: 'box-shadow 0.18s ease',
+                            cursor: 'pointer',
+                          }}
+                          onMouseEnter={(e) => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(124,58,237,0.1)')}
+                          onMouseLeave={(e) => (e.currentTarget.style.boxShadow = 'none')}
+                          onClick={() => router.push(`/instructor/exams/${exam.id}`)}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              <span style={{
+                                fontSize: 11, fontWeight: 700, textTransform: 'uppercase',
+                                background: '#f3f4f6', color: '#6b7280', padding: '3px 8px', borderRadius: 6,
+                                display: 'flex', alignItems: 'center', gap: 4,
+                              }}>
+                                {exam.exam_type === 'coding' ? <Code size={11} /> : <FileCheck size={11} />}
+                                {typeLabel}
+                              </span>
+                              {exam.grade_weight > 0 && (
+                                <span style={{
+                                  fontSize: 11, fontWeight: 700, background: '#fef3c7', color: '#d97706',
+                                  padding: '3px 8px', borderRadius: 6,
+                                }}>
+                                  {Math.round(exam.grade_weight * 100)}% Weight
+                                </span>
+                              )}
+                            </div>
+                            <span style={{
+                              fontSize: 11, fontWeight: 700, padding: '3px 10px', borderRadius: 20,
+                              background: exam.is_published ? '#d1fae5' : '#fee2e2',
+                              color: exam.is_published ? '#059669' : '#dc2626',
+                            }}>
+                              {exam.is_published ? 'Published' : 'Draft'}
+                            </span>
+                          </div>
+
+                          <h4 style={{ fontSize: 15, fontWeight: 700, color: '#0f172a', margin: 0, lineHeight: 1.3 }}>
+                            {exam.title}
+                          </h4>
+                          {exam.description && (
+                            <p style={{ fontSize: 12.5, color: '#64748b', margin: 0, lineHeight: 1.4 }}>
+                              {exam.description.length > 100 ? exam.description.slice(0, 100) + '…' : exam.description}
+                            </p>
+                          )}
+
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 14, flexWrap: 'wrap' }}>
+                            <span style={{ fontSize: 12, fontWeight: 500, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Clock size={13} /> {exam.duration_minutes} min
+                            </span>
+                            <span style={{ fontSize: 12, fontWeight: 500, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <FileCheck size={13} /> {exam.question_count} Q{exam.question_count !== 1 ? 's' : ''}
+                            </span>
+                            <span style={{ fontSize: 12, fontWeight: 500, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Award size={13} /> Pass: {exam.pass_threshold}%
+                            </span>
+                            <span style={{ fontSize: 12, fontWeight: 500, color: '#6b7280', display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <Users size={13} /> {exam.attempt_count ?? 0} attempts
+                            </span>
+                          </div>
+
+                          {(exam.available_from || exam.due_at) && (
+                            <div style={{ fontSize: 11.5, color: '#7c3aed', fontWeight: 600, display: 'flex', alignItems: 'center', gap: 4 }}>
+                              <CalendarClock size={13} />
+                              {exam.available_from && `Opens ${new Date(exam.available_from).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                              {exam.available_from && exam.due_at && ' → '}
+                              {exam.due_at && `Due ${new Date(exam.due_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}`}
+                            </div>
+                          )}
+
+                          <div style={{
+                            display: 'flex', gap: 8, paddingTop: 8,
+                            borderTop: '1px solid #f1f5f9',
+                          }}
+                            onClick={(e) => e.stopPropagation()}
+                          >
+                            <button
+                              style={{
+                                flex: 1, padding: '7px 0', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                                border: 'none', cursor: 'pointer',
+                                background: exam.is_published ? '#fee2e2' : '#d1fae5',
+                                color: exam.is_published ? '#dc2626' : '#059669',
+                                display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 4,
+                              }}
+                              onClick={() => toggleExamPublish(exam)}
+                              disabled={busyId === exam.id}
+                            >
+                              {exam.is_published ? <><EyeOff size={13} /> Unpublish</> : <><Eye size={13} /> Publish</>}
+                            </button>
+                            <button
+                              style={{
+                                padding: '7px 14px', borderRadius: 8, fontSize: 12, fontWeight: 700,
+                                border: '1px solid #e2e8f0', background: '#fff', color: '#64748b',
+                                cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 4,
+                              }}
+                              onClick={() => removeExam(exam)}
+                              disabled={busyId === exam.id}
+                            >
+                              <Trash2 size={13} /> Delete
+                            </button>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                )}
+              </div>
+            )}
+
             {/* 4. SUB TAB 2 CONTENT: SETTINGS (SUBJECT EDIT FORM) */}
             {subjectSubTab === 'settings' && (
               <form className={styles.settingsFormCard} onSubmit={saveSubjectSettings}>
@@ -1241,6 +1476,95 @@ export default function ExperimentsPage() {
                     <p className={styles.templateMeta}>Language: {tpl.lang} · Includes Rubrics & Test Cases</p>
                   </div>
                 ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══ MODAL: CREATE EXAM ═══ */}
+        {showCreateExamModal && (
+          <div className={styles.modalOverlay} onClick={() => setShowCreateExamModal(false)}>
+            <div className={styles.modalContent} onClick={e => e.stopPropagation()} style={{ maxWidth: 520 }}>
+              <div className={styles.modalHeader}>
+                <div>
+                  <h3 className={styles.modalTitle}>Create New Exam</h3>
+                  <p style={{ fontSize: 13, color: '#64748b', margin: '2px 0 0 0' }}>
+                    Set up a timed exam for {selectedSubject?.subject_name || 'this subject'}.
+                  </p>
+                </div>
+                <button className={styles.closeBtn} onClick={() => setShowCreateExamModal(false)}><X size={16} /></button>
+              </div>
+
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14, padding: '16px 0' }}>
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Exam Title *</label>
+                  <input
+                    type="text" className={styles.formInput}
+                    placeholder="e.g. Midterm — Data Structures"
+                    value={newExamTitle} onChange={e => setNewExamTitle(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>Description</label>
+                  <textarea
+                    className={styles.formInput} rows={2}
+                    placeholder="Brief instructions for students (optional)"
+                    value={newExamDescription} onChange={e => setNewExamDescription(e.target.value)}
+                  />
+                </div>
+
+                <div className={styles.formRowGrid}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Exam Type</label>
+                    <select className={styles.formInput} value={newExamType} onChange={e => setNewExamType(e.target.value as any)}>
+                      <option value="mcq">MCQ Only</option>
+                      <option value="coding">Coding Only</option>
+                      <option value="mixed">Mixed (MCQ + Coding)</option>
+                    </select>
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Duration (minutes)</label>
+                    <input type="number" className={styles.formInput} value={newExamDuration} onChange={e => setNewExamDuration(e.target.value)} min="5" />
+                  </div>
+                </div>
+
+                <div className={styles.formRowGrid}>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Max Attempts</label>
+                    <input type="number" className={styles.formInput} value={newExamMaxAttempts} onChange={e => setNewExamMaxAttempts(e.target.value)} min="1" />
+                  </div>
+                  <div className={styles.formGroup}>
+                    <label className={styles.formLabel}>Pass Threshold (%)</label>
+                    <input type="number" className={styles.formInput} value={newExamPassThreshold} onChange={e => setNewExamPassThreshold(e.target.value)} min="0" max="100" />
+                  </div>
+                </div>
+
+                <div className={styles.formGroup}>
+                  <label className={styles.formLabel}>
+                    Grade Weight (% contribution to final grade)
+                    <span style={{ fontWeight: 400, color: '#94a3b8', marginLeft: 4 }}>0 = not graded</span>
+                  </label>
+                  <input type="number" className={styles.formInput} value={newExamWeight} onChange={e => setNewExamWeight(e.target.value)} min="0" max="100" step="5" />
+                </div>
+              </div>
+
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 10, borderTop: '1px solid #e2e8f0', paddingTop: 14 }}>
+                <button
+                  style={{ padding: '8px 18px', borderRadius: 8, fontSize: 13, fontWeight: 700, border: '1px solid #e2e8f0', background: '#fff', color: '#64748b', cursor: 'pointer' }}
+                  onClick={() => setShowCreateExamModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  className={styles.saveSettingsBtn}
+                  onClick={handleCreateExam}
+                  disabled={!newExamTitle.trim() || creatingExam}
+                  style={{ opacity: newExamTitle.trim() ? 1 : 0.5 }}
+                >
+                  {creatingExam ? 'Creating…' : <><Plus size={15} /> Create Exam</>}
+                </button>
               </div>
             </div>
           </div>

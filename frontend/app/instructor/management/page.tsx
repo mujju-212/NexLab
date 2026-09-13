@@ -40,10 +40,23 @@ function cellColor(v: number | null, threshold: number) {
   return { background: '#16a34a', color: '#fff' };
 }
 
+interface RosterStudent {
+  student_id: string;
+  full_name: string;
+  roll_number: string | null;
+}
+
 export default function ManagementPage() {
   const [tab, setTab] = useState<Tab>('interventions');
   const [toast, setToast] = useState<string | null>(null);
+  const [roster, setRoster] = useState<RosterStudent[]>([]);
   const toast3 = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3200); };
+
+  useEffect(() => {
+    experienceService.analyticsRoster()
+      .then(res => setRoster(res.roster ?? []))
+      .catch(() => {});
+  }, []);
 
   return (
     <InstructorShell activePage="Management" title="Student Management"
@@ -66,19 +79,19 @@ export default function ManagementPage() {
         ))}
       </div>
 
-      {tab === 'interventions' && <InterventionsTab toast3={toast3} />}
+      {tab === 'interventions' && <InterventionsTab toast3={toast3} roster={roster} />}
       {tab === 'heatmap' && <HeatmapTab />}
       {tab === 'insights' && <InsightsTab toast3={toast3} />}
       {tab === 'announcements' && <AnnouncementsTab toast3={toast3} />}
-      {tab === 'extensions' && <ExtensionsTab toast3={toast3} />}
-      {tab === 'notes' && <NotesTab toast3={toast3} />}
+      {tab === 'extensions' && <ExtensionsTab toast3={toast3} roster={roster} />}
+      {tab === 'notes' && <NotesTab toast3={toast3} roster={roster} />}
     </InstructorShell>
   );
 }
 
 // ═══════════════════════ F1 — Interventions ═══════════════════════
 
-function InterventionsTab({ toast3 }: { toast3: (m: string) => void }) {
+function InterventionsTab({ toast3, roster }: { toast3: (m: string) => void; roster: RosterStudent[] }) {
   const [rows, setRows] = useState<InterventionRow[]>([]);
   const [students, setStudents] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<'open' | 'resolved' | 'all'>('open');
@@ -144,12 +157,21 @@ function InterventionsTab({ toast3 }: { toast3: (m: string) => void }) {
     } catch { toast3('Failed to save outcome.'); }
   };
 
-  // Build student id options from any known rows; if empty, show names list
+  // Build student id options from roster or known rows
   const studentOptions = useMemo(() => {
     const seen = new Map<string, string>();
-    rows.forEach(r => seen.set(r.student_id, r.student_name ?? 'Student'));
+    roster.forEach(r => seen.set(r.student_id, `${r.full_name} (${r.roll_number || 'No Roll'})`));
+    rows.forEach(r => {
+      if (!seen.has(r.student_id)) seen.set(r.student_id, r.student_name ?? 'Student');
+    });
     return Array.from(seen.entries());
-  }, [rows]);
+  }, [rows, roster]);
+
+  useEffect(() => {
+    if (!studentId && studentOptions.length > 0) {
+      setStudentId(studentOptions[0][0]);
+    }
+  }, [studentOptions, studentId]);
 
   return (
     <>
@@ -172,7 +194,7 @@ function InterventionsTab({ toast3 }: { toast3: (m: string) => void }) {
           <p className={styles.sectionTitle} style={{ marginBottom: 12 }}>New intervention</p>
           {studentOptions.length === 0 ? (
             <p style={{ fontSize: 13, color: '#b45309' }}>
-              Students appear here once they show up in your attention/at-risk list — record your first intervention from a flagged student.
+              No enrolled students found.
             </p>
           ) : (
             <>
@@ -180,7 +202,6 @@ function InterventionsTab({ toast3 }: { toast3: (m: string) => void }) {
                 <div className={styles.formGroup}>
                   <label className={styles.formLabel}>Student</label>
                   <select className={styles.select} value={studentId} onChange={e => setStudentId(e.target.value)}>
-                    <option value="">Select student…</option>
                     {studentOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
                   </select>
                 </div>
@@ -410,11 +431,17 @@ function InsightsTab({ toast3 }: { toast3: (m: string) => void }) {
 
 // ═══════════════════════ T3-14 — Private notes ═══════════════════════
 
-function NotesTab({ toast3 }: { toast3: (m: string) => void }) {
+function NotesTab({ toast3, roster }: { toast3: (m: string) => void; roster: RosterStudent[] }) {
   const [studentId, setStudentId] = useState('');
   const [note, setNote] = useState('');
   const [rows, setRows] = useState<import('@/services/experience.service').TeacherNoteRow[]>([]);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (!studentId && roster.length > 0) {
+      setStudentId(roster[0].student_id);
+    }
+  }, [roster, studentId]);
 
   const load = useCallback(async (id: string) => {
     if (!id) { setRows([]); return; }
@@ -424,8 +451,12 @@ function NotesTab({ toast3 }: { toast3: (m: string) => void }) {
     finally { setLoading(false); }
   }, []);
 
+  useEffect(() => {
+    if (studentId) load(studentId);
+  }, [studentId, load]);
+
   const add = async () => {
-    if (!studentId || !note.trim()) { toast3('Enter a student ID and a note.'); return; }
+    if (!studentId || !note.trim()) { toast3('Select a student and enter a note.'); return; }
     try {
       await experienceService.addNote(studentId.trim(), note.trim());
       setNote('');
@@ -448,9 +479,19 @@ function NotesTab({ toast3 }: { toast3: (m: string) => void }) {
         Only you can see these — visible to no other teacher, admin or student.
       </p>
       <div className={styles.formGroup}>
-        <label className={styles.formLabel}>Student ID</label>
-        <input className={styles.input} value={studentId} onChange={e => setStudentId(e.target.value)}
-          placeholder="Student ID (from Students page)" />
+        <label className={styles.formLabel}>Student</label>
+        {roster.length > 0 ? (
+          <select className={styles.select} value={studentId} onChange={e => setStudentId(e.target.value)}>
+            {roster.map(s => (
+              <option key={s.student_id} value={s.student_id}>
+                {s.full_name} ({s.roll_number || 'No Roll'})
+              </option>
+            ))}
+          </select>
+        ) : (
+          <input className={styles.input} value={studentId} onChange={e => setStudentId(e.target.value)}
+            placeholder="Student ID (from Students page)" />
+        )}
       </div>
       <div className={styles.formGroup}>
         <label className={styles.formLabel}>Note</label>
@@ -583,15 +624,27 @@ function HeatmapTab() {
 
 function AnnouncementsTab({ toast3 }: { toast3: (m: string) => void }) {
   const [recipients, setRecipients] = useState<Array<{ section_subject_id: string; subject_name: string; section_name: string; student_count: number }>>([]);
+  const [instructorNotices, setInstructorNotices] = useState<any[]>([]);
   const [target, setTarget] = useState('');
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
+  const [priority, setPriority] = useState<'normal' | 'important' | 'urgent'>('normal');
   const [sending, setSending] = useState(false);
+  const [loading, setLoading] = useState(false);
+
+  const loadNotices = () => {
+    setLoading(true);
+    experienceService.listInstructorAnnouncements()
+      .then(res => setInstructorNotices(res.announcements))
+      .catch(() => {})
+      .finally(() => setLoading(false));
+  };
 
   useEffect(() => {
     experienceService.announcementRecipients()
       .then(r => setRecipients(r.recipients))
       .catch(() => {});
+    loadNotices();
   }, []);
 
   const send = async () => {
@@ -601,55 +654,137 @@ function AnnouncementsTab({ toast3 }: { toast3: (m: string) => void }) {
       const res = await experienceService.instructorAnnounce({ section_subject_id: target, title, message });
       toast3(`Announcement sent to ${res.sent_to} students.`);
       setTitle(''); setMessage('');
+      loadNotices();
     } catch (e: unknown) {
       toast3((e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Send failed.');
     } finally { setSending(false); }
   };
 
+  const markRead = async (id: string) => {
+    try {
+      await experienceService.markInstructorAnnouncementRead(id);
+      setInstructorNotices(prev => prev.map(a => a.id === id ? { ...a, is_read: true } : a));
+    } catch {}
+  };
+
+  const toggleLike = async (id: string) => {
+    try {
+      const res = await experienceService.toggleInstructorAnnouncementLike(id);
+      setInstructorNotices(prev => prev.map(a => a.id === id ? { ...a, is_liked: res.liked, likes_count: res.likes_count } : a));
+    } catch {}
+  };
+
   return (
-    <div className={styles.sectionCard}>
-      <p className={styles.sectionTitle} style={{ marginBottom: 4 }}>Announce to one of your sections</p>
-      <p className={styles.sectionSub} style={{ marginBottom: 14 }}>
-        Reaches only students enrolled in the selected class — narrower than admin announcements by design.
-      </p>
-      <div className={styles.formGroup}>
-        <label className={styles.formLabel}>Class</label>
-        <select className={styles.select} value={target} onChange={e => setTarget(e.target.value)}>
-          <option value="">Select class…</option>
-          {recipients.map(r => (
-            <option key={r.section_subject_id} value={r.section_subject_id}>
-              {r.subject_name} — Section {r.section_name} · {r.student_count} students
-            </option>
-          ))}
-        </select>
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
+      {/* Compose Card */}
+      <div className={styles.sectionCard}>
+        <p className={styles.sectionTitle} style={{ marginBottom: 4 }}>Announce to one of your sections</p>
+        <p className={styles.sectionSub} style={{ marginBottom: 14 }}>
+          Reaches only students enrolled in the selected class — narrower than admin announcements by design.
+        </p>
+        <div className={styles.formGroup}>
+          <label className={styles.formLabel}>Class</label>
+          <select className={styles.select} value={target} onChange={e => setTarget(e.target.value)}>
+            <option value="">Select class…</option>
+            {recipients.map(r => (
+              <option key={r.section_subject_id} value={r.section_subject_id}>
+                {r.subject_name} — Section {r.section_name} · {r.student_count} students
+              </option>
+            ))}
+          </select>
+        </div>
+        <div className={styles.formGroup}>
+          <label className={styles.formLabel}>Title</label>
+          <input className={styles.input} value={title} onChange={e => setTitle(e.target.value)}
+            placeholder="Lab moved to Thursday" maxLength={200} />
+        </div>
+        <div className={styles.formGroup}>
+          <label className={styles.formLabel}>Message</label>
+          <textarea className={styles.textarea} rows={3} value={message} onChange={e => setMessage(e.target.value)}
+            placeholder="Write your announcement…" />
+        </div>
+        <button className={styles.primaryBtn} onClick={send} disabled={sending || !target}>
+          <Send size={13} /> {sending ? 'Sending…' : 'Send Announcement'}
+        </button>
       </div>
-      <div className={styles.formGroup}>
-        <label className={styles.formLabel}>Title</label>
-        <input className={styles.input} value={title} onChange={e => setTitle(e.target.value)}
-          placeholder="Lab moved to Thursday" maxLength={200} />
+
+      {/* Institutional & Section Announcements Feed */}
+      <div className={styles.sectionCard}>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
+          <div>
+            <p className={styles.sectionTitle} style={{ margin: 0 }}>Campus Notices & Broadcasts</p>
+            <p className={styles.sectionSub} style={{ margin: '2px 0 0' }}>
+              Institutional announcements and messages sent to faculty.
+            </p>
+          </div>
+          <button
+            className={styles.ghostBtn}
+            onClick={loadNotices}
+            title="Refresh"
+            style={{ padding: '6px 10px', fontSize: 12 }}
+          >
+            Refresh
+          </button>
+        </div>
+
+        {instructorNotices.length === 0 ? (
+          <p className={styles.sectionSub}>No announcements found.</p>
+        ) : (
+          <div className={styles.list}>
+            {instructorNotices.map(a => (
+              <div key={a.id} className={styles.listRow} style={{ borderLeft: a.priority === 'urgent' ? '3px solid #dc2626' : a.priority === 'important' ? '3px solid #f59e0b' : '3px solid transparent' }}>
+                <div className={styles.rowBody}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                    <p className={styles.rowTitle}>{a.title}</p>
+                    {a.priority !== 'normal' && (
+                      <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: a.priority === 'urgent' ? '#fee2e2' : '#fef3c7', color: a.priority === 'urgent' ? '#dc2626' : '#d97706' }}>
+                        {a.priority}
+                      </span>
+                    )}
+                    <span style={{ fontSize: 11, color: '#9891a6' }}>• {a.author_name || 'Admin'}</span>
+                  </div>
+                  <p className={styles.rowMeta} style={{ margin: '4px 0', fontSize: 12.5, color: '#4b5563' }}>{a.message}</p>
+                  <p className={styles.rowSub} style={{ fontSize: 11, color: '#9ca3af' }}>
+                    {new Date(a.sent_at || a.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
+                    {a.reach_count > 0 && ` · Reached: ${a.reach_count} users · Views: ${a.views_count}`}
+                  </p>
+                </div>
+                <div className={styles.rowSide} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                  <button
+                    className={styles.ghostBtn}
+                    onClick={() => toggleLike(a.id)}
+                    style={{ fontSize: 11, color: a.is_liked ? '#dc2626' : '#6b7280' }}
+                  >
+                    ❤️ {a.likes_count || 0}
+                  </button>
+                  <button
+                    className={styles.ghostBtn}
+                    onClick={() => markRead(a.id)}
+                    style={{ fontSize: 11, color: a.is_read ? '#059669' : '#6b7280' }}
+                  >
+                    {a.is_read ? '✓ Read' : 'Mark Read'}
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        )}
       </div>
-      <div className={styles.formGroup}>
-        <label className={styles.formLabel}>Message</label>
-        <textarea className={styles.textarea} rows={4} value={message} onChange={e => setMessage(e.target.value)}
-          placeholder="Write your announcement…" />
-      </div>
-      <button className={styles.primaryBtn} onClick={send} disabled={sending || !target}>
-        <Send size={13} /> {sending ? 'Sending…' : 'Send Announcement'}
-      </button>
     </div>
   );
 }
 
+
 // ═══════════════════════ F4 — Extensions ═══════════════════════
 
-function ExtensionsTab({ toast3 }: { toast3: (m: string) => void }) {
+function ExtensionsTab({ toast3, roster }: { toast3: (m: string) => void; roster: RosterStudent[] }) {
   const [experiments, setExperiments] = useState<Array<{ id: string; title: string }>>([]);
   const [expId, setExpId] = useState('');
   const [rows, setRows] = useState<ExtensionRow[]>([]);
   const [loading, setLoading] = useState(false);
 
   // grant form
-  const [studentName, setStudentName] = useState('');
+  const [studentId, setStudentId] = useState('');
   const [until, setUntil] = useState('');
   const [reason, setReason] = useState('');
   const [excused, setExcused] = useState(false);
@@ -657,9 +792,19 @@ function ExtensionsTab({ toast3 }: { toast3: (m: string) => void }) {
 
   useEffect(() => {
     import('@/services/experiment.service').then(({ experimentService }) =>
-      experimentService.listMine().then(e => setExperiments(e as Array<{ id: string; title: string }>))
-        .catch(() => {}));
+      experimentService.listMine().then(e => {
+        const list = e as Array<{ id: string; title: string }>;
+        setExperiments(list);
+        if (list.length > 0) setExpId(list[0].id);
+      })
+    ).catch(() => {});
   }, []);
+
+  useEffect(() => {
+    if (!studentId && roster.length > 0) {
+      setStudentId(roster[0].student_id);
+    }
+  }, [roster, studentId]);
 
   const load = useCallback(async (id: string) => {
     if (!id) { setRows([]); return; }
@@ -671,20 +816,20 @@ function ExtensionsTab({ toast3 }: { toast3: (m: string) => void }) {
   useEffect(() => { load(expId); }, [expId, load]);
 
   const grant = async () => {
-    if (!expId || !studentName.trim() || !until) {
+    if (!expId || !studentId.trim() || !until) {
       toast3('Pick an experiment, student and date.'); return;
     }
     setGranting(true);
     try {
       await experienceService.grantExtension({
         experiment_id: expId,
-        student_id: studentName.trim(),   // id chosen below via student list if available
+        student_id: studentId.trim(),
         extension_until: new Date(until).toISOString(),
         reason: reason || undefined,
         excused,
       });
       toast3('Extension granted — the student was notified.');
-      setReason(''); setStudentName(''); setUntil(''); setExcused(false);
+      setReason(''); setUntil(''); setExcused(false);
       load(expId);
     } catch (e: unknown) {
       toast3((e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Failed to grant.');
@@ -713,9 +858,19 @@ function ExtensionsTab({ toast3 }: { toast3: (m: string) => void }) {
             </select>
           </div>
           <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Student ID</label>
-            <input className={styles.input} value={studentName} onChange={e => setStudentName(e.target.value)}
-              placeholder="Student ID (from Students page)" />
+            <label className={styles.formLabel}>Student</label>
+            {roster.length > 0 ? (
+              <select className={styles.select} value={studentId} onChange={e => setStudentId(e.target.value)}>
+                {roster.map(s => (
+                  <option key={s.student_id} value={s.student_id}>
+                    {s.full_name} ({s.roll_number || 'No Roll'})
+                  </option>
+                ))}
+              </select>
+            ) : (
+              <input className={styles.input} value={studentId} onChange={e => setStudentId(e.target.value)}
+                placeholder="Student ID (from Students page)" />
+            )}
           </div>
         </div>
         <div className={styles.gridTwo}>

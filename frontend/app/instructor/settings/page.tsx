@@ -35,8 +35,33 @@ const RUBRIC_FIELDS = [
   { key: 'quiz',         label: 'Quiz (%)' },
 ];
 
+const DEFAULT_SETTINGS: SettingsShape = {
+  default_proctor_policy: {
+    lockdown_fullscreen: true,
+    block_copy_paste: true,
+    block_tab_switch: true,
+    plagiarism_scan: true,
+    focus_ml: false,
+    webcam_required: false,
+  },
+  default_rubric: {
+    test_cases: 60,
+    lab_report: 20,
+    code_quality: 10,
+    viva: 10,
+    quiz: 0,
+  },
+  default_session_duration_min: 90,
+  default_late_join_window_min: 10,
+  default_gate_threshold: 70,
+  allow_ai_hints: true,
+  at_risk_avg_threshold: 40,
+  at_risk_min_threshold: 20,
+  notification_prefs: ['integrity_spike', 'submission_ready'],
+};
+
 export default function InstructorSettingsPage() {
-  const [settings, setSettings] = useState<SettingsShape | null>(null);
+  const [settings, setSettings] = useState<SettingsShape>(DEFAULT_SETTINGS);
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -44,26 +69,44 @@ export default function InstructorSettingsPage() {
   const load = useCallback(async () => {
     try {
       const s = await experienceService.getSettings();
-      setSettings(s as unknown as SettingsShape);
-    } catch { /* keep defaults */ }
-    finally { setLoading(false); }
+      if (s) {
+        setSettings((prev) => ({
+          ...DEFAULT_SETTINGS,
+          ...(s as unknown as Partial<SettingsShape>),
+          default_proctor_policy: {
+            ...DEFAULT_SETTINGS.default_proctor_policy,
+            ...((s as any)?.default_proctor_policy || {}),
+          },
+          default_rubric: {
+            ...DEFAULT_SETTINGS.default_rubric,
+            ...((s as any)?.default_rubric || {}),
+          },
+        }));
+      }
+    } catch {
+      /* keep defaults */
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
   useEffect(() => { load(); }, [load]);
 
   const save = async () => {
-    if (!settings) return;
     setSaving(true);
     try {
       const updated = await experienceService.patchSettings(settings as unknown as Record<string, unknown>);
-      setSettings(updated as unknown as SettingsShape);
+      if (updated) {
+        setSettings(prev => ({ ...prev, ...(updated as unknown as Partial<SettingsShape>) }));
+      }
       setNotice('Settings saved. New experiments & sessions will use these defaults.');
       setTimeout(() => setNotice(null), 4000);
     } catch (e: any) {
       setNotice(e?.response?.data?.error || 'Failed to save.');
       setTimeout(() => setNotice(null), 4000);
+    } finally {
+      setSaving(false);
     }
-    finally { setSaving(false); }
   };
 
   if (loading) {
@@ -76,10 +119,8 @@ export default function InstructorSettingsPage() {
     );
   }
 
-  if (!settings) return null;
-
   const set = (field: string, value: unknown) =>
-    setSettings(prev => prev ? { ...prev, [field]: value } : prev);
+    setSettings(prev => ({ ...prev, [field]: value }));
 
   const setProctor = (key: string, value: boolean) =>
     setSettings(prev => prev ? {

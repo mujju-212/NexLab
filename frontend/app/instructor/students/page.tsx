@@ -71,7 +71,11 @@ export default function StudentsPage() {
     (async () => {
       try {
         const res = await sessionService.list();
-        setSessions(res.sessions ?? []);
+        const list = res.sessions ?? [];
+        setSessions(list);
+        if (list.length > 0 && !sessionId) {
+          setSessionId(list[0].id);
+        }
       } catch (err) {
         toast3(errText(err));
       }
