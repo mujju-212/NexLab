@@ -175,10 +175,9 @@ def _send_session_reminders():
                 for enrollment in students:
                     notif = Notification(
                         user_id=enrollment.student_id,
-                        institution_id=institution_id,
-                        notif_type='session_reminder',
+                        type='session_reminder',
                         title=f'Lab Session in {label}',
-                        body=f'Your lab session starts in {label}. Complete pre-lab if not done.'
+                        message=f'Your lab session starts in {label}. Complete pre-lab if not done.'
                     )
                     db.session.add(notif)
         db.session.commit()

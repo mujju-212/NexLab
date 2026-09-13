@@ -313,7 +313,7 @@ def trends():
     present_counts = dict(
         db.session.query(
             SessionAttendance.session_id,
-            db.func.count(SessionAttendance.id),
+            db.func.count(SessionAttendance.student_id),
         ).filter(
             SessionAttendance.session_id.in_(session_ids),
             SessionAttendance.status == 'present',
@@ -662,7 +662,7 @@ def ai_usage_analytics():
     by_feature = defaultdict(int)
 
     # Student-level aggregates from SQL
-    student_agg = dict(db.session.query(
+    student_query_rows = db.session.query(
         AIUsageLog.user_id,
         db.func.coalesce(db.func.sum(AIUsageLog.total_tokens), 0),
         db.func.coalesce(db.func.sum(AIUsageLog.estimated_cost_usd), 0.0),
@@ -671,7 +671,8 @@ def ai_usage_analytics():
         AIUsageLog.institution_id == g.institution_id,
         AIUsageLog.created_at >= start,
         AIUsageLog.created_at <= end,
-    ).group_by(AIUsageLog.user_id).all()) if logs else {}
+    ).group_by(AIUsageLog.user_id).all() if logs else []
+    student_agg = {r[0]: (r[1], r[2], r[3]) for r in student_query_rows}
 
     # Feature breakdown per student
     feature_agg = defaultdict(lambda: defaultdict(int))

@@ -16,7 +16,7 @@ from flask import Blueprint, request, jsonify, g
 from app.auth.utils import require_role
 from app.extensions import db, socketio
 from app.models.session import LabSession, SessionAttendance
-from app.models.experiment import Experiment, ContentPage, ContentModule
+from app.models.experiment import Experiment, ContentPage, ContentModule, ContentProgress
 from app.models.conductor import (
     Checkpoint, CheckpointProgress, LivePageState, ProctorPolicy,
     SessionModeTransition, ChatMessage,
@@ -24,8 +24,14 @@ from app.models.conductor import (
 from app.models.submission import CodeAttempt, CodeVersion
 from app.models.academic import SectionSubject, SectionStudent
 from app.models.user import User
+from app.models.knowledge import FocusScore
+from app.models.grading import Grade
+from app.models.proctor_event import ProctorEvent
+from collections import defaultdict
 from datetime import datetime, timedelta
 import uuid
+import threading
+import logging
 
 conductor_bp = Blueprint('instructor_conductor', __name__)
 
@@ -228,9 +234,8 @@ def live_state(session_id):
     chat_rows = ChatMessage.query.filter_by(session_id=session_id).order_by(
         ChatMessage.at.desc()).limit(100).all()
     chat = [c.to_dict() for c in reversed(chat_rows)]
-    from app.models.user import User as _U
     chat_user_ids = {c['from_id'] for c in chat} | {c['to_id'] for c in chat if c['to_id']}
-    chat_users = {u.id: u.full_name for u in _U.query.filter(_U.id.in_(chat_user_ids)).all()}
+    chat_users = {u.id: u.full_name for u in User.query.filter(User.id.in_(chat_user_ids)).all()}
     for c in chat:
         c['from_name'] = chat_users.get(c['from_id'], '')
         c['to_name'] = chat_users.get(c['to_id'], '')
@@ -487,8 +492,7 @@ def broadcast(session_id):
     db.session.add(chat)
     db.session.commit()
 
-    from app.models.user import User as _U
-    instr = _U.query.get(g.user_id)
+    instr = User.query.get(g.user_id)
     sender_name = instr.full_name if instr else 'Instructor'
 
     socketio.emit('instructor_message', {
@@ -570,8 +574,7 @@ def get_chat(session_id):
             user_ids.add(c.from_id)
         if c.to_id:
             user_ids.add(c.to_id)
-    from app.models.user import User as _U
-    users = _U.query.filter(_U.id.in_(list(user_ids))).all() if user_ids else []
+    users = User.query.filter(User.id.in_(list(user_ids))).all() if user_ids else []
     name_map = {u.id: u.full_name for u in users}
     res = []
     for c in rows:
@@ -628,12 +631,11 @@ def send_chat(session_id):
     db.session.commit()
 
     payload = chat.to_dict()
-    from app.models.user import User as _U
-    sender = _U.query.get(g.user_id)
+    sender = User.query.get(g.user_id)
     payload['from_name'] = sender.full_name if sender else ''
     # Include the recipient's name for 1:1 DMs so the UI can label the thread.
     if to_id:
-        recipient = _U.query.get(to_id)
+        recipient = User.query.get(to_id)
         payload['to_name'] = recipient.full_name if recipient else ''
 
     if not to_id:
@@ -1007,8 +1009,6 @@ def _spawn_finalize_worker(session_id):
     """D3 — on session end, grade finalization runs in the background so the
     HTTP response returns immediately. Separate app context, like the report
     worker; failures are logged, never raised into the request."""
-    import threading
-
     def _worker():
         from app import create_app
         worker_app = create_app()
@@ -1019,7 +1019,6 @@ def _spawn_finalize_worker(session_id):
                     _finalize_grades_core(sess)
             except Exception as exc:
                 db.session.rollback()
-                import logging
                 logging.getLogger(__name__).warning(
                     '[conductor] auto-finalize failed for session %s: %s',
                     session_id, exc)
