@@ -40,6 +40,9 @@ class Exam(db.Model):
     pass_threshold    = db.Column(db.Integer, default=40)         # % to pass
     shuffle_questions = db.Column(db.Boolean, default=True)
     is_published      = db.Column(db.Boolean, default=False)
+    # Contribution to the student's final grade (0.0–1.0 = 0–100%).
+    # e.g. 0.3 means this exam counts as 30% of the overall grade.
+    grade_weight      = db.Column(db.Float, default=0.0)
 
     created_at        = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at        = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
@@ -77,6 +80,7 @@ class Exam(db.Model):
             'pass_threshold': self.pass_threshold,
             'shuffle_questions': bool(self.shuffle_questions),
             'is_published': bool(self.is_published),
+            'grade_weight': float(self.grade_weight or 0.0),
             'window_state': self.window_state(),
             'question_count': self.questions.count(),
             'created_at': _iso_z(self.created_at),

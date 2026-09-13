@@ -105,6 +105,7 @@ def create_exam():
         pass_threshold=int(data.get('pass_threshold') if data.get('pass_threshold') is not None else 40),
         shuffle_questions=bool(data.get('shuffle_questions', True)),
         is_published=False,
+        grade_weight=max(0.0, min(1.0, float(data.get('grade_weight') or 0))),
     )
     try:
         exam.available_from = _parse_dt(data.get('available_from'))
@@ -152,6 +153,8 @@ def update_exam(exam_id):
     for f in bool_fields:
         if f in data:
             setattr(exam, f, bool(data[f]))
+    if 'grade_weight' in data and data['grade_weight'] is not None:
+        exam.grade_weight = max(0.0, min(1.0, float(data['grade_weight'])))
     for f in ('available_from', 'due_at'):
         if f in data:
             try:
