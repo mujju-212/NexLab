@@ -902,3 +902,458 @@ def agent_apply(run_id):
         'target':  payload.get('target'),
         'run_id':  run_id,
     }), 200
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+def _generate_smart_fallback_title(prompt: str) -> str:
+    """Generate a clean 3-5 word title from the user prompt by removing conversational boilerplate."""
+    cleaned = (prompt or '').strip().rstrip('?.!')
+    prefixes = [
+        'give me a markdown table of ', 'give me a markdown table comparing ', 'give me a markdown table on ',
+        'give me a table of ', 'give me a table comparing ', 'give me a ', 'give me ',
+        'compare ', 'comparison between ', 'comparison of ',
+        'what are the ', 'what is the ', 'what lab sessions are ', 'what are ', 'what is ',
+        'which students are at risk or ', 'which students are at risk ', 'which students are ',
+        'can you give me ', 'can you show me ', 'can you tell me ', 'can you ',
+        'please provide ', 'please show ', 'please give ', 'please ',
+        'show me ', 'tell me about ', 'tell me ', 'who consumed the most '
+    ]
+    lower = cleaned.lower()
+    for p in prefixes:
+        if lower.startswith(p):
+            cleaned = cleaned[len(p):].strip()
+            break
+    words = [w for w in cleaned.split() if w]
+    if not words:
+        words = [w for w in prompt.split() if w]
+    return ' '.join(words[:4]).title()
+
+
+@ai_bp.route('/chat/sessions', methods=['GET'])
+@require_auth
+@require_role('institution_admin')
+def list_chat_sessions():
+    """List all AI chat sessions for this admin, pinned threads first, then newest."""
+    from app.models.admin_copilot import AdminChatSession
+    sessions = AdminChatSession.query.filter_by(
+        institution_id=g.institution_id,
+        user_id=g.user_id,
+    ).order_by(AdminChatSession.is_pinned.desc(), AdminChatSession.updated_at.desc()).all()
+    return jsonify({'sessions': [s.to_dict() for s in sessions]}), 200
+
+
+@ai_bp.route('/chat/sessions', methods=['POST'])
+@require_auth
+@require_role('institution_admin')
+def create_chat_session():
+    """Create a new chat conversation thread."""
+    from app.models.admin_copilot import AdminChatSession
+    data = request.get_json(silent=True) or {}
+    title = (data.get('title') or '').strip() or 'New Conversation'
+    mode = data.get('mode') or 'chat'
+
+    session = AdminChatSession(
+        institution_id=g.institution_id,
+        user_id=g.user_id,
+        title=title,
+        mode=mode,
+    )
+    db.session.add(session)
+    db.session.commit()
+    return jsonify({'session': session.to_dict(include_last_message=False)}), 201
+
+
+@ai_bp.route('/chat/sessions/<session_id>', methods=['GET'])
+@require_auth
+@require_role('institution_admin')
+def get_chat_session(session_id):
+    """Get full message history for a specific chat thread."""
+    from app.models.admin_copilot import AdminChatSession, AdminChatMessage
+    session = AdminChatSession.query.filter_by(
+        id=session_id,
+        institution_id=g.institution_id,
+        user_id=g.user_id,
+    ).first()
+    if not session:
+        return jsonify({'error': 'Session not found'}), 404
+
+    messages = session.messages.order_by(AdminChatMessage.created_at.asc()).all()
+    return jsonify({
+        'session': session.to_dict(),
+        'messages': [m.to_dict() for m in messages],
+    }), 200
+
+
+@ai_bp.route('/chat/sessions/<session_id>', methods=['PATCH'])
+@require_auth
+@require_role('institution_admin')
+def update_chat_session(session_id):
+    """Rename or pin/unpin a chat session."""
+    from app.models.admin_copilot import AdminChatSession
+    session = AdminChatSession.query.filter_by(
+        id=session_id,
+        institution_id=g.institution_id,
+        user_id=g.user_id,
+    ).first()
+    if not session:
+        return jsonify({'error': 'Session not found'}), 404
+
+    data = request.get_json(silent=True) or {}
+    if 'title' in data:
+        session.title = (data['title'] or '').strip()[:255] or session.title
+    if 'is_pinned' in data:
+        session.is_pinned = bool(data['is_pinned'])
+    session.updated_at = datetime.utcnow()
+    db.session.commit()
+    return jsonify({'session': session.to_dict()}), 200
+
+
+@ai_bp.route('/chat/sessions/<session_id>', methods=['DELETE'])
+@require_auth
+@require_role('institution_admin')
+def delete_chat_session(session_id):
+    """Delete a chat session and all its messages."""
+    from app.models.admin_copilot import AdminChatSession
+    session = AdminChatSession.query.filter_by(
+        id=session_id,
+        institution_id=g.institution_id,
+        user_id=g.user_id,
+    ).first()
+    if not session:
+        return jsonify({'error': 'Session not found'}), 404
+
+    db.session.delete(session)
+    db.session.commit()
+    return jsonify({'success': True, 'deleted_id': session_id}), 200
+
+
+@ai_bp.route('/chat/message', methods=['POST'])
+@require_auth
+@require_role('institution_admin')
+@limiter.limit("15 per minute")
+def send_chat_message():
+    """
+    Unified AI Copilot messaging endpoint.
+    Accepts:
+      - session_id: optional (creates new if missing)
+      - prompt: string (required)
+      - mode: 'chat' | 'agent' (default 'chat')
+      - doc_id: optional string (target PDF for RAG)
+      - web_search: optional bool
+    """
+    import json
+    from app.models.admin_copilot import AdminChatSession, AdminChatMessage
+    from app.ai.agent import run_copilot, AIDisabled as AgentAIDisabled, AIQuotaExceeded as AgentQuotaExceeded
+    from app.models.ai_usage import AIAgentRun
+
+    data = request.get_json(silent=True) or {}
+    prompt = (data.get('prompt') or '').strip()
+    mode = data.get('mode') or 'chat'
+    doc_id = data.get('doc_id')
+    web_search = bool(data.get('web_search', False))
+    session_id = data.get('session_id')
+
+    if not prompt:
+        return jsonify({'error': 'prompt is required'}), 400
+    if len(prompt) > 3000:
+        return jsonify({'error': 'prompt must be 3000 characters or fewer'}), 400
+
+    # Ensure session exists
+    session = None
+    if session_id:
+        session = AdminChatSession.query.filter_by(
+            id=session_id,
+            institution_id=g.institution_id,
+            user_id=g.user_id,
+        ).first()
+
+    if not session:
+        # Generate initial clean smart title from prompt
+        title = _generate_smart_fallback_title(prompt)
+        session = AdminChatSession(
+            institution_id=g.institution_id,
+            user_id=g.user_id,
+            title=title or 'New Chat',
+            mode=mode,
+        )
+        db.session.add(session)
+        db.session.flush()
+
+    # Record User Message
+    user_msg = AdminChatMessage(
+        session_id=session.id,
+        role='user',
+        content=prompt,
+        mode=mode,
+    )
+    db.session.add(user_msg)
+
+    # Fetch recent history for multi-turn context
+    recent_msgs = session.messages.order_by(AdminChatMessage.created_at.desc()).limit(6).all()
+    history = [{'role': m.role, 'content': m.content} for m in reversed(recent_msgs)]
+
+    try:
+        copilot_result = run_copilot(
+            prompt=prompt,
+            institution_id=g.institution_id,
+            user_id=g.user_id,
+            role=g.role,
+            mode=mode,
+            doc_id=doc_id,
+            web_search_enabled=web_search,
+            chat_history=history,
+        )
+    except AgentAIDisabled as e:
+        return jsonify({'error': str(e.reason)}), 403
+    except AgentQuotaExceeded as e:
+        return jsonify({'error': e.reason}), 429
+
+    # Record Assistant Message
+    assistant_msg = AdminChatMessage(
+        session_id=session.id,
+        role='assistant',
+        content=copilot_result.get('answer', ''),
+        mode=mode,
+        tool_calls=copilot_result.get('tool_calls', []),
+        pending_action=copilot_result.get('pending_action'),
+        sources=copilot_result.get('sources', []),
+        total_tokens=copilot_result.get('total_tokens', 0),
+    )
+    db.session.add(assistant_msg)
+
+    # Also log to AIAgentRun for centralized platform analytics
+    run_row = AIAgentRun(
+        institution_id=g.institution_id,
+        user_id=g.user_id,
+        prompt=prompt,
+        tool_calls=json.dumps(copilot_result.get('tool_calls', []), default=str),
+        result=copilot_result.get('answer', ''),
+        total_tokens=copilot_result.get('total_tokens', 0),
+        status=copilot_result.get('status', 'completed'),
+    )
+    db.session.add(run_row)
+
+    # Update session touch timestamp and mode
+    session.updated_at = datetime.utcnow()
+    session.mode = mode
+
+    # Smart title: generate a concise 3-5 word title after the first exchange
+    msg_count = session.messages.count()
+    needs_smart_title = (
+        msg_count <= 2 or
+        session.title.endswith('...') or
+        session.title in ('New Chat', 'New Conversation')
+    )
+    if needs_smart_title:
+        ai_title_applied = False
+        try:
+            from app.ai.gate import guarded_ai_call
+            title_text, _, is_fb, _ = guarded_ai_call(
+                'agent',
+                institution_id=g.institution_id,
+                user_id=g.user_id,
+                role=g.role,
+                messages=[
+                    {'role': 'system', 'content': 'Generate a concise 3 to 5 word title summarizing this user request. Reply ONLY with the title. Do not include quotes, punctuation at the end, or prefix.'},
+                    {'role': 'user', 'content': f"User prompt: {prompt[:250]}"},
+                ],
+                pool='fast',
+                max_tokens=25,
+                temperature=0.3,
+            )
+            if title_text and not is_fb:
+                cleaned = title_text.strip().strip('"\'`').rstrip('.?!')
+                if 2 < len(cleaned) <= 80 and not cleaned.lower().startswith('title:'):
+                    session.title = cleaned
+                    ai_title_applied = True
+        except Exception as e:
+            current_app.logger.warning(f"Smart title generation error: {e}")
+
+        if not ai_title_applied:
+            smart_fallback = _generate_smart_fallback_title(prompt)
+            if smart_fallback:
+                session.title = smart_fallback
+
+    db.session.commit()
+
+    return jsonify({
+        'session_id': session.id,
+        'session_title': session.title,
+        'user_message': user_msg.to_dict(),
+        'assistant_message': assistant_msg.to_dict(),
+        'pending_action': copilot_result.get('pending_action'),
+        'sources': copilot_result.get('sources', []),
+        'run_id': run_row.id,
+    }), 201
+
+
+@ai_bp.route('/chat/actions/execute', methods=['POST'])
+@require_auth
+@require_role('institution_admin')
+def execute_chat_action():
+    """
+    Executes a confirmed administrative action directly against the database.
+    """
+    from app.ai.agent import execute_copilot_action
+    from app.models.admin_copilot import AdminChatMessage
+
+    data = request.get_json(silent=True) or {}
+    action_payload = data.get('action_payload')
+    message_id = data.get('message_id')
+
+    if not action_payload or not isinstance(action_payload, dict):
+        return jsonify({'error': 'action_payload object is required'}), 400
+
+    try:
+        result = execute_copilot_action(
+            action_payload=action_payload,
+            institution_id=g.institution_id,
+            user_id=g.user_id,
+        )
+
+        # If message_id provided, clear pending_action and append system acknowledgement
+        if message_id:
+            msg = AdminChatMessage.query.filter_by(id=message_id).first()
+            if msg:
+                msg.pending_action = None
+                db.session.commit()
+
+        return jsonify({
+            'success': True,
+            'result': result,
+        }), 200
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'error': str(exc)}), 400
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PDF Document Management for RAG
+# ══════════════════════════════════════════════════════════════════════════════
+
+@ai_bp.route('/documents', methods=['GET'])
+@require_auth
+@require_role('institution_admin')
+def list_documents():
+    """List all uploaded PDF documents for this institution."""
+    from app.models.admin_copilot import InstitutionDocument
+    docs = InstitutionDocument.query.filter_by(
+        institution_id=g.institution_id
+    ).order_by(InstitutionDocument.created_at.desc()).all()
+    return jsonify({'documents': [d.to_dict() for d in docs]}), 200
+
+
+@ai_bp.route('/documents/upload', methods=['POST'])
+@require_auth
+@require_role('institution_admin')
+def upload_document():
+    """
+    Upload a PDF document, extract text page-by-page, chunk it, and index for RAG.
+    """
+    import os
+    import pypdf
+    from werkzeug.utils import secure_filename
+    from app.models.admin_copilot import InstitutionDocument
+
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file uploaded'}), 400
+
+    file = request.files['file']
+    if not file or not file.filename:
+        return jsonify({'error': 'Filename is empty'}), 400
+
+    orig_filename = secure_filename(file.filename)
+    if not orig_filename.lower().endswith('.pdf'):
+        return jsonify({'error': 'Only PDF documents are supported for RAG indexing'}), 400
+
+    upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'institution_docs')
+    os.makedirs(upload_dir, exist_ok=True)
+
+    file_id = str(uuid.uuid4())
+    stored_name = f"{file_id}_{orig_filename}"
+    file_path = os.path.join(upload_dir, stored_name)
+    file.save(file_path)
+    file_size = os.path.getsize(file_path)
+
+    # Extract text using pypdf
+    chunks = []
+    page_count = 0
+    try:
+        reader = pypdf.PdfReader(file_path)
+        page_count = len(reader.pages)
+
+        for page_num, page in enumerate(reader.pages, start=1):
+            text = (page.extract_text() or '').strip()
+            if not text:
+                continue
+
+            # Split into ~600-char semantic chunks with 100-char overlap
+            step = 500
+            for i in range(0, len(text), step):
+                chunk_text = text[i:i + 650].strip()
+                if len(chunk_text) > 30:
+                    chunks.append({
+                        'chunk_id': f"{file_id}_p{page_num}_{len(chunks)}",
+                        'page': page_num,
+                        'text': chunk_text,
+                        'tokens': len(chunk_text.split()),
+                    })
+    except Exception as exc:
+        log.warning("[copilot.pdf] parsing error for %s: %s", orig_filename, exc)
+        return jsonify({'error': f'Failed to parse PDF: {str(exc)}'}), 400
+
+    doc = InstitutionDocument(
+        id=file_id,
+        institution_id=g.institution_id,
+        uploaded_by=g.user_id,
+        filename=orig_filename,
+        file_path=file_path,
+        file_size=file_size,
+        page_count=page_count,
+        chunks=chunks,
+        status='indexed',
+    )
+    db.session.add(doc)
+    db.session.commit()
+
+    from app.institution.audit import write_audit
+    write_audit(g.user_id, g.institution_id, 'upload_document', 'document', doc.id,
+                f"Uploaded PDF '{orig_filename}' ({page_count} pages, {len(chunks)} chunks)")
+
+    return jsonify({
+        'success': True,
+        'document': doc.to_dict(),
+        'message': f"Document '{orig_filename}' indexed with {len(chunks)} searchable chunks.",
+    }), 201
+
+
+@ai_bp.route('/documents/<doc_id>', methods=['DELETE'])
+@require_auth
+@require_role('institution_admin')
+def delete_document(doc_id):
+    """Delete an uploaded PDF document and remove from RAG index."""
+    import os
+    from app.models.admin_copilot import InstitutionDocument
+
+    doc = InstitutionDocument.query.filter_by(
+        id=doc_id,
+        institution_id=g.institution_id
+    ).first()
+    if not doc:
+        return jsonify({'error': 'Document not found'}), 404
+
+    try:
+        if os.path.exists(doc.file_path):
+            os.remove(doc.file_path)
+    except Exception as exc:
+        log.warning("[copilot.pdf] could not remove file %s: %s", doc.file_path, exc)
+
+    db.session.delete(doc)
+    db.session.commit()
+
+    from app.institution.audit import write_audit
+    write_audit(g.user_id, g.institution_id, 'delete_document', 'document', doc_id,
+                f"Deleted PDF '{doc.filename}'")
+
+    return jsonify({'success': True, 'deleted_id': doc_id}), 200
+

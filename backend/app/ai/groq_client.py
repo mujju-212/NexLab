@@ -24,21 +24,23 @@ from flask import current_app
 DEFAULT_POOLS = {
     # fast, cheap models for hints / short evaluations
     'fast': [
-        'llama-3.1-8b-instant',
-        'llama-3.3-70b-versatile',
-        'gemma2-9b-it',
-        'mixtral-8x7b-32768',
+        'groq/compound-mini',
+        'groq/compound',
+        'openai/gpt-oss-20b',
     ],
     # stronger reasoning for chat / viva / test-case generation
     'quality': [
-        'llama-3.3-70b-versatile',
-        'deepseek-r1-distill-llama-70b',
-        'llama-3.1-8b-instant',
-        'gemma2-9b-it',
+        'groq/compound-mini',
+        'groq/compound',
+        'qwen/qwen3.6-27b',
+        'openai/gpt-oss-20b',
     ],
 }
 
+REASONING_MODELS = {'qwen/qwen3.6-27b', 'qwen/qwen3.8-27b'}
+
 # OpenRouter Free Models Pool (100% verified active sub-second models)
+
 OPENROUTER_MODELS = [
     'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',  # 0.32s ultra-fast
     'cohere/north-mini-code:free',                          # 0.73s coding specialized
