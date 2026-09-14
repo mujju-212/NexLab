@@ -1,0 +1,10 @@
+search-path = ["backend"]
+venv = "backend/venv"
+ignore-missing-imports = ["*"]
+preset = "off"
+
+[errors]
+missing-import = "ignore"
+unexpected-argument = "ignore"
+no-such-member = "ignore"
+bad-argument-type = "ignore"

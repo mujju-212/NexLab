@@ -47,6 +47,7 @@ python-dotenv==1.0.1
 # ── Utilities ────────────────────────────────────────────────────────────────
 python-dateutil==2.9.0
 pypdf==4.3.1          # PDF text extraction for AI Assist file upload
+duckduckgo-search>=7.0.0  # Web search for AI Copilot RAG
 
 # ── LiveKit (live session video — replaces Jitsi) ────────────────────────────
 livekit>=0.11

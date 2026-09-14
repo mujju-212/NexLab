@@ -1,0 +1,15 @@
+[tool.pyrefly]
+search-path = ["backend"]
+venv = "backend/venv"
+ignore-missing-imports = ["*"]
+
+[tool.pyrefly.errors]
+missing-import = "ignore"
+
+[tool.pyright]
+include = ["backend"]
+extraPaths = ["backend"]
+venvPath = "backend"
+venv = "venv"
+reportMissingImports = false
+reportMissingTypeStubs = false

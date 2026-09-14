@@ -21,6 +21,28 @@ def create_app(config_name=None):
 
     # ── Initialize extensions ─────────────────────────────────────────────
     db.init_app(app)
+
+    # ── High-Performance SQLite Connection Optimization ──────────────────
+    with app.app_context():
+        try:
+            from sqlalchemy import event
+            from sqlalchemy.engine import Engine
+            import sqlite3
+
+            @event.listens_for(Engine, "connect")
+            def set_sqlite_pragma(dbapi_connection, connection_record):
+                if isinstance(dbapi_connection, sqlite3.Connection):
+                    cursor = dbapi_connection.cursor()
+                    cursor.execute("PRAGMA journal_mode = WAL;")
+                    cursor.execute("PRAGMA synchronous = NORMAL;")
+                    cursor.execute("PRAGMA cache_size = -64000;")  # 64MB RAM page cache
+                    cursor.execute("PRAGMA busy_timeout = 5000;")
+                    cursor.execute("PRAGMA temp_store = MEMORY;")
+                    cursor.execute("PRAGMA foreign_keys = ON;")
+                    cursor.close()
+        except Exception:
+            pass
+
     migrate.init_app(app, db)
     jwt.init_app(app)
     cors.init_app(app, resources={
@@ -48,6 +70,8 @@ def create_app(config_name=None):
     from app.institution.routes import institution_bp
     from app.institution.extended import institution_ext_bp
     from app.institution.departments import departments_bp
+    from app.institution.planner import planner_bp
+    from app.institution.announcements import announcements_inst_bp
     from app.instructor.routes import instructor_bp
     from app.instructor.content import content_bp
     from app.instructor.simulation import simulation_bp
@@ -68,12 +92,14 @@ def create_app(config_name=None):
     from app.practice.extras import extra_bp
     from app.notifications import notif_bp
 
-    app.register_blueprint(auth_bp,            url_prefix='/api/auth')
-    app.register_blueprint(admin_bp,           url_prefix='/api/admin')
-    app.register_blueprint(platform_bp,        url_prefix='/api/platform')
-    app.register_blueprint(institution_bp,     url_prefix='/api/institution')
-    app.register_blueprint(institution_ext_bp, url_prefix='/api/institution')
-    app.register_blueprint(departments_bp,     url_prefix='/api/institution')
+    app.register_blueprint(auth_bp,               url_prefix='/api/auth')
+    app.register_blueprint(admin_bp,              url_prefix='/api/admin')
+    app.register_blueprint(platform_bp,           url_prefix='/api/platform')
+    app.register_blueprint(announcements_inst_bp, url_prefix='/api/institution')
+    app.register_blueprint(institution_bp,        url_prefix='/api/institution')
+    app.register_blueprint(institution_ext_bp,    url_prefix='/api/institution')
+    app.register_blueprint(departments_bp,        url_prefix='/api/institution')
+    app.register_blueprint(planner_bp,            url_prefix='/api/institution')
     app.register_blueprint(instructor_bp,      url_prefix='/api/instructor')
     app.register_blueprint(content_bp,         url_prefix='/api/instructor')
     app.register_blueprint(simulation_bp,      url_prefix='/api/instructor')
