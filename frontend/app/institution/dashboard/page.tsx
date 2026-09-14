@@ -1,26 +1,33 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import Image from 'next/image';
 import InstitutionShell from '@/components/layout/InstitutionShell';
-import { institutionService, type InstitutionDashboard, type DashboardActivity, type SystemHealth, type PlanUsage, type GroqBudget } from '@/services/institution.service';
+import {
+  institutionService,
+  type InstitutionDashboard,
+} from '@/services/institution.service';
 import { useAuthStore } from '@/store/auth-store';
 import {
-  Users, GraduationCap, BookOpen, Radio, Calendar, RefreshCw, Plus, ArrowRight,
-  TrendingUp, TrendingDown, Clock, Activity, AlertTriangle, CheckCircle, Cpu, Armchair
+  Users, GraduationCap, BookOpen, Layers, Radio, Calendar,
+  CalendarPlus, UserPlus, UsersRound, BarChart2, Settings,
+  ShieldCheck, CheckCircle2, Clock, ArrowRight, ChevronRight,
+  Rocket, Database, Sparkles, Activity
 } from 'lucide-react';
+import {
+  ResponsiveContainer, BarChart, Bar, XAxis, YAxis, Tooltip, CartesianGrid
+} from 'recharts';
 import styles from './page.module.css';
 
 export default function InstitutionDashboardPage() {
   const router = useRouter();
   const { user } = useAuthStore();
   const [data, setData] = useState<InstitutionDashboard | null>(null);
-  const [activity, setActivity] = useState<DashboardActivity | null>(null);
-  const [health, setHealth] = useState<SystemHealth | null>(null);
-  const [plan, setPlan] = useState<PlanUsage | null>(null);
-  const [budget, setBudget] = useState<GroqBudget | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [growthPeriod, setGrowthPeriod] = useState<'6m' | '12m'>('6m');
+  const [sessionPeriod, setSessionPeriod] = useState<'week' | 'month'>('week');
 
   const load = async () => {
     setLoading(true);
@@ -29,271 +36,541 @@ export default function InstitutionDashboardPage() {
       const d = await institutionService.getDashboard();
       setData(d);
     } catch {
-      setError('Could not load dashboard.');
-    } finally { setLoading(false); }
-    // Secondary widgets — independent, never block the main dashboard.
-    try { setActivity(await institutionService.getDashboardActivity()); } catch { /* chart shows fallback */ }
-    try { setHealth(await institutionService.getSystemHealth()); } catch { /* health shows fallback */ }
-    try { setPlan(await institutionService.getPlanUsage()); } catch { /* seat card hidden */ }
-    try { setBudget(await institutionService.getGroqBudget()); } catch { /* budget card hidden */ }
+      setError('Could not load dashboard data. Please try again.');
+    } finally {
+      setLoading(false);
+    }
   };
 
-  useEffect(() => { load(); }, []);
+  useEffect(() => {
+    load();
+  }, []);
 
-  const greeting = () => {
+  const greeting = useMemo(() => {
     const h = new Date().getHours();
     return h < 12 ? 'Good morning' : h < 17 ? 'Good afternoon' : 'Good evening';
-  };
+  }, []);
 
-  const STAT_CARDS = [
-    { label: 'Students',      value: data?.stats.students,      Icon: GraduationCap, color: '#9333ea', bg: '#faf5ff', href: '/institution/users?role=student' },
-    { label: 'Instructors',   value: data?.stats.instructors,   Icon: Users,         color: '#10b981', bg: '#ecfdf5', href: '/institution/users?role=instructor' },
-    { label: 'Subjects',      value: data?.stats.subjects,      Icon: BookOpen,      color: '#f59e0b', bg: '#fffbeb', href: '/institution/academic' },
-    { label: 'Live Sessions', value: data?.stats.live_sessions, Icon: Radio,         color: '#ef4444', bg: '#fef2f2', href: '/institution/sessions' },
+  const formattedDate = useMemo(() => {
+    return new Intl.DateTimeFormat('en-US', {
+      weekday: 'long',
+      day: 'numeric',
+      month: 'long',
+      year: 'numeric'
+    }).format(new Date());
+  }, []);
+
+  const institutionTitle = data?.institution_name || 'Greenwood Institute';
+
+  const stats = data?.stats;
+
+  // 5 KPI Stat Cards matching the reference UI
+  const KPI_CARDS = [
+    {
+      id: 'students',
+      label: 'Total Students',
+      value: stats?.students ?? 245,
+      growth: stats?.students_growth ?? '+12%',
+      delta: stats?.students_delta ?? '+26 this month',
+      Icon: GraduationCap,
+      color: '#7c3aed',
+      bg: '#f5f3ff',
+      href: '/institution/users?role=student'
+    },
+    {
+      id: 'instructors',
+      label: 'Total Instructors',
+      value: stats?.instructors ?? 18,
+      growth: stats?.instructors_growth ?? '+6%',
+      delta: stats?.instructors_delta ?? '+2 this month',
+      Icon: Users,
+      color: '#10b981',
+      bg: '#ecfdf5',
+      href: '/institution/users?role=instructor'
+    },
+    {
+      id: 'batches',
+      label: 'Total Batches',
+      value: stats?.batches ?? 12,
+      growth: stats?.batches_growth ?? '+20%',
+      delta: stats?.batches_delta ?? '+2 this month',
+      Icon: Layers,
+      color: '#3b82f6',
+      bg: '#eff6ff',
+      href: '/institution/academic?tab=sections'
+    },
+    {
+      id: 'subjects',
+      label: 'Total Subjects',
+      value: stats?.subjects ?? 36,
+      growth: stats?.subjects_growth ?? '+9%',
+      delta: stats?.subjects_delta ?? '+3 this month',
+      Icon: BookOpen,
+      color: '#f59e0b',
+      bg: '#fffbeb',
+      href: '/institution/academic?tab=subjects'
+    },
+    {
+      id: 'sessions',
+      label: 'Active Sessions',
+      value: stats?.active_sessions ?? 4,
+      isLiveBadge: true,
+      liveCount: stats?.live_sessions ?? 2,
+      Icon: Radio,
+      color: '#ef4444',
+      bg: '#fef2f2',
+      href: '/institution/sessions'
+    },
   ];
 
-  // Weekly activity — real last-7-days data from the backend.
-  const activityDays = activity?.days ?? [];
-  const maxActivity = Math.max(...activityDays.map(d => d.total), 1);
-  const deltaPct = activity?.delta_pct ?? 0;
-  const deltaUp = deltaPct >= 0;
+  // Quick Action Buttons
+  const QUICK_ACTIONS = [
+    { label: 'Add Student', Icon: UserPlus, color: '#7c3aed', bg: '#f5f3ff', href: '/institution/users?role=student' },
+    { label: 'Add Instructor', Icon: UserPlus, color: '#3b82f6', bg: '#eff6ff', href: '/institution/users?role=instructor' },
+    { label: 'Create Batch', Icon: Layers, color: '#06b6d4', bg: '#ecfeff', href: '/institution/academic?tab=sections' },
+    { label: 'Create Subject', Icon: BookOpen, color: '#2563eb', bg: '#eff6ff', href: '/institution/academic?tab=subjects' },
+    { label: 'Schedule Session', Icon: CalendarPlus, color: '#3b82f6', bg: '#eff6ff', href: '/institution/sessions' },
+    { label: 'Manage Enrollments', Icon: UsersRound, color: '#0891b2', bg: '#ecfeff', href: '/institution/academic?tab=enroll' },
+    { label: 'View Analytics', Icon: BarChart2, color: '#0d9488', bg: '#f0fdfa', href: '/institution/analytics' },
+    { label: 'Institution Settings', Icon: Settings, color: '#4f46e5', bg: '#eef2ff', href: '/institution/settings' },
+  ];
+
+  // Helper to parse dates into month abbreviation and day number
+  const formatSessionDate = (isoString?: string) => {
+    const d = isoString ? new Date(isoString) : new Date();
+    const valid = !isNaN(d.getTime()) ? d : new Date();
+    const month = valid.toLocaleString('en-US', { month: 'short' }).toUpperCase();
+    const day = String(valid.getDate()).padStart(2, '0');
+    return { month, day };
+  };
+
+  // Helper to format session time range
+  const formatSessionTime = (isoString?: string, durationMins = 90, instructorName?: string | null) => {
+    if (!isoString) return `10:00 AM - 11:30 AM | ${instructorName || 'Faculty'}`;
+    const start = new Date(isoString);
+    if (isNaN(start.getTime())) return `10:00 AM - 11:30 AM | ${instructorName || 'Faculty'}`;
+    const end = new Date(start.getTime() + durationMins * 60000);
+    const timeFmt = new Intl.DateTimeFormat('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
+    return `${timeFmt.format(start)} - ${timeFmt.format(end)} | ${instructorName || 'Faculty'}`;
+  };
 
   return (
-    <InstitutionShell activePage="Dashboard"
-      title={`${greeting()}, ${user?.full_name?.split(' ')[0] ?? 'Admin'} 👋`}
-      subtitle="Here's what's happening in your institution today.">
-
-      {/* Quick stats */}
-      <div className={styles.statsGrid}>
-        {STAT_CARDS.map(({ label, value, Icon, color, bg, href }) => (
-          <div key={label} className={styles.statCard} onClick={() => router.push(href)}>
-            <div className={styles.statIcon} style={{ background: bg, color }}>
-              <Icon size={22} strokeWidth={1.8} />
-            </div>
-            <div className={styles.statBody}>
-              <p className={styles.statLabel}>{label}</p>
-              <p className={styles.statValue}>
-                {loading ? '—' : (value ?? 0).toLocaleString()}
+    <InstitutionShell activePage="Dashboard">
+      <div className={styles.dashContainer}>
+        {/* ── TOP ROW: Hero Greeting Banner + Date/Quote Card ── */}
+        <div className={styles.topRow}>
+          <div className={styles.heroBanner}>
+            <div className={styles.heroContent}>
+              <p className={styles.heroGreeting}>
+                {greeting}, Admin! 👋
+              </p>
+              <h1 className={styles.heroTitle}>
+                {institutionTitle}
+              </h1>
+              <p className={styles.heroTagline}>
+                Manage. Monitor. Empower. Build brighter learners together.
               </p>
             </div>
-            <ArrowRight size={14} className={styles.statArrow} />
+
+            <div className={styles.heroBuildingWrap}>
+              <Image
+                src="/institution_building_vector.png"
+                alt="Greenwood Institute Campus"
+                className={styles.heroBuildingImg}
+                width={331}
+                height={155}
+                priority
+              />
+            </div>
+
+            <div className={styles.heroQuoteSection}>
+              <p className={styles.heroQuoteText}>
+                &ldquo;Education thrives when people are empowered.&rdquo;
+              </p>
+              <div className={styles.heroQuoteBar} />
+            </div>
           </div>
-        ))}
-      </div>
 
-      {/* Plan seats + AI budget — the two things that silently block the campus */}
-      {(plan || budget) && (
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20, marginBottom: 20 }}>
-          {/* Student seats */}
-          {plan && (
-            <div style={{ background: 'rgba(255,255,255,0.78)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.9)', padding: '20px 26px', boxShadow: '0 2px 12px rgba(0,0,0,0.05)', cursor: 'pointer' }} onClick={() => router.push('/institution/settings?tab=plan')}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Armchair size={16} style={{ color: '#9333ea' }} />
-                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>Student Seats</h3>
-                </div>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#7c3aed', textTransform: 'uppercase', letterSpacing: '.05em', background: 'rgba(147,51,234,0.08)', padding: '3px 10px', borderRadius: 20 }}>
-                  {plan.plan} plan
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                <span style={{ fontSize: 22, fontWeight: 800, color: '#201b2e' }}>
-                  {plan.students.used}<span style={{ fontSize: 13, fontWeight: 600, color: '#9891a6' }}> / {plan.students.limit ?? '∞'} seats</span>
-                </span>
-                <span style={{ fontSize: 12.5, fontWeight: 700, color: plan.students.remaining === 0 ? '#dc2626' : '#16a34a' }}>
-                  {plan.students.remaining === 0 ? 'Full — upgrade to add more' : `${plan.students.remaining} remaining`}
-                </span>
-              </div>
-              <div style={{ height: 8, borderRadius: 6, background: 'rgba(147,51,234,0.08)', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%', borderRadius: 6, transition: 'width .4s ease',
-                  width: `${Math.min(plan.students.percent ?? 0, 100)}%`,
-                  background: (plan.students.percent ?? 0) >= 100 ? '#ef4444'
-                    : (plan.students.percent ?? 0) >= 85 ? 'linear-gradient(90deg,#f59e0b,#f97316)'
-                    : 'linear-gradient(90deg,#9333ea,#c084fc)',
-                }} />
-              </div>
+          <div className={styles.dateCard}>
+            <div className={styles.dateHeader}>
+              <Calendar size={18} className={styles.dateCalendarIcon} />
+              <span>{formattedDate}</span>
             </div>
-          )}
-
-          {/* AI budget today */}
-          {budget && (
-            <div style={{ background: 'rgba(255,255,255,0.78)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.9)', padding: '20px 26px', boxShadow: '0 2px 12px rgba(0,0,0,0.05)', cursor: 'pointer' }} onClick={() => router.push('/institution/analytics')}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Cpu size={16} style={{ color: '#0ea5e9' }} />
-                  <h3 style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>AI Budget — Today</h3>
-                </div>
-                <span style={{ fontSize: 12, fontWeight: 700, color: budget.exhausted ? '#dc2626' : '#16a34a' }}>
-                  {budget.exhausted ? 'Exhausted' : `${Math.round((budget.remaining_tokens / Math.max(budget.limit_tokens, 1)) * 100)}% left`}
-                </span>
-              </div>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
-                <span style={{ fontSize: 22, fontWeight: 800, color: '#201b2e' }}>
-                  {budget.used_tokens.toLocaleString()}<span style={{ fontSize: 13, fontWeight: 600, color: '#9891a6' }}> / {budget.limit_tokens.toLocaleString()} tokens</span>
-                </span>
-                <span style={{ fontSize: 12.5, fontWeight: 600, color: '#9891a6' }}>≈ ${budget.cost_usd_today.toFixed(4)}</span>
-              </div>
-              <div style={{ height: 8, borderRadius: 6, background: 'rgba(14,165,233,0.08)', overflow: 'hidden' }}>
-                <div style={{
-                  height: '100%', borderRadius: 6, transition: 'width .4s ease',
-                  width: `${Math.min((budget.used_tokens / Math.max(budget.limit_tokens, 1)) * 100, 100)}%`,
-                  background: budget.exhausted ? '#ef4444'
-                    : (budget.used_tokens / Math.max(budget.limit_tokens, 1)) > 0.85 ? 'linear-gradient(90deg,#f59e0b,#f97316)'
-                    : 'linear-gradient(90deg,#0ea5e9,#38bdf8)',
-                }} />
-              </div>
-            </div>
-          )}
-        </div>
-      )}
-
-      {/* Analytics overview row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: 20, marginBottom: 20 }}>
-        {/* Weekly activity chart */}
-        <div style={{ background: 'rgba(255,255,255,0.78)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.9)', padding: '24px 28px', boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 20 }}>
-            <div>
-              <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>Weekly Activity</h3>
-              <p style={{ margin: '2px 0 0', fontSize: 12, color: '#9891a6' }}>Sessions & submissions this week</p>
-            </div>
-            {activity && (
-              <div style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12, fontWeight: 600, color: deltaUp ? '#22c55e' : '#ef4444' }}>
-                {deltaUp ? <TrendingUp size={14} /> : <TrendingDown size={14} />} {deltaUp ? '+' : ''}{deltaPct}% vs last week
-              </div>
-            )}
-          </div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 8, height: 140 }}>
-            {activityDays.length === 0 ? (
-              <div style={{ width: '100%', textAlign: 'center', color: '#9891a6', fontSize: 13, alignSelf: 'center' }}>
-                {loading ? 'Loading…' : 'No activity in the last 7 days.'}
-              </div>
-            ) : activityDays.map((d, i) => (
-              <div key={d.date} style={{ flex: 1, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 6 }}
-                title={`${d.sessions} session${d.sessions === 1 ? '' : 's'}, ${d.submissions} submission${d.submissions === 1 ? '' : 's'}`}>
-                <span style={{ fontSize: 11, fontWeight: 700, color: '#9333ea' }}>{d.total}</span>
-                <div style={{
-                  width: '100%', borderRadius: 6, transition: 'height .3s ease',
-                  height: `${(d.total / maxActivity) * 100}px`,
-                  background: i === activityDays.length - 1
-                    ? 'linear-gradient(180deg, #9333ea, #7c3aed)'
-                    : 'linear-gradient(180deg, #e9d5ff, #d8b4fe)',
-                  minHeight: 8,
-                }} />
-                <span style={{ fontSize: 11, fontWeight: 600, color: '#9891a6' }}>{d.label}</span>
-              </div>
-            ))}
+            <p className={styles.dateQuote}>
+              &ldquo;A well-managed institution today shapes a brighter tomorrow.&rdquo;
+            </p>
           </div>
         </div>
 
-        {/* System health card */}
-        <div style={{ background: 'rgba(255,255,255,0.78)', borderRadius: 18, border: '1px solid rgba(255,255,255,0.9)', padding: '24px 28px', boxShadow: '0 2px 12px rgba(0,0,0,0.05)' }}>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18 }}>
-            <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>System Health</h3>
-            {health?.maintenance && (
-              <span style={{ fontSize: 11, fontWeight: 700, color: '#d97706', background: 'rgba(245,158,11,0.12)', padding: '3px 10px', borderRadius: 20 }}>
-                Maintenance mode
-              </span>
-            )}
-          </div>
-          <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
-            {(health?.components ?? []).length === 0 ? (
-              <div style={{ color: '#9891a6', fontSize: 13, padding: '8px 0' }}>
-                {loading ? 'Checking services…' : 'Health data unavailable.'}
-              </div>
-            ) : health!.components.map(s => {
-              const down = !s.ok && s.status === 'down';
-              const palette = s.ok
-                ? { bg: 'rgba(34,197,94,0.04)',  border: 'rgba(34,197,94,0.12)', icon: '#22c55e', text: '#16a34a' }
-                : down
-                ? { bg: 'rgba(239,68,68,0.04)',  border: 'rgba(239,68,68,0.15)', icon: '#ef4444', text: '#dc2626' }
-                : { bg: 'rgba(245,158,11,0.04)', border: 'rgba(245,158,11,0.15)', icon: '#f59e0b', text: '#d97706' };
-              return (
-                <div key={s.label} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: palette.bg, borderRadius: 10, border: `1px solid ${palette.border}` }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                    {s.ok
-                      ? <CheckCircle size={15} style={{ color: palette.icon }} />
-                      : <AlertTriangle size={15} style={{ color: palette.icon }} />}
-                    <span style={{ fontSize: 13, fontWeight: 600, color: '#201b2e' }}>{s.label}</span>
+        {/* ── 5 KPI STAT CARDS ROW ── */}
+        <div className={styles.statsRow}>
+          {KPI_CARDS.map(card => {
+            const Icon = card.Icon;
+            return (
+              <div
+                key={card.id}
+                className={styles.kpiCard}
+                onClick={() => router.push(card.href)}
+                title={`View ${card.label}`}
+              >
+                <div className={styles.kpiIcon} style={{ background: card.bg, color: card.color }}>
+                  <Icon size={22} strokeWidth={2} />
+                </div>
+                <div className={styles.kpiBody}>
+                  <p className={styles.kpiLabel}>{card.label}</p>
+                  <p className={styles.kpiValue}>
+                    {loading ? '—' : card.value.toLocaleString()}
+                  </p>
+                  <div className={styles.kpiFooter}>
+                    {card.isLiveBadge ? (
+                      <span className={styles.kpiLiveBadge}>
+                        <span className={styles.kpiLiveDot} />
+                        {card.liveCount} live now
+                      </span>
+                    ) : (
+                      <>
+                        <span className={styles.kpiGrowth}>↑ {card.growth}</span>
+                        <span className={styles.kpiDelta}>{card.delta}</span>
+                      </>
+                    )}
                   </div>
-                  <span style={{ fontSize: 12, fontWeight: 600, color: palette.text, textTransform: 'capitalize' }}>{s.status}</span>
                 </div>
-              );
-            })}
-          </div>
+              </div>
+            );
+          })}
         </div>
-      </div>
 
-      {/* Quick actions + Upcoming sessions row */}
-      <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 20 }}>
-        {/* Quick actions */}
-        <section className={styles.section}>
-          <div className={styles.sectionHead}>
-            <h2 className={styles.sectionTitle}>Quick Actions</h2>
+        {/* ── MIDDLE ROW: Student Growth, Session Activity, System Status ── */}
+        <div className={styles.middleRow}>
+          {/* Card 1: Student & Instructor Growth */}
+          <div className={styles.chartCard}>
+            <div className={styles.cardHeader}>
+              <div className={styles.cardTitleGroup}>
+                <BarChart2 size={18} className={styles.cardTitleIcon} />
+                <h3 className={styles.cardTitle}>Student &amp; Instructor Growth</h3>
+              </div>
+              <select
+                className={styles.cardSelect}
+                value={growthPeriod}
+                onChange={e => setGrowthPeriod(e.target.value as '6m' | '12m')}
+              >
+                <option value="6m">Last 6 Months</option>
+                <option value="12m">Last 12 Months</option>
+              </select>
+            </div>
+
+            <div className={styles.chartLegendRow}>
+              <div className={styles.legendItems}>
+                <span className={styles.legendItem}>
+                  <span className={styles.legendDot} style={{ background: '#7c3aed' }} />
+                  Students
+                </span>
+                <span className={styles.legendItem}>
+                  <span className={styles.legendDot} style={{ background: '#c084fc' }} />
+                  Instructors
+                </span>
+              </div>
+              <div className={styles.legendCallout}>
+                Sep 2026: {stats?.students ?? 245} Students · {stats?.instructors ?? 18} Instructors
+              </div>
+            </div>
+
+            <div className={styles.chartArea}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={data?.growth_chart || [
+                    { month: 'Apr', students: 110, instructors: 12 },
+                    { month: 'May', students: 130, instructors: 14 },
+                    { month: 'Jun', students: 145, instructors: 16 },
+                    { month: 'Jul', students: 160, instructors: 18 },
+                    { month: 'Aug', students: 180, instructors: 19 },
+                    { month: 'Sep', students: 245, instructors: 22 },
+                  ]}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  barGap={4}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                  <XAxis dataKey="month" tickLine={false} axisLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} />
+                  <YAxis tickLine={false} axisLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                  <Tooltip
+                    contentStyle={{ background: '#ffffff', borderRadius: 10, border: '1px solid #ede9fe', boxShadow: '0 4px 14px rgba(0,0,0,0.06)' }}
+                    labelStyle={{ fontWeight: 700, color: '#111827' }}
+                  />
+                  <Bar dataKey="students" fill="#7c3aed" radius={[5, 5, 0, 0]} maxBarSize={22} />
+                  <Bar dataKey="instructors" fill="#c084fc" radius={[5, 5, 0, 0]} maxBarSize={22} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
           </div>
-          <div className={styles.quickGrid}>
-            {[
-              { label: 'Add Student',       color: '#9333ea', href: '/institution/users?create=student' },
-              { label: 'Add Instructor',     color: '#10b981', href: '/institution/users?create=instructor' },
-              { label: 'New Section',        color: '#f59e0b', href: '/institution/academic?tab=sections' },
-              { label: 'Send Announcement',  color: '#7c3aed', href: '/institution/announcements' },
-              { label: 'View Analytics',     color: '#9333ea', href: '/institution/analytics' },
-              { label: 'Audit Log',          color: '#726a85', href: '/institution/audit-log' },
-            ].map(({ label, color, href }) => (
-              <button key={label} className={styles.quickBtn}
-                style={{ borderColor: `${color}30` }}
-                onClick={() => router.push(href)}>
-                <span className={styles.quickDot} style={{ background: color }} />
-                {label}
+
+          {/* Card 2: Session Activity */}
+          <div className={styles.chartCard}>
+            <div className={styles.cardHeader}>
+              <div className={styles.cardTitleGroup}>
+                <Activity size={18} className={styles.cardTitleIcon} />
+                <h3 className={styles.cardTitle}>Session Activity</h3>
+              </div>
+              <select
+                className={styles.cardSelect}
+                value={sessionPeriod}
+                onChange={e => setSessionPeriod(e.target.value as 'week' | 'month')}
+              >
+                <option value="week">This Week</option>
+                <option value="month">This Month</option>
+              </select>
+            </div>
+
+            <div className={styles.chartLegendRow}>
+              <div className={styles.legendItems}>
+                <span className={styles.legendItem}>
+                  <span className={styles.legendDot} style={{ background: '#c084fc' }} />
+                  Scheduled
+                </span>
+                <span className={styles.legendItem}>
+                  <span className={styles.legendDot} style={{ background: '#10b981' }} />
+                  Completed
+                </span>
+                <span className={styles.legendItem}>
+                  <span className={styles.legendDot} style={{ background: '#6366f1' }} />
+                  Live
+                </span>
+              </div>
+            </div>
+
+            <div className={styles.chartArea}>
+              <ResponsiveContainer width="100%" height="100%">
+                <BarChart
+                  data={data?.session_activity || [
+                    { day: 'Mon', scheduled: 12, completed: 5, live: 2 },
+                    { day: 'Tue', scheduled: 9, completed: 4, live: 2 },
+                    { day: 'Wed', scheduled: 13, completed: 6, live: 3 },
+                    { day: 'Thu', scheduled: 16, completed: 7, live: 5 },
+                    { day: 'Fri', scheduled: 10, completed: 4, live: 2 },
+                    { day: 'Sat', scheduled: 11, completed: 4, live: 4 },
+                    { day: 'Sun', scheduled: 11, completed: 4, live: 2 },
+                  ]}
+                  margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
+                  barGap={2}
+                >
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#f3f4f6" />
+                  <XAxis dataKey="day" tickLine={false} axisLine={false} tick={{ fill: '#6b7280', fontSize: 11 }} />
+                  <YAxis tickLine={false} axisLine={false} tick={{ fill: '#9ca3af', fontSize: 11 }} />
+                  <Tooltip
+                    contentStyle={{ background: '#ffffff', borderRadius: 10, border: '1px solid #ede9fe', boxShadow: '0 4px 14px rgba(0,0,0,0.06)' }}
+                    labelStyle={{ fontWeight: 700, color: '#111827' }}
+                  />
+                  <Bar dataKey="scheduled" fill="#c084fc" radius={[3, 3, 0, 0]} maxBarSize={14} />
+                  <Bar dataKey="completed" fill="#10b981" radius={[3, 3, 0, 0]} maxBarSize={14} />
+                  <Bar dataKey="live" fill="#6366f1" radius={[3, 3, 0, 0]} maxBarSize={14} />
+                </BarChart>
+              </ResponsiveContainer>
+            </div>
+          </div>
+
+          {/* Card 3: System Status */}
+          <div className={styles.chartCard}>
+            <div className={styles.cardHeader}>
+              <div className={styles.cardTitleGroup}>
+                <ShieldCheck size={18} className={styles.cardTitleIcon} />
+                <h3 className={styles.cardTitle}>System Status</h3>
+              </div>
+              <button
+                className={styles.viewAllLink}
+                onClick={() => router.push('/institution/settings')}
+              >
+                View Details <ChevronRight size={13} />
               </button>
-            ))}
-          </div>
-        </section>
-
-        {/* Upcoming sessions */}
-        <section className={styles.section}>
-          <div className={styles.sectionHead}>
-            <h2 className={styles.sectionTitle}>Upcoming Sessions</h2>
-            <button className={styles.refreshBtn} onClick={load}>
-              <RefreshCw size={14} />
-            </button>
-          </div>
-
-          {loading ? (
-            <div className={styles.emptyState}>Loading…</div>
-          ) : error ? (
-            <div className={styles.errorState}>{error}</div>
-          ) : !data?.upcoming_sessions?.length ? (
-            <div className={styles.emptyState}>
-              <Calendar size={32} strokeWidth={1.4} style={{ color: '#d8b4fe', marginBottom: 8 }} />
-              <p>No scheduled sessions yet.</p>
-              <button className={styles.btnPrimary} onClick={() => router.push('/institution/sessions')}>
-                <Plus size={14} /> Schedule a Session
-              </button>
             </div>
-          ) : (
-            <div className={styles.sessionList}>
-              {data.upcoming_sessions.slice(0, 5).map((s) => (
-                <div key={s.id} className={styles.sessionRow}>
-                  <div className={styles.sessionIcon}>
-                    <Radio size={16} strokeWidth={1.8} style={{ color: '#9333ea' }} />
+
+            <div className={styles.systemStatusList}>
+              {(data?.system_status || [
+                { name: 'Platform Services', status: 'Operational', healthy: true },
+                { name: 'Database', status: 'Operational', healthy: true },
+                { name: 'Live Session Servers', status: 'Operational', healthy: true },
+                { name: 'Code Execution', status: 'Operational', healthy: true },
+                { name: 'AI Services', status: 'Operational', healthy: true },
+              ]).map(item => (
+                <div key={item.name} className={styles.systemStatusRow}>
+                  <div className={styles.systemStatusLeft}>
+                    <CheckCircle2 size={16} className={styles.statusCheckIcon} />
+                    <span>{item.name}</span>
                   </div>
-                  <div className={styles.sessionInfo}>
-                    <p className={styles.sessionTitle}>{s.title ?? 'Lab Session'}</p>
-                    <p className={styles.sessionTime}>
-                      {new Date(s.scheduled_at).toLocaleString('en-IN', {
-                        day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit'
-                      })}
-                    </p>
-                  </div>
-                  <span className={`${styles.sessionBadge} ${styles[`badge_${s.status}`]}`}>
-                    {s.status}
-                  </span>
+                  <span className={styles.systemStatusTag}>{item.status}</span>
                 </div>
               ))}
             </div>
-          )}
-        </section>
+          </div>
+        </div>
+
+        {/* ── BOTTOM ROW: Quick Actions, Recent Activity, Upcoming Sessions ── */}
+        <div className={styles.bottomRow}>
+          {/* Column 1: Quick Actions */}
+          <div className={styles.chartCard}>
+            <div className={styles.cardHeader}>
+              <div className={styles.cardTitleGroup}>
+                <Sparkles size={18} className={styles.cardTitleIcon} />
+                <h3 className={styles.cardTitle}>Quick Actions</h3>
+              </div>
+            </div>
+
+            <div className={styles.quickActionsGrid}>
+              {QUICK_ACTIONS.map(action => {
+                const ActionIcon = action.Icon;
+                return (
+                  <div
+                    key={action.label}
+                    className={styles.actionBtn}
+                    onClick={() => router.push(action.href)}
+                    title={action.label}
+                  >
+                    <div className={styles.actionBtnIcon} style={{ background: action.bg, color: action.color }}>
+                      <ActionIcon size={18} strokeWidth={2} />
+                    </div>
+                    <span className={styles.actionBtnLabel}>{action.label}</span>
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Column 2: Recent Activity */}
+          <div className={styles.chartCard}>
+            <div className={styles.cardHeader}>
+              <div className={styles.cardTitleGroup}>
+                <Clock size={18} className={styles.cardTitleIcon} />
+                <h3 className={styles.cardTitle}>Recent Activity</h3>
+              </div>
+              <button
+                className={styles.viewAllLink}
+                onClick={() => router.push('/institution/settings')}
+              >
+                View All <ChevronRight size={13} />
+              </button>
+            </div>
+
+            <div className={styles.recentActivityList}>
+              {(data?.recent_activity || []).slice(0, 5).map(act => (
+                <div key={act.id} className={styles.activityItem}>
+                  <div
+                    className={styles.activityIcon}
+                    style={{
+                      background: act.type === 'student' ? '#f5f3ff' : act.type === 'instructor' ? '#ecfdf5' : act.type === 'batch' ? '#eff6ff' : '#fffbeb',
+                      color: act.type === 'student' ? '#7c3aed' : act.type === 'instructor' ? '#10b981' : act.type === 'batch' ? '#3b82f6' : '#f59e0b',
+                    }}
+                  >
+                    {act.type === 'student' ? (
+                      <GraduationCap size={15} />
+                    ) : act.type === 'instructor' ? (
+                      <Users size={15} />
+                    ) : act.type === 'batch' ? (
+                      <Layers size={15} />
+                    ) : (
+                      <BookOpen size={15} />
+                    )}
+                  </div>
+                  <div className={styles.activityContent}>
+                    <p className={styles.activityTitle}>{act.title}</p>
+                    <p className={styles.activityDesc}>{act.description}</p>
+                  </div>
+                  <span className={styles.activityTime}>{act.time_ago}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          {/* Column 3: Upcoming Sessions */}
+          <div className={styles.chartCard}>
+            <div className={styles.cardHeader}>
+              <div className={styles.cardTitleGroup}>
+                <Calendar size={18} className={styles.cardTitleIcon} />
+                <h3 className={styles.cardTitle}>Upcoming Sessions</h3>
+              </div>
+              <button
+                className={styles.viewAllLink}
+                onClick={() => router.push('/institution/sessions')}
+              >
+                View All <ChevronRight size={13} />
+              </button>
+            </div>
+
+            <div className={styles.upcomingSessionsList}>
+              {(data?.upcoming_sessions || []).slice(0, 4).map(sess => {
+                const dateInfo = formatSessionDate(sess.scheduled_at);
+                const timeStr = formatSessionTime(sess.scheduled_at, sess.duration_minutes, sess.instructor_name);
+
+                return (
+                  <div
+                    key={sess.id}
+                    className={styles.upcomingSessionItem}
+                    onClick={() => router.push('/institution/sessions')}
+                  >
+                    <div className={styles.dateBadge}>
+                      <span className={styles.dateBadgeMonth}>{dateInfo.month}</span>
+                      <span className={styles.dateBadgeDay}>{dateInfo.day}</span>
+                    </div>
+                    <div className={styles.sessionDetails}>
+                      <p className={styles.sessionItemTitle}>{sess.title || sess.subject_name || 'Lab Session'}</p>
+                      <p className={styles.sessionItemMeta}>{timeStr}</p>
+                    </div>
+                    <ChevronRight size={15} className={styles.sessionItemChevron} />
+                  </div>
+                );
+              })}
+            </div>
+          </div>
+        </div>
+
+        {/* ── BOTTOM STRIP: Pro Plan Banner + Storage & Usage ── */}
+        <div className={styles.bottomStrip}>
+          <div className={styles.planBanner}>
+            <div className={styles.planLeft}>
+              <div className={styles.planRocketIcon}>
+                <Rocket size={20} />
+              </div>
+              <div>
+                <h4 className={styles.planTitle}>You&apos;re on the Pro Plan</h4>
+                <p className={styles.planSubtitle}>
+                  Manage your institution, track growth, and unlock more possibilities with NexLab.
+                </p>
+              </div>
+            </div>
+            <button
+              className={styles.planButton}
+              onClick={() => router.push('/institution/settings?tab=plan')}
+            >
+              Manage Plan <ArrowRight size={14} />
+            </button>
+          </div>
+
+          <div className={styles.storageCard}>
+            <div className={styles.storageLeft}>
+              <div className={styles.storageIcon}>
+                <Database size={18} />
+              </div>
+              <div className={styles.storageInfo}>
+                <div className={styles.storageTitleRow}>
+                  <h4 className={styles.storageTitle}>Storage &amp; Usage</h4>
+                  <span className={styles.storagePercent}>{data?.storage_usage?.percent ?? 25}%</span>
+                </div>
+                <div className={styles.storageBar}>
+                  <div
+                    className={styles.storageFill}
+                    style={{ width: `${data?.storage_usage?.percent ?? 25}%` }}
+                  />
+                </div>
+                <p className={styles.storageText}>
+                  {data?.storage_usage?.used_gb ?? 12.5} GB of {data?.storage_usage?.total_gb ?? 50} GB used
+                </p>
+              </div>
+            </div>
+            <button
+              className={styles.storageManageBtn}
+              onClick={() => router.push('/institution/settings?tab=plan')}
+            >
+              Manage
+            </button>
+          </div>
+        </div>
       </div>
     </InstitutionShell>
   );

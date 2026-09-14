@@ -40,6 +40,8 @@ backend/ml_training/datasets/
 
 # ── Database ────────────────────────────────────────────────────────────
 *.db
+*.db-shm
+*.db-wal
 *.sqlite3
 backend/instance/
 
@@ -55,7 +57,8 @@ backend/.pip_cache/
 *.log
 logs/
 
-# ── IDE ─────────────────────────────────────────────────────────────────
+# ── IDE & Local Tooling ──────────────────────────────────────────────────
+.freebuff/
 .vscode/
 .idea/
 *.swp

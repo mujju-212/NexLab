@@ -219,6 +219,8 @@ export interface StudentDashboard {
   total_submissions: number;
   unread_notifications: number;
   hints_used_today: number;
+  overall_progress?: number;
+  daily_streak?: number;
 }
 
 // ─── Notification ─────────────────────────────────────────────────────────────

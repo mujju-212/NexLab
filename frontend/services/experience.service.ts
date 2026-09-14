@@ -259,6 +259,62 @@ export interface InstructorSearchHit {
   sub_label?: string | null; link: string;
 }
 
+// ── Exam types (instructor) ──────────────────────────────────────────────────
+
+export interface InstructorExam {
+  id: string;
+  institution_id: string;
+  subject_id: string;
+  created_by?: string;
+  title: string;
+  description?: string;
+  exam_type: 'mcq' | 'coding' | 'mixed';
+  available_from: string | null;
+  due_at: string | null;
+  duration_minutes: number;
+  max_attempts: number;
+  pass_threshold: number;
+  shuffle_questions: boolean;
+  is_published: boolean;
+  grade_weight: number;
+  window_state: 'upcoming' | 'open' | 'closed';
+  question_count: number;
+  attempt_count?: number;
+  subject_name?: string;
+  subject_code?: string;
+  created_at: string;
+  updated_at: string;
+  questions?: Record<string, any>[];
+}
+
+export interface CreateExamPayload {
+  title: string;
+  subject_id: string;
+  description?: string;
+  exam_type?: 'mcq' | 'coding' | 'mixed';
+  duration_minutes?: number;
+  max_attempts?: number;
+  pass_threshold?: number;
+  shuffle_questions?: boolean;
+  available_from?: string | null;
+  due_at?: string | null;
+  grade_weight?: number;
+}
+
+export interface ExamAttemptRow {
+  attempt_id: string;
+  student_id: string;
+  student_name: string;
+  student_email: string;
+  status: string;
+  score: number | null;
+  total_points: number;
+  max_points: number;
+  passed: boolean;
+  started_at: string | null;
+  submitted_at: string | null;
+}
+
 export interface SubmissionItem {
   id?: string;
   type: string;
@@ -587,6 +643,19 @@ export const experienceService = {
     const { data } = await apiClient.post('/instructor/announcements', payload);
     return data;
   },
+  async listInstructorAnnouncements(): Promise<{ announcements: any[]; unread_count: number; total: number }> {
+    const { data } = await apiClient.get('/instructor/announcements');
+    return data;
+  },
+  async markInstructorAnnouncementRead(id: string): Promise<{ is_read: boolean; views_count: number }> {
+    const { data } = await apiClient.post(`/instructor/announcements/${id}/read`);
+    return data;
+  },
+  async toggleInstructorAnnouncementLike(id: string): Promise<{ liked: boolean; likes_count: number }> {
+    const { data } = await apiClient.post(`/instructor/announcements/${id}/like`);
+    return data;
+  },
+
 
   async listExtensions(experimentId?: string): Promise<{ extensions: ExtensionRow[] }> {
     const { data } = await apiClient.get('/instructor/extensions', { params: experimentId ? { experiment_id: experimentId } : {} });
@@ -683,5 +752,37 @@ export const experienceService = {
     const { data } = await apiClient.get('/instructor/search', { params: { q, types } })
       .catch(() => ({ data: { results: [] as InstructorSearchHit[] } }));
     return data.results ?? [];
+  },
+
+  // ── Exams (Instructor) ──────────────────────────────────────────────────
+  async listExams(subjectId?: string): Promise<InstructorExam[]> {
+    const params: Record<string, string> = {};
+    if (subjectId) params.subject_id = subjectId;
+    const { data } = await apiClient.get<{ exams: InstructorExam[] }>('/instructor/exams', { params });
+    return data.exams ?? [];
+  },
+
+  async createExam(payload: CreateExamPayload): Promise<InstructorExam> {
+    const { data } = await apiClient.post<{ exam: InstructorExam }>('/instructor/exams', payload);
+    return data.exam;
+  },
+
+  async getExam(examId: string): Promise<InstructorExam> {
+    const { data } = await apiClient.get<{ exam: InstructorExam }>(`/instructor/exams/${examId}`);
+    return data.exam;
+  },
+
+  async updateExam(examId: string, payload: Partial<CreateExamPayload> & { is_published?: boolean }): Promise<InstructorExam> {
+    const { data } = await apiClient.patch<{ exam: InstructorExam }>(`/instructor/exams/${examId}`, payload);
+    return data.exam;
+  },
+
+  async deleteExam(examId: string): Promise<void> {
+    await apiClient.delete(`/instructor/exams/${examId}`);
+  },
+
+  async getExamAttempts(examId: string): Promise<{ attempts: ExamAttemptRow[]; exam: InstructorExam }> {
+    const { data } = await apiClient.get(`/instructor/exams/${examId}/attempts`);
+    return data;
   },
 };
