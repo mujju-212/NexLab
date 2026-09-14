@@ -1,12 +1,14 @@
 'use client';
 
-import { useCallback, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import Link from 'next/link';
 import {
   LayoutDashboard, FlaskConical, PlayCircle, Radio,
-  ClipboardCheck, BarChart3, RotateCcw, Users, BookOpen,
+  ClipboardCheck, BarChart3, Users,
   Bell, Search, ChevronRight, LogOut, Settings, User, Menu,
-  MessageSquare, Lightbulb, FileText, HeartHandshake, ClipboardList
+  MessageSquare, FileText, Crown, ArrowRight,
+  ClipboardList, RotateCcw, HeartHandshake
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './InstructorShell.module.css';
@@ -15,22 +17,25 @@ import { experienceService } from '@/services/experience.service';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
 
-const NAV_FAVORITES = [
-  { id: 'Dashboard',       Icon: LayoutDashboard, route: '/instructor/dashboard'  },
-  { id: 'Experiments',     Icon: FlaskConical,    route: '/instructor/experiments' },
-  { id: 'Sessions',        Icon: PlayCircle,      route: '/instructor/sessions'    },
-  { id: 'Live Conductor',  Icon: Radio,           route: '/instructor/live-lab'    },
+const NAV_MAIN = [
+  { id: 'Dashboard',       label: 'Dashboard',       Icon: LayoutDashboard, route: '/instructor/dashboard' },
+  { id: 'Experiments',     label: 'Experiments',     Icon: FlaskConical,    route: '/instructor/experiments' },
+  { id: 'Sessions',        label: 'Sessions',        Icon: PlayCircle,      route: '/instructor/sessions' },
+  { id: 'Live Conductor',  label: 'Live Conductor',  Icon: Radio,           route: '/instructor/live-lab' },
+  { id: 'Students',        label: 'Students',        Icon: Users,          route: '/instructor/students' },
+  { id: 'Grading',         label: 'Grading',         Icon: ClipboardCheck,  route: '/instructor/grading' },
+  { id: 'Analytics',       label: 'Analytics',       Icon: BarChart3,       route: '/instructor/analytics' },
 ];
 
-const NAV_MAIN = [
-  { id: 'Grading',             Icon: ClipboardCheck, route: '/instructor/grading'     },
-  { id: 'Exams',               Icon: ClipboardList,  route: '/instructor/exams'       },
-  { id: 'Analytics',           Icon: BarChart3,      route: '/instructor/analytics'   },
-  { id: 'Catch-Up Reviews',    Icon: RotateCcw,      route: '/instructor/catch-up'    },
-  { id: 'Student Management',  Icon: Users,          route: '/instructor/students'    },
-  { id: 'Management',          Icon: HeartHandshake, route: '/instructor/management'  },
-  { id: 'Viva',                Icon: MessageSquare,  route: '/instructor/viva'        },
-  { id: 'Reports',             Icon: FileText,       route: '/instructor/reports'     },
+const NAV_TEACHING = [
+  { id: 'Viva',             label: 'Viva Panel',       Icon: MessageSquare,   route: '/instructor/viva' },
+  { id: 'Catch-Up Reviews', label: 'Catch-Up Reviews', Icon: RotateCcw,       route: '/instructor/catch-up' },
+  { id: 'Management',       label: 'Class Management', Icon: HeartHandshake,  route: '/instructor/management' },
+];
+
+const NAV_MORE = [
+  { id: 'Reports',  label: 'Reports',  Icon: FileText, route: '/instructor/reports' },
+  { id: 'Settings', label: 'Settings', Icon: Settings, route: '/instructor/settings' },
 ];
 
 interface InstructorShellProps {
@@ -38,7 +43,6 @@ interface InstructorShellProps {
   children: React.ReactNode;
   title?: string;
   subtitle?: string;
-  /** Pass true on pages that manage their own internal scroll (e.g. Conductor) */
   noScroll?: boolean;
 }
 
@@ -48,8 +52,33 @@ export default function InstructorShell({ activePage, children, title, subtitle,
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
 
+  useEffect(() => {
+    const primaryRoutes = [
+      '/instructor/dashboard',
+      '/instructor/experiments',
+      '/instructor/sessions',
+      '/instructor/live-lab',
+      '/instructor/students',
+      '/instructor/grading',
+      '/instructor/analytics',
+      '/instructor/exams',
+      '/instructor/viva',
+      '/instructor/catch-up',
+      '/instructor/management',
+      '/instructor/reports',
+      '/instructor/settings',
+    ];
+    primaryRoutes.forEach((route) => {
+      try {
+        router.prefetch(route);
+      } catch {
+        /* noop */
+      }
+    });
+  }, [router]);
+
   const go = useCallback(async (id: string, route: string) => {
-    setDrawerOpen(false); // close mobile drawer on navigation
+    setDrawerOpen(false);
     if (id === 'Logout') {
       await authService.logout();
       clearAuth();
@@ -59,16 +88,26 @@ export default function InstructorShell({ activePage, children, title, subtitle,
     router.push(route);
   }, [router, clearAuth]);
 
+  const isItemActive = (id: string) => {
+    if (id === activePage) return true;
+    if (id === 'Dashboard' && (activePage === 'Dashboard' || activePage === 'Dashboard Home')) return true;
+    if (id === 'Exams' && (activePage === 'Exams' || activePage === 'Exam Management')) return true;
+    if (id === 'Catch-Up Reviews' && (activePage === 'Catch-Up' || activePage === 'Catch-Up Reviews')) return true;
+    if (id === 'Management' && (activePage === 'Management' || activePage === 'Class Management')) return true;
+    if (id === 'Students' && (activePage === 'Students' || activePage === 'Student Management')) return true;
+    return false;
+  };
+
   const navCls = useCallback((id: string, isLogout = false) =>
-    [styles.navItem, id === activePage ? styles.navItemActive : '', isLogout ? styles.navItemLogout : '']
+    [styles.navItem, isItemActive(id) ? styles.navItemActive : '', isLogout ? styles.navItemLogout : '']
       .filter(Boolean).join(' '),
   [activePage]);
 
   const initials = useMemo(
-    () => user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? 'IN',
+    () => user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? 'DI',
     [user?.full_name],
   );
-  const firstName = useMemo(() => user?.full_name?.split(' ')[0] ?? 'Instructor', [user?.full_name]);
+  const fullName = user?.full_name || 'Dr. Priya Sharma';
 
   return (
     <div className={styles.stage}>
@@ -82,61 +121,65 @@ export default function InstructorShell({ activePage, children, title, subtitle,
         {/* ══ SIDEBAR ══ */}
         <aside className={`${styles.sidebar} ${collapsed ? styles.sidebarCollapsed : ''} ${drawerOpen ? styles.sidebarDrawerOpen : ''}`}>
           <div className={styles.sidebarTop}>
-            <div className={styles.logo} onClick={() => router.push('/instructor/dashboard')}>
-              <Image src="/logo.png" alt="NexLab" width={collapsed ? 54 : 105} height={collapsed ? 36 : 70} style={{ objectFit: 'contain' }} priority />
+            <div className={styles.brandRow} onClick={() => router.push('/instructor/dashboard')}>
+              <Image src="/logo.png" alt="NexLab" width={collapsed ? 42 : 88} height={collapsed ? 28 : 56} style={{ objectFit: 'contain' }} priority />
+              {!collapsed && <span className={styles.roleBadge}>Instructor</span>}
             </div>
-            <button className={styles.collapseBtn} onClick={() => setCollapsed(p => !p)} title="Collapse">
+            <button className={styles.collapseBtn} onClick={() => setCollapsed(p => !p)} title="Toggle Sidebar">
               <Menu size={16} strokeWidth={2} />
             </button>
           </div>
 
           <nav className={styles.navGroup}>
-            <span className={styles.navLabel}>Favorites</span>
+            <span className={styles.navLabel}>MAIN</span>
             <ul>
-              {NAV_FAVORITES.map(({ id, Icon, route }) => (
-                <li key={id} className={navCls(id)} title={id} onClick={() => go(id, route)}>
+              {NAV_MAIN.map(({ id, label, Icon, route }) => (
+                <li key={id} className={navCls(id)} title={label} onClick={() => go(id, route)}>
                   <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
-                  <span className={styles.label}>{id}</span>
+                  <span className={styles.label}>{label}</span>
                 </li>
               ))}
             </ul>
           </nav>
 
           <nav className={styles.navGroup}>
-            <span className={styles.navLabel}>Main Menu</span>
+            <span className={styles.navLabel}>TEACHING & MANAGEMENT</span>
             <ul>
-              {NAV_MAIN.map(({ id, Icon, route }) => (
-                <li key={id} className={navCls(id)} title={id} onClick={() => go(id, route)}>
+              {NAV_TEACHING.map(({ id, label, Icon, route }) => (
+                <li key={id} className={navCls(id)} title={label} onClick={() => go(id, route)}>
                   <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
-                  <span className={styles.label}>{id}</span>
+                  <span className={styles.label}>{label}</span>
                 </li>
               ))}
             </ul>
           </nav>
 
-          <div className={`${styles.navGroup} ${styles.bottomGroup}`}>
+          <nav className={styles.navGroup}>
+            <span className={styles.navLabel}>MORE</span>
             <ul>
-              <li className={navCls('Profile')} title="Profile" onClick={() => go('Profile', '/instructor/profile')}>
-                <User size={17} strokeWidth={1.9} className={styles.navIcon} />
-                <span className={styles.label}>Profile</span>
-              </li>
-              <li className={navCls('Settings')} title="Settings" onClick={() => go('Settings', '/instructor/settings')}>
-                <Settings size={17} strokeWidth={1.9} className={styles.navIcon} />
-                <span className={styles.label}>Settings</span>
-              </li>
-              <li className={navCls('Logout', true)} title="Logout" onClick={() => go('Logout', '/login')}>
-                <LogOut size={17} strokeWidth={1.9} className={styles.navIcon} />
-                <span className={styles.label}>Logout</span>
-              </li>
+              {NAV_MORE.map(({ id, label, Icon, route }) => (
+                <li key={id} className={navCls(id)} title={label} onClick={() => go(id, route)}>
+                  <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
+                  <span className={styles.label}>{label}</span>
+                </li>
+              ))}
             </ul>
-          </div>
+          </nav>
 
-          <div className={styles.promoBanner}>
-            <div className={styles.promoIcon}><Lightbulb size={16} strokeWidth={1.9} /></div>
-            <div className={styles.promoText}>
-              <p className={styles.promoTitle}>AI Grading Ready</p>
-              <a className={styles.promoLink} onClick={() => router.push('/instructor/grading')}>Grade with AI →</a>
+          {/* NexLab Pro bottom promo card */}
+          <div className={styles.nexlabProCard} onClick={() => router.push('/instructor/management')}>
+            <div className={styles.proCardLeft}>
+              <div className={styles.crownIcon}>
+                <Crown size={16} color="#f59e0b" fill="#f59e0b" />
+              </div>
+              <div className={styles.proText}>
+                <p className={styles.proTitle}>NexLab Pro</p>
+                <p className={styles.proSub}>Empowering hands-on learning</p>
+              </div>
             </div>
+            <button className={styles.proArrowBtn} aria-label="Learn more about NexLab Pro">
+              <ArrowRight size={13} color="#fff" />
+            </button>
           </div>
         </aside>
 
@@ -145,26 +188,35 @@ export default function InstructorShell({ activePage, children, title, subtitle,
 
         {/* ══ MAIN ══ */}
         <main className={styles.content} style={noScroll ? { overflow: 'hidden', display: 'flex', flexDirection: 'column' } : undefined}>
+          
+          {/* Top Header */}
           <div className={styles.contentHeader}>
             <button className={styles.mobileMenuBtn} onClick={() => setDrawerOpen(true)} aria-label="Open menu">
               <Menu size={17} strokeWidth={2} />
             </button>
-            <div className={styles.breadcrumb}>
-              Instructor <ChevronRight size={14} className={styles.breadSep} /> <strong>{activePage}</strong>
-            </div>
-            <div className={styles.headerRight}>
+
+            {/* Global Search Bar with Ctrl K */}
+            <div className={styles.headerSearchWrap}>
               <ShellSearchBox
                 className={styles.searchBar}
-                placeholder="Search students, experiments…"
+                placeholder="Search students, experiments, sessions, or reports..."
                 fetcher={(q) => experienceService.instructorSearch(q)}
                 onSelect={(hit: SearchHit) => router.push(hit.link ?? '/instructor/students')}
               />
+            </div>
+
+            {/* Header Right Actions */}
+            <div className={styles.headerRight}>
               <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
+              
               <div className={styles.profileChip} onClick={() => router.push('/instructor/profile')}>
-                <div className={styles.avatarLg} style={{ background: '#d946ef' }}>
+                <div className={styles.avatarLg}>
                   {initials}
                 </div>
-                <span>{firstName}</span>
+                <div className={styles.profileText}>
+                  <span className={styles.userName}>{fullName}</span>
+                  <span className={styles.userRole}>Instructor</span>
+                </div>
               </div>
             </div>
           </div>
