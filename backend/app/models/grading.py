@@ -5,6 +5,10 @@ from app.extensions import db
 
 class Grade(db.Model):
     __tablename__ = 'grades'
+    __table_args__ = (
+        # analytics trends grade bucket per session
+        db.Index('ix_grades_session_id', 'session_id'),
+    )
     id                  = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     student_id          = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
     experiment_id       = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=False)
@@ -29,6 +33,7 @@ class Grade(db.Model):
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)
 
     inline_comments     = db.relationship('InlineComment', backref='grade', lazy='dynamic')
+    experiment          = db.relationship('Experiment', backref='grades')
 
     def calculate_final(self, rubric):
         """Calculate final grade from components based on rubric weights.
@@ -78,6 +83,10 @@ class InlineComment(db.Model):
 
 class HintLog(db.Model):
     __tablename__ = 'hint_logs'
+    __table_args__ = (
+        # hint_effectiveness grouping by experiment + student
+        db.Index('ix_hint_logs_experiment_student', 'experiment_id', 'student_id'),
+    )
     id                  = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     student_id          = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
     experiment_id       = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=False)
@@ -94,6 +103,10 @@ class HintLog(db.Model):
 
 class VivaSession(db.Model):
     __tablename__ = 'viva_sessions'
+    __table_args__ = (
+        # /vivas order-by
+        db.Index('ix_viva_sessions_experiment_created', 'experiment_id', 'created_at'),
+    )
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     student_id      = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
     experiment_id   = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=False)

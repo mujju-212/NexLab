@@ -6,6 +6,10 @@ from app.extensions import db
 class SessionFeedback(db.Model):
     """Anonymous session feedback — no student_id stored"""
     __tablename__ = 'session_feedback'
+    __table_args__ = (
+        # feedback order-by
+        db.Index('ix_session_feedback_session_submitted', 'session_id', 'submitted_at'),
+    )
     id                      = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id              = db.Column(db.String(36), db.ForeignKey('lab_sessions.id'), nullable=False)
     institution_id          = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
@@ -22,6 +26,11 @@ class SessionFeedback(db.Model):
 class PlagiarismFlag(db.Model):
     """Similarity flags raised after session — instructor reviews"""
     __tablename__ = 'plagiarism_flags'
+    __table_args__ = (
+        # grading flags (institution + status), session_plagiarism
+        db.Index('ix_plagiarism_flags_institution_status', 'institution_id', 'status'),
+        db.Index('ix_plagiarism_flags_session_id', 'session_id'),
+    )
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     institution_id  = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
     experiment_id   = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=False)

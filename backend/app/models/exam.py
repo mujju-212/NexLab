@@ -95,7 +95,8 @@ class ExamQuestion(db.Model):
     __tablename__ = 'exam_questions'
 
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    exam_id         = db.Column(db.String(36), db.ForeignKey('exams.id'), nullable=False)
+    exam_id         = db.Column(db.String(36), db.ForeignKey('exams.id'), nullable=True)
+    experiment_id   = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=True)
 
     question_type   = db.Column(db.String(10), default='mcq')     # mcq | coding
     prompt          = db.Column(db.Text, nullable=False)
@@ -122,6 +123,7 @@ class ExamQuestion(db.Model):
         d = {
             'id': self.id,
             'exam_id': self.exam_id,
+            'experiment_id': self.experiment_id,
             'question_type': self.question_type or 'mcq',
             'prompt': self.prompt,
             'points': self.points,
@@ -151,7 +153,8 @@ class ExamAttempt(db.Model):
     __tablename__ = 'exam_attempts'
 
     id            = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    exam_id       = db.Column(db.String(36), db.ForeignKey('exams.id'), nullable=False)
+    exam_id       = db.Column(db.String(36), db.ForeignKey('exams.id'), nullable=True)
+    experiment_id = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=True)
     student_id    = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
 
     started_at    = db.Column(db.DateTime, default=datetime.utcnow)
@@ -175,6 +178,7 @@ class ExamAttempt(db.Model):
         d = {
             'id': self.id,
             'exam_id': self.exam_id,
+            'experiment_id': self.experiment_id,
             'student_id': self.student_id,
             'started_at': _iso_z(self.started_at),
             'expires_at': _iso_z(self.expires_at),
