@@ -38,7 +38,11 @@ def upgrade():
             sa.Column('user_id', sa.String(36), sa.ForeignKey('users.id'), nullable=False),
             sa.Column('title', sa.String(255), server_default='New Conversation'),
             sa.Column('mode', sa.String(20), server_default='chat'),
-            sa.Column('is_pinned', sa.Boolean(), server_default=sa.text('0')),
+            # sa.false() not sa.text('0'): PG rejects an integer literal as a
+            # boolean DEFAULT (DatatypeMismatch); sqlite accepted it, which is
+            # how this slipped through. sa.false() renders 0/false correctly
+            # on both backends.
+            sa.Column('is_pinned', sa.Boolean(), server_default=sa.false()),
             sa.Column('created_at', sa.DateTime()),
             sa.Column('updated_at', sa.DateTime()),
         )
@@ -84,7 +88,10 @@ def upgrade():
             sa.Column('file_size', sa.Integer(), server_default='0'),
             sa.Column('page_count', sa.Integer(), server_default='0'),
             sa.Column('chunks', sa.JSON()),
-            sa.Column('status', sa.String(20), server_default="'indexed'"),
+            # plain string, not a quoted literal — SQLAlchemy renders it as
+            # DEFAULT 'indexed' itself; "'indexed'" would double-quote and
+            # blow up on Postgres.
+            sa.Column('status', sa.String(20), server_default='indexed'),
             sa.Column('created_at', sa.DateTime()),
         )
     if not _index_exists('ix_institution_documents_institution_id'):
