@@ -55,7 +55,7 @@ class Announcement(db.Model):
     likes_count = db.Column(db.Integer, default=0, nullable=False)
 
     # Relationships
-    author = db.relationship('User', foreign_keys=[author_id], lazy='joined')
+    author = db.relationship('User', foreign_keys=[author_id], lazy='selectin')
     interactions = db.relationship('AnnouncementInteraction', backref='announcement', cascade='all, delete-orphan', lazy='dynamic')
 
     __table_args__ = (

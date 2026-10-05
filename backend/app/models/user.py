@@ -6,6 +6,24 @@ from app.extensions import db
 class User(db.Model):
     __tablename__ = 'users'
 
+    # Indexes are declared here as well as in migrations so `alembic
+    # revision --autogenerate` doesn't propose dropping them, and so a fresh
+    # `db.create_all()` gets the same shape as the migrated database.
+    # Index names match the existing performance-indexes migration where they
+    # overlap; the rest cover admin-side filters that were still seq-scanning.
+    __table_args__ = (
+        db.Index('ix_users_institution_id', 'institution_id'),
+        # Every hot admin query filters institution_id + role (+ is_active for
+        # the dashboard counts); this 3-col index replaces the old
+        # (institution_id, role) one — role-only filters use its prefix.
+        db.Index('ix_users_institution_id_role_is_active',
+                 'institution_id', 'role', 'is_active'),
+        # users page ?department_id= (plain FK — never indexed by any migration)
+        db.Index('ix_users_department_id', 'department_id'),
+        # both of these order_by(full_name) after filtering
+        db.Index('ix_users_institution_id_full_name', 'institution_id', 'full_name'),
+    )
+
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     institution_id  = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=True)
     # platform_admin has no institution_id (NULL)
@@ -39,6 +57,10 @@ class User(db.Model):
 
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
+
+    @property
+    def name(self):
+        return self.full_name
 
     def to_dict(self, include_sensitive=False):
         data = {

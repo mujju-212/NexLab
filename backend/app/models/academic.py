@@ -86,6 +86,12 @@ class Section(db.Model):
 class SectionStudent(db.Model):
     """Many-to-many: students enrolled in sections"""
     __tablename__ = 'section_students'
+    # PK covers (section_id, student_id). The users-list enrichment queries
+    # by student_id IN (...) and the section-students tab by section_id, so
+    # student_id needs its own index the PK ordering can't serve.
+    __table_args__ = (
+        db.Index('ix_section_students_student_id', 'student_id'),
+    )
     section_id  = db.Column(db.String(36), db.ForeignKey('sections.id'), primary_key=True)
     student_id  = db.Column(db.String(36), db.ForeignKey('users.id'), primary_key=True)
     enrolled_at = db.Column(db.DateTime, default=datetime.utcnow)
@@ -117,6 +123,25 @@ class SectionSubject(db.Model):
 class AuditLog(db.Model):
     """Admin action history — tracks all sensitive operations per institution"""
     __tablename__ = 'audit_logs'
+
+    # The audit-log page always filters institution_id + a created_at window
+    # and orders created_at DESC with offset/limit — the (institution_id,
+    # created_at) composite turns that from a sort-into-a-temp-set into a
+    # backward index scan. The other three back the DISTINCT filter-choice
+    # queries and the ?action=/?severity= dropdown filters.
+    __table_args__ = (
+        db.Index('ix_audit_logs_institution_id', 'institution_id'),
+        db.Index('ix_audit_logs_actor_id', 'actor_id'),
+        db.Index('ix_audit_logs_institution_created',
+                 'institution_id', 'created_at'),
+        db.Index('ix_audit_logs_institution_action',
+                 'institution_id', 'action'),
+        db.Index('ix_audit_logs_institution_module',
+                 'institution_id', 'module'),
+        db.Index('ix_audit_logs_institution_severity',
+                 'institution_id', 'severity'),
+    )
+
     id             = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     institution_id = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
     actor_id       = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
@@ -131,8 +156,11 @@ class AuditLog(db.Model):
     severity       = db.Column(db.String(20), default='low', nullable=False)  # low | medium | high
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
 
-    # Actor relationship
-    actor          = db.relationship('User', foreign_keys=[actor_id], lazy='joined')
+    # Actor relationship. selectin (not joined): with joined, every paged
+    # audit query gets rewritten as SELECT DISTINCT ... LEFT JOIN users, and
+    # Postgres must hash/sort the full text rows to dedupe — the actor is then
+    # fetched in one cheap IN-batch query instead.
+    actor          = db.relationship('User', foreign_keys=[actor_id], lazy='selectin')
 
     def to_dict(self):
         return {
