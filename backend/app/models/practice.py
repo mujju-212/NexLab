@@ -348,3 +348,68 @@ class StudentBadge(db.Model):
             'desc':       meta.get('desc', ''),
             'earned_at':  self.earned_at.isoformat() if self.earned_at else None,
         }
+
+
+# ─── Track 2: Platform Competitive Rating ────────────────────────────────────
+
+class PlatformRating(db.Model):
+    """
+    Competitive difficulty-weighted platform rating for Track-2 global rankings.
+    Formula: Σ_over_accepted_problems( base[difficulty] × quality_factor × recency_factor )
+    Anti-farming: only the first accepted solve per problem earns rating.
+    """
+    __tablename__ = 'platform_ratings'
+
+    student_id          = db.Column(db.String(36), db.ForeignKey('users.id'), primary_key=True)
+    rating              = db.Column(db.Float, default=0.0, nullable=False, index=True)
+    global_rank         = db.Column(db.Integer, nullable=True)
+    global_percentile   = db.Column(db.Float, default=0.0)
+    problems_solved     = db.Column(db.Integer, default=0)
+    easy_solved         = db.Column(db.Integer, default=0)
+    medium_solved       = db.Column(db.Integer, default=0)
+    hard_solved         = db.Column(db.Integer, default=0)
+    streak_days         = db.Column(db.Integer, default=0)
+    updated_at          = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'student_id':        self.student_id,
+            'rating':            round(float(self.rating or 0.0), 1),
+            'global_rank':       self.global_rank,
+            'global_percentile': round(float(self.global_percentile or 0.0), 1),
+            'problems_solved':   self.problems_solved,
+            'easy_solved':       self.easy_solved,
+            'medium_solved':     self.medium_solved,
+            'hard_solved':       self.hard_solved,
+            'streak_days':       self.streak_days,
+            'updated_at':        self.updated_at.isoformat() if self.updated_at else None,
+        }
+
+
+class PlatformRatingPeriod(db.Model):
+    """
+    Historical rating & rank snapshots for weekly/monthly rank movement tracking.
+    """
+    __tablename__ = 'platform_rating_periods'
+
+    id          = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    student_id  = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False, index=True)
+    period_type = db.Column(db.String(20), nullable=False)   # weekly | monthly
+    period_key  = db.Column(db.String(20), nullable=False)   # e.g. 2026-W41 or 2026-10
+    rating      = db.Column(db.Float, default=0.0)
+    rank_pos    = db.Column(db.Integer, nullable=True)
+    created_at  = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (db.UniqueConstraint('student_id', 'period_type', 'period_key', name='uq_student_period_rating'),)
+
+    def to_dict(self):
+        return {
+            'id':          self.id,
+            'student_id':  self.student_id,
+            'period_type': self.period_type,
+            'period_key':  self.period_key,
+            'rating':      round(float(self.rating or 0.0), 1),
+            'rank_pos':    self.rank_pos,
+            'created_at':  self.created_at.isoformat() if self.created_at else None,
+        }
+

@@ -70,6 +70,16 @@ class Experiment(db.Model):
     # ── Experiment type (D6): coding | quiz_only | mixed | reading ─────────────
     experiment_type     = db.Column(db.String(20), default='coding')
 
+    # ── Delivery mode (unification: practice | lab | exam) ───────────────────
+    delivery_mode       = db.Column(db.String(10), default='lab')
+
+    # ── Exam-mode fields (active when delivery_mode == 'exam') ───────────────
+    available_from      = db.Column(db.DateTime)       # window start (UTC)
+    due_at              = db.Column(db.DateTime)       # window end (UTC)
+    max_attempts        = db.Column(db.Integer, default=1)
+    pass_threshold      = db.Column(db.Integer, default=40)    # % to pass
+    shuffle_questions   = db.Column(db.Boolean, default=False)
+
     # ── Proctor defaults (JSON of 6 toggles matching ProctorPolicy columns) ────
     proctor_defaults    = db.Column(db.JSON, default=dict)
 
@@ -83,6 +93,17 @@ class Experiment(db.Model):
     test_cases      = db.relationship('TestCase', backref='experiment', lazy='dynamic')
     content_modules = db.relationship('ContentModule', backref='experiment',
                                       order_by='ContentModule.display_order', lazy='dynamic')
+    exam_questions  = db.relationship('ExamQuestion', backref='experiment', lazy='dynamic', cascade='all, delete-orphan')
+    exam_attempts   = db.relationship('ExamAttempt', backref='experiment', lazy='dynamic', cascade='all, delete-orphan')
+
+    def window_state(self, now=None):
+        """'upcoming' | 'open' | 'closed' based on the availability window."""
+        now = now or datetime.utcnow()
+        if self.available_from and now < self.available_from:
+            return 'upcoming'
+        if self.due_at and now > self.due_at:
+            return 'closed'
+        return 'open'
 
     def validate(self):
         """Returns list of validation error strings. Empty list = valid."""
@@ -132,6 +153,14 @@ class Experiment(db.Model):
             'weightage': self.weightage,
             'grade_scale': self.grade_scale,
             'experiment_type': self.experiment_type or 'coding',
+            'delivery_mode': self.delivery_mode or 'lab',
+            'available_from': _iso_z(self.available_from),
+            'due_at': _iso_z(self.due_at),
+            'duration_minutes': (self.time_limit_sec // 60) if self.time_limit_sec else 30,
+            'max_attempts': self.max_attempts or 1,
+            'pass_threshold': self.pass_threshold or 40,
+            'shuffle_questions': bool(self.shuffle_questions),
+            'window_state': self.window_state() if (self.delivery_mode == 'exam') else 'open',
             'proctor_defaults': self.proctor_defaults or {},
             'created_at': self.created_at.isoformat() if self.created_at else None,
             'rubric': {
@@ -248,6 +277,10 @@ class QuizQuestion(db.Model):
 class ContentProgress(db.Model):
     """Tracks student completion of each content module"""
     __tablename__ = 'content_progress'
+    __table_args__ = (
+        # quiz-gate analytics (features.py:662)
+        db.Index('ix_content_progress_module_id', 'module_id'),
+    )
     student_id      = db.Column(db.String(36), db.ForeignKey('users.id'), primary_key=True)
     module_id       = db.Column(db.String(36), db.ForeignKey('content_modules.id'), primary_key=True)
     completed       = db.Column(db.Boolean, default=False)

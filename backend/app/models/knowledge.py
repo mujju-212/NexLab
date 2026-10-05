@@ -43,6 +43,8 @@ class StudentRanking(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint('student_id', 'section_subject_id', name='uq_student_section_subject'),
+        # trajectory + dashboard IN-list
+        db.Index('ix_student_rankings_student_id', 'student_id'),
     )
 
     def to_dict(self):
@@ -87,5 +89,49 @@ class FocusScore(db.Model):
             'focus_score': self.focus_score,
             'signals':     self.signals or {},
             'recorded_at': self.recorded_at.isoformat() if self.recorded_at else None,
+        }
+
+
+class ExperimentConcept(db.Model):
+    """Explicit mapping between experiments and curriculum knowledge concepts"""
+    __tablename__ = 'experiment_concepts'
+    id             = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    experiment_id  = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=False, index=True)
+    concept        = db.Column(db.String(100), nullable=False, index=True)
+    weight         = db.Column(db.Float, default=1.0)
+    created_at     = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('experiment_id', 'concept', name='uq_exp_concept'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'experiment_id': self.experiment_id,
+            'concept': self.concept,
+            'weight': self.weight,
+        }
+
+
+class ConceptPrereq(db.Model):
+    """Concept dependency graph: concept requires requires_concept"""
+    __tablename__ = 'concept_prereqs'
+    id               = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    concept          = db.Column(db.String(100), nullable=False, index=True)
+    requires_concept = db.Column(db.String(100), nullable=False, index=True)
+    subject_id       = db.Column(db.String(36), db.ForeignKey('subjects.id'), nullable=True, index=True)
+    created_at       = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (
+        db.UniqueConstraint('concept', 'requires_concept', 'subject_id', name='uq_concept_prereq_sub'),
+    )
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'concept': self.concept,
+            'requires_concept': self.requires_concept,
+            'subject_id': self.subject_id,
         }
 

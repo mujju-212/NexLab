@@ -32,6 +32,8 @@ class Intervention(db.Model):
     # open | improved | no_change | worsened   (instructor-set outcome)
     outcome       = db.Column(db.String(20), default='open')
     outcome_note  = db.Column(db.Text)
+    risk_score_before = db.Column(db.Float, nullable=True)
+    risk_score_after  = db.Column(db.Float, nullable=True)
     resolved_at   = db.Column(db.DateTime)
     created_at    = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
@@ -56,6 +58,8 @@ class Intervention(db.Model):
             'follow_up_at':   self.follow_up_at.isoformat() + 'Z' if self.follow_up_at else None,
             'outcome':        self.outcome,
             'outcome_note':   self.outcome_note,
+            'risk_score_before': round(self.risk_score_before, 1) if self.risk_score_before is not None else None,
+            'risk_score_after':  round(self.risk_score_after, 1) if self.risk_score_after is not None else None,
             'resolved_at':    self.resolved_at.isoformat() + 'Z' if self.resolved_at else None,
             'created_at':     self.created_at.isoformat() + 'Z' if self.created_at else None,
         }

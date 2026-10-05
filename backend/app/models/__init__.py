@@ -12,7 +12,7 @@ from app.models.session import LabSession, SessionAttendance
 from app.models.exam import Exam, ExamQuestion, ExamAttempt
 from app.models.submission import CodeVersion, CodeAttempt
 from app.models.grading import Grade, InlineComment, VivaSession, VivaAnswer, HintLog
-from app.models.knowledge import ConceptMastery, StudentRanking, FocusScore
+from app.models.knowledge import ConceptMastery, StudentRanking, FocusScore, ExperimentConcept, ConceptPrereq
 from app.models.feedback import SessionFeedback, PlagiarismFlag
 from app.models.free import FreeCourse, FreeExercise, FreeProgress
 from app.models.otp import EmailOTP
@@ -37,6 +37,9 @@ from app.models.billing import Invoice, PaymentMethod
 from app.models.help import FAQArticle, SupportTicket
 from app.models.ai_governance import AIUserQuota, AIFeatureConfig, SecurityEvent, ComplianceSetting
 from app.models.admin_copilot import AdminChatSession, AdminChatMessage, InstitutionDocument
+from app.models.analytics_config import AnalyticsConfig
+from app.models.analytics_snapshot import StudentMetricSnapshot, InstitutionDailyKPI
+from app.models.analytics_rank import RankSnapshot
 
 __all__ = [
     'User', 'Institution',
@@ -69,6 +72,8 @@ __all__ = [
     'FAQArticle', 'SupportTicket',
     'AIUserQuota', 'AIFeatureConfig', 'SecurityEvent', 'ComplianceSetting',
     'AdminChatSession', 'AdminChatMessage', 'InstitutionDocument',
+    'AnalyticsConfig', 'StudentMetricSnapshot', 'InstitutionDailyKPI',
+    'RankSnapshot', 'ExperimentConcept', 'ConceptPrereq',
 ]
 
 

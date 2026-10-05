@@ -20,6 +20,26 @@ def _iso_z(dt):
 
 class LabSession(db.Model):
     __tablename__ = 'lab_sessions'
+
+    # Names match the performance-indexes migration (declared here so
+    # autogenerate doesn't try to drop them); the two new composites back the
+    # admin list endpoints: "upcoming/live" (status IN + scheduled_at ASC)
+    # and "history/calendar" (time-ordered scan within an institution).
+    __table_args__ = (
+        db.Index('ix_lab_sessions_institution_id', 'institution_id'),
+        db.Index('ix_lab_sessions_institution_id_status',
+                 'institution_id', 'status'),
+        db.Index('ix_lab_sessions_section_subject_id', 'section_subject_id'),
+        db.Index('ix_lab_sessions_experiment_id', 'experiment_id'),
+        db.Index('ix_lab_sessions_iid_status_scheduled',
+                 'institution_id', 'status', 'scheduled_at'),
+        db.Index('ix_lab_sessions_iid_scheduled',
+                 'institution_id', 'scheduled_at'),
+        # instructor dashboard active/upcoming + attention starting-soon
+        db.Index('ix_lab_sessions_ss_status_scheduled',
+                 'section_subject_id', 'status', 'scheduled_at'),
+    )
+
     id                      = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     institution_id          = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
     section_subject_id      = db.Column(db.String(36), db.ForeignKey('section_subjects.id'), nullable=False)
@@ -55,6 +75,7 @@ class LabSession(db.Model):
     created_at              = db.Column(db.DateTime, default=datetime.utcnow)
 
     attendances             = db.relationship('SessionAttendance', backref='session', lazy='dynamic')
+    experiment              = db.relationship('Experiment', foreign_keys=[experiment_id], lazy='select')
 
     def to_dict(self):
         return {
@@ -79,6 +100,10 @@ class LabSession(db.Model):
 
 class SessionAttendance(db.Model):
     __tablename__ = 'session_attendance'
+    __table_args__ = (
+        # live_dashboard/roster status filters (PK leads session_id; status adds)
+        db.Index('ix_session_attendance_session_status', 'session_id', 'status'),
+    )
     session_id          = db.Column(db.String(36), db.ForeignKey('lab_sessions.id'), primary_key=True)
     student_id          = db.Column(db.String(36), db.ForeignKey('users.id'), primary_key=True)
     joined_at           = db.Column(db.DateTime)

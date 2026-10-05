@@ -25,6 +25,13 @@ class CodeVersion(db.Model):
 class CodeAttempt(db.Model):
     """Every code execution — all attempts, not just final"""
     __tablename__ = 'code_attempts'
+    __table_args__ = (
+        # A4 attempt counts per session, session analytics
+        db.Index('ix_code_attempts_session_id', 'session_id'),
+        # dashboard pending/recent finals
+        db.Index('ix_code_attempts_exp_final_submitted',
+                 'experiment_id', 'is_final_submission', 'submitted_at'),
+    )
     id                  = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     student_id          = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
     experiment_id       = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=False)
@@ -53,6 +60,10 @@ class CodeAttempt(db.Model):
     is_final_submission = db.Column(db.Boolean, default=False)
     is_catchup          = db.Column(db.Boolean, default=False)
     submitted_at        = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def created_at(self):
+        return self.submitted_at
 
     def to_dict(self):
         return {
