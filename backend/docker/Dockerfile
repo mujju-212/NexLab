@@ -23,8 +23,7 @@ RUN mkdir -p ml_models
 
 EXPOSE 5000
 
-CMD ["gunicorn", "--worker-class", "eventlet", "-w", "1", \
-     "--bind", "0.0.0.0:5000", \
-     "--timeout", "120", \
-     "--log-level", "info", \
-     "run:app"]
+# Worker count via GUNICORN_WORKERS (default 1). >1 REQUIRES USE_REDIS=true in
+# the environment: Socket.IO needs the Redis message-broker to fan events out
+# across workers, and APScheduler would otherwise run every job N times.
+CMD ["sh", "-c", "gunicorn --worker-class eventlet -w ${GUNICORN_WORKERS:-1} --bind 0.0.0.0:5000 --timeout 120 --log-level info run:app"]

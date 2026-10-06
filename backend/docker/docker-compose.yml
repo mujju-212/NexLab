@@ -21,6 +21,21 @@ services:
       timeout: 5s
       retries: 5
 
+  # ── Redis (Socket.IO message-broker + shared rate-limit storage) ──────────
+  # REQUIRED when GUNICORN_WORKERS > 1: without it, each worker keeps its own
+  # socket room state and rate counters, so broadcasts miss users and limits
+  # effectively multiply by the worker count.
+  redis:
+    image: redis:7-alpine
+    container_name: vlab_redis
+    command: ["redis-server", "--appendonly", "no", "--maxmemory", "128mb", "--maxmemory-policy", "allkeys-lru"]
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
   # ── Flask Backend ──────────────────────────────────────────────────────────
   flask_app:
     build:
@@ -28,8 +43,15 @@ services:
       dockerfile: docker/Dockerfile
     container_name: vlab_api
     environment:
-      FLASK_ENV: ${FLASK_ENV:-development}
+      FLASK_ENV: ${FLASK_ENV:-production}
       DATABASE_URL: postgresql://postgres:${POSTGRES_PASSWORD:-devpassword}@postgres:5432/virtuallab
+      # eventlet async mode for Socket.IO (pairs with the gunicorn worker class)
+      SOCKETIO_ASYNC_MODE: eventlet
+      # USE_REDIS=true wires the Redis broker below — required for multi-worker
+      USE_REDIS: ${USE_REDIS:-true}
+      REDIS_URL: redis://redis:6379/0
+      RATELIMIT_STORAGE_URI: redis://redis:6379/1
+      GUNICORN_WORKERS: ${GUNICORN_WORKERS:-1}
       GROQ_API_KEY: ${GROQ_API_KEY}
       CLOUDINARY_CLOUD_NAME: ${CLOUDINARY_CLOUD_NAME}
       CLOUDINARY_API_KEY: ${CLOUDINARY_API_KEY}
@@ -48,6 +70,27 @@ services:
     depends_on:
       postgres:
         condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # ── Next.js Frontend (production build) ────────────────────────────────────
+  # The image builds the site once; runtime is plain `next start`. Set
+  # NEXT_PUBLIC_API_URL at BUILD time (it inlines into client bundles), so
+  # it lives under build.args, not environment.
+  frontend:
+    build:
+      context: ../../frontend
+      dockerfile: ../backend/docker/Dockerfile.frontend
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:5000/api}
+        NEXT_PUBLIC_SOCKET_URL: ${NEXT_PUBLIC_SOCKET_URL:-http://localhost:5000}
+        NEXT_PUBLIC_LIVEKIT_URL: ${NEXT_PUBLIC_LIVEKIT_URL:-}
+    container_name: vlab_web
+    ports:
+      - "3000:3000"
+    depends_on:
+      - flask_app
     restart: unless-stopped
 
 volumes:
