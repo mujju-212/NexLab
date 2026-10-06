@@ -16,7 +16,22 @@
   --danger:           #ef4444;
   --danger-pale:      #fef2f2;
   --info:             #9333ea;
-  --info-pale:        #faf5ff;
+  /* Analytics Semantic Tokens */
+  --an-pos:           #22c55e;
+  --an-warn:          #eab308;
+  --an-neg:           #ef4444;
+  --an-accent:        #7c3aed;
+  --an-muted:         #9ca3af;
+  --an-ink:           #111827;
+  --an-card-bg:       #ffffff;
+  --an-border:        #ede9fe;
+  --an-chart-1:       #7c3aed;
+  --an-chart-2:       #06b6d4;
+  --an-chart-3:       #f59e0b;
+  --an-chart-4:       #ef4444;
+  --an-chart-5:       #10b981;
+  --an-chart-6:       #8b5cf6;
+  --an-chart-7:       #ec4899;
 
   /* Text */
   --text-1:           #111827;
