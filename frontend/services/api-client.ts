@@ -4,7 +4,7 @@ import Cookies from 'js-cookie';
 // Flask backend runs on :5000 with /api prefix already in .env.local
 export const apiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000/api',
-  timeout: 15000, // fail fast instead of hanging pages when backend is slow/down
+  timeout: 30000, // allow deep analytics computations to complete smoothly
   headers: {
     'Content-Type': 'application/json',
   },

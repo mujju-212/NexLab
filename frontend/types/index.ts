@@ -60,6 +60,15 @@ export interface Experiment {
   student_status?: 'completed' | 'in_progress' | 'not_started';
   completed_at?: string | null;
   score?: number | null;
+  delivery_mode?: 'lab' | 'exam' | 'practice';
+  weightage?: number;
+  grade_scale?: number;
+  available_from?: string | null;
+  due_at?: string | null;
+  max_attempts?: number | null;
+  pass_threshold?: number | null;
+  shuffle_questions?: boolean;
+  window_state?: 'always_open' | 'upcoming' | 'active' | 'closed';
 }
 
 // ─── Pre-Lab Content ──────────────────────────────────────────────────────────

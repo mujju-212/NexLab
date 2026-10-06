@@ -33,8 +33,11 @@ export function getGlobalSocket(): Socket | null {
     currentToken = token;
     socketInstance = io(SOCKET_URL, {
       auth: { token },
-      // polling first for Flask-SocketIO compatibility
-      transports: ['polling', 'websocket'],
+      // websocket-first: each polling client pins a server HTTP thread for
+      // ~25s at a time (long-poll), which starved real API calls. WebSockets
+      // hold no request slot. Polling stays as fallback for proxies that
+      // break upgrades.
+      transports: ['websocket', 'polling'],
       reconnection: true,
       reconnectionAttempts: 15,
       reconnectionDelay: 1000,
