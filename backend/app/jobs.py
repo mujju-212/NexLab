@@ -95,6 +95,15 @@ def start():
         replace_existing=True
     )
 
+    # Job 7: Nightly analytics metric & KPI snapshot rollup (O(1) trends & risk slopes)
+    scheduler.add_job(
+        func=_run_nightly_metric_snapshots,
+        trigger='cron',
+        hour=2, minute=30,
+        id='nightly_analytics_snapshots',
+        replace_existing=True
+    )
+
     scheduler.start()
 
 
@@ -456,3 +465,14 @@ def _dispatch_scheduled_announcements():
                 scheduler.app.logger.warning(
                     '[jobs] scheduled announcement %s raised: %s', row.id, exc)
         db.session.commit()
+
+
+def _run_nightly_metric_snapshots():
+    """Nightly metric and KPI snapshots for all institutions."""
+    with scheduler.app.app_context():
+        from app.analytics.snapshots import run_all_institution_daily_snapshots
+        try:
+            res = run_all_institution_daily_snapshots()
+            scheduler.app.logger.info('[jobs] Nightly analytics snapshots completed: %s', res)
+        except Exception as exc:
+            scheduler.app.logger.warning('[jobs] Nightly analytics snapshots failed: %s', exc)

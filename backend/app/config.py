@@ -37,10 +37,16 @@ class Config:
     if SQLALCHEMY_DATABASE_URI.startswith('sqlite'):
         SQLALCHEMY_ENGINE_OPTIONS = {}
     else:
+        # Sized to cover waitress' default 16 threads with burst headroom so a
+        # page fan-out (dashboard = 6 concurrent queries) never queues on the
+        # pool. pool_pre_ping keeps recycled-after-idle connections from
+        # 500-ing when Postgres has closed them server-side.
         SQLALCHEMY_ENGINE_OPTIONS = {
             'pool_size': 10,
+            'max_overflow': 20,
             'pool_recycle': 300,
             'pool_pre_ping': True,
+            'pool_timeout': 20,
         }
 
 
@@ -128,14 +134,17 @@ class ProductionConfig(Config):
     DEBUG = False
     SQLALCHEMY_ENGINE_OPTIONS = {
         'pool_size': 20,
+        'max_overflow': 30,
         'pool_recycle': 300,
         'pool_pre_ping': True,
+        'pool_timeout': 20,
     }
 
 
 class TestingConfig(Config):
     TESTING = True
-    SQLALCHEMY_DATABASE_URI = 'postgresql://postgres:password@localhost:5432/virtuallab_test'
+    SQLALCHEMY_DATABASE_URI = os.environ.get('TEST_DATABASE_URL', 'sqlite:///:memory:')
+    SQLALCHEMY_ENGINE_OPTIONS = {}
 
 
 config = {

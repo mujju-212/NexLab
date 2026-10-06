@@ -5,6 +5,9 @@ flask-migrate==4.0.7
 flask-jwt-extended==4.6.0
 flask-cors==4.0.1
 flask-socketio==5.3.6
+simple-websocket>=1.0  # REQUIRED for websocket transport in "threading" async_mode;
+                       # without it Flask-SocketIO silently downgrades all clients
+                       # to HTTP long-polling (which starves API threads)
 flask-limiter==3.7.0
 
 # ── Database ─────────────────────────────────────────────────────────────────
@@ -14,6 +17,8 @@ sqlalchemy==2.0.36
 # ── Server ───────────────────────────────────────────────────────────────────
 gunicorn==22.0.0
 eventlet==0.36.1
+waitress==3.0.2        # production-quality WSGI server for local dev (Windows-safe)
+redis==5.2.1           # Socket.IO message-broker + shared rate-limit storage (prod)
 
 # ── Background Jobs ──────────────────────────────────────────────────────────
 apscheduler==3.10.4

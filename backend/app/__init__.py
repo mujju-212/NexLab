@@ -60,7 +60,18 @@ def create_app(config_name=None):
         response.headers['Access-Control-Allow-Methods'] = 'GET, POST, PUT, DELETE, OPTIONS, PATCH'
         return response
 
-    socketio.init_app(app, cors_allowed_origins='*', async_mode='threading')
+    # async_mode: 'threading' pairs with waitress (local dev on Windows/Linux);
+    # 'eventlet' pairs with `gunicorn -k eventlet` in production. Selected via
+    # env so the same code runs on both. When USE_REDIS=true, Socket.IO gets a
+    # Redis message-broker so multi-worker fan-out keeps working
+    # (single-worker setups don't need it).
+    sio_kwargs = {
+        'cors_allowed_origins': '*',
+        'async_mode': os.environ.get('SOCKETIO_ASYNC_MODE', 'threading'),
+    }
+    if app.config.get('USE_REDIS'):
+        sio_kwargs['client_manager'] = app.config['REDIS_URL']
+    socketio.init_app(app, **sio_kwargs)
     limiter.init_app(app)
 
     # ── Register blueprints ───────────────────────────────────────────────
@@ -91,10 +102,14 @@ def create_app(config_name=None):
     from app.practice.routes import practice_bp
     from app.practice.extras import extra_bp
     from app.notifications import notif_bp
+    from app.analytics.routes import student_analytics_bp
+    from app.student_analytics.routes import student_facing_analytics_bp, platform_public_bp
+    from app.free_analytics.routes import free_analytics_bp
 
     app.register_blueprint(auth_bp,               url_prefix='/api/auth')
     app.register_blueprint(admin_bp,              url_prefix='/api/admin')
     app.register_blueprint(platform_bp,           url_prefix='/api/platform')
+    app.register_blueprint(platform_public_bp,    url_prefix='/api/platform')
     app.register_blueprint(announcements_inst_bp, url_prefix='/api/institution')
     app.register_blueprint(institution_bp,        url_prefix='/api/institution')
     app.register_blueprint(institution_ext_bp,    url_prefix='/api/institution')
@@ -116,9 +131,13 @@ def create_app(config_name=None):
     app.register_blueprint(ai_bp,              url_prefix='/api/ai')
     app.register_blueprint(ml_bp,              url_prefix='/api/ml')
     app.register_blueprint(free_bp,            url_prefix='/api/free')
+    app.register_blueprint(free_analytics_bp,  url_prefix='/api/free/analytics')
     app.register_blueprint(practice_bp,        url_prefix='/api/practice')
     app.register_blueprint(extra_bp,           url_prefix='/api/practice')
     app.register_blueprint(notif_bp,           url_prefix='/api')
+    app.register_blueprint(student_analytics_bp, url_prefix='/api/analytics')
+    app.register_blueprint(student_facing_analytics_bp, url_prefix='/api/student/analytics')
+
 
     # ── Execution Engine v2 (Docker runner) ─────────────────────────────
     # Registered unconditionally — all routes return 503 when the flag is off.
@@ -149,7 +168,18 @@ def create_app(config_name=None):
         except Exception:
             pass  # Table may not exist yet (before first migration)
 
-    # ── Health check route ─────────────────────────────────────────────────
+    # ── Root & Health check routes ─────────────────────────────────────────
+    @app.route('/')
+    def root():
+        return {
+            'status': 'online',
+            'service': 'NexLab Virtual Lab API',
+            'version': '1.0.0',
+            'health_check': '/health',
+            'api_base': '/api',
+            'frontend_url': 'http://localhost:3000'
+        }, 200
+
     @app.route('/health')
     def health():
         return {'status': 'ok', 'service': 'virtual-lab-api'}, 200
