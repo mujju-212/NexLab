@@ -1,0 +1,88 @@
+"""
+Content Access & Unlock Engine (Track 2)
+Manages progression-based access gating for Medium/Hard problem tiers,
+advanced study plans, and competitive coding events.
+"""
+from typing import Dict, Any, List
+from app.models.practice import StudentXP, PlatformRating, xp_to_level
+
+
+def check_content_unlocks(student_id: str) -> Dict[str, Any]:
+    """
+    Evaluates unlock criteria for Medium/Hard problem tiers and advanced courses.
+    Rules:
+      - Easy: Always unlocked
+      - Medium: Unlocked when easy_solved >= 15 OR rating >= 300
+      - Hard: Unlocked when medium_solved >= 20 OR rating >= 1500
+      - Contests / Premium: Unlocked when level >= 3 OR rating >= 500
+    """
+    xp = StudentXP.query.filter_by(student_id=student_id).first()
+    rating_rec = PlatformRating.query.get(student_id)
+
+    easy_solved = rating_rec.easy_solved if rating_rec else (xp.easy_solved if xp else 0)
+    medium_solved = rating_rec.medium_solved if rating_rec else (xp.medium_solved if xp else 0)
+    rating = float(rating_rec.rating if rating_rec else 0.0)
+    total_xp = xp.total_xp if xp else 0
+    level, _ = xp_to_level(total_xp)
+
+    # 1. Medium check
+    medium_unlocked = easy_solved >= 15 or rating >= 300.0
+    medium_progress = min(100.0, round(max((easy_solved / 15.0), (rating / 300.0)) * 100.0, 1))
+
+    # 2. Hard check
+    hard_unlocked = medium_solved >= 20 or rating >= 1500.0
+    hard_progress = min(100.0, round(max((medium_solved / 20.0), (rating / 1500.0)) * 100.0, 1))
+
+    # 3. Contests / Advanced study plans check
+    contests_unlocked = level >= 3 or rating >= 500.0
+    contests_progress = min(100.0, round(max((level / 3.0), (rating / 500.0)) * 100.0, 1))
+
+    unlocked_tiers = ['Easy']
+    if medium_unlocked:
+        unlocked_tiers.append('Medium')
+    if hard_unlocked:
+        unlocked_tiers.append('Hard')
+
+    # Next unlock target
+    if not medium_unlocked:
+        next_unlock = {
+            'target': 'Medium Difficulty Problems',
+            'requirement': 'Solve 15 Easy problems OR attain 300+ Platform Rating',
+            'current': f'{easy_solved}/15 solved (Rating: {round(rating)})',
+            'progress_pct': medium_progress,
+        }
+    elif not hard_unlocked:
+        next_unlock = {
+            'target': 'Hard Difficulty Problems',
+            'requirement': 'Solve 20 Medium problems OR attain 1500+ Platform Rating',
+            'current': f'{medium_solved}/20 solved (Rating: {round(rating)})',
+            'progress_pct': hard_progress,
+        }
+    elif not contests_unlocked:
+        next_unlock = {
+            'target': 'Competitive Coding Contests',
+            'requirement': 'Reach Level 3 (Apprentice) OR 500+ Rating',
+            'current': f'Level {level} (Rating: {round(rating)})',
+            'progress_pct': contests_progress,
+        }
+    else:
+        next_unlock = {
+            'target': 'All Tiers Mastered',
+            'requirement': 'All problem tiers and competitive features are fully unlocked',
+            'current': 'Complete access',
+            'progress_pct': 100.0,
+        }
+
+    return {
+        'unlocked_tiers': unlocked_tiers,
+        'medium_unlocked': medium_unlocked,
+        'hard_unlocked': hard_unlocked,
+        'contests_unlocked': contests_unlocked,
+        'next_unlock': next_unlock,
+        'stats': {
+            'easy_solved': easy_solved,
+            'medium_solved': medium_solved,
+            'rating': round(rating, 1),
+            'level': level,
+        },
+    }
