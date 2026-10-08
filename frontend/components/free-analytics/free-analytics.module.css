@@ -1,0 +1,635 @@
+/* ══════════════════════════════════════════════════════════════════════════════
+   Free User Analytics (Growth Profile) — CSS Module
+   Theme Tokens: Purple (#7c3aed, #9333ea), Amber (#f59e0b), Emerald (#10b981)
+══════════════════════════════════════════════════════════════════════════════ */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 1.75rem;
+  font-family: var(--font-body, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+}
+
+/* ── Hero ─────────────────────────────────────────────────────────────────── */
+.rankHero {
+  position: relative;
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.95), rgba(250, 248, 255, 0.9));
+  border: 1px solid rgba(124, 58, 237, 0.15);
+  border-radius: 1.25rem;
+  padding: 1.75rem 2rem;
+  box-shadow: 0 12px 36px -10px rgba(124, 58, 237, 0.08), inset 0 1px 0 rgba(255, 255, 255, 0.9);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+  overflow: hidden;
+}
+
+.rankHero::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  height: 4px;
+  background: linear-gradient(90deg, #7c3aed, #f59e0b, #10b981);
+}
+
+.heroTopRow {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 1rem;
+}
+
+.userIdentity {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+.avatarBox {
+  width: 48px;
+  height: 48px;
+  border-radius: 50%;
+  background: linear-gradient(135deg, #7c3aed, #9333ea);
+  color: #fff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.25rem;
+  font-weight: 800;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);
+}
+
+.userName {
+  font-size: 1.25rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+  line-height: 1.2;
+}
+
+.userSubtitle {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 0.15rem 0 0;
+}
+
+.heroTopActions {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.streakPill {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #fef2f2;
+  border: 1px solid #fee2e2;
+  color: #ef4444;
+  padding: 0.4rem 0.85rem;
+  border-radius: 9999px;
+  font-size: 0.825rem;
+  font-weight: 700;
+}
+
+.shareButton {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: #f5f3ff;
+  border: 1px solid rgba(124, 58, 237, 0.2);
+  color: #7c3aed;
+  padding: 0.45rem 0.95rem;
+  border-radius: 0.65rem;
+  font-size: 0.825rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all 0.2s ease;
+}
+
+.shareButton:hover {
+  background: #ede9fe;
+  transform: translateY(-1px);
+}
+
+/* Hero Metrics Grid */
+.heroMetricsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(210px, 1fr));
+  gap: 1.25rem;
+  padding: 1rem 0;
+  border-top: 1px solid #f1f5f9;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.heroMetricCard {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.metricLabel {
+  font-size: 0.75rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: #64748b;
+}
+
+.metricValueWrap {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+}
+
+.metricPrimary {
+  font-size: 1.85rem;
+  font-weight: 900;
+  color: #0f172a;
+  letter-spacing: -0.02em;
+  line-height: 1;
+}
+
+.metricDelta {
+  font-size: 0.775rem;
+  font-weight: 700;
+  color: #10b981;
+}
+
+.metricSubtext {
+  font-size: 0.75rem;
+  color: #64748b;
+}
+
+.diffChipsRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+  margin-top: 0.35rem;
+}
+
+.diffChip {
+  font-size: 0.72rem;
+  font-weight: 700;
+  padding: 0.2rem 0.5rem;
+  border-radius: 0.375rem;
+}
+
+.diffEasy { background: #ecfdf5; color: #059669; }
+.diffMed { background: #fffbeb; color: #b45309; }
+.diffHard { background: #fef2f2; color: #dc2626; }
+
+/* Hero Unlock Bar */
+.heroUnlockRow {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.unlockHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.unlockTarget {
+  color: #334155;
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.unlockPct {
+  font-weight: 700;
+  color: #7c3aed;
+}
+
+.unlockProgressBar {
+  height: 8px;
+  background: #f1f5f9;
+  border-radius: 9999px;
+  overflow: hidden;
+  position: relative;
+}
+
+.unlockProgressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #9333ea);
+  border-radius: 9999px;
+  transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+/* ── Tabs Navigation ──────────────────────────────────────────────────────── */
+.tabsNav {
+  display: flex;
+  gap: 0.5rem;
+  background: rgba(255, 255, 255, 0.7);
+  padding: 0.35rem;
+  border-radius: 0.875rem;
+  border: 1px solid rgba(226, 232, 240, 0.8);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+
+.tabsNav::-webkit-scrollbar {
+  display: none;
+}
+
+.tabBtn {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.55rem 1.15rem;
+  border-radius: 0.625rem;
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: #64748b;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.2s ease;
+}
+
+.tabBtn:hover {
+  color: #0f172a;
+  background: rgba(255, 255, 255, 0.5);
+}
+
+.tabBtnActive {
+  color: #7c3aed;
+  background: #fff;
+  font-weight: 700;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.12);
+}
+
+/* ── Tab Content Cards ───────────────────────────────────────────────────── */
+.card {
+  background: rgba(255, 255, 255, 0.95);
+  border: 1px solid #e2e8f0;
+  border-radius: 1.125rem;
+  padding: 1.5rem;
+  box-shadow: 0 4px 16px -4px rgba(15, 23, 42, 0.04);
+}
+
+.cardHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 1.25rem;
+}
+
+.cardTitleWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.cardIconBox {
+  width: 36px;
+  height: 36px;
+  border-radius: 0.625rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cardTitle {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.cardSubtitle {
+  font-size: 0.775rem;
+  color: #64748b;
+  margin: 0.1rem 0 0;
+}
+
+/* ── Highlights Strip ─────────────────────────────────────────────────────── */
+.highlightsRow {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 1rem;
+  margin-bottom: 1.5rem;
+}
+
+.highlightCard {
+  display: flex;
+  align-items: center;
+  gap: 0.85rem;
+  background: #faf8ff;
+  border: 1px solid rgba(124, 58, 237, 0.12);
+  border-radius: 0.875rem;
+  padding: 1rem 1.15rem;
+}
+
+.highlightIconBox {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  background: #ede9fe;
+  color: #7c3aed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.highlightText {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #1e1b4b;
+}
+
+/* ── Grid Layouts ────────────────────────────────────────────────────────── */
+.twoColGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 1.5rem;
+}
+
+@media (max-width: 960px) {
+  .twoColGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* ── Recommendations ─────────────────────────────────────────────────────── */
+.recGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 1rem;
+}
+
+.recCard {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.875rem;
+  padding: 1.15rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 0.75rem;
+  transition: all 0.2s ease;
+}
+
+.recCard:hover {
+  border-color: #c4b5fd;
+  box-shadow: 0 6px 20px -6px rgba(124, 58, 237, 0.15);
+  transform: translateY(-2px);
+}
+
+.recTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.recTitle {
+  font-size: 0.95rem;
+  font-weight: 700;
+  color: #0f172a;
+  margin: 0;
+}
+
+.recReason {
+  font-size: 0.775rem;
+  color: #64748b;
+  margin: 0.25rem 0 0;
+}
+
+.recBottom {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  border-top: 1px solid #f1f5f9;
+  padding-top: 0.65rem;
+}
+
+.recActionBtn {
+  font-size: 0.775rem;
+  font-weight: 700;
+  color: #7c3aed;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+/* ── Activity Heatmap (GitHub Calendar) ──────────────────────────────────── */
+.heatmapWrapper {
+  overflow-x: auto;
+  padding-bottom: 0.5rem;
+}
+
+.heatmapGrid {
+  display: flex;
+  gap: 3px;
+  align-items: flex-start;
+  min-width: 720px;
+}
+
+.heatmapCol {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.heatmapCell {
+  width: 11px;
+  height: 11px;
+  border-radius: 2px;
+  transition: transform 0.1s ease;
+  cursor: pointer;
+}
+
+.heatmapCell:hover {
+  transform: scale(1.3);
+  z-index: 5;
+}
+
+.cellLevel0 { background: #f1f5f9; }
+.cellLevel1 { background: #ddd6fe; }
+.cellLevel2 { background: #a78bfa; }
+.cellLevel3 { background: #7c3aed; }
+.cellLevel4 { background: #4c1d95; }
+
+.heatmapLegend {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 0.35rem;
+  font-size: 0.7rem;
+  color: #64748b;
+  margin-top: 0.75rem;
+}
+
+/* ── Personal Bests Cards ─────────────────────────────────────────────────── */
+.bestsGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 1rem;
+}
+
+.bestCard {
+  background: #f8fafc;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.875rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.bestLabel {
+  font-size: 0.725rem;
+  font-weight: 700;
+  color: #64748b;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.bestValue {
+  font-size: 1.35rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+.bestDetail {
+  font-size: 0.725rem;
+  color: #64748b;
+}
+
+/* ── Course Completion Cards ──────────────────────────────────────────────── */
+.coursesGrid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.25rem;
+}
+
+.courseCard {
+  background: #fff;
+  border: 1px solid #e2e8f0;
+  border-radius: 1rem;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 1rem;
+  transition: all 0.2s ease;
+}
+
+.courseCard:hover {
+  border-color: #c4b5fd;
+  box-shadow: 0 8px 24px -8px rgba(124, 58, 237, 0.12);
+}
+
+.courseCardTop {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.courseTitle {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.courseDesc {
+  font-size: 0.8rem;
+  color: #64748b;
+  margin: 0.25rem 0 0;
+  line-height: 1.4;
+}
+
+.certBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  background: #ecfdf5;
+  border: 1px solid #a7f3d0;
+  color: #059669;
+  padding: 0.25rem 0.65rem;
+  border-radius: 9999px;
+  font-size: 0.725rem;
+  font-weight: 700;
+}
+
+.courseActionBtn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.4rem;
+  background: linear-gradient(95deg, #7c3aed, #9333ea);
+  color: #fff;
+  padding: 0.6rem 1rem;
+  border-radius: 0.625rem;
+  font-size: 0.825rem;
+  font-weight: 700;
+  border: none;
+  cursor: pointer;
+  transition: opacity 0.15s;
+}
+
+.courseActionBtn:hover {
+  opacity: 0.9;
+}
+
+/* ── Modal ────────────────────────────────────────────────────────────────── */
+.modalBackdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(15, 23, 42, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  padding: 1rem;
+}
+
+.modalBox {
+  background: #fff;
+  border-radius: 1.25rem;
+  max-width: 520px;
+  width: 100%;
+  padding: 1.75rem;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.modalHeader {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.closeBtn {
+  background: transparent;
+  border: none;
+  color: #64748b;
+  cursor: pointer;
+  padding: 0.25rem;
+  border-radius: 0.375rem;
+}
+
+.closeBtn:hover {
+  color: #0f172a;
+}
