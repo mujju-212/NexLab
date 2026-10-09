@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Mail, GraduationCap, BookOpen, ShieldCheck } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import { useAuthStore } from '@/store/auth-store';
@@ -19,14 +20,15 @@ export default function InstructorProfilePage() {
   const user = useAuthStore((s) => s.user);
   const [assignments, setAssignments] = useState<SectionSubjectLite[]>([]);
 
+  const { data, isLoading: loadingAssignments } = useQuery({
+    queryKey: ['instructor', 'section-subjects'],
+    queryFn: () => sessionService.getSectionSubjects(),
+    staleTime: 60 * 1000,
+  });
+
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await sessionService.getSectionSubjects();
-        setAssignments(res.section_subjects ?? []);
-      } catch { /* assignments stay empty on error */ }
-    })();
-  }, []);
+    if (data) setAssignments(data.section_subjects ?? []);
+  }, [data]);
 
   const name = user?.full_name ?? 'Instructor';
   const initials = name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase() || 'IN';

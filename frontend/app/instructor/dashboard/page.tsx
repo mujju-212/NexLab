@@ -1,8 +1,9 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { useQuery } from '@tanstack/react-query';
 import InstructorShell from '@/components/layout/InstructorShell';
 import { useAuthStore } from '@/store/auth-store';
 import { sessionService } from '@/services/session.service';
@@ -112,51 +113,39 @@ export default function InstructorDashboard() {
   const router = useRouter();
   const user = useAuthStore((s) => s.user);
 
-  const [loading, setLoading] = useState(true);
-  const [stats, setStats] = useState<DashStats>({
+  const { data, isLoading: loading, error } = useQuery({
+    queryKey: ['instructor', 'dashboard'],
+    queryFn: () => sessionService.getDashboard(),
+    staleTime: 60 * 1000,
+  });
+
+  const stats: DashStats = data?.stats ?? {
     experiment_count: 4,
     student_count: 24,
     active_session_count: 0,
     pending_grading_count: 11,
     new_experiments_this_month: 2,
-  });
-  const [upcomingSessions, setUpcomingSessions] = useState<SessionItem[]>([]);
-  const [recentActivity, setRecentActivity] = useState<ActivityEvent[]>([]);
-  const [conceptMastery, setConceptMastery] = useState<ConceptItem[]>([]);
-  const [performance, setPerformance] = useState<StudentPerformance>({
+  };
+  const upcomingSessions: SessionItem[] = data?.upcoming_sessions ?? [];
+  const recentActivity: ActivityEvent[] = data?.recent_activity ?? [];
+  const conceptMastery: ConceptItem[] = data?.concept_mastery ?? [];
+  const performance: StudentPerformance = data?.student_performance ?? {
     total: 71,
     excellent: 20,
     good: 35,
     needs_support: 12,
     at_risk: 4,
     performing_well_pct: 65,
-  });
-  const [recentSubmissions, setRecentSubmissions] = useState<RecentSubmission[]>([]);
+  };
+  const recentSubmissions: RecentSubmission[] = data?.recent_submissions ?? [];
 
   // Interactive calendar state
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [weekOffset, setWeekOffset] = useState<number>(0);
 
-  useEffect(() => {
-    let mounted = true;
-    (async () => {
-      try {
-        const res = await sessionService.getDashboard();
-        if (!mounted) return;
-        if (res.stats) setStats(res.stats);
-        if (res.upcoming_sessions) setUpcomingSessions(res.upcoming_sessions);
-        if (res.recent_activity) setRecentActivity(res.recent_activity);
-        if (res.concept_mastery) setConceptMastery(res.concept_mastery);
-        if (res.student_performance) setPerformance(res.student_performance);
-        if (res.recent_submissions) setRecentSubmissions(res.recent_submissions);
-      } catch (err) {
-        console.error('Failed to load instructor dashboard:', err);
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    })();
-    return () => { mounted = false; };
-  }, []);
+  if (error) {
+    console.error('Failed to load instructor dashboard:', error);
+  }
 
   // Time-of-day greeting
   const greeting = useMemo(() => {

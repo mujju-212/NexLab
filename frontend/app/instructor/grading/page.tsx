@@ -1,13 +1,15 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   ClipboardCheck, CheckCircle2, History, MessageSquare, Lock, Save, X,
-  Sparkles, Loader2, TrendingUp, FileCheck, Award,
+  Sparkles, Loader2, TrendingUp, FileCheck, Award, AlertTriangle, BookOpen,
 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import { experimentService } from '@/services/experiment.service';
 import { submissionService } from '@/services/submission.service';
+import { sessionService } from '@/services/session.service';
 import { experienceService, type InstructorExam, type ExamAttemptRow } from '@/services/experience.service';
 import styles from '../shared.module.css';
 
@@ -39,7 +41,6 @@ const fmt = (iso: string | null) =>
   iso ? new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
 
 export default function GradingPage() {
-  const [experiments, setExperiments] = useState<ExpOption[]>([]);
   const [selectedExp, setSelectedExp] = useState('');
   const [submissions, setSubmissions] = useState<SubmissionRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -68,7 +69,7 @@ export default function GradingPage() {
   const [replayIdx, setReplayIdx] = useState(0);
 
   // grading mode tab
-  const [gradingMode, setGradingMode] = useState<'submissions' | 'exams'>('submissions');
+  const [gradingMode, setGradingMode] = useState<'submissions' | 'exams' | 'rollup'>('submissions');
 
   // exam grading state
   const [examList, setExamList] = useState<InstructorExam[]>([]);
@@ -77,51 +78,95 @@ export default function GradingPage() {
   const [selectedExamData, setSelectedExamData] = useState<InstructorExam | null>(null);
   const [loadingExams, setLoadingExams] = useState(false);
 
+  // Subject rollup state
+  const [selectedSubject, setSelectedSubject] = useState('');
+
   const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
+  // ── react-query fetches ───────────────────────────────────────────────────────
+  const { data: ssData } = useQuery({
+    queryKey: ['instructor', 'section-subjects'],
+    queryFn: () => sessionService.getSectionSubjects(),
+    staleTime: 60 * 1000,
+  });
+
+  const subjects = ((ssData?.section_subjects ?? []) as Array<{ subject_id: string; subject_name: string; subject_code: string }>).filter(
+    (ss, i, arr) => arr.findIndex(x => x.subject_id === ss.subject_id) === i
+  );
+
   useEffect(() => {
-    experimentService.listMine()
-      .then(exps => {
-        setExperiments(exps as ExpOption[]);
-        if ((exps as ExpOption[]).length > 0) setSelectedExp((exps as ExpOption[])[0].id);
-      })
-      .catch(() => setExperiments([]));
-    experienceService.listExams()
-      .then(exams => {
-        setExamList(exams);
-        if (exams.length > 0) setSelectedExam(exams[0].id);
-      })
-      .catch(() => setExamList([]));
-  }, []);
+    if (subjects.length > 0 && !selectedSubject) {
+      setSelectedSubject(subjects[0].subject_id);
+    }
+  }, [subjects, selectedSubject]);
+
+  const { data: gradeSummaryData, isLoading: gradeSummaryLoading } = useQuery({
+    queryKey: ['instructor', 'subject-grade-summary', { subjectId: selectedSubject }],
+    queryFn: () => experimentService.getSubjectGradeSummary(selectedSubject),
+    enabled: !!selectedSubject && gradingMode === 'rollup',
+    staleTime: 30 * 1000,
+  });
+
+  const { data: experiments = [] } = useQuery({
+    queryKey: ['instructor', 'experiments', 'mine'],
+    queryFn: () => experimentService.listMine(),
+    staleTime: 60 * 1000,
+  });
+
+  const { data: exams = [] } = useQuery({
+    queryKey: ['instructor', 'exams'],
+    queryFn: () => experienceService.listExams(),
+    staleTime: 60 * 1000,
+  });
+
+  const { data: submissionsData, isLoading: submissionsLoading } = useQuery({
+    queryKey: ['instructor', 'submissions', { expId: selectedExp }],
+    queryFn: () => submissionService.getSubmissions(selectedExp),
+    enabled: !!selectedExp,
+    staleTime: 30 * 1000,
+  });
+
+  const { data: examAttemptsData, isLoading: examAttemptsLoading } = useQuery({
+    queryKey: ['instructor', 'exam-attempts', { examId: selectedExam }],
+    queryFn: () => experienceService.getExamAttempts(selectedExam),
+    enabled: !!selectedExam,
+    staleTime: 30 * 1000,
+  });
+
+  // Sync selected experiment when list loads
+  useEffect(() => {
+    if ((experiments as ExpOption[]).length > 0 && !selectedExp) setSelectedExp((experiments as ExpOption[])[0].id);
+  }, [experiments, selectedExp]);
+
+  // Sync selected exam when list loads
+  useEffect(() => {
+    if (exams.length > 0 && !selectedExam) setSelectedExam(exams[0].id);
+    setExamList(exams as InstructorExam[]);
+  }, [exams, selectedExam]);
+
+  // Sync submissions data
+  useEffect(() => {
+    if (submissionsData) setSubmissions(submissionsData.submissions ?? []);
+  }, [submissionsData]);
+
+  // Sync exam attempts data
+  useEffect(() => {
+    if (examAttemptsData) {
+      setExamAttempts(examAttemptsData.attempts ?? []);
+      setSelectedExamData(examAttemptsData.exam ?? null);
+    }
+  }, [examAttemptsData]);
+
+  // Derived loading states
+  const isLoading = submissionsLoading || examAttemptsLoading;
 
   const loadSubmissions = useCallback(async (expId: string) => {
-    if (!expId) return;
-    setLoading(true);
-    try {
-      const d = await submissionService.getSubmissions(expId);
-      setSubmissions(d.submissions ?? []);
-    } catch { setSubmissions([]); }
-    finally { setLoading(false); }
+    // No longer needed — react-query handles this
   }, []);
-
-  useEffect(() => { loadSubmissions(selectedExp); }, [selectedExp, loadSubmissions]);
 
   const loadExamAttempts = useCallback(async (examId: string) => {
-    if (!examId) return;
-    setLoadingExams(true);
-    try {
-      const res = await experienceService.getExamAttempts(examId);
-      setExamAttempts(res.attempts ?? []);
-      setSelectedExamData(res.exam ?? null);
-    } catch {
-      setExamAttempts([]);
-      setSelectedExamData(null);
-    } finally {
-      setLoadingExams(false);
-    }
+    // No longer needed — react-query handles this
   }, []);
-
-  useEffect(() => { if (selectedExam) loadExamAttempts(selectedExam); }, [selectedExam, loadExamAttempts]);
 
   const openGrade = (sub: SubmissionRow) => {
     setGrading(sub);
@@ -235,6 +280,19 @@ export default function GradingPage() {
             </span>
           )}
         </button>
+        <button
+          onClick={() => setGradingMode('rollup')}
+          style={{
+            padding: '8px 20px', borderRadius: 8, fontSize: 13, fontWeight: 700,
+            border: 'none', cursor: 'pointer',
+            background: gradingMode === 'rollup' ? '#fff' : 'transparent',
+            color: gradingMode === 'rollup' ? '#0f172a' : '#64748b',
+            boxShadow: gradingMode === 'rollup' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+            display: 'flex', alignItems: 'center', gap: 6,
+          }}
+        >
+          <Award size={14} /> Subject Grade Book
+        </button>
       </div>
 
       {gradingMode === 'submissions' && (
@@ -242,11 +300,11 @@ export default function GradingPage() {
       <div className={styles.actionRow}>
         <select className={styles.select} style={{ maxWidth: 380 }} value={selectedExp}
           onChange={e => setSelectedExp(e.target.value)}>
-          {experiments.length === 0 && <option value="">No experiments found</option>}
-          {experiments.map(e => <option key={e.id} value={e.id}>#{e.exp_number} — {e.title}</option>)}
+          {(experiments as ExpOption[]).length === 0 && <option value="">No experiments found</option>}
+          {(experiments as ExpOption[]).map(e => <option key={e.id} value={e.id}>#{e.exp_number} — {e.title}</option>)}
         </select>
         <span className={styles.sectionSub}>
-          {loading ? 'Loading…' : `${submissions.length} final submission${submissions.length === 1 ? '' : 's'}`}
+          {isLoading ? 'Loading…' : `${submissions.length} final submission${submissions.length === 1 ? '' : 's'}`}
         </span>
         {selectedExp && (
           <button className={styles.ghostBtn} onClick={() => { setShowCurve(true); setCurvePreview(null); }}
@@ -262,7 +320,7 @@ export default function GradingPage() {
             <ClipboardCheck size={30} color="#d8b4fe" style={{ marginBottom: 8 }} />
             <p className={styles.sectionSub}>Create an experiment first to receive submissions.</p>
           </div>
-        ) : loading ? (
+        ) : isLoading ? (
           <p className={styles.sectionSub}>Loading submissions…</p>
         ) : submissions.length === 0 ? (
           <div style={{ textAlign: 'center', padding: '32px 0' }}>
@@ -468,7 +526,7 @@ export default function GradingPage() {
               {examList.map(e => <option key={e.id} value={e.id}>{e.title} ({e.exam_type.toUpperCase()})</option>)}
             </select>
             <span className={styles.sectionSub}>
-              {loadingExams ? 'Loading…' : `${examAttempts.length} attempt${examAttempts.length === 1 ? '' : 's'}`}
+              {isLoading ? 'Loading…' : `${examAttempts.length} attempt${examAttempts.length === 1 ? '' : 's'}`}
               {selectedExamData && selectedExamData.grade_weight > 0 && (
                 <span style={{ marginLeft: 8, fontSize: 11, fontWeight: 700, background: '#fef3c7', color: '#d97706', padding: '2px 8px', borderRadius: 6 }}>
                   {Math.round(selectedExamData.grade_weight * 100)}% of final grade
@@ -483,7 +541,7 @@ export default function GradingPage() {
                 <FileCheck size={30} color="#d8b4fe" style={{ marginBottom: 8 }} />
                 <p className={styles.sectionSub}>No exams created yet. Create exams from the Experiments page.</p>
               </div>
-            ) : loadingExams ? (
+            ) : isLoading ? (
               <p className={styles.sectionSub}>Loading exam attempts…</p>
             ) : examAttempts.length === 0 ? (
               <div style={{ textAlign: 'center', padding: '32px 0' }}>
@@ -563,6 +621,206 @@ export default function GradingPage() {
                   </tbody>
                 </table>
               </>
+            )}
+          </div>
+        </>
+      )}
+
+      {gradingMode === 'rollup' && (
+        <>
+          <div className={styles.actionRow} style={{ flexWrap: 'wrap', gap: 12 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <BookOpen size={16} color="#7c3aed" />
+              <select
+                className={styles.select}
+                style={{ minWidth: 260 }}
+                value={selectedSubject}
+                onChange={e => setSelectedSubject(e.target.value)}
+              >
+                {subjects.length === 0 && <option value="">No subjects found</option>}
+                {subjects.map(s => (
+                  <option key={s.subject_id} value={s.subject_id}>
+                    {s.subject_name} ({s.subject_code})
+                  </option>
+                ))}
+              </select>
+            </div>
+            {gradeSummaryData && (
+              <span className={styles.sectionSub}>
+                {gradeSummaryData.students.length} student{gradeSummaryData.students.length === 1 ? '' : 's'} enrolled • {gradeSummaryData.experiments.length} assessment items
+              </span>
+            )}
+          </div>
+
+          {/* Over-allocation warning banner */}
+          {gradeSummaryData?.subject.over_allocation && (
+            <div style={{
+              display: 'flex', alignItems: 'center', gap: 12,
+              background: '#fffbeb', border: '1px solid #fef3c7', color: '#b45309',
+              padding: '12px 18px', borderRadius: 12, fontSize: 13.5, fontWeight: 600,
+              marginBottom: 16
+            }}>
+              <AlertTriangle size={18} color="#d97706" />
+              <div>
+                <strong>Over-allocation Detected:</strong> Total assessment weightage ({gradeSummaryData.subject.total_weightage} pts) exceeds Subject Total Marks ({gradeSummaryData.subject.total_marks} pts).
+                Student rollup scores may exceed the course ceiling.
+              </div>
+            </div>
+          )}
+
+          {/* Metric KPI cards */}
+          {gradeSummaryData && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Subject Ceiling</span>
+                <span style={{ fontSize: 20, fontWeight: 800, color: '#0f172a' }}>{gradeSummaryData.subject.total_marks} Marks</span>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>{gradeSummaryData.subject.name} ({gradeSummaryData.subject.code})</span>
+              </div>
+
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Total Weightage Sum</span>
+                <span style={{
+                  fontSize: 20, fontWeight: 800,
+                  color: gradeSummaryData.subject.over_allocation ? '#d97706' : '#7c3aed'
+                }}>
+                  {gradeSummaryData.subject.total_weightage} pts
+                </span>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                  {gradeSummaryData.subject.over_allocation ? 'Exceeds total marks' : 'Within ceiling'}
+                </span>
+              </div>
+
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Assessments</span>
+                <span style={{ fontSize: 20, fontWeight: 800, color: '#0f172a' }}>
+                  {gradeSummaryData.experiments.length}
+                </span>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                  {gradeSummaryData.experiments.filter(e => e.delivery_mode === 'exam').length} Exams • {gradeSummaryData.experiments.filter(e => e.delivery_mode !== 'exam').length} Labs
+                </span>
+              </div>
+
+              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 12, padding: '14px 16px', display: 'flex', flexDirection: 'column', gap: 4 }}>
+                <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Class Average</span>
+                <span style={{ fontSize: 20, fontWeight: 800, color: '#059669' }}>
+                  {gradeSummaryData.students.length > 0
+                    ? `${(gradeSummaryData.students.reduce((acc, s) => acc + s.subject_score, 0) / gradeSummaryData.students.length).toFixed(1)} pts`
+                    : '—'}
+                </span>
+                <span style={{ fontSize: 11, color: '#94a3b8' }}>Across all enrolled students</span>
+              </div>
+            </div>
+          )}
+
+          {/* Rollup Matrix Table Card */}
+          <div className={styles.sectionCard} style={{ overflow: 'hidden' }}>
+            {gradeSummaryLoading ? (
+              <p className={styles.sectionSub} style={{ padding: 24 }}>Loading subject grade book…</p>
+            ) : !selectedSubject ? (
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <BookOpen size={30} color="#d8b4fe" style={{ marginBottom: 8 }} />
+                <p className={styles.sectionSub}>Select a subject to view the grade book.</p>
+              </div>
+            ) : !gradeSummaryData || gradeSummaryData.experiments.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '32px 0' }}>
+                <ClipboardCheck size={30} color="#d8b4fe" style={{ marginBottom: 8 }} />
+                <p className={styles.sectionSub}>No experiments or exams found for this subject.</p>
+              </div>
+            ) : (
+              <div style={{ overflowX: 'auto', width: '100%' }}>
+                <table className={styles.table} style={{ minWidth: 700 }}>
+                  <thead>
+                    <tr>
+                      <th style={{ minWidth: 200, position: 'sticky', left: 0, background: '#f8fafc', zIndex: 1 }}>Student</th>
+                      {gradeSummaryData.experiments.map(e => (
+                        <th key={e.id} style={{ minWidth: 140, textAlign: 'center' }}>
+                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 2 }}>
+                            <span style={{ fontSize: 11, fontWeight: 700, color: '#475569' }}>
+                              #{e.exp_number} {e.title.length > 18 ? e.title.slice(0, 18) + '…' : e.title}
+                            </span>
+                            <span style={{
+                              fontSize: 10,
+                              fontWeight: 700,
+                              padding: '1px 6px',
+                              borderRadius: 6,
+                              background: e.delivery_mode === 'exam' ? '#ede9fe' : '#e0f2fe',
+                              color: e.delivery_mode === 'exam' ? '#7c3aed' : '#0369a1',
+                            }}>
+                              {e.delivery_mode === 'exam' ? '⏱️ Exam' : '🧪 Lab'} ({e.weightage} pts)
+                            </span>
+                          </div>
+                        </th>
+                      ))}
+                      <th style={{ minWidth: 150, textAlign: 'right' }}>
+                        Total Rollup ({gradeSummaryData.subject.total_marks} max)
+                      </th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {gradeSummaryData.students.length === 0 ? (
+                      <tr>
+                        <td colSpan={gradeSummaryData.experiments.length + 2} style={{ textAlign: 'center', padding: 24, color: '#64748b' }}>
+                          No students enrolled in this subject.
+                        </td>
+                      </tr>
+                    ) : (
+                      gradeSummaryData.students.map(s => {
+                        const pct = gradeSummaryData.subject.total_marks > 0
+                          ? Math.round((s.subject_score / gradeSummaryData.subject.total_marks) * 100)
+                          : 0;
+                        return (
+                          <tr key={s.student_id}>
+                            <td style={{ position: 'sticky', left: 0, background: '#ffffff', zIndex: 1 }}>
+                              <div className={styles.tdStrong}>{s.full_name}</div>
+                              <div style={{ fontSize: 12, color: '#94a3b8' }}>
+                                {s.roll_number || s.student_id.slice(0, 8)}
+                              </div>
+                            </td>
+                            {gradeSummaryData.experiments.map(e => {
+                              const rawScore = s.experiment_scores[e.id];
+                              const hasScore = rawScore !== undefined && rawScore !== null;
+                              const weighted = hasScore ? ((rawScore / (e.grade_scale || 100)) * (e.weightage || 0)) : 0;
+                              return (
+                                <td key={e.id} style={{ textAlign: 'center' }}>
+                                  {hasScore ? (
+                                    <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
+                                      <span style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>
+                                        {rawScore} / {e.grade_scale}
+                                      </span>
+                                      <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>
+                                        +{weighted.toFixed(1)} pts
+                                      </span>
+                                    </div>
+                                  ) : (
+                                    <span style={{ fontSize: 13, color: '#cbd5e1' }}>—</span>
+                                  )}
+                                </td>
+                              );
+                            })}
+                            <td style={{ textAlign: 'right' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
+                                <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>
+                                  {s.subject_score.toFixed(1)} / {gradeSummaryData.subject.total_marks}
+                                </span>
+                                <span style={{
+                                  fontSize: 11,
+                                  fontWeight: 700,
+                                  padding: '1px 7px',
+                                  borderRadius: 8,
+                                  background: pct >= 75 ? '#dcfce7' : pct >= 50 ? '#dbeafe' : '#fee2e2',
+                                  color: pct >= 75 ? '#15803d' : pct >= 50 ? '#1d4ed8' : '#b91c1c'
+                                }}>
+                                  {pct}%
+                                </span>
+                              </div>
+                            </td>
+                          </tr>
+                        );
+                      })
+                    )}
+                  </tbody>
+                </table>
+              </div>
             )}
           </div>
         </>

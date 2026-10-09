@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import { RotateCcw, Video, FileText, Clock, Loader2 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import styles from '../shared.module.css';
@@ -15,26 +16,21 @@ const fmtDate = (iso: string | null | undefined) => {
 
 export default function CatchUpPage() {
   const router = useRouter();
-  const [data, setData] = useState<CatchupOverview | null>(null);
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await instructorService.getCatchups();
-        setData(res);
-      } catch {
-        setError('Could not load catch-up overview.');
-      } finally {
-        setLoading(false);
-      }
-    })();
-  }, []);
+  const { data, isLoading: loading, error: fetchError } = useQuery({
+    queryKey: ['instructor', 'catchups'],
+    queryFn: () => instructorService.getCatchups(),
+    staleTime: 60 * 1000,
+  });
 
   const enabled = data?.enabled_sessions ?? [];
   const active = enabled.filter((s) => !s.expired);
   const attempts = data?.attempts ?? [];
+
+  useEffect(() => {
+    if (fetchError) setError('Could not load catch-up overview.');
+  }, [fetchError]);
 
   return (
     <InstructorShell

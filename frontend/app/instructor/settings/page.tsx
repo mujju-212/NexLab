@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Save, Loader2 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import { experienceService } from '@/services/experience.service';
@@ -62,35 +63,37 @@ const DEFAULT_SETTINGS: SettingsShape = {
 
 export default function InstructorSettingsPage() {
   const [settings, setSettings] = useState<SettingsShape>(DEFAULT_SETTINGS);
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
 
-  const load = useCallback(async () => {
-    try {
-      const s = await experienceService.getSettings();
-      if (s) {
-        setSettings((prev) => ({
-          ...DEFAULT_SETTINGS,
-          ...(s as unknown as Partial<SettingsShape>),
-          default_proctor_policy: {
-            ...DEFAULT_SETTINGS.default_proctor_policy,
-            ...((s as any)?.default_proctor_policy || {}),
-          },
-          default_rubric: {
-            ...DEFAULT_SETTINGS.default_rubric,
-            ...((s as any)?.default_rubric || {}),
-          },
-        }));
-      }
-    } catch {
-      /* keep defaults */
-    } finally {
-      setLoading(false);
-    }
-  }, []);
+  const { data, isLoading: loading, error: fetchError } = useQuery({
+    queryKey: ['instructor', 'settings'],
+    queryFn: () => experienceService.getSettings(),
+    staleTime: 60 * 1000,
+  });
 
-  useEffect(() => { load(); }, [load]);
+  useEffect(() => {
+    if (data) {
+      setSettings((prev) => ({
+        ...DEFAULT_SETTINGS,
+        ...(data as unknown as Partial<SettingsShape>),
+        default_proctor_policy: {
+          ...DEFAULT_SETTINGS.default_proctor_policy,
+          ...((data as any)?.default_proctor_policy || {}),
+        },
+        default_rubric: {
+          ...DEFAULT_SETTINGS.default_rubric,
+          ...((data as any)?.default_rubric || {}),
+        },
+      }));
+    }
+  }, [data]);
+
+  useEffect(() => {
+    if (fetchError) {
+      /* keep defaults */
+    }
+  }, [fetchError]);
 
   const save = async () => {
     setSaving(true);

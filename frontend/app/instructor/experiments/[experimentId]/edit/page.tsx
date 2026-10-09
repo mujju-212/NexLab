@@ -1,6 +1,7 @@
 'use client';
 
 import { use, useCallback, useEffect, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Save, Sparkles, AlertCircle,
@@ -34,6 +35,12 @@ interface Exp {
   is_published: boolean;
   weightage: number;
   grade_scale: 100 | 10;
+  delivery_mode?: 'lab' | 'exam' | 'practice';
+  available_from?: string | null;
+  due_at?: string | null;
+  max_attempts?: number | null;
+  pass_threshold?: number | null;
+  shuffle_questions?: boolean;
   experiment_type?: string;
   rubric_test_cases?: number;
   rubric_lab_report?: number;
@@ -202,13 +209,13 @@ function GradingSection({
 export default function EditExperimentPage({ params }: { params: Promise<{ experimentId: string }> }) {
   const { experimentId } = use(params);
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   const [tab, setTab] = useState<Tab>('details');
   const [exp, setExp] = useState<Exp | null>(null);
   const [toast, setToast] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [languages, setLanguages] = useState<CompilerLanguage[]>([]);
 
   // Interactive Concept Tags state
   const [tagInput, setTagInput] = useState('');
@@ -228,6 +235,13 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
     allow_ai_hints: true,
     weightage: 100,
     grade_scale: 100 as 100 | 10,
+    delivery_mode: 'lab' as 'lab' | 'exam' | 'practice',
+    available_from: '',
+    due_at: '',
+    duration_minutes: 60,
+    max_attempts: 1,
+    pass_threshold: 40,
+    shuffle_questions: false,
     prerequisites: '',
     learning_outcomes: '',
 
@@ -240,53 +254,61 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
   });
 
   const [contentCount, setContentCount] = useState<number | null>(null);
+  const [languages, setLanguages] = useState<CompilerLanguage[]>([]);
 
   const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
-  const loadExp = useCallback(async () => {
-    try {
-      let found: Exp | null = null;
-      try {
-        found = (await experimentService.getById(experimentId)) as unknown as Exp;
-      } catch {
-        const exps = (await experimentService.listMine()) as Exp[];
-        found = exps.find(e => e.id === experimentId) ?? null;
-      }
-      setExp(found);
-      if (found) {
-        setTagsList(found.concept_tags ?? []);
-        setForm({
-          title: found.title,
-          aim: found.aim ?? '',
-          exp_number: found.exp_number ?? 1,
-          difficulty_level: found.difficulty_level ?? 2,
-          time_limit_sec: found.time_limit_sec ?? 60,
-          allowed_languages: found.allowed_languages ?? [],
-          experiment_type: found.experiment_type ?? 'coding',
-          enable_viva: found.enable_viva ?? true,
-          enable_lockdown: found.enable_lockdown ?? true,
-          allow_ai_hints: found.allow_ai_hints ?? true,
-          weightage: found.weightage ?? 100,
-          grade_scale: (found.grade_scale === 10 ? 10 : 100) as 100 | 10,
-          prerequisites: '',
-          learning_outcomes: '',
-          rubric_test_cases: found.rubric_test_cases ?? 60,
-          rubric_lab_report: found.rubric_lab_report ?? 20,
-          rubric_code_quality: found.rubric_code_quality ?? 10,
-          rubric_viva: found.rubric_viva ?? 10,
-          rubric_quiz: found.rubric_quiz ?? 0,
-        });
-      }
-    } catch { setExp(null); }
-  }, [experimentId]);
+  const { data: expData, isLoading: loadingExp } = useQuery({
+    queryKey: ['instructor', 'experiment', { id: experimentId }],
+    queryFn: () => experimentService.getById(experimentId),
+    staleTime: 60 * 1000,
+  });
 
-  useEffect(() => { loadExp(); }, [loadExp]);
+  const { data: langData, isLoading: loadingLang } = useQuery({
+    queryKey: ['execution', 'languages'],
+    queryFn: () => executionService.listLanguages(),
+    staleTime: 60 * 1000,
+  });
 
   useEffect(() => {
-    executionService.listLanguages()
-      .then(d => setLanguages((d.languages ?? []).filter(l => l.engine === 'docker')))
-      .catch(() => setLanguages([]));
-  }, []);
+    if (expData) {
+      const found = expData as unknown as Exp;
+      setExp(found);
+      setTagsList(found.concept_tags ?? []);
+      setForm({
+        title: found.title,
+        aim: found.aim ?? '',
+        exp_number: found.exp_number ?? 1,
+        difficulty_level: found.difficulty_level ?? 2,
+        time_limit_sec: found.time_limit_sec ?? 60,
+        allowed_languages: found.allowed_languages ?? [],
+        experiment_type: found.experiment_type ?? 'coding',
+        enable_viva: found.enable_viva ?? true,
+        enable_lockdown: found.enable_lockdown ?? true,
+        allow_ai_hints: found.allow_ai_hints ?? true,
+        weightage: found.weightage ?? 100,
+        grade_scale: (found.grade_scale === 10 ? 10 : 100) as 100 | 10,
+        delivery_mode: (found.delivery_mode || 'lab') as 'lab' | 'exam' | 'practice',
+        available_from: found.available_from ? found.available_from.slice(0, 16) : '',
+        due_at: found.due_at ? found.due_at.slice(0, 16) : '',
+        duration_minutes: found.time_limit_sec ? Math.round(found.time_limit_sec / 60) : 60,
+        max_attempts: found.max_attempts ?? 1,
+        pass_threshold: found.pass_threshold ?? 40,
+        shuffle_questions: Boolean(found.shuffle_questions),
+        prerequisites: '',
+        learning_outcomes: '',
+        rubric_test_cases: found.rubric_test_cases ?? 60,
+        rubric_lab_report: found.rubric_lab_report ?? 20,
+        rubric_code_quality: found.rubric_code_quality ?? 10,
+        rubric_viva: found.rubric_viva ?? 10,
+        rubric_quiz: found.rubric_quiz ?? 0,
+      });
+    }
+  }, [expData]);
+
+  useEffect(() => {
+    setLanguages((langData?.languages ?? []).filter((l: CompilerLanguage) => l.engine === 'docker'));
+  }, [langData]);
 
   useEffect(() => {
     const t = new URLSearchParams(window.location.search).get('tab');
@@ -335,7 +357,7 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
         aim: form.aim,
         difficulty_level: form.difficulty_level,
         concept_tags: tagsList,
-        time_limit_sec: form.time_limit_sec,
+        time_limit_sec: form.delivery_mode === 'exam' ? form.duration_minutes * 60 : form.time_limit_sec,
         allowed_languages: form.allowed_languages,
         experiment_type: form.experiment_type,
         enable_viva: form.enable_viva,
@@ -343,6 +365,12 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
         allow_ai_hints: form.allow_ai_hints,
         weightage: form.weightage,
         grade_scale: form.grade_scale,
+        delivery_mode: form.delivery_mode,
+        available_from: form.delivery_mode === 'exam' && form.available_from ? form.available_from : null,
+        due_at: form.delivery_mode === 'exam' && form.due_at ? form.due_at : null,
+        max_attempts: form.delivery_mode === 'exam' ? form.max_attempts : null,
+        pass_threshold: form.delivery_mode === 'exam' ? form.pass_threshold : null,
+        shuffle_questions: form.delivery_mode === 'exam' ? form.shuffle_questions : false,
         rubric_test_cases: form.rubric_test_cases,
         rubric_lab_report: form.rubric_lab_report,
         rubric_code_quality: form.rubric_code_quality,
@@ -350,7 +378,7 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
         rubric_quiz: form.rubric_quiz,
       });
       toast3('Experiment settings saved successfully.');
-      loadExp();
+      queryClient.invalidateQueries({ queryKey: ['instructor', 'experiment', { id: experimentId }] });
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };
       setError(e?.response?.data?.error ?? 'Failed to save experiment.');
@@ -459,8 +487,176 @@ export default function EditExperimentPage({ params }: { params: Promise<{ exper
                 value={form.weightage}
                 onChange={e => setForm(f => ({ ...f, weightage: parseInt(e.target.value) || 100 }))}
               />
+              <p className={createStyles.inputHelpText} style={{ color: '#7c3aed', fontWeight: 600 }}>
+                Rolls up into subject grade: (score / grade_scale) × weightage
+              </p>
             </div>
           </div>
+
+          {/* Delivery Mode Selector */}
+          <div className={createStyles.formGroup}>
+            <label className={createStyles.formLabel}>
+              Delivery Mode <span className={createStyles.reqStar}>*</span>
+            </label>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(180px, 1fr))', gap: 12, marginTop: 4 }}>
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, delivery_mode: 'lab' }))}
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: 12,
+                  border: form.delivery_mode === 'lab' ? '2px solid #7c3aed' : '1px solid #e2e8f0',
+                  background: form.delivery_mode === 'lab' ? '#f5f3ff' : '#ffffff',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4
+                }}
+              >
+                <span style={{ fontWeight: 700, fontSize: 14, color: form.delivery_mode === 'lab' ? '#6d28d9' : '#1e293b' }}>
+                  🧪 Lab Experiment
+                </span>
+                <span style={{ fontSize: 12, color: '#64748b' }}>
+                  Standard continuous lab with modules, code runner, and viva.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, delivery_mode: 'exam' }))}
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: 12,
+                  border: form.delivery_mode === 'exam' ? '2px solid #7c3aed' : '1px solid #e2e8f0',
+                  background: form.delivery_mode === 'exam' ? '#f5f3ff' : '#ffffff',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4
+                }}
+              >
+                <span style={{ fontWeight: 700, fontSize: 14, color: form.delivery_mode === 'exam' ? '#6d28d9' : '#1e293b' }}>
+                  ⏱️ Timed Exam
+                </span>
+                <span style={{ fontSize: 12, color: '#64748b' }}>
+                  Scheduled time window, attempt limit, rolls up to subject grade.
+                </span>
+              </button>
+
+              <button
+                type="button"
+                onClick={() => setForm(f => ({ ...f, delivery_mode: 'practice' }))}
+                style={{
+                  padding: '14px 16px',
+                  borderRadius: 12,
+                  border: form.delivery_mode === 'practice' ? '2px solid #7c3aed' : '1px solid #e2e8f0',
+                  background: form.delivery_mode === 'practice' ? '#f5f3ff' : '#ffffff',
+                  textAlign: 'left',
+                  cursor: 'pointer',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4
+                }}
+              >
+                <span style={{ fontWeight: 700, fontSize: 14, color: form.delivery_mode === 'practice' ? '#6d28d9' : '#1e293b' }}>
+                  ✨ Practice Mode
+                </span>
+                <span style={{ fontSize: 12, color: '#64748b' }}>
+                  Self-paced playground without exam or grading pressure.
+                </span>
+              </button>
+            </div>
+          </div>
+
+          {/* Conditional Timed Exam Settings */}
+          {form.delivery_mode === 'exam' && (
+            <div style={{ background: '#faf5ff', border: '1px solid #e9d5ff', borderRadius: 14, padding: 16, display: 'flex', flexDirection: 'column', gap: 14 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <span style={{ fontSize: 16 }}>⏱️</span>
+                <strong style={{ fontSize: 14, color: '#6b21a8' }}>Exam Window & Delivery Settings</strong>
+              </div>
+
+              <div className={createStyles.gridTwo}>
+                <div className={createStyles.formGroup}>
+                  <label className={createStyles.formLabel}>Available From</label>
+                  <input
+                    type="datetime-local"
+                    className={createStyles.formInput}
+                    value={form.available_from}
+                    onChange={e => setForm(f => ({ ...f, available_from: e.target.value }))}
+                  />
+                  <p className={createStyles.inputHelpText}>Optional: earliest date/time students can start.</p>
+                </div>
+
+                <div className={createStyles.formGroup}>
+                  <label className={createStyles.formLabel}>Due Date / Window Closes</label>
+                  <input
+                    type="datetime-local"
+                    className={createStyles.formInput}
+                    value={form.due_at}
+                    onChange={e => setForm(f => ({ ...f, due_at: e.target.value }))}
+                  />
+                  <p className={createStyles.inputHelpText}>Optional: deadline after which no new attempts are allowed.</p>
+                </div>
+              </div>
+
+              <div className={createStyles.gridTwo}>
+                <div className={createStyles.formGroup}>
+                  <label className={createStyles.formLabel}>Duration (Minutes)</label>
+                  <input
+                    type="number"
+                    min={5}
+                    max={300}
+                    className={createStyles.formInput}
+                    value={form.duration_minutes}
+                    onChange={e => setForm(f => ({ ...f, duration_minutes: parseInt(e.target.value) || 60 }))}
+                  />
+                  <p className={createStyles.inputHelpText}>Timer duration once an attempt starts.</p>
+                </div>
+
+                <div className={createStyles.formGroup}>
+                  <label className={createStyles.formLabel}>Max Attempts</label>
+                  <input
+                    type="number"
+                    min={1}
+                    max={10}
+                    className={createStyles.formInput}
+                    value={form.max_attempts}
+                    onChange={e => setForm(f => ({ ...f, max_attempts: parseInt(e.target.value) || 1 }))}
+                  />
+                  <p className={createStyles.inputHelpText}>Number of attempts allowed per student.</p>
+                </div>
+              </div>
+
+              <div className={createStyles.gridTwo}>
+                <div className={createStyles.formGroup}>
+                  <label className={createStyles.formLabel}>Pass Threshold (%)</label>
+                  <input
+                    type="number"
+                    min={0}
+                    max={100}
+                    className={createStyles.formInput}
+                    value={form.pass_threshold}
+                    onChange={e => setForm(f => ({ ...f, pass_threshold: parseInt(e.target.value) || 40 }))}
+                  />
+                </div>
+
+                <div className={createStyles.formGroup} style={{ justifyContent: 'center' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', marginTop: 24, fontSize: 13.5, fontWeight: 600, color: '#334155' }}>
+                    <input
+                      type="checkbox"
+                      checked={form.shuffle_questions}
+                      onChange={e => setForm(f => ({ ...f, shuffle_questions: e.target.checked }))}
+                      style={{ width: 16, height: 16, accentColor: '#7c3aed' }}
+                    />
+                    Shuffle Question Order for Students
+                  </label>
+                </div>
+              </div>
+            </div>
+          )}
 
           <div className={createStyles.formGroup}>
             <label className={createStyles.formLabel}>

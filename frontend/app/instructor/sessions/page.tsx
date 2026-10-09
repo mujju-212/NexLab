@@ -1,17 +1,18 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
+import InstructorShell from '@/components/layout/InstructorShell';
+import { sessionService } from '@/services/session.service';
+import { experimentService } from '@/services/experiment.service';
+import { experienceService } from '@/services/experience.service';
 import {
   Plus, Search, Calendar, Radio, Clock, CheckCircle2, AlertTriangle,
   Code, Database, FileText, ChevronLeft, ChevronRight, X, Play, ArrowRight,
   ShieldCheck, Lock, RotateCcw, BrainCircuit, Users, Eye, Edit3, Filter as FilterIcon,
   Sparkles, Check, Save, Sliders, Shield, Award, Activity, Trash2, Layers, BookOpen, AlertCircle
 } from 'lucide-react';
-import InstructorShell from '@/components/layout/InstructorShell';
-import { sessionService } from '@/services/session.service';
-import { experimentService } from '@/services/experiment.service';
-import { experienceService } from '@/services/experience.service';
 import styles from './sessions.module.css';
 
 interface EnrichedSession {
@@ -66,6 +67,21 @@ const getCountdownString = (scheduledAt: string | null) => {
 
 export default function SessionsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
+
+  // ── react-query loader helpers (mirrors admin/sessions pattern) ───────────────
+  const SESSIONS_STALE_MS = 30 * 1000;
+
+  const cachedFetch = <T,>(key: unknown[], fn: () => Promise<T>) =>
+    queryClient.fetchQuery<T>({
+      queryKey: ['instructor', 'sessions', ...key],
+      queryFn: fn,
+      staleTime: SESSIONS_STALE_MS,
+    });
+
+  const invalidateSessions = () =>
+    queryClient.invalidateQueries({ queryKey: ['instructor', 'sessions'] });
+
   const [sessions, setSessions] = useState<EnrichedSession[]>([]);
   const [activeTab, setActiveTab] = useState<FilterTab>('All Sessions');
   const [searchQuery, setSearchQuery] = useState('');
@@ -102,6 +118,51 @@ export default function SessionsPage() {
   const [weekOffset, setWeekOffset] = useState(0);
 
   const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+
+  // ── Loaders — routed through react-query cache (fetchQuery) ──────────────────
+  const loadLive = async () => {
+    try {
+      const data = await cachedFetch(['live'], () => sessionService.list());
+      setSessions(data.sessions ?? []);
+    } catch {
+      setSessions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const loadUpcoming = async () => {
+    try {
+      const data = await cachedFetch(['upcoming'], () => sessionService.list());
+      setSessions(data.sessions ?? []);
+    } catch {
+      setSessions([]);
+    }
+  };
+
+  const loadCompleted = async () => {
+    try {
+      const data = await cachedFetch(['completed'], () => sessionService.list());
+      setSessions(data.sessions ?? []);
+    } catch {
+      setSessions([]);
+    }
+  };
+
+  const load = async () => {
+    try {
+      const data = await cachedFetch(['all'], () => sessionService.list());
+      setSessions(data.sessions ?? []);
+    } catch {
+      setSessions([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    load();
+  }, []);
 
   const openEditModal = (s: EnrichedSession) => {
     setEditSession(s);
@@ -158,6 +219,7 @@ export default function SessionsPage() {
 
       toast3('Session configuration saved!');
       setEditSession(null);
+      invalidateSessions();
       load();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };
@@ -167,24 +229,12 @@ export default function SessionsPage() {
     }
   };
 
-  const load = useCallback(async () => {
-    try {
-      const data = await sessionService.list();
-      setSessions(data.sessions ?? []);
-    } catch {
-      setSessions([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => { load(); }, [load]);
-
   const startSession = async (id: string) => {
     setBusyId(id);
     try {
       await sessionService.start(id);
       toast3('Session started — students can now join.');
+      invalidateSessions();
       load();
     } catch (err: unknown) {
       const e = err as { response?: { data?: { error?: string } } };
@@ -199,6 +249,7 @@ export default function SessionsPage() {
     try {
       await sessionService.end(id);
       toast3('Session ended — grades will be finalized automatically.');
+      invalidateSessions();
       load();
     } catch {
       toast3('Could not end session.');

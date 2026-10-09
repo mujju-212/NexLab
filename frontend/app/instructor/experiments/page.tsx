@@ -1,7 +1,8 @@
 'use client';
 
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import {
   FlaskConical, Plus, Pencil, Trash2, EyeOff,
@@ -90,6 +91,20 @@ const EXPERIMENT_TEMPLATES = [
 export default function ExperimentsPage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+
+  // ── react-query loader helpers (mirrors admin/sessions pattern) ───────────────
+  const EXPS_STALE_MS = 30 * 1000;
+
+  const cachedFetch = <T,>(key: unknown[], fn: () => Promise<T>) =>
+    queryClient.fetchQuery<T>({
+      queryKey: ['instructor', 'experiments', ...key],
+      queryFn: fn,
+      staleTime: EXPS_STALE_MS,
+    });
+
+  const invalidateExperiments = () =>
+    queryClient.invalidateQueries({ queryKey: ['instructor', 'experiments'] });
 
   // Navigation & View State
   const [activeTab, setActiveTab] = useState<'subjects' | 'experiments'>('subjects');
@@ -140,13 +155,13 @@ export default function ExperimentsPage() {
 
   const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
-  // Load section-subjects & main experiment dataset
-  const loadData = useCallback(async () => {
+  // ── Loaders — routed through react-query cache (fetchQuery) ──────────────────
+  const loadData = async () => {
     setLoading(true);
     try {
       const [ssRes, expsRes] = await Promise.all([
-        sessionService.getSectionSubjects(),
-        experimentService.listMine(),
+        cachedFetch(['section-subjects'], () => sessionService.getSectionSubjects()),
+        cachedFetch(['mine'], () => experimentService.listMine()),
       ]);
       setSubjects(ssRes.section_subjects ?? []);
       setAllExperiments((expsRes ?? []) as ExpRow[]);
@@ -156,34 +171,34 @@ export default function ExperimentsPage() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  };
 
-  useEffect(() => { loadData(); }, [loadData]);
-
-  // Fetch experiments belonging to a specific subject
-  const loadSubjectExperiments = useCallback(async (subjId: string) => {
+  const loadSubjectExperiments = async (subjId: string) => {
     setLoadingExps(true);
     try {
-      const res = await experimentService.listMine(subjId);
+      const res = await cachedFetch(['subject', subjId], () => experimentService.listMine(subjId));
       setSubjectExperiments((res ?? []) as ExpRow[]);
     } catch {
       setSubjectExperiments([]);
     } finally {
       setLoadingExps(false);
     }
-  }, []);
+  };
 
-  // Fetch exams belonging to a specific subject
-  const loadSubjectExams = useCallback(async (subjId: string) => {
+  const loadSubjectExams = async (subjId: string) => {
     setLoadingExams(true);
     try {
-      const res = await experienceService.listExams(subjId);
+      const res = await cachedFetch(['exams', subjId], () => experienceService.listExams(subjId));
       setSubjectExams(res);
     } catch {
       setSubjectExams([]);
     } finally {
       setLoadingExams(false);
     }
+  };
+
+  useEffect(() => {
+    loadData();
   }, []);
 
   // Sync deep link query param ?subject_id=
@@ -271,6 +286,7 @@ export default function ExperimentsPage() {
     try {
       await experimentService.setPublished(exp.id, !exp.is_published);
       toast3(exp.is_published ? 'Experiment unpublished.' : 'Experiment published to students.');
+      invalidateExperiments();
       if (selectedSubject) {
         loadSubjectExperiments(selectedSubject.subject_id);
       } else {
@@ -289,6 +305,7 @@ export default function ExperimentsPage() {
     try {
       await experimentService.delete(exp.id);
       toast3('Experiment deleted.');
+      invalidateExperiments();
       if (selectedSubject) {
         loadSubjectExperiments(selectedSubject.subject_id);
       } else {
@@ -320,6 +337,7 @@ export default function ExperimentsPage() {
       setNewExamTitle(''); setNewExamDescription(''); setNewExamType('mcq');
       setNewExamDuration('30'); setNewExamMaxAttempts('1'); setNewExamPassThreshold('40');
       setNewExamWeight('0');
+      invalidateExperiments();
       loadSubjectExams(selectedSubject.subject_id);
     } catch {
       toast3('Failed to create exam.');
@@ -333,6 +351,7 @@ export default function ExperimentsPage() {
     try {
       await experienceService.updateExam(exam.id, { is_published: !exam.is_published });
       toast3(exam.is_published ? 'Exam unpublished.' : 'Exam published to students.');
+      invalidateExperiments();
       if (selectedSubject) loadSubjectExams(selectedSubject.subject_id);
     } catch {
       toast3('Could not update exam status.');
@@ -347,6 +366,7 @@ export default function ExperimentsPage() {
     try {
       await experienceService.deleteExam(exam.id);
       toast3('Exam deleted.');
+      invalidateExperiments();
       if (selectedSubject) loadSubjectExams(selectedSubject.subject_id);
     } catch {
       toast3('Could not delete exam.');

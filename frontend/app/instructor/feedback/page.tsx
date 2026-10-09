@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { MessageSquare, Star, Loader2 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import styles from '../shared.module.css';
@@ -26,49 +27,47 @@ const fmtDate = (iso: string | null | undefined) => {
 };
 
 export default function FeedbackPage() {
-  const [sessions, setSessions] = useState<SessionOption[]>([]);
   const [sessionId, setSessionId] = useState<string>('');
   const [data, setData] = useState<SessionFeedbackData | null>(null);
-  const [loadingSessions, setLoadingSessions] = useState(true);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const { data: sessionsData, isLoading: loadingSessions } = useQuery({
+    queryKey: ['instructor', 'sessions', 'list'],
+    queryFn: () => sessionService.list(),
+    staleTime: 60 * 1000,
+  });
+
+  const sessionsList: SessionOption[] = (sessionsData as any)?.sessions ?? [];
+
+  const { data: feedbackData, isLoading: loadingFeedback, error: fetchError } = useQuery({
+    queryKey: ['instructor', 'feedback', { sessionId }],
+    queryFn: () => instructorService.getSessionFeedback(sessionId),
+    enabled: !!sessionId,
+    staleTime: 30 * 1000,
+  });
+
   const loadFeedback = useCallback(async (id: string) => {
-    if (!id) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await instructorService.getSessionFeedback(id);
-      setData(res);
-    } catch {
-      setError('Could not load feedback for this session.');
-      setData(null);
-    } finally {
-      setLoading(false);
-    }
+    setSessionId(id);
   }, []);
 
   useEffect(() => {
-    (async () => {
-      try {
-        const res = await sessionService.list();
-        const list: SessionOption[] = res.sessions || [];
-        setSessions(list);
-        if (list.length > 0) {
-          setSessionId(list[0].id);
-          await loadFeedback(list[0].id);
-        }
-      } catch {
-        setError('Could not load sessions.');
-      } finally {
-        setLoadingSessions(false);
-      }
-    })();
-  }, [loadFeedback]);
+    if (fetchError) setError('Could not load feedback for this session.');
+  }, [fetchError]);
+
+  useEffect(() => {
+    if (feedbackData) setData(feedbackData);
+    setLoading(loadingFeedback);
+  }, [feedbackData, loadingFeedback]);
+
+  useEffect(() => {
+    if (sessionsList.length > 0 && !sessionId) {
+      setSessionId(sessionsList[0].id);
+    }
+  }, [sessionsList, sessionId]);
 
   const handleSelect = (id: string) => {
     setSessionId(id);
-    loadFeedback(id);
   };
 
   const avgs = data?.averages;
@@ -91,8 +90,8 @@ export default function FeedbackPage() {
             disabled={loadingSessions}
           >
             {loadingSessions && <option>Loading sessions…</option>}
-            {!loadingSessions && sessions.length === 0 && <option>No sessions yet</option>}
-            {sessions.map((s) => (
+            {!loadingSessions && sessionsList.length === 0 && <option>No sessions yet</option>}
+            {sessionsList.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.experiment_title}
                 {s.section_name ? ` · ${s.section_name}` : ''} · {fmtDate(s.scheduled_at)}
@@ -180,7 +179,7 @@ export default function FeedbackPage() {
             )}
           </section>
         </>
-      ) : !loadingSessions && sessions.length === 0 ? (
+      ) : !loadingSessions && sessionsList.length === 0 ? (
         <section className={styles.sectionCard}>
           <p style={{ color: '#6b7280', fontSize: '13.5px', margin: 0 }}>
             No lab sessions found. Schedule and run a session first — feedback becomes available once students submit it.

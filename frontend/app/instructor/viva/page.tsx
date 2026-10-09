@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import { Award, Loader2, X, Sparkles } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import styles from '../shared.module.css';
@@ -23,30 +24,25 @@ const statusBadge = (status: string) => {
 };
 
 export default function VivaPage() {
-  const [vivas, setVivas] = useState<VivaListItem[]>([]);
   const [filter, setFilter] = useState<StatusFilter>('all');
-  const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
   const [detail, setDetail] = useState<VivaDetail | null>(null);
   const [loadingDetail, setLoadingDetail] = useState(false);
 
-  const loadVivas = useCallback(async (status: StatusFilter) => {
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await instructorService.listVivas(status === 'all' ? undefined : status);
-      setVivas(res);
-    } catch {
-      setError('Could not load viva sessions.');
-    } finally {
-      setLoading(false);
-    }
+  const { data: vivas = [], isLoading: loading, error: fetchError } = useQuery({
+    queryKey: ['instructor', 'vivas', { filter }],
+    queryFn: () => instructorService.listVivas(filter === 'all' ? undefined : filter),
+    staleTime: 30 * 1000,
+  });
+
+  const loadVivas = useCallback((status: StatusFilter) => {
+    setFilter(status);
   }, []);
 
   useEffect(() => {
-    loadVivas('all');
-  }, [loadVivas]);
+    if (fetchError) setError('Could not load viva sessions.');
+  }, [fetchError]);
 
   const openDetail = async (vivaId: string) => {
     setLoadingDetail(true);
@@ -62,7 +58,6 @@ export default function VivaPage() {
 
   const handleFilter = (f: StatusFilter) => {
     setFilter(f);
-    loadVivas(f);
   };
 
   const completed = vivas.filter((v) => v.status === 'completed').length;

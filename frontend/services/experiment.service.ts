@@ -131,5 +131,41 @@ export const experimentService = {
     );
     return data.subject;
   },
+
+  // ── Instructor: Subject grade-summary rollup matrix ─────────────────────────
+  // GET /api/instructor/subjects/<subject_id>/grade-summary
+  async getSubjectGradeSummary(subjectId: string): Promise<SubjectGradeSummary> {
+    const { data } = await apiClient.get<SubjectGradeSummary>(
+      `/instructor/subjects/${subjectId}/grade-summary`
+    );
+    return data;
+  },
 };
+
+export interface SubjectGradeSummary {
+  subject: {
+    id: string;
+    name: string;
+    code: string;
+    total_marks: number;
+    total_weightage: number;
+    over_allocation: boolean;
+  };
+  experiments: Array<{
+    id: string;
+    exp_number: number;
+    title: string;
+    delivery_mode?: 'lab' | 'exam' | 'practice';
+    weightage: number;
+    grade_scale: number;
+  }>;
+  students: Array<{
+    student_id: string;
+    full_name: string;
+    roll_number: string | null;
+    experiment_scores: Record<string, number>;
+    subject_score: number;
+  }>;
+}
+
 

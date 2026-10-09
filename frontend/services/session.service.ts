@@ -97,6 +97,26 @@ export const sessionService = {
   },
 
   // ── Instructor: Attendance ────────────────────────────────────────────────────
+  // GET /api/instructor/attendance/filter-tree
+  async getAttendanceFilterTree() {
+    const { data } = await apiClient.get('/instructor/attendance/filter-tree');
+    return data;
+  },
+
+  // GET /api/instructor/attendance/student/<student_id>
+  async getStudentAttendanceHistory(studentId: string) {
+    const { data } = await apiClient.get(`/instructor/attendance/student/${studentId}`);
+    return data;
+  },
+
+  // GET /api/instructor/attendance/students/search?q=...
+  async searchAttendanceStudents(query: string) {
+    const { data } = await apiClient.get(`/instructor/attendance/students/search`, {
+      params: { q: query },
+    });
+    return data;
+  },
+
   // GET /api/instructor/sessions/<id>/attendance
   async getAttendance(id: string) {
     const { data } = await apiClient.get(`/instructor/sessions/${id}/attendance`);

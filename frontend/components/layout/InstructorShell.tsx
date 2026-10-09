@@ -8,7 +8,7 @@ import {
   ClipboardCheck, BarChart3, Users,
   Bell, Search, ChevronRight, LogOut, Settings, User, Menu,
   MessageSquare, FileText, Crown, ArrowRight,
-  ClipboardList, RotateCcw, HeartHandshake
+  ClipboardList, RotateCcw, HeartHandshake, Star
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './InstructorShell.module.css';
@@ -28,14 +28,16 @@ const NAV_MAIN = [
 ];
 
 const NAV_TEACHING = [
+  { id: 'Exams',            label: 'Exams',            Icon: ClipboardList,   route: '/instructor/exams' },
   { id: 'Viva',             label: 'Viva Panel',       Icon: MessageSquare,   route: '/instructor/viva' },
   { id: 'Catch-Up Reviews', label: 'Catch-Up Reviews', Icon: RotateCcw,       route: '/instructor/catch-up' },
   { id: 'Management',       label: 'Class Management', Icon: HeartHandshake,  route: '/instructor/management' },
 ];
 
 const NAV_MORE = [
-  { id: 'Reports',  label: 'Reports',  Icon: FileText, route: '/instructor/reports' },
-  { id: 'Settings', label: 'Settings', Icon: Settings, route: '/instructor/settings' },
+  { id: 'Feedback', label: 'Student Feedback', Icon: Star,     route: '/instructor/feedback' },
+  { id: 'Reports',  label: 'Reports',          Icon: FileText, route: '/instructor/reports' },
+  { id: 'Settings', label: 'Settings',         Icon: Settings, route: '/instructor/settings' },
 ];
 
 interface InstructorShellProps {
@@ -62,6 +64,7 @@ export default function InstructorShell({ activePage, children, title, subtitle,
       '/instructor/grading',
       '/instructor/analytics',
       '/instructor/exams',
+      '/instructor/feedback',
       '/instructor/viva',
       '/instructor/catch-up',
       '/instructor/management',
@@ -92,6 +95,7 @@ export default function InstructorShell({ activePage, children, title, subtitle,
     if (id === activePage) return true;
     if (id === 'Dashboard' && (activePage === 'Dashboard' || activePage === 'Dashboard Home')) return true;
     if (id === 'Exams' && (activePage === 'Exams' || activePage === 'Exam Management')) return true;
+    if (id === 'Feedback' && (activePage === 'Feedback' || activePage === 'Student Feedback')) return true;
     if (id === 'Catch-Up Reviews' && (activePage === 'Catch-Up' || activePage === 'Catch-Up Reviews')) return true;
     if (id === 'Management' && (activePage === 'Management' || activePage === 'Class Management')) return true;
     if (id === 'Students' && (activePage === 'Students' || activePage === 'Student Management')) return true;

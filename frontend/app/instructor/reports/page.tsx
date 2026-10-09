@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { Download, Table, Loader2, FileText, RefreshCw } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import styles from '../shared.module.css';
@@ -59,10 +60,9 @@ const statusBadge = (status: string) => {
 };
 
 export default function ReportsPage() {
-  const [sessions, setSessions] = useState<SessionOption[]>([]);
+  const queryClient = useQueryClient();
   const [sessionId, setSessionId] = useState<string>('');
   const [attendance, setAttendance] = useState<AttendanceRow[]>([]);
-  const [loadingSessions, setLoadingSessions] = useState(true);
   const [loading, setLoading] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -77,13 +77,46 @@ export default function ReportsPage() {
   const [generating, setGenerating] = useState(false);
   const [reportsLoading, setReportsLoading] = useState(true);
 
-  const loadReports = useCallback(async () => {
-    try { setReports(await experienceService.listReports()); }
-    catch { /* ignore */ }
-    finally { setReportsLoading(false); }
+  const { data: sessionsData, isLoading: loadingSessions } = useQuery({
+    queryKey: ['instructor', 'sessions', 'list'],
+    queryFn: () => sessionService.list(),
+    staleTime: 60 * 1000,
+  });
+
+  const sessionsList: SessionOption[] = (sessionsData as any)?.sessions ?? [];
+
+  const loadAttendance = useCallback(async (id: string) => {
+    if (!id) return;
+    setLoading(true);
+    setError(null);
+    try {
+      const res = await sessionService.getAttendance(id);
+      setAttendance(res.attendance || []);
+    } catch {
+      setError('Could not load attendance for this session.');
+      setAttendance([]);
+    } finally {
+      setLoading(false);
+    }
   }, []);
 
-  useEffect(() => { loadReports(); }, [loadReports]);
+  const { data: reportsData, isLoading: reportsLoadingQuery } = useQuery({
+    queryKey: ['instructor', 'reports'],
+    queryFn: () => experienceService.listReports(),
+    staleTime: 60 * 1000,
+  });
+
+  useEffect(() => {
+    if (reportsData) setReports(reportsData);
+    setReportsLoading(reportsLoadingQuery);
+  }, [reportsData, reportsLoadingQuery]);
+
+  useEffect(() => {
+    if (sessionsList.length > 0 && !sessionId) {
+      setSessionId(sessionsList[0].id);
+      loadAttendance(sessionsList[0].id);
+    }
+  }, [sessionsList, sessionId, loadAttendance]);
 
   const generateReport = async () => {
     setGenerating(true);
@@ -92,7 +125,7 @@ export default function ReportsPage() {
       if (reportKind === 'student_progress') params.audience = audience;
       await experienceService.requestReport(reportKind, params);
       flash('Report generation started — it will appear below when ready.');
-      await loadReports();
+      queryClient.invalidateQueries({ queryKey: ['instructor', 'reports'] });
     } catch (e: any) {
       setError(e?.response?.data?.error || 'Report generation failed.');
     } finally {
@@ -116,40 +149,7 @@ export default function ReportsPage() {
     setTimeout(() => setNotice(null), 4000);
   };
 
-  const loadAttendance = useCallback(async (id: string) => {
-    if (!id) return;
-    setLoading(true);
-    setError(null);
-    try {
-      const res = await sessionService.getAttendance(id);
-      setAttendance(res.attendance || []);
-    } catch {
-      setError('Could not load attendance for this session.');
-      setAttendance([]);
-    } finally {
-      setLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    (async () => {
-      try {
-        const res = await sessionService.list();
-        const list: SessionOption[] = res.sessions || [];
-        setSessions(list);
-        if (list.length > 0) {
-          setSessionId(list[0].id);
-          await loadAttendance(list[0].id);
-        }
-      } catch {
-        setError('Could not load sessions.');
-      } finally {
-        setLoadingSessions(false);
-      }
-    })();
-  }, [loadAttendance]);
-
-  const selectedSession = useMemo(() => sessions.find((s) => s.id === sessionId), [sessions, sessionId]);
+  const selectedSession = useMemo(() => sessionsList.find((s: any) => s.id === sessionId), [sessionsList, sessionId]);
 
   const { present, late, absent, catchups } = useMemo(() => {
     let present = 0, late = 0, absent = 0, catchups = 0;
@@ -286,8 +286,8 @@ export default function ReportsPage() {
             disabled={loadingSessions}
           >
             {loadingSessions && <option>Loading sessions…</option>}
-            {!loadingSessions && sessions.length === 0 && <option>No sessions yet</option>}
-            {sessions.map((s) => (
+            {!loadingSessions && sessionsList.length === 0 && <option>No sessions yet</option>}
+            {sessionsList.map((s) => (
               <option key={s.id} value={s.id}>
                 {s.experiment_title}
                 {s.section_name ? ` · ${s.section_name}` : ''} · {fmtDate(s.scheduled_at)}
