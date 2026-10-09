@@ -142,6 +142,8 @@ def list_experiments(subject_id):
         is_published=True
     ).order_by(Experiment.exp_number).all()
 
+    from app.models.exam import ExamAttempt
+
     exp_ids = [e.id for e in exps]
     grades = {g_row.experiment_id: g_row for g_row in Grade.query.filter(
         Grade.student_id == g.user_id,
@@ -161,6 +163,16 @@ def list_experiments(subject_id):
         if a.experiment_id not in any_attempts:
             any_attempts[a.experiment_id] = a
 
+    exam_attempts = ExamAttempt.query.filter(
+        ExamAttempt.student_id == g.user_id,
+        ExamAttempt.experiment_id.in_(exp_ids)
+    ).order_by(ExamAttempt.submitted_at.desc(), ExamAttempt.started_at.desc()).all() if exp_ids else []
+
+    latest_exam_attempts = {}
+    for ea in exam_attempts:
+        if ea.experiment_id not in latest_exam_attempts:
+            latest_exam_attempts[ea.experiment_id] = ea
+
     enriched = []
     for e in exps:
         d = e.to_dict()
@@ -169,6 +181,16 @@ def list_experiments(subject_id):
             d['student_status'] = 'completed'
             d['completed_at'] = (gr.graded_at or gr.created_at).strftime('%b %d, %Y') if (gr.graded_at or gr.created_at) else None
             d['score'] = gr.final_grade
+        elif e.delivery_mode == 'exam' and e.id in latest_exam_attempts:
+            ea = latest_exam_attempts[e.id]
+            if ea.status == 'submitted':
+                d['student_status'] = 'completed'
+                d['completed_at'] = ea.submitted_at.strftime('%b %d, %Y') if ea.submitted_at else None
+                d['score'] = ea.score
+            else:
+                d['student_status'] = 'in_progress'
+                d['completed_at'] = None
+                d['score'] = None
         elif e.id in final_attempts:
             att = final_attempts[e.id]
             d['student_status'] = 'completed'
@@ -185,6 +207,81 @@ def list_experiments(subject_id):
         enriched.append(d)
 
     return jsonify({'experiments': enriched}), 200
+
+
+@student_bp.route('/subjects/<subject_id>/grade-summary', methods=['GET'])
+@require_role('student')
+def my_subject_grade_summary(subject_id):
+    """Return the student's personal grade summary and rollup for a subject.
+
+    Formula: subject_score = Σ (experiment_score / grade_scale) × weightage
+    """
+    from app.models.subject import Subject
+    from app.models.experiment import Experiment
+    from app.models.grading import Grade
+
+    subject = Subject.query.filter_by(
+        id=subject_id, institution_id=g.institution_id
+    ).first_or_404()
+
+    exps = Experiment.query.filter_by(
+        subject_id=subject_id,
+        institution_id=g.institution_id,
+        is_published=True
+    ).order_by(Experiment.exp_number).all()
+
+    exp_ids = [e.id for e in exps]
+
+    grades = {g_row.experiment_id: g_row for g_row in Grade.query.filter(
+        Grade.student_id == g.user_id,
+        Grade.experiment_id.in_(exp_ids)
+    ).all()} if exp_ids else {}
+
+    total_weightage = sum(e.weightage or 0 for e in exps)
+    total_marks = subject.total_marks or 100
+
+    items = []
+    earned_weighted_score = 0.0
+
+    for e in exps:
+        gr = grades.get(e.id)
+        raw_score = float(gr.final_grade) if gr and gr.final_grade is not None else None
+        scale = float(e.grade_scale or 100)
+        weight = float(e.weightage or 0)
+        weighted_score = (raw_score / scale) * weight if (scale > 0 and raw_score is not None) else None
+        if weighted_score is not None:
+            earned_weighted_score += weighted_score
+
+        items.append({
+            'experiment_id': e.id,
+            'exp_number': e.exp_number,
+            'title': e.title,
+            'delivery_mode': getattr(e, 'delivery_mode', 'lab') or 'lab',
+            'weightage': weight,
+            'grade_scale': scale,
+            'raw_score': raw_score,
+            'weighted_score': round(weighted_score, 2) if weighted_score is not None else None,
+            'is_graded': raw_score is not None,
+            'status': 'completed' if raw_score is not None else 'pending',
+            'window_state': e.window_state() if hasattr(e, 'window_state') else 'always_open',
+            'available_from': e.available_from.isoformat() if getattr(e, 'available_from', None) else None,
+            'due_at': e.due_at.isoformat() if getattr(e, 'due_at', None) else None,
+        })
+
+    return jsonify({
+        'subject': {
+            'id': subject.id,
+            'name': subject.name,
+            'code': subject.code,
+            'total_marks': total_marks,
+            'total_weightage': round(total_weightage, 2),
+            'over_allocation': total_weightage > total_marks,
+        },
+        'earned_score': round(earned_weighted_score, 2),
+        'total_possible_score': round(total_weightage, 2),
+        'items': items,
+    }), 200
+
 
 
 # â”€â”€ Pre-Lab Content & Gate â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

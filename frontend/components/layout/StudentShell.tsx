@@ -20,6 +20,7 @@ const NAV_STUDENT = [
   { id: 'Dashboard',          label: 'Dashboard',          Icon: LayoutDashboard, route: '/student/dashboard' },
   { id: 'Announcements',      label: 'Announcements',      Icon: Megaphone,       route: '/student/announcements' },
   { id: 'My Subjects',        label: 'My Subjects',        Icon: BookOpen,        route: '/student/subjects' },
+  { id: 'Exams',              label: 'My Exams',           Icon: FileClock,       route: '/student/exams' },
   { id: 'Compiler',           label: 'Compiler',           Icon: Code2,           route: '/student/compiler' },
   { id: 'Live Coding Lab',    label: 'Live Coding Lab',    Icon: Terminal,        route: '/student/live-lab' },
 ];
@@ -58,6 +59,7 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
     const primaryRoutes = [
       '/student/dashboard',
       '/student/subjects',
+      '/student/exams',
       '/student/compiler',
       '/student/live-lab',
       '/student/practice',
@@ -82,6 +84,7 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
   const isItemActive = (id: string) => {
     if (id === activePage) return true;
     if (id === 'Dashboard' && (activePage === 'Dashboard' || activePage === 'Dashboard Home')) return true;
+    if (id === 'Exams' && (activePage === 'Exams' || activePage === 'My Exams')) return true;
     if (id === 'Submissions' && (activePage === 'Submission' || activePage === 'Submissions')) return true;
     if (id === 'Leaderboard' && (activePage === 'Ranking' || activePage === 'Leaderboard')) return true;
     if (id === 'Quests' && activePage === 'Quest') return true;

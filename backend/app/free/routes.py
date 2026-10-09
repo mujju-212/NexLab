@@ -204,14 +204,30 @@ def submit_exercise(exercise_id):
     prog.language_used= language
     prog.best_score   = prog.best_score or 0.0
     prog.xp_earned    = prog.xp_earned or 0
+    was_already_solved = (prog.status == 'solved')
     if score > prog.best_score:
         prog.best_score = score
-    if solved and prog.status != 'solved':
-        prog.status    = 'solved'
-        prog.solved_at = datetime.utcnow()
-        prog.xp_earned = ex.xp_reward
+    if solved:
+        if not was_already_solved:
+            prog.status    = 'solved'
+            prog.solved_at = datetime.utcnow()
+            prog.xp_earned = ex.xp_reward
+
+            # Real-time Track-2 platform sync
+            from app.models.practice import StudentXP, StudentBadge
+            from app.platform_rank.rating import compute_student_platform_rating
+            xp = StudentXP.query.filter_by(student_id=g.user_id).first()
+            if not xp:
+                xp = StudentXP(student_id=g.user_id)
+                db.session.add(xp)
+            xp.add_xp(ex.xp_reward)
+            xp.update_streak()
+            if not StudentBadge.query.filter_by(student_id=g.user_id, badge_id='first_solve').first():
+                db.session.add(StudentBadge(student_id=g.user_id, badge_id='first_solve'))
+            compute_student_platform_rating(g.user_id, commit=False)
     else:
-        prog.status = 'attempted'
+        if not was_already_solved:
+            prog.status = 'attempted'
 
     db.session.commit()
 
@@ -253,6 +269,19 @@ def submit_mcq(exercise_id):
         prog.best_score = 100.0
         prog.solved_at  = datetime.utcnow()
         prog.xp_earned  = ex.xp_reward
+
+        from app.models.practice import StudentXP, StudentBadge
+        from app.platform_rank.rating import compute_student_platform_rating
+        xp = StudentXP.query.filter_by(student_id=g.user_id).first()
+        if not xp:
+            xp = StudentXP(student_id=g.user_id)
+            db.session.add(xp)
+        xp.add_xp(ex.xp_reward)
+        xp.update_streak()
+        if not StudentBadge.query.filter_by(student_id=g.user_id, badge_id='first_solve').first():
+            db.session.add(StudentBadge(student_id=g.user_id, badge_id='first_solve'))
+        compute_student_platform_rating(g.user_id, commit=False)
+
     db.session.commit()
 
     return jsonify({
@@ -290,6 +319,19 @@ def complete_simulation(exercise_id):
         prog.best_score = 100.0
         prog.solved_at  = datetime.utcnow()
         prog.xp_earned  = ex.xp_reward
+
+        from app.models.practice import StudentXP, StudentBadge
+        from app.platform_rank.rating import compute_student_platform_rating
+        xp = StudentXP.query.filter_by(student_id=g.user_id).first()
+        if not xp:
+            xp = StudentXP(student_id=g.user_id)
+            db.session.add(xp)
+        xp.add_xp(ex.xp_reward)
+        xp.update_streak()
+        if not StudentBadge.query.filter_by(student_id=g.user_id, badge_id='first_solve').first():
+            db.session.add(StudentBadge(student_id=g.user_id, badge_id='first_solve'))
+        compute_student_platform_rating(g.user_id, commit=False)
+
     db.session.commit()
 
     return jsonify({

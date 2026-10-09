@@ -1,199 +1,260 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import React, { useState, Suspense } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { RotateCw, Lightbulb, Sparkles } from 'lucide-react';
+
 import StudentShell from '@/components/layout/StudentShell';
-import { studentService } from '@/services/student.service';
-import type { StudentDashboard } from '@/types';
-import { Loader2 } from 'lucide-react';
-import styles from './page.module.css';
+import { useAuthStore } from '@/store/auth-store';
+import { studentAnalyticsService } from '@/services/student-analytics.service';
+import {
+  TwoTrackHero,
+  OverviewTab,
+  AcademicTab,
+  PlatformTab,
+  KnowledgeMapTab,
+} from '@/components/student-analytics';
+import styles from '@/components/student-analytics/student-analytics.module.css';
 
-interface MasteryRow {
-  concept: string;
-  mastery_score: number;
-  experiment_count: number;
-  last_updated: string | null;
-}
+function StudentAnalyticsDashboard() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+  const { user } = useAuthStore();
 
-interface GradeRow {
-  id: string;
-  auto_grade: number | null;
-  manual_grade: number | null;
-  manual_feedback: string | null;
-  viva_grade: number | null;
-  code_quality_grade: number | null;
-  hint_deduction: number;
-  final_grade: number | null;
-  graded_at: string | null;
-  is_locked: boolean;
-}
+  const currentTab = searchParams.get('tab') || 'overview';
+  const selectedSubjectId = searchParams.get('subject') || null;
 
-const BAR_H = 120;
+  const handleTabChange = (tab: string) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', tab);
+    router.replace(`?${params.toString()}`);
+  };
 
-const fmtDate = (iso: string | null) =>
-  iso ? new Date(iso).toLocaleDateString(undefined, { month: 'short', day: 'numeric' }) : '—';
+  const handleSubjectChange = (subjectId: string | null) => {
+    const params = new URLSearchParams(searchParams.toString());
+    if (subjectId) {
+      params.set('subject', subjectId);
+    } else {
+      params.delete('subject');
+    }
+    router.replace(`?${params.toString()}`);
+  };
 
-export default function AnalyticsPage() {
-  const [dash, setDash] = useState<StudentDashboard | null>(null);
-  const [mastery, setMastery] = useState<MasteryRow[]>([]);
-  const [grades, setGrades] = useState<GradeRow[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState('');
+  // Platform Leaderboard state
+  const [boardScope, setBoardScope] = useState<'global' | 'topic' | 'institution'>('global');
+  const [boardPeriod, setBoardPeriod] = useState<'all_time' | 'monthly' | 'weekly'>('all_time');
+  const [boardTopic, setBoardTopic] = useState('Arrays & Strings');
 
-  useEffect(() => {
-    Promise.all([
-      studentService.getDashboard(),
-      studentService.getMastery(),
-      studentService.getGrades(),
-    ])
-      .then(([d, m, g]) => {
-        setDash(d);
-        setMastery(m as MasteryRow[]);
-        setGrades((g as GradeRow[]).filter(r => r.final_grade != null)
-          .sort((a, b) => (a.graded_at || '').localeCompare(b.graded_at || '')));
-      })
-      .catch(e => setError(e instanceof Error ? e.message : 'Failed to load analytics'))
-      .finally(() => setLoading(false));
-  }, []);
+  // ── TanStack Queries ───────────────────────────────────────────────────────
+  const {
+    data: overview,
+    isLoading: overviewLoading,
+    isRefetching,
+    refetch,
+  } = useQuery({
+    queryKey: ['student-analytics-overview'],
+    queryFn: () => studentAnalyticsService.getOverview(),
+    staleTime: 60 * 1000,
+  });
 
-  if (loading) {
-    return (
-      <StudentShell activePage="Performance Analytics" title="Performance Analytics" subtitle="Track your learning progress and concept mastery">
-        <div className={styles.loadingBox}><Loader2 size={20} className={styles.spinner} /> Loading analytics…</div>
-      </StudentShell>
-    );
-  }
+  const { data: subjects = [] } = useQuery({
+    queryKey: ['student-analytics-subjects'],
+    queryFn: () => studentAnalyticsService.getSubjects(),
+    staleTime: 60 * 1000,
+  });
 
-  if (error) {
-    return (
-      <StudentShell activePage="Performance Analytics" title="Performance Analytics" subtitle="Track your learning progress and concept mastery">
-        <div className={styles.errorBox}>⚠️ {error}</div>
-      </StudentShell>
-    );
-  }
+  const { data: ranks } = useQuery({
+    queryKey: ['student-analytics-ranks'],
+    queryFn: () => studentAnalyticsService.getRanks(),
+    staleTime: 60 * 1000,
+  });
 
-  const bestPosition = dash?.best_rank?.rank_position ?? null;
+  const { data: standing } = useQuery({
+    queryKey: ['student-analytics-standing'],
+    queryFn: () => studentAnalyticsService.getStanding(),
+    staleTime: 60 * 1000,
+  });
+
+  const { data: attendance } = useQuery({
+    queryKey: ['student-analytics-attendance', selectedSubjectId],
+    queryFn: () => studentAnalyticsService.getAttendance(selectedSubjectId || undefined),
+    staleTime: 60 * 1000,
+  });
+
+  const { data: integrity } = useQuery({
+    queryKey: ['student-analytics-integrity'],
+    queryFn: () => studentAnalyticsService.getIntegrity(),
+    staleTime: 60 * 1000,
+  });
+
+  const { data: trends } = useQuery({
+    queryKey: ['student-analytics-trends'],
+    queryFn: () => studentAnalyticsService.getTrends(),
+    staleTime: 60 * 1000,
+  });
+
+  const { data: forecast } = useQuery({
+    queryKey: ['student-analytics-forecast'],
+    queryFn: () => studentAnalyticsService.getForecast(),
+    staleTime: 60 * 1000,
+  });
+
+  const { data: unlocks } = useQuery({
+    queryKey: ['student-analytics-unlocks'],
+    queryFn: () => studentAnalyticsService.getContentUnlocks(),
+    staleTime: 60 * 1000,
+  });
+
+  const { data: mastery } = useQuery({
+    queryKey: ['student-analytics-mastery', selectedSubjectId],
+    queryFn: () => studentAnalyticsService.getMastery(selectedSubjectId || undefined),
+    staleTime: 60 * 1000,
+  });
+
+  const { data: practiceMastery = [] } = useQuery({
+    queryKey: ['student-analytics-practice-mastery'],
+    queryFn: () => studentAnalyticsService.getPracticeMastery(),
+    staleTime: 60 * 1000,
+  });
+
+  const { data: leaderboardData, isLoading: leaderboardLoading } = useQuery({
+    queryKey: ['platform-leaderboard', boardScope, boardTopic, boardPeriod],
+    queryFn: () =>
+      studentAnalyticsService.getPlatformLeaderboard({
+        scope: boardScope,
+        scope_id: boardScope === 'topic' ? boardTopic : undefined,
+        period: boardPeriod,
+      }),
+    staleTime: 30 * 1000,
+  });
+
+  const handleRefresh = async () => {
+    await queryClient.invalidateQueries({ queryKey: ['student-analytics'] });
+    await queryClient.invalidateQueries({ queryKey: ['platform-leaderboard'] });
+    refetch();
+  };
+
+  const highlights = overview?.highlights;
 
   return (
-    <StudentShell activePage="Performance Analytics" title="Performance Analytics" subtitle="Track your learning progress and concept mastery">
-      {/* KPI Strip */}
-      <div className={styles.kpiRow}>
-        {[
-          { label: 'Overall Score', value: dash?.avg_grade != null ? `${dash.avg_grade}%` : '—', color: '#9333ea', sub: 'Average final grade' },
-          { label: 'Submissions',   value: `${dash?.total_submissions ?? 0}`,                     color: '#22c55e', sub: 'Code attempts submitted' },
-          { label: 'Best Rank',     value: bestPosition != null ? `#${bestPosition}` : '—',       color: '#f59e0b', sub: 'Best position in a subject' },
-          { label: 'Hints Used',    value: `${dash?.hints_used_today ?? 0}`,                      color: '#ec4899', sub: 'AI hints used today' },
-        ].map(k => (
-          <div key={k.label} className={styles.kpiCard}>
-            <p className={styles.kpiLabel}>{k.label}</p>
-            <p className={styles.kpiValue} style={{ color: k.color }}>{k.value}</p>
-            <p className={styles.kpiSub}>{k.sub}</p>
+    <StudentShell
+      activePage="Performance Analytics"
+      title="My Growth"
+      subtitle="Two-Track Growth Profile: Academic Mastery & Platform Competitive Standing"
+    >
+      <div className={styles.container}>
+        {/* Dual-Rank Hero Banner (<ProfileHero>) */}
+        <TwoTrackHero
+          overview={overview ?? null}
+          activeTab={currentTab}
+          onTabChange={handleTabChange}
+          studentName={user?.full_name || 'Student'}
+          rollNumber={(user as any)?.roll_number}
+          department={(user as any)?.department || 'Computer Science'}
+        />
+
+        {/* Action Controls & Refetch Status */}
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '-0.5rem' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+            {highlights?.suggestions && highlights.suggestions.length > 0 && (
+              <span className={styles.metaBadge} style={{ background: '#f5f3ff', color: '#6d28d9' }}>
+                <Lightbulb size={13} /> {highlights.suggestions[0]}
+              </span>
+            )}
           </div>
-        ))}
-      </div>
 
-      <div className={styles.chartRow}>
-        {/* Score History Bar Chart */}
-        <div className={styles.chartCard}>
-          <h2 className={styles.chartTitle}>Score History</h2>
-          {grades.length === 0 ? (
-            <p className={styles.emptyNote}>No graded experiments yet.</p>
-          ) : (
-            <div className={styles.barChart}>
-              {grades.slice(-8).map(r => {
-                const score = Math.round(r.final_grade ?? 0);
-                return (
-                  <div key={r.id} className={styles.barGroup}>
-                    <div className={styles.barWrap}>
-                      <div
-                        className={styles.bar}
-                        style={{
-                          height: `${(score / 100) * BAR_H}px`,
-                          background: score >= 90 ? 'linear-gradient(180deg,#22c55e,#16a34a)' :
-                                      score >= 75 ? 'linear-gradient(180deg,#9333ea,#7c3aed)' :
-                                                    'linear-gradient(180deg,#f59e0b,#f2994a)',
-                        }}
-                      />
-                    </div>
-                    <p className={styles.barScore}>{score}</p>
-                    <p className={styles.barLabel}>{fmtDate(r.graded_at)}</p>
-                  </div>
-                );
-              })}
-            </div>
-          )}
+          <button
+            onClick={handleRefresh}
+            disabled={isRefetching}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.4rem',
+              padding: '0.45rem 0.85rem',
+              borderRadius: '0.5rem',
+              border: '1px solid #e2e8f0',
+              background: '#ffffff',
+              color: '#475569',
+              fontSize: '0.8rem',
+              fontWeight: 600,
+              cursor: 'pointer',
+            }}
+          >
+            <RotateCw size={13} className={isRefetching ? styles.spinner : ''} />
+            <span>{isRefetching ? 'Updating…' : 'Refresh Telemetry'}</span>
+          </button>
         </div>
 
-        {/* Concept Mastery */}
-        <div className={styles.chartCard}>
-          <h2 className={styles.chartTitle}>Concept Mastery</h2>
-          {mastery.length === 0 ? (
-            <p className={styles.emptyNote}>No concepts tracked yet — complete experiments to build mastery.</p>
-          ) : (
-            <div className={styles.masteryList}>
-              {mastery.map(c => {
-                const pct = Math.round(c.mastery_score);
-                return (
-                  <div key={c.concept} className={styles.masteryRow}>
-                    <span className={styles.masteryName}>{c.concept}</span>
-                    <div className={styles.masteryTrack}>
-                      <div
-                        className={styles.masteryFill}
-                        style={{
-                          width: `${pct}%`,
-                          background: pct >= 80 ? '#22c55e' : pct >= 60 ? '#9333ea' : '#f59e0b',
-                        }}
-                      />
-                    </div>
-                    <span className={styles.masteryPct}>{pct}%</span>
-                  </div>
-                );
-              })}
-            </div>
-          )}
-        </div>
-      </div>
+        {/* ── 4 PRIMARY TABS ──────────────────────────────────────────────── */}
 
-      {/* Grade Breakdown Table */}
-      <div className={styles.tableCard}>
-        <h2 className={styles.chartTitle}>Grade Breakdown</h2>
-        {grades.length === 0 ? (
-          <p className={styles.emptyNote}>Nothing graded yet.</p>
-        ) : (
-          <table className={styles.table}>
-            <thead>
-              <tr>
-                <th>Graded On</th>
-                <th>Auto</th>
-                <th>Manual</th>
-                <th>Viva</th>
-                <th>Hint Penalty</th>
-                <th>Final</th>
-                <th>Status</th>
-              </tr>
-            </thead>
-            <tbody>
-              {grades.map(r => {
-                const pct = Math.round(r.final_grade ?? 0);
-                return (
-                  <tr key={r.id}>
-                    <td>{fmtDate(r.graded_at)}</td>
-                    <td>{r.auto_grade != null ? Math.round(r.auto_grade) : '—'}</td>
-                    <td>{r.manual_grade != null ? Math.round(r.manual_grade) : '—'}</td>
-                    <td>{r.viva_grade != null ? Math.round(r.viva_grade) : '—'}</td>
-                    <td>{r.hint_deduction ? `−${r.hint_deduction}` : '0'}</td>
-                    <td className={styles.tdScore}>{pct}</td>
-                    <td>
-                      <span className={`${styles.gradePill} ${pct >= 90 ? styles.gradeA : pct >= 75 ? styles.gradeB : styles.gradeC}`}>
-                        {r.is_locked ? '🔒 Locked' : 'Published'}
-                      </span>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
+        {/* Tab 1: 🏠 Overview */}
+        {currentTab === 'overview' && (
+          <OverviewTab overview={overview ?? null} onNavigateTab={handleTabChange} />
+        )}
+
+        {/* Tab 2: 🎓 Academic */}
+        {currentTab === 'academic' && (
+          <AcademicTab
+            subjects={subjects}
+            selectedSubjectId={selectedSubjectId}
+            onSubjectChange={handleSubjectChange}
+            mastery={mastery}
+            trends={trends}
+            forecast={forecast}
+            standing={standing}
+            attendance={attendance || overview?.academic?.attendance}
+            academicRanks={ranks?.academic || overview?.academic?.ranks}
+          />
+        )}
+
+        {/* Tab 3: 🏆 Platform */}
+        {currentTab === 'platform' && (
+          <PlatformTab
+            standing={overview?.platform}
+            unlocks={unlocks || overview?.unlocks}
+            practiceMastery={practiceMastery}
+            leaderboardData={leaderboardData ?? null}
+            leaderboardLoading={leaderboardLoading}
+            boardScope={boardScope}
+            boardPeriod={boardPeriod}
+            boardTopic={boardTopic}
+            onScopeChange={setBoardScope}
+            onPeriodChange={setBoardPeriod}
+            onTopicChange={setBoardTopic}
+          />
+        )}
+
+        {/* Tab 4: 🧭 Knowledge Map */}
+        {currentTab === 'knowledge' && (
+          <KnowledgeMapTab
+            knowledgeMap={overview?.knowledge_map}
+            focusTopics={highlights?.focus_topics}
+            prerequisiteBlocks={mastery?.prerequisite_blocks}
+          />
         )}
       </div>
     </StudentShell>
+  );
+}
+
+export default function AnalyticsPage() {
+  return (
+    <Suspense
+      fallback={
+        <StudentShell
+          activePage="Performance Analytics"
+          title="My Growth"
+          subtitle="Loading your personalized growth profile…"
+        >
+          <div className={styles.loadingBox}>
+            <RotateCw size={20} className={styles.spinner} /> Loading telemetry…
+          </div>
+        </StudentShell>
+      }
+    >
+      <StudentAnalyticsDashboard />
+    </Suspense>
   );
 }

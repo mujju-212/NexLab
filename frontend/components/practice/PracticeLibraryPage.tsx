@@ -412,7 +412,8 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
                   <th>Title</th>
                   <th>Topic</th>
                   <th>Difficulty</th>
-                  <th>Acceptance</th>                  <th>Status</th>
+                  <th>Acceptance</th>
+                  <th>Status</th>
                 </tr>
               </thead>
               <tbody>

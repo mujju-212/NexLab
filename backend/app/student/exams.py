@@ -67,6 +67,13 @@ def _norm_mcq(val):
 def _visible_exam_or_404(exam_id):
     """Return (exam, None) if published + the student is enrolled; else (None, err)."""
     exam = Exam.query.filter_by(id=exam_id, institution_id=g.institution_id).first()
+    if not exam:
+        from app.models.experiment import Experiment
+        exp = Experiment.query.filter_by(
+            id=exam_id, institution_id=g.institution_id, delivery_mode='exam'
+        ).first()
+        if exp:
+            exam = exp
     if not exam or not exam.is_published:
         return None, (jsonify({'error': 'Exam not found.'}), 404)
     if exam.subject_id not in _enrolled_subject_ids():
@@ -75,7 +82,51 @@ def _visible_exam_or_404(exam_id):
 
 
 def _attempts_for(exam_id):
-    return ExamAttempt.query.filter_by(exam_id=exam_id, student_id=g.user_id).all()
+    from sqlalchemy import or_
+    return ExamAttempt.query.filter(
+        ExamAttempt.student_id == g.user_id,
+        or_(ExamAttempt.exam_id == exam_id, ExamAttempt.experiment_id == exam_id)
+    ).all()
+
+
+def _get_exam_questions_list(exam):
+    """Return list of questions for Exam or Experiment."""
+    if hasattr(exam, 'questions') and exam.questions.count() > 0:
+        return list(exam.questions.all())
+    if hasattr(exam, 'exam_questions') and exam.exam_questions.count() > 0:
+        return list(exam.exam_questions.all())
+    # If it's an Experiment with test_cases, adapt as a coding question
+    adapted = []
+    if hasattr(exam, 'test_cases') and exam.test_cases.count() > 0:
+        class AdaptedCodingQuestion:
+            def __init__(self, exp):
+                self.id = f"exp_code_{exp.id}"
+                self.question_type = 'coding'
+                self.prompt = exp.problem_statement or exp.aim or exp.title
+                self.points = 100.0
+                self.language = (exp.allowed_languages or ['python'])[0] if exp.allowed_languages else 'python'
+                self.starter_code = ''
+                self.test_cases = [
+                    {'input': tc.input_data, 'expected': tc.expected_output, 'hidden': tc.is_hidden, 'weight': tc.points_weight}
+                    for tc in exp.test_cases.all()
+                ]
+                self.explanation = None
+            def to_dict(self, instructor=False):
+                return {
+                    'id': self.id,
+                    'question_type': 'coding',
+                    'prompt': self.prompt,
+                    'points': self.points,
+                    'language': self.language,
+                    'starter_code': self.starter_code,
+                    'test_cases': self.test_cases if instructor else [
+                        {'input': c['input'], 'expected': c['expected'], 'hidden': False}
+                        for c in self.test_cases if not c.get('hidden')
+                    ],
+                    'explanation': None
+                }
+        adapted.append(AdaptedCodingQuestion(exam))
+    return adapted
 
 
 def _grade_attempt(exam, raw_answers):
@@ -89,7 +140,7 @@ def _grade_attempt(exam, raw_answers):
     from app.execution.languages import resolve as resolve_language
     from app.student.routes import _norm_output
 
-    questions = list(exam.questions.all())
+    questions = _get_exam_questions_list(exam)
     max_points = 0.0
     earned_total = 0.0
     detail = {}
@@ -181,13 +232,43 @@ def _finalize_attempt(exam, attempt, raw_answers, force_expired=False):
     attempt.submitted_at = now
     expired = force_expired or (attempt.expires_at and now > attempt.expires_at + timedelta(seconds=_GRACE_SECONDS))
     attempt.status = 'expired' if expired else 'submitted'
+
+    # Sync exam result into the canonical Grade model so it rolls up to Subject total!
+    target_exp_id = attempt.experiment_id or (exam.id if hasattr(exam, 'id') else None)
+    if target_exp_id:
+        try:
+            from app.models.grading import Grade
+            from app.models.experiment import Experiment
+            exp_row = Experiment.query.get(target_exp_id)
+            if exp_row:
+                attempt.experiment_id = target_exp_id
+                grade = Grade.query.filter_by(
+                    student_id=attempt.student_id,
+                    experiment_id=target_exp_id
+                ).first()
+                if not grade:
+                    grade = Grade(
+                        student_id=attempt.student_id,
+                        experiment_id=target_exp_id,
+                        institution_id=g.institution_id,
+                    )
+                    db.session.add(grade)
+                current_final = grade.final_grade or 0.0
+                if attempt.score >= current_final or grade.final_grade is None:
+                    grade.final_grade = attempt.score
+                    grade.auto_grade = attempt.score
+                    grade.quiz_grade = attempt.score
+                    grade.graded_at = now
+        except Exception:
+            pass
+
     db.session.commit()
     return attempt, None
 
 
 def _questions_for_attempt(exam, attempt):
     """Student-safe question list, deterministically shuffled per attempt."""
-    questions = list(exam.questions.all())
+    questions = _get_exam_questions_list(exam)
     if exam.shuffle_questions:
         random.Random(attempt.id).shuffle(questions)
     return [q.to_dict(instructor=False) for q in questions]
@@ -205,37 +286,69 @@ def list_exams():
     if not subject_ids:
         return jsonify({'exams': [], 'count': 0, 'server_now': _iso_z(datetime.utcnow())}), 200
 
+    from app.models.experiment import Experiment
+
     exams = Exam.query.filter(
         Exam.institution_id == g.institution_id,
         Exam.subject_id.in_(subject_ids),
         Exam.is_published.is_(True),
     ).order_by(Exam.due_at.asc().nullsfirst(), Exam.created_at.desc()).all()
 
+    # Also include experiments authored with delivery_mode == 'exam'
+    exps = Experiment.query.filter(
+        Experiment.institution_id == g.institution_id,
+        Experiment.subject_id.in_(subject_ids),
+        Experiment.delivery_mode == 'exam',
+        Experiment.is_published.is_(True),
+    ).all()
+
+    exam_ids = {e.id for e in exams}
+    all_assessment_items = list(exams) + [e for e in exps if e.id not in exam_ids]
+    all_ids = [e.id for e in all_assessment_items]
+
+    from sqlalchemy import or_
     my_attempts = ExamAttempt.query.filter(
         ExamAttempt.student_id == g.user_id,
-        ExamAttempt.exam_id.in_([e.id for e in exams]),
-    ).all() if exams else []
+        or_(ExamAttempt.exam_id.in_(all_ids), ExamAttempt.experiment_id.in_(all_ids)),
+    ).all() if all_ids else []
+
     by_exam = {}
     for a in my_attempts:
-        by_exam.setdefault(a.exam_id, []).append(a)
+        key = a.exam_id or a.experiment_id
+        if key:
+            by_exam.setdefault(key, []).append(a)
 
     result = []
-    for e in exams:
+    for e in all_assessment_items:
         atts = by_exam.get(e.id, [])
         latest = max(atts, key=lambda a: a.started_at or a.created_at) if atts else None
         best_score = max([a.score for a in atts if a.score is not None], default=None)
+
+        q_count = 0
+        if hasattr(e, 'questions') and e.questions:
+            q_count = e.questions.count()
+        elif hasattr(e, 'exam_questions') and e.exam_questions:
+            q_count = e.exam_questions.count()
+        if q_count == 0 and hasattr(e, 'test_cases') and e.test_cases:
+            q_count = e.test_cases.count()
+
+        dur = getattr(e, 'duration_minutes', None)
+        if dur is None:
+            time_sec = getattr(e, 'time_limit_sec', None)
+            dur = (time_sec // 60) if time_sec else 30
+
         result.append({
             'id': e.id,
             'title': e.title,
-            'description': e.description,
-            'exam_type': e.exam_type,
+            'description': getattr(e, 'description', None) or getattr(e, 'aim', None),
+            'exam_type': getattr(e, 'exam_type', None) or getattr(e, 'experiment_type', 'mcq'),
             'subject_id': e.subject_id,
             'available_from': _iso_z(e.available_from),
             'due_at': _iso_z(e.due_at),
-            'duration_minutes': e.duration_minutes,
-            'max_attempts': e.max_attempts,
-            'pass_threshold': e.pass_threshold,
-            'question_count': e.questions.count(),
+            'duration_minutes': dur,
+            'max_attempts': e.max_attempts or 1,
+            'pass_threshold': e.pass_threshold or 40,
+            'question_count': q_count,
             'window_state': e.window_state(),
             'attempts_used': len(atts),
             'attempts_remaining': max(0, (e.max_attempts or 1) - len(atts)),

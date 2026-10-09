@@ -379,5 +379,40 @@ export const studentService = {
     const { data } = await apiClient.get<ExamResultResponse>(`/student/exams/${examId}/result`);
     return data;
   },
+
+  // GET /api/student/subjects/<subjectId>/grade-summary
+  async getSubjectGradeSummary(subjectId: string): Promise<StudentSubjectGradeSummary> {
+    const { data } = await apiClient.get<StudentSubjectGradeSummary>(`/student/subjects/${subjectId}/grade-summary`);
+    return data;
+  },
 };
+
+export interface StudentSubjectGradeSummary {
+  subject: {
+    id: string;
+    name: string;
+    code: string;
+    total_marks: number;
+    total_weightage: number;
+    over_allocation: boolean;
+  };
+  earned_score: number;
+  total_possible_score: number;
+  items: Array<{
+    experiment_id: string;
+    exp_number: number;
+    title: string;
+    delivery_mode: 'lab' | 'exam' | 'practice';
+    weightage: number;
+    grade_scale: number;
+    raw_score: number | null;
+    weighted_score: number | null;
+    is_graded: boolean;
+    status: 'completed' | 'pending';
+    window_state?: string;
+    available_from?: string | null;
+    due_at?: string | null;
+  }>;
+}
+
 

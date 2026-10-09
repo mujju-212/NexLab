@@ -1,185 +1,230 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import { useRouter } from 'next/navigation';
-import IndividualShell from '@/components/layout/IndividualShell';
-import { freeService, type FreeCourse, type Progress } from '@/services/free.service';
-import { useAuthStore } from '@/store/auth-store';
-import styles from './progress.module.css';
+import React, { Suspense, useEffect } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import {
-  Zap, BookOpen, Code2, Target, TrendingUp, CheckCircle2, RefreshCw,
+  Sparkles,
+  Trophy,
+  Compass,
+  Calendar,
+  BookOpen,
+  RefreshCw,
+  AlertCircle,
 } from 'lucide-react';
+import IndividualShell from '@/components/layout/IndividualShell';
+import {
+  RankHero,
+  FreeOverviewTab,
+  FreeLadderTab,
+  FreeSkillsTab,
+  FreeActivityTab,
+  FreeCoursesTab,
+} from '@/components/free-analytics';
+import { freeService } from '@/services/free.service';
+import { useAuthStore } from '@/store/auth-store';
+import styles from '@/components/free-analytics/free-analytics.module.css';
 
-export default function ProgressPage() {
+const VALID_TABS = ['overview', 'ladder', 'skills', 'activity', 'courses'] as const;
+type TabKey = (typeof VALID_TABS)[number];
+
+function ProgressPageContent() {
   const router = useRouter();
+  const searchParams = useSearchParams();
   const { user, isAuthenticated } = useAuthStore();
 
-  const [progress, setProgress] = useState<Progress | null>(null);
-  const [courses,  setCourses]  = useState<FreeCourse[]>([]);
-  const [loading,  setLoading]  = useState(true);
-
   useEffect(() => {
-    if (!isAuthenticated || !user) { router.replace('/login'); }
+    if (!isAuthenticated || !user) {
+      router.replace('/login');
+    }
   }, [isAuthenticated, user, router]);
 
-  useEffect(() => {
-    if (!user) { setLoading(false); return; }
-    Promise.all([
-      freeService.getProgress(),
-      freeService.listCourses(),
-    ]).then(([prog, crs]) => {
-      setProgress(prog);
-      setCourses(crs);
-    }).finally(() => setLoading(false));
-  }, [user]);
+  // Tab State synced with URL query param
+  const currentTab = (searchParams?.get('tab') as TabKey) || 'overview';
+  const activeTab: TabKey = VALID_TABS.includes(currentTab) ? currentTab : 'overview';
+
+  const handleTabChange = (tab: string) => {
+    const params = new URLSearchParams(searchParams?.toString() || '');
+    params.set('tab', tab);
+    router.push(`/practice/progress?${params.toString()}`);
+  };
+
+  // 1. Unified Profile Query (Overview)
+  const {
+    data: overview,
+    isLoading: overviewLoading,
+    error: overviewError,
+    refetch,
+  } = useQuery({
+    queryKey: ['free-analytics-overview'],
+    queryFn: () => freeService.getFreeOverview(),
+    enabled: !!user,
+  });
+
+  // 2. Targeted Recommendations
+  const { data: recsData } = useQuery({
+    queryKey: ['free-analytics-recommendations'],
+    queryFn: () => freeService.getRecommendations(5),
+    enabled: !!user,
+  });
+
+  // 3. User's Showcase Settings
+  const { data: showcaseMe } = useQuery({
+    queryKey: ['free-analytics-showcase-me'],
+    queryFn: () => freeService.getMyShowcase(),
+    enabled: !!user,
+  });
 
   if (!isAuthenticated || !user) return null;
-
-  const courseMap = Object.fromEntries(courses.map(c => [c.id, c]));
 
   return (
     <IndividualShell
       activePage="progress"
-      title="My Progress"
-      subtitle="Track your XP, solved exercises, and course completion across NexLab."
+      title="My Growth"
+      subtitle="Track your competitive platform rating, ladder standings, topic mastery, and course progress."
     >
-      {loading ? (
-        <div className={styles.loading}>
-          <RefreshCw size={22} className={styles.spinIcon} />
-          <span>Loading your progress…</span>
-        </div>
-      ) : (
-        <>
-          {/* ── Stats row ─────────────────────────────────────────────── */}
-          <div className={styles.statsRow}>
-            <div className={styles.statChip}>
-              <Zap size={15} style={{ color: '#f59e0b' }} />
-              <strong>{progress?.total_xp ?? 0}</strong> XP Earned
-            </div>
-            <div className={styles.statChip}>
-              <CheckCircle2 size={15} style={{ color: '#10b981' }} />
-              <strong>{progress?.total_solved ?? 0}</strong> Solved
-            </div>
-            <div className={styles.statChip}>
-              <Target size={15} style={{ color: '#7c3aed' }} />
-              <strong>
-                {progress
-                  ? Object.values(progress.by_course).reduce((a, c) => a + c.attempted, 0)
-                  : 0}
-              </strong>{' '}
-              Attempted
-            </div>
+      <div className={styles.container}>
+        {overviewLoading ? (
+          <div
+            style={{
+              minHeight: '360px',
+              display: 'flex',
+              flexDirection: 'column',
+              alignItems: 'center',
+              justifyContent: 'center',
+              gap: '1rem',
+              color: '#64748b',
+            }}
+          >
+            <RefreshCw size={28} className={styles.spinIcon} style={{ animation: 'spin 1s linear infinite' }} />
+            <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>Loading your platform growth profile…</span>
           </div>
+        ) : overviewError || !overview ? (
+          <div
+            style={{
+              padding: '2.5rem',
+              background: '#fef2f2',
+              border: '1px solid #fee2e2',
+              borderRadius: '1.25rem',
+              textAlign: 'center',
+              color: '#dc2626',
+            }}
+          >
+            <AlertCircle size={36} style={{ margin: '0 auto 0.75rem' }} />
+            <h3 style={{ margin: 0, fontSize: '1.1rem', fontWeight: 800 }}>Unable to load growth analytics</h3>
+            <p style={{ margin: '0.5rem 0 1.25rem', fontSize: '0.85rem', color: '#991b1b' }}>
+              We encountered a temporary issue retrieving your performance metrics.
+            </p>
+            <button
+              onClick={() => refetch()}
+              style={{
+                padding: '0.6rem 1.25rem',
+                borderRadius: '0.625rem',
+                background: '#dc2626',
+                color: '#fff',
+                fontWeight: 700,
+                fontSize: '0.825rem',
+                border: 'none',
+                cursor: 'pointer',
+              }}
+            >
+              Retry
+            </button>
+          </div>
+        ) : (
+          <>
+            {/* ── 1. The Rank Hero ───────────────────────────────────────── */}
+            <RankHero
+              standing={overview.standing}
+              difficultyMix={overview.difficulty_mix}
+              unlocks={overview.unlocks}
+              userName={user?.full_name || 'Coder'}
+              initialPublic={showcaseMe?.profile_public ?? false}
+              profileSlug={showcaseMe?.profile_slug}
+            />
 
-          {/* ── Course Progress ───────────────────────────────────────── */}
-          {progress && Object.keys(progress.by_course).length > 0 && (
-            <section className={styles.section}>
-              <div className={styles.sectionHeader}>
-                <BookOpen size={16} className={styles.sectionIcon} />
-                <h2 className={styles.sectionTitle}>Course Progress</h2>
-              </div>
-              <div className={styles.courseGrid}>
-                {Object.entries(progress.by_course).map(([courseId, data]) => {
-                  const course = courseMap[courseId];
-                  const total  = course?.exercise_count || data.attempted || 1;
-                  const pct    = Math.min(100, Math.round((data.solved / total) * 100));
-                  return (
-                    <div
-                      key={courseId}
-                      className={styles.courseCard}
-                      onClick={() => course && router.push(`/practice/${course.slug || course.id}`)}
-                    >
-                      <div className={styles.courseCardTop}>
-                        <div className={styles.courseInfo}>
-                          <h3 className={styles.courseName}>{course?.title ?? courseId}</h3>
-                          <span className={styles.courseXp}>
-                            <Zap size={12} /> {data.xp} XP
-                          </span>
-                        </div>
-                        <div className={styles.solvedBadge}>
-                          <CheckCircle2 size={13} />
-                          {data.solved}/{total}
-                        </div>
-                      </div>
-                      <div className={styles.progressBarWrap}>
-                        <div className={styles.progressBar}>
-                          <div className={styles.progressFill} style={{ width: `${pct}%` }} />
-                        </div>
-                        <span className={styles.progressPct}>{pct}%</span>
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
+            {/* ── 2. Growth Profile Navigation Tabs ───────────────────────── */}
+            <div className={styles.tabsNav}>
+              {[
+                { id: 'overview', label: 'Overview', icon: Sparkles },
+                { id: 'ladder', label: 'Ladder & Ranks', icon: Trophy },
+                { id: 'skills', label: 'Skills & Topics', icon: Compass },
+                { id: 'activity', label: 'Activity & Trends', icon: Calendar },
+                { id: 'courses', label: 'Courses & Certs', icon: BookOpen },
+              ].map((tab) => {
+                const Icon = tab.icon;
+                const isActive = activeTab === tab.id;
+                return (
+                  <button
+                    key={tab.id}
+                    onClick={() => handleTabChange(tab.id)}
+                    className={`${styles.tabBtn} ${isActive ? styles.tabBtnActive : ''}`}
+                  >
+                    <Icon size={16} />
+                    <span>{tab.label}</span>
+                  </button>
+                );
+              })}
+            </div>
 
-          {/* ── Recent Activity ───────────────────────────────────────── */}
-          {progress && progress.records.length > 0 && (
-            <section className={styles.section}>
-              <div className={styles.sectionHeader}>
-                <TrendingUp size={16} className={styles.sectionIcon} />
-                <h2 className={styles.sectionTitle}>Recent Activity</h2>
-              </div>
-              <div className={styles.activityList}>
-                {progress.records.slice(0, 10).map((rec, i) => {
-                  const course = courseMap[rec.course_id];
-                  return (
-                    <div key={`${rec.exercise_id}-${i}`} className={styles.activityRow}>
-                      <div className={styles.activityIcon}>
-                        {rec.status === 'solved' ? (
-                          <CheckCircle2 size={16} style={{ color: '#10b981' }} />
-                        ) : (
-                          <Target size={16} style={{ color: '#f59e0b' }} />
-                        )}
-                      </div>
-                      <div className={styles.activityInfo}>
-                        <span className={styles.activityExercise}>
-                          Exercise <code className={styles.exCode}>{rec.exercise_id}</code>
-                        </span>
-                        <span className={styles.activityCourse}>
-                          {course?.title ?? rec.course_id}
-                        </span>
-                      </div>
-                      <div className={styles.activityRight}>
-                        <span className={`${styles.statusBadge} ${rec.status === 'solved' ? styles.statusSolved : styles.statusAttempted}`}>
-                          {rec.status}
-                        </span>
-                        {rec.xp_earned > 0 && (
-                          <span className={styles.xpPill}>
-                            <Zap size={11} /> +{rec.xp_earned}
-                          </span>
-                        )}
-                      </div>
-                    </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* ── Empty state ───────────────────────────────────────────── */}
-          {progress &&
-            Object.keys(progress.by_course).length === 0 &&
-            progress.records.length === 0 && (
-              <div className={styles.emptyState}>
-                <div className={styles.emptyIcon}>
-                  <Code2 size={28} />
-                </div>
-                <h3 className={styles.emptyTitle}>No activity yet</h3>
-                <p className={styles.emptySub}>
-                  Start solving exercises to track your progress and earn XP!
-                </p>
-                <button
-                  className={styles.registerBtn}
-                  onClick={() => router.push('/practice')}
-                >
-                  Browse Courses →
-                </button>
-              </div>
+            {/* ── 3. Tab Panels ───────────────────────────────────────────── */}
+            {activeTab === 'overview' && (
+              <FreeOverviewTab
+                overview={overview}
+                recommendations={recsData?.recommendations}
+                onNavigateTab={handleTabChange}
+              />
             )}
-        </>
-      )}
+
+            {activeTab === 'ladder' && (
+              <FreeLadderTab
+                standing={overview.standing}
+                difficultyMix={overview.difficulty_mix}
+                unlocks={overview.unlocks}
+              />
+            )}
+
+            {activeTab === 'skills' && (
+              <FreeSkillsTab
+                topicStrength={overview.topic_strength}
+                recommendations={recsData?.recommendations}
+              />
+            )}
+
+            {activeTab === 'activity' && (
+              <FreeActivityTab activity={overview.activity} />
+            )}
+
+            {activeTab === 'courses' && (
+              <FreeCoursesTab initialCourses={overview.courses} />
+            )}
+          </>
+        )}
+      </div>
     </IndividualShell>
+  );
+}
+
+export default function ProgressPage() {
+  return (
+    <Suspense
+      fallback={
+        <IndividualShell activePage="progress" title="My Growth">
+          <div
+            style={{
+              minHeight: '360px',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              color: '#64748b',
+            }}
+          >
+            Loading Growth Profile…
+          </div>
+        </IndividualShell>
+      }
+    >
+      <ProgressPageContent />
+    </Suspense>
   );
 }

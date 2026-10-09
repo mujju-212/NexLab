@@ -4,12 +4,13 @@ import { useEffect, useState, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import StudentShell from '@/components/layout/StudentShell';
-import { studentService } from '@/services/student.service';
+import { studentService, type StudentSubjectGradeSummary } from '@/services/student.service';
 import type { SectionSubject, Experiment } from '@/types';
 import {
   LayoutGrid, List, ChevronDown, ChevronUp, CheckCircle2,
   Clock, Circle, MoreVertical, ArrowRight, Sparkles,
-  BookOpen, FlaskConical, Loader2, PlayCircle, Layers
+  BookOpen, FlaskConical, Loader2, PlayCircle, Layers,
+  Award, FileCheck, X
 } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -32,6 +33,24 @@ export default function StudentSubjectsPage() {
   const [loadingExps, setLoadingExps] = useState<Record<string, boolean>>({});
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+
+  // Grade Breakdown Modal State
+  const [gradeModalSubjectId, setGradeModalSubjectId] = useState<string | null>(null);
+  const [gradeSummary, setGradeSummary] = useState<StudentSubjectGradeSummary | null>(null);
+  const [loadingGradeSummary, setLoadingGradeSummary] = useState(false);
+
+  const openGradeModal = async (subjectId: string) => {
+    setGradeModalSubjectId(subjectId);
+    setLoadingGradeSummary(true);
+    try {
+      const summary = await studentService.getSubjectGradeSummary(subjectId);
+      setGradeSummary(summary);
+    } catch {
+      setGradeSummary(null);
+    } finally {
+      setLoadingGradeSummary(false);
+    }
+  };
 
   // Filtering & View Modes
   const [filter, setFilter] = useState<'all' | 'in_progress' | 'completed' | 'not_started'>('all');
@@ -407,9 +426,31 @@ export default function StudentSubjectsPage() {
 
                         {/* Connected Timeline Accordion Drawer */}
                         <div className={styles.drawerBody}>
-                          <h3 className={styles.drawerTitle}>
-                            Experiments ({sub.total_experiments ?? experiments.length})
-                          </h3>
+                          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
+                            <h3 className={styles.drawerTitle} style={{ margin: 0 }}>
+                              Assessments & Labs ({sub.total_experiments ?? experiments.length})
+                            </h3>
+                            <button
+                              type="button"
+                              onClick={() => openGradeModal(sub.subject_id)}
+                              style={{
+                                display: 'inline-flex',
+                                alignItems: 'center',
+                                gap: 6,
+                                background: '#f5f3ff',
+                                color: '#7c3aed',
+                                border: '1px solid #ddd6fe',
+                                padding: '5px 12px',
+                                borderRadius: 8,
+                                fontSize: 12,
+                                fontWeight: 700,
+                                cursor: 'pointer',
+                                transition: 'all 0.15s ease'
+                              }}
+                            >
+                              <Award size={13} /> View Grade Breakdown
+                            </button>
+                          </div>
 
                           {isExpsLoading && (
                             <div style={{ padding: '24px 0', textAlign: 'center', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
@@ -429,6 +470,7 @@ export default function StudentSubjectsPage() {
                               {experiments.map(exp => {
                                 const isCompleted = exp.student_status === 'completed';
                                 const isInProgress = exp.student_status === 'in_progress';
+                                const isExam = exp.delivery_mode === 'exam';
 
                                 return (
                                   <div key={exp.id} className={styles.timelineItem}>
@@ -440,15 +482,31 @@ export default function StudentSubjectsPage() {
                                           ? styles.timelineNodeInProgress
                                           : ''
                                       }`}
+                                      style={isExam && !isCompleted ? { borderColor: '#7c3aed' } : undefined}
                                     />
 
-                                    <div className={styles.expCard}>
+                                    <div className={styles.expCard} style={isExam ? { borderLeft: '3px solid #7c3aed' } : undefined}>
                                       <div className={styles.expMain}>
-                                        <div className={styles.expIconBox}>
-                                          <FlaskConical size={18} strokeWidth={2.2} />
+                                        <div className={styles.expIconBox} style={isExam ? { background: '#ede9fe', color: '#7c3aed' } : undefined}>
+                                          {isExam ? <Clock size={18} strokeWidth={2.2} /> : <FlaskConical size={18} strokeWidth={2.2} />}
                                         </div>
                                         <div className={styles.expContent}>
-                                          <h4 className={styles.expTitle}>{exp.title}</h4>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                                            <h4 className={styles.expTitle}>{exp.title}</h4>
+                                            {isExam && (
+                                              <span style={{
+                                                fontSize: 10.5,
+                                                fontWeight: 800,
+                                                background: '#7c3aed',
+                                                color: '#ffffff',
+                                                padding: '2px 8px',
+                                                borderRadius: 6,
+                                                letterSpacing: '0.04em',
+                                              }}>
+                                                TIMED EXAM • {exp.weightage || 100} PTS
+                                              </span>
+                                            )}
+                                          </div>
                                           <p className={styles.expAim}>{exp.aim || exp.problem_statement}</p>
 
                                           {exp.concept_tags && exp.concept_tags.length > 0 && (
@@ -465,7 +523,7 @@ export default function StudentSubjectsPage() {
                                         {isCompleted ? (
                                           <span className={styles.statusPillCompleted}>
                                             <CheckCircle2 size={13} />
-                                            <span>Completed</span>
+                                            <span>Completed {exp.score !== null && exp.score !== undefined ? `(${exp.score}%)` : ''}</span>
                                             {exp.completed_at && (
                                               <span className={styles.statusDate}>{exp.completed_at}</span>
                                             )}
@@ -475,6 +533,10 @@ export default function StudentSubjectsPage() {
                                             <Clock size={13} />
                                             <span>In Progress</span>
                                           </span>
+                                        ) : exp.window_state === 'closed' ? (
+                                          <span className={styles.statusPillNotStarted} style={{ background: '#f1f5f9', color: '#64748b' }}>
+                                            <span>Closed</span>
+                                          </span>
                                         ) : (
                                           <span className={styles.statusPillNotStarted}>
                                             <Circle size={12} />
@@ -482,13 +544,43 @@ export default function StudentSubjectsPage() {
                                           </span>
                                         )}
 
-                                        <button
-                                          className={styles.openLabBtn}
-                                          onClick={() => router.push(`/student/pre-lab/${exp.id}`)}
-                                        >
-                                          <span>Open Lab</span>
-                                          <ArrowRight size={13} />
-                                        </button>
+                                        {isExam ? (
+                                          isCompleted ? (
+                                            <button
+                                              className={styles.openLabBtn}
+                                              style={{ background: '#7c3aed' }}
+                                              onClick={() => router.push(`/student/exams/${exp.id}`)}
+                                            >
+                                              <span>View Result</span>
+                                              <ArrowRight size={13} />
+                                            </button>
+                                          ) : exp.window_state === 'closed' ? (
+                                            <button
+                                              className={styles.openLabBtn}
+                                              style={{ background: '#cbd5e1', cursor: 'not-allowed' }}
+                                              disabled
+                                            >
+                                              <span>Closed</span>
+                                            </button>
+                                          ) : (
+                                            <button
+                                              className={styles.openLabBtn}
+                                              style={{ background: 'linear-gradient(135deg, #7c3aed, #6d28d9)' }}
+                                              onClick={() => router.push(`/student/exams/${exp.id}`)}
+                                            >
+                                              <span>Take Exam</span>
+                                              <ArrowRight size={13} />
+                                            </button>
+                                          )
+                                        ) : (
+                                          <button
+                                            className={styles.openLabBtn}
+                                            onClick={() => router.push(`/student/pre-lab/${exp.id}`)}
+                                          >
+                                            <span>Open Lab</span>
+                                            <ArrowRight size={13} />
+                                          </button>
+                                        )}
 
                                         <button className={styles.moreOptionsBtn} aria-label="More options">
                                           <MoreVertical size={16} />
@@ -671,6 +763,143 @@ export default function StudentSubjectsPage() {
           </span>
           <span className={styles.footerBrand}>NexLab &bull; Learn by Doing</span>
         </footer>
+
+        {/* ══ SUBJECT GRADE SUMMARY MODAL ══ */}
+        {gradeModalSubjectId && (
+          <div style={{
+            position: 'fixed', inset: 0, zIndex: 9999,
+            background: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(4px)',
+            display: 'flex', alignItems: 'center', justifyContent: 'center',
+            padding: 16
+          }}>
+            <div style={{
+              background: '#ffffff', borderRadius: 16, maxWidth: 680, width: '100%',
+              maxHeight: '90vh', overflowY: 'auto',
+              boxShadow: '0 20px 25px -5px rgba(0, 0, 0, 0.2), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
+              border: '1px solid #e2e8f0'
+            }}>
+              <div style={{
+                display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                padding: '16px 20px', borderBottom: '1px solid #f1f5f9'
+              }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 10, background: '#ede9fe',
+                    display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed'
+                  }}>
+                    <Award size={20} />
+                  </div>
+                  <div>
+                    <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700, color: '#0f172a' }}>
+                      {gradeSummary?.subject.name || 'Subject Grade Breakdown'}
+                    </h3>
+                    <span style={{ fontSize: 12, color: '#64748b' }}>
+                      {gradeSummary?.subject.code} • Cumulative Rollup Score
+                    </span>
+                  </div>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setGradeModalSubjectId(null)}
+                  style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#64748b', padding: 4 }}
+                >
+                  <X size={20} />
+                </button>
+              </div>
+
+              <div style={{ padding: 20 }}>
+                {loadingGradeSummary ? (
+                  <div style={{ padding: '32px 0', textAlign: 'center', color: '#94a3b8', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+                    <Loader2 size={18} className="animate-spin" />
+                    <span>Loading your grades…</span>
+                  </div>
+                ) : !gradeSummary ? (
+                  <p style={{ textAlign: 'center', color: '#64748b', padding: 24 }}>No grade details available.</p>
+                ) : (
+                  <>
+                    <div style={{
+                      display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(160px, 1fr))',
+                      gap: 12, marginBottom: 20
+                    }}>
+                      <div style={{ background: '#f8fafc', padding: 14, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                        <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, display: 'block' }}>Earned Score</span>
+                        <span style={{ fontSize: 22, fontWeight: 800, color: '#059669' }}>
+                          {gradeSummary.earned_score} pts
+                        </span>
+                      </div>
+                      <div style={{ background: '#f8fafc', padding: 14, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                        <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, display: 'block' }}>Total Possible (Weightage)</span>
+                        <span style={{ fontSize: 22, fontWeight: 800, color: '#7c3aed' }}>
+                          {gradeSummary.total_possible_score} pts
+                        </span>
+                      </div>
+                      <div style={{ background: '#f8fafc', padding: 14, borderRadius: 12, border: '1px solid #e2e8f0' }}>
+                        <span style={{ fontSize: 11, color: '#64748b', fontWeight: 600, display: 'block' }}>Course Ceiling</span>
+                        <span style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>
+                          {gradeSummary.subject.total_marks} Marks
+                        </span>
+                      </div>
+                    </div>
+
+                    <div style={{ border: '1px solid #e2e8f0', borderRadius: 12, overflow: 'hidden' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: 13 }}>
+                        <thead>
+                          <tr style={{ background: '#f8fafc', borderBottom: '1px solid #e2e8f0', textAlign: 'left', color: '#475569' }}>
+                            <th style={{ padding: '10px 14px' }}>Assessment</th>
+                            <th style={{ padding: '10px 14px' }}>Type</th>
+                            <th style={{ padding: '10px 14px', textAlign: 'center' }}>Raw Score</th>
+                            <th style={{ padding: '10px 14px', textAlign: 'right' }}>Weighted Score</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {gradeSummary.items.map(item => (
+                            <tr key={item.experiment_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                              <td style={{ padding: '12px 14px' }}>
+                                <div style={{ fontWeight: 600, color: '#0f172a' }}>
+                                  #{item.exp_number} {item.title}
+                                </div>
+                                <span style={{ fontSize: 11, color: '#94a3b8' }}>
+                                  Weight: {item.weightage} pts (Scale: {item.grade_scale})
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 14px' }}>
+                                <span style={{
+                                  fontSize: 11, fontWeight: 700, padding: '2px 7px', borderRadius: 6,
+                                  background: item.delivery_mode === 'exam' ? '#ede9fe' : '#e0f2fe',
+                                  color: item.delivery_mode === 'exam' ? '#7c3aed' : '#0369a1'
+                                }}>
+                                  {item.delivery_mode === 'exam' ? '⏱️ Exam' : '🧪 Lab'}
+                                </span>
+                              </td>
+                              <td style={{ padding: '12px 14px', textAlign: 'center' }}>
+                                {item.raw_score !== null ? (
+                                  <span style={{ fontWeight: 700, color: '#0f172a' }}>
+                                    {item.raw_score} / {item.grade_scale}
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#94a3b8' }}>Pending</span>
+                                )}
+                              </td>
+                              <td style={{ padding: '12px 14px', textAlign: 'right' }}>
+                                {item.weighted_score !== null ? (
+                                  <span style={{ fontWeight: 700, color: '#059669' }}>
+                                    +{item.weighted_score} pts
+                                  </span>
+                                ) : (
+                                  <span style={{ color: '#94a3b8' }}>—</span>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                    </div>
+                  </>
+                )}
+              </div>
+            </div>
+          </div>
+        )}
 
       </div>
     </StudentShell>

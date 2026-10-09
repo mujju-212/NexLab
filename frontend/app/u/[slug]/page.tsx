@@ -1,159 +1,486 @@
 'use client';
 
-/**
- * Public achievement showcase — /u/<slug>
- * No auth, no shell: a share card anyone can open.
- * Respects the owner's opt-out (404 when private).
- */
-import { useEffect, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import Link from 'next/link';
-import { Zap, Flame, Trophy, Target, CheckCircle2, Copy, Lock } from 'lucide-react';
-
-interface ShowcaseData {
-  display_name: string;
-  xp: {
-    total_xp: number; level: number; level_name: string;
-    streak_days: number; problems_solved: number;
-    easy: number; medium: number; hard: number;
-  };
-  badges: Array<{ badge_id: string; [k: string]: unknown }>;
-  recent_solves: Array<{ title: string; slug: string | null; difficulty: string | null; solved_at: string | null }>;
-}
+import { useParams } from 'next/navigation';
+import {
+  Zap,
+  Flame,
+  Trophy,
+  Target,
+  CheckCircle2,
+  Copy,
+  Lock,
+  ExternalLink,
+  Award,
+  Compass,
+  ArrowRight,
+  ShieldCheck,
+  Code2,
+} from 'lucide-react';
+import { freeService, type FreeShowcaseData } from '@/services/free.service';
 
 export default function PublicShowcasePage() {
-  const [data, setData] = useState<ShowcaseData | null>(null);
+  const params = useParams<{ slug: string }>();
+  const slug = params?.slug;
+
+  const [data, setData] = useState<FreeShowcaseData | null>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'private'>('loading');
   const [copied, setCopied] = useState(false);
 
   useEffect(() => {
-    const slug = window.location.pathname.split('/').pop();
-    if (!slug) { setState('private'); return; }
-    fetch(`${process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api'}/practice/showcase/${slug}`)
-      .then(r => (r.ok ? r.json() : Promise.reject(r.status)))
-      .then(d => { setData(d); setState('ok'); })
-      .catch(() => setState('private'));
-  }, []);
+    if (!slug) {
+      setState('private');
+      return;
+    }
+
+    freeService
+      .getShowcase(slug)
+      .then((res) => {
+        setData(res);
+        setState('ok');
+      })
+      .catch(() => {
+        setState('private');
+      });
+  }, [slug]);
 
   const copyLink = async () => {
+    if (typeof window === 'undefined') return;
     try {
       await navigator.clipboard.writeText(window.location.href);
       setCopied(true);
       setTimeout(() => setCopied(false), 2500);
-    } catch { /* clipboard unavailable */ }
+    } catch {
+      // clipboard fallback
+    }
   };
 
   if (state === 'loading') {
     return (
-      <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#170f26,#2b1f42)', color: '#c9c2d8', fontFamily: "'Manrope', sans-serif" }}>
-        Loading…
+      <main
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(135deg, #0b0f19 0%, #1e1b4b 100%)',
+          color: '#c4b5fd',
+          fontFamily: "'Inter', -apple-system, sans-serif",
+        }}
+      >
+        <div style={{ textAlign: 'center', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: '0.75rem' }}>
+          <div
+            style={{
+              width: 38,
+              height: 38,
+              borderRadius: '50%',
+              border: '3px solid rgba(124, 58, 237, 0.3)',
+              borderTopColor: '#7c3aed',
+              animation: 'spin 1s linear infinite',
+            }}
+          />
+          <span style={{ fontSize: '0.875rem', fontWeight: 600 }}>Loading verified athlete profile…</span>
+        </div>
       </main>
     );
   }
 
   if (state === 'private' || !data) {
     return (
-      <main style={{ minHeight: '100vh', display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'linear-gradient(135deg,#170f26,#2b1f42)', color: '#fff', fontFamily: "'Manrope', sans-serif", textAlign: 'center', padding: 24 }}>
-        <div>
-          <Lock size={36} style={{ margin: '0 auto 14px', color: '#8b7fa8' }} />
-          <h1 style={{ fontSize: 20, fontWeight: 700, marginBottom: 8 }}>This profile is private</h1>
-          <p style={{ fontSize: 14, color: '#8b7fa8' }}>The user has not made their achievements public.</p>
-          <Link href="/practice/dashboard" style={{ color: '#a78bfa', fontSize: 14 }}>← Back to NexLab</Link>
+      <main
+        style={{
+          minHeight: '100vh',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          background: 'linear-gradient(135deg, #0b0f19 0%, #1e1b4b 100%)',
+          color: '#fff',
+          fontFamily: "'Inter', -apple-system, sans-serif",
+          padding: 24,
+          textAlign: 'center',
+        }}
+      >
+        <div
+          style={{
+            maxWidth: 420,
+            background: 'rgba(255, 255, 255, 0.04)',
+            backdropFilter: 'blur(16px)',
+            border: '1px solid rgba(255, 255, 255, 0.1)',
+            borderRadius: 24,
+            padding: '2.5rem 2rem',
+          }}
+        >
+          <div
+            style={{
+              width: 56,
+              height: 56,
+              borderRadius: '50%',
+              background: 'rgba(239, 68, 68, 0.1)',
+              color: '#ef4444',
+              display: 'flex',
+              alignItems: 'center',
+              justifyContent: 'center',
+              margin: '0 auto 1.25rem',
+            }}
+          >
+            <Lock size={28} />
+          </div>
+          <h1 style={{ fontSize: '1.25rem', fontWeight: 800, margin: '0 0 0.5rem' }}>This Profile is Private</h1>
+          <p style={{ fontSize: '0.875rem', color: '#94a3b8', lineHeight: 1.5, margin: '0 0 1.5rem' }}>
+            The athlete has made their statistics private, or this profile link is no longer active.
+          </p>
+          <Link
+            href="/practice/dashboard"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.5rem',
+              background: '#7c3aed',
+              color: '#fff',
+              padding: '0.65rem 1.25rem',
+              borderRadius: '0.625rem',
+              fontWeight: 700,
+              fontSize: '0.85rem',
+              textDecoration: 'none',
+            }}
+          >
+            ← Explore NexLab Practice
+          </Link>
         </div>
       </main>
     );
   }
 
-  const { xp, badges, recent_solves, display_name } = data;
-  const isMobile = typeof window !== 'undefined' && window.innerWidth < 640;
-  const cardWidth = Math.min(560, isMobile ? window.innerWidth - 32 : 560);
+  const { standing, badges, top_topics, recent_solves, display_name } = data;
+  const initials = display_name
+    .split(' ')
+    .map((n) => n[0])
+    .join('')
+    .toUpperCase()
+    .slice(0, 2) || 'NL';
 
   return (
-    <main style={{
-      minHeight: '100vh', background: 'linear-gradient(135deg,#170f26,#2b1f42)',
-      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
-      fontFamily: "'Manrope', sans-serif",
-    }}>
-      <div style={{ width: cardWidth, maxWidth: '100%' }}>
-        {/* Share card */}
-        <div style={{
-          background: 'rgba(255,255,255,0.97)', borderRadius: 24, overflow: 'hidden',
-          boxShadow: '0 30px 80px rgba(0,0,0,0.5)',
-        }}>
-          <div style={{
-            background: 'linear-gradient(135deg,#7c3aed,#9333ea)', padding: '26px 28px', color: '#fff',
-          }}>
-            <p style={{ margin: 0, fontSize: 12, fontWeight: 800, letterSpacing: 4, opacity: 0.85 }}>NEXLAB PRACTICE</p>
-            <h1 style={{ margin: '8px 0 2px', fontSize: 26, fontWeight: 800 }}>{display_name}</h1>
-            <p style={{ margin: 0, fontSize: 14, opacity: 0.9 }}>{xp.level_name} · Level {xp.level}</p>
+    <main
+      style={{
+        minHeight: '100vh',
+        background: 'linear-gradient(135deg, #090d16 0%, #151128 50%, #1e1b4b 100%)',
+        display: 'flex',
+        flexDirection: 'column',
+        alignItems: 'center',
+        justifyContent: 'center',
+        padding: '2rem 1rem',
+        fontFamily: "'Inter', -apple-system, BlinkMacSystemFont, sans-serif",
+      }}
+    >
+      <div style={{ maxWidth: 620, width: '100%' }}>
+        {/* Profile Card Container */}
+        <div
+          style={{
+            background: '#ffffff',
+            borderRadius: 24,
+            overflow: 'hidden',
+            boxShadow: '0 30px 90px -20px rgba(0, 0, 0, 0.7), 0 0 0 1px rgba(255, 255, 255, 0.1)',
+          }}
+        >
+          {/* Header Banner */}
+          <div
+            style={{
+              background: 'linear-gradient(135deg, #6d28d9 0%, #7c3aed 50%, #9333ea 100%)',
+              padding: '2rem',
+              color: '#fff',
+              position: 'relative',
+            }}
+          >
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '1.25rem' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: '0.45rem' }}>
+                <ShieldCheck size={16} color="#34d399" />
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 800,
+                    letterSpacing: '0.12em',
+                    textTransform: 'uppercase',
+                    color: '#a7f3d0',
+                  }}
+                >
+                  VERIFIED PLATFORM ATHLETE
+                </span>
+              </div>
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.35rem',
+                  background: 'rgba(0, 0, 0, 0.25)',
+                  padding: '0.3rem 0.65rem',
+                  borderRadius: 9999,
+                  fontSize: '0.75rem',
+                  fontWeight: 700,
+                }}
+              >
+                <Flame size={14} color="#f87171" />
+                <span>{standing.streak_days}d Streak</span>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', alignItems: 'center', gap: '1.25rem' }}>
+              <div
+                style={{
+                  width: 58,
+                  height: 58,
+                  borderRadius: '50%',
+                  background: '#fff',
+                  color: '#7c3aed',
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'center',
+                  fontSize: '1.4rem',
+                  fontWeight: 900,
+                  boxShadow: '0 8px 24px rgba(0, 0, 0, 0.25)',
+                  flexShrink: 0,
+                }}
+              >
+                {initials}
+              </div>
+
+              <div>
+                <h1 style={{ margin: 0, fontSize: '1.65rem', fontWeight: 900, letterSpacing: '-0.02em', lineHeight: 1.2 }}>
+                  {display_name}
+                </h1>
+                <p style={{ margin: '0.2rem 0 0', fontSize: '0.85rem', color: '#e9d5ff', fontWeight: 600 }}>
+                  {standing.level_name} · Level {standing.level}
+                </p>
+              </div>
+            </div>
           </div>
 
-          <div style={{ padding: '22px 28px' }}>
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginBottom: 18 }}>
-              {[
-                { Icon: Zap, label: 'Total XP', value: xp.total_xp.toLocaleString(), color: '#d97706' },
-                { Icon: Target, label: 'Problems Solved', value: xp.problems_solved, color: '#7c3aed' },
-                { Icon: Flame, label: 'Current Streak', value: `${xp.streak_days}d`, color: '#dc2626' },
-                { Icon: Trophy, label: 'Badges', value: badges.length, color: '#059669' },
-              ].map(s => (
-                <div key={s.label} style={{ background: '#faf9ff', borderRadius: 14, padding: '12px 16px' }}>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 4 }}>
-                    <s.Icon size={14} color={s.color} />
-                    <span style={{ fontSize: 11, fontWeight: 700, color: '#9891a6', textTransform: 'uppercase', letterSpacing: '.05em' }}>{s.label}</span>
-                  </div>
-                  <span style={{ fontSize: 20, fontWeight: 800, color: '#201b2e' }}>{s.value}</span>
+          {/* Body Section */}
+          <div style={{ padding: '1.75rem 2rem', display: 'flex', flexDirection: 'column', gap: '1.5rem' }}>
+            {/* Primary Metrics Grid */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '0.85rem' }}>
+              <div style={{ background: '#faf8ff', borderRadius: 14, padding: '1rem', border: '1px solid #ede9fe' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#7c3aed', marginBottom: '0.3rem' }}>
+                  <Award size={15} />
+                  <span style={{ fontSize: '0.725rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Platform Rating
+                  </span>
                 </div>
-              ))}
+                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>
+                  {Math.round(standing.rating).toLocaleString()}
+                </div>
+                <div style={{ fontSize: '0.725rem', color: '#059669', fontWeight: 700, marginTop: '0.35rem' }}>
+                  Top {Math.max(1, 100 - Math.round(standing.global_percentile))}% Globally
+                </div>
+              </div>
+
+              <div style={{ background: '#faf8ff', borderRadius: 14, padding: '1rem', border: '1px solid #ede9fe' }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', color: '#d97706', marginBottom: '0.3rem' }}>
+                  <Zap size={15} />
+                  <span style={{ fontSize: '0.725rem', fontWeight: 700, textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Experience & Solves
+                  </span>
+                </div>
+                <div style={{ fontSize: '1.65rem', fontWeight: 900, color: '#0f172a', lineHeight: 1 }}>
+                  {standing.problems_solved} <span style={{ fontSize: '0.9rem', color: '#64748b', fontWeight: 600 }}>solved</span>
+                </div>
+                <div style={{ fontSize: '0.725rem', color: '#64748b', fontWeight: 600, marginTop: '0.35rem' }}>
+                  {standing.total_xp.toLocaleString()} XP Earned
+                </div>
+              </div>
             </div>
 
-            <div style={{ display: 'flex', gap: 8, marginBottom: 18 }}>
-              {[
-                ['Easy', xp.easy, '#059669'], ['Medium', xp.medium, '#d97706'], ['Hard', xp.hard, '#dc2626'],
-              ].map(([label, n, color]) => (
-                <div key={label as string} style={{ flex: 1, textAlign: 'center', background: '#faf9ff', borderRadius: 10, padding: '8px 0' }}>
-                  <span style={{ fontSize: 16, fontWeight: 800, color: color as string }}>{n}</span>
-                  <span style={{ display: 'block', fontSize: 10.5, color: '#9891a6', fontWeight: 700, textTransform: 'uppercase' }}>{label}</span>
-                </div>
-              ))}
+            {/* Solved Breakdown Chips */}
+            <div style={{ display: 'flex', gap: '0.65rem' }}>
+              <div style={{ flex: 1, textAlign: 'center', background: '#ecfdf5', borderRadius: 10, padding: '0.6rem 0', border: '1px solid #a7f3d0' }}>
+                <span style={{ display: 'block', fontSize: '1.15rem', fontWeight: 800, color: '#059669' }}>
+                  {standing.easy_solved}
+                </span>
+                <span style={{ fontSize: '0.675rem', fontWeight: 700, color: '#047857', textTransform: 'uppercase' }}>Easy</span>
+              </div>
+              <div style={{ flex: 1, textAlign: 'center', background: '#fffbeb', borderRadius: 10, padding: '0.6rem 0', border: '1px solid #fde68a' }}>
+                <span style={{ display: 'block', fontSize: '1.15rem', fontWeight: 800, color: '#d97706' }}>
+                  {standing.medium_solved}
+                </span>
+                <span style={{ fontSize: '0.675rem', fontWeight: 700, color: '#b45309', textTransform: 'uppercase' }}>Medium</span>
+              </div>
+              <div style={{ flex: 1, textAlign: 'center', background: '#fef2f2', borderRadius: 10, padding: '0.6rem 0', border: '1px solid #fecaca' }}>
+                <span style={{ display: 'block', fontSize: '1.15rem', fontWeight: 800, color: '#dc2626' }}>
+                  {standing.hard_solved}
+                </span>
+                <span style={{ fontSize: '0.675rem', fontWeight: 700, color: '#b91c1c', textTransform: 'uppercase' }}>Hard</span>
+              </div>
             </div>
 
-            {recent_solves.length > 0 && (
-              <>
-                <p style={{ margin: '0 0 8px', fontSize: 12, fontWeight: 700, color: '#9891a6', textTransform: 'uppercase', letterSpacing: '.05em' }}>Recent solves</p>
-                {recent_solves.slice(0, 4).map((s, i) => (
-                  <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '7px 0', borderBottom: '1px solid #f3f0fa' }}>
-                    <CheckCircle2 size={14} color="#059669" />
-                    <span style={{ flex: 1, fontSize: 13, fontWeight: 600, color: '#201b2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.title}</span>
-                    <span style={{ fontSize: 11, color: '#9891a6' }}>{s.difficulty}</span>
-                  </div>
-                ))}
-              </>
+            {/* Top Topic Mastery */}
+            {top_topics && top_topics.length > 0 && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.65rem' }}>
+                  <Compass size={15} color="#7c3aed" />
+                  <span style={{ fontSize: '0.775rem', fontWeight: 700, textTransform: 'uppercase', color: '#64748b' }}>
+                    Verified Topic Proficiencies
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.5rem' }}>
+                  {top_topics.slice(0, 4).map((t) => (
+                    <div key={t.topic} style={{ background: '#f8fafc', padding: '0.65rem 0.85rem', borderRadius: 8 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '0.8rem', fontWeight: 700, marginBottom: '0.25rem' }}>
+                        <span style={{ color: '#0f172a' }}>{t.topic}</span>
+                        <span style={{ color: '#7c3aed' }}>{Math.round(t.strength)}%</span>
+                      </div>
+                      <div style={{ height: 6, background: '#e2e8f0', borderRadius: 9999, overflow: 'hidden' }}>
+                        <div
+                          style={{
+                            height: '100%',
+                            background: 'linear-gradient(90deg, #7c3aed, #9333ea)',
+                            width: `${Math.min(100, t.strength)}%`,
+                            borderRadius: 9999,
+                          }}
+                        />
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
             )}
 
-            {badges.length > 0 && (
-              <div style={{ marginTop: 14, display: 'flex', flexWrap: 'wrap', gap: 6 }}>
-                {badges.map(b => (
-                  <span key={b.badge_id} style={{
-                    fontSize: 11, fontWeight: 700, color: '#7c3aed',
-                    background: 'rgba(124,58,237,.09)', borderRadius: 999, padding: '4px 11px',
-                  }}>
-                    🏅 {(b.label as string) ?? (b.badge_id as string).replace(/_/g, ' ')}
+            {/* Badges Shelf */}
+            {badges && badges.length > 0 && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.65rem' }}>
+                  <Trophy size={15} color="#d97706" />
+                  <span style={{ fontSize: '0.775rem', fontWeight: 700, textTransform: 'uppercase', color: '#64748b' }}>
+                    Earned Badges ({badges.length})
                   </span>
-                ))}
+                </div>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '0.5rem' }}>
+                  {badges.map((b) => (
+                    <div
+                      key={b.badge_id}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '0.4rem',
+                        background: '#faf8ff',
+                        border: '1px solid #ede9fe',
+                        padding: '0.35rem 0.75rem',
+                        borderRadius: 9999,
+                        fontSize: '0.775rem',
+                        fontWeight: 700,
+                        color: '#6d28d9',
+                      }}
+                    >
+                      <span>🏅</span>
+                      <span>{b.title || b.badge_id.replace(/_/g, ' ')}</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Recent Solves */}
+            {recent_solves && recent_solves.length > 0 && (
+              <div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '0.4rem', marginBottom: '0.65rem' }}>
+                  <Code2 size={15} color="#059669" />
+                  <span style={{ fontSize: '0.775rem', fontWeight: 700, textTransform: 'uppercase', color: '#64748b' }}>
+                    Recent Solved Problems
+                  </span>
+                </div>
+                <div style={{ display: 'flex', flexDirection: 'column', gap: '0.35rem' }}>
+                  {recent_solves.slice(0, 4).map((s, idx) => (
+                    <div
+                      key={idx}
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '0.55rem 0.75rem',
+                        background: '#f8fafc',
+                        borderRadius: 8,
+                        fontSize: '0.8rem',
+                      }}
+                    >
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
+                        <CheckCircle2 size={14} color="#10b981" />
+                        <span style={{ fontWeight: 600, color: '#0f172a' }}>{s.title}</span>
+                      </div>
+                      <span
+                        style={{
+                          fontSize: '0.7rem',
+                          fontWeight: 700,
+                          padding: '0.15rem 0.45rem',
+                          borderRadius: 4,
+                          background:
+                            s.difficulty === 'Easy'
+                              ? '#ecfdf5'
+                              : s.difficulty === 'Medium'
+                              ? '#fffbeb'
+                              : '#fef2f2',
+                          color:
+                            s.difficulty === 'Easy'
+                              ? '#059669'
+                              : s.difficulty === 'Medium'
+                              ? '#d97706'
+                              : '#dc2626',
+                        }}
+                      >
+                        {s.difficulty}
+                      </span>
+                    </div>
+                  ))}
+                </div>
               </div>
             )}
           </div>
         </div>
 
-        <div style={{ display: 'flex', justifyContent: 'center', gap: 12, marginTop: 18 }}>
-          <button onClick={copyLink} style={{
-            display: 'flex', alignItems: 'center', gap: 7, padding: '10px 18px',
-            borderRadius: 12, border: '1px solid rgba(255,255,255,0.25)', background: 'rgba(255,255,255,0.08)',
-            color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer',
-          }}>
-            <Copy size={14} /> {copied ? 'Link copied!' : 'Share this profile'}
+        {/* Footer Actions */}
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            marginTop: '1.5rem',
+            flexWrap: 'wrap',
+            gap: '1rem',
+          }}
+        >
+          <button
+            onClick={copyLink}
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              padding: '0.65rem 1.15rem',
+              borderRadius: 12,
+              background: 'rgba(255, 255, 255, 0.1)',
+              border: '1px solid rgba(255, 255, 255, 0.2)',
+              color: '#fff',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              cursor: 'pointer',
+              transition: 'background 0.2s',
+            }}
+          >
+            <Copy size={15} />
+            <span>{copied ? 'Link Copied!' : 'Copy Share Link'}</span>
           </button>
-          <Link href="/practice/dashboard" style={{ color: '#a78bfa', fontSize: 14, display: 'flex', alignItems: 'center' }}>
-            ← NexLab
+
+          <Link
+            href="/practice/dashboard"
+            style={{
+              display: 'inline-flex',
+              alignItems: 'center',
+              gap: '0.45rem',
+              color: '#c4b5fd',
+              fontSize: '0.85rem',
+              fontWeight: 700,
+              textDecoration: 'none',
+            }}
+          >
+            <span>Practice on NexLab</span>
+            <ArrowRight size={15} />
           </Link>
         </div>
       </div>
