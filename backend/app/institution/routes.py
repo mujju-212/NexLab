@@ -4,6 +4,7 @@ Manages: users, academic structure, sections, subjects, environment profiles,
          announcements, analytics, audit log, force logout
 """
 # pyrefly: ignore [missing-import]
+from collections import defaultdict
 from flask import Blueprint, request, jsonify, g, make_response
 from app.auth.utils import require_role, require_institution
 from app.extensions import db, socketio
@@ -31,6 +32,11 @@ from sqlalchemy import func, or_, case, text as sa_text
 import bcrypt, uuid, csv, io, json
 
 institution_bp = Blueprint('institution', __name__)
+
+# Per-institution TTL cache for the audit-log filter dropdown choices:
+# {institution_id: (expires_at_monotonic, (users, modules, actions))}
+# Single-process only (dev/waitress/gunicorn-1-worker); stale worst case 60s.
+_AUDIT_FILTERS_CACHE: dict = {}
 
 
 def _int_arg(name, default, lo=None, hi=None):
@@ -126,8 +132,12 @@ def list_users():
         paged    = query.paginate(page=page, per_page=per_page, error_out=False)
         items    = paged.items
     else:
-        page, per_page, paged = 1, total, None
-        items = query.all()
+        # Legacy un-paged shape — kept for the academic enrollment picker,
+        # which genuinely needs every match. Hard-capped so a large
+        # institution can't turn this into a multi-MB response; callers who
+        # page the table (users page) pass ?page= and hit the branch above.
+        page, per_page, paged = 1, min(total, 2000), None
+        items = query.limit(2000).all()
 
     # Pre-fetch student section + batch mapping only for students on this page
     target_student_ids = [u.id for u in items if u.role == 'student']
@@ -1809,121 +1819,7 @@ def institution_dashboard():
     }), 200
 
 
-# ── Announcements ──────────────────────────────────────────────────────────────
 
-@institution_bp.route('/announcements', methods=['POST'])
-@require_role('institution_admin')
-def send_announcement():
-    """
-    Broadcast announcement to all users or a specific role/section.
-    Creates one Notification row per target user.
-
-    Body: {
-        title, message,
-        target: 'all' | 'students' | 'instructors',
-        section_id: (optional — scope to one section only)
-    }
-    """
-    data       = request.get_json()
-    title      = data.get('title', '')
-    message    = data.get('message', '')
-    target     = data.get('target', 'all')        # all | students | instructors
-    section_id = data.get('section_id')           # optional scope
-
-    if not title or not message:
-        return jsonify({'error': 'title and message required'}), 400
-
-    # Build target user list
-    query = User.query.filter_by(institution_id=g.institution_id, is_active=True)
-
-    if target == 'students':
-        query = query.filter_by(role='student')
-    elif target == 'instructors':
-        query = query.filter_by(role='instructor')
-    # 'all' → no extra filter
-
-    if section_id:
-        # Scope to students in a specific section (404s if it is not ours, so an
-        # announcement can never leak into another institution's section).
-        _own_section(section_id)
-        enrolled_ids = [
-            e.student_id
-            for e in SectionStudent.query.filter_by(section_id=section_id).all()
-        ]
-        query = query.filter(User.id.in_(enrolled_ids))
-
-    users = query.all()
-    created = 0
-    for user in users:
-        notif = Notification(
-            user_id=user.id,
-            type='announcement',
-            title=title,
-            message=message,
-        )
-        db.session.add(notif)
-        created += 1
-
-    # Persist first, then push via SocketIO — users must never get a toast for
-    # an announcement whose rows failed to commit.
-    db.session.commit()
-
-    from app.extensions import socketio
-    socketio.emit('new_announcement', {
-        'title': title,
-        'message': message,
-        'from': 'Institution Admin',
-        'timestamp': datetime.utcnow().isoformat(),
-    }, room=f"institution_{g.institution_id}")
-
-    _write_audit(g.user_id, g.institution_id, 'send_announcement', 'announcement', None,
-                 f"\"{title}\" sent to {created} {target}"
-                 + (f" in one section" if section_id else ""))
-    return jsonify({'sent_to': created, 'target': target}), 201
-
-
-@institution_bp.route('/announcements/recent', methods=['GET'])
-@require_role('institution_admin')
-def recent_announcements():
-    """
-    Last 20 announcements sent by this institution, deduplicated.
-    Returns one row per unique (title, message, created_at) broadcast,
-    not one row per recipient.
-    """
-    from sqlalchemy import text as sa_text
-    iid = g.institution_id
-
-    # Fetch deduplicated announcements using GROUP BY on the logical broadcast key.
-    # We pick the minimum Notification.id per group so the result is deterministic.
-    is_sqlite = db.engine.dialect.name == 'sqlite'
-    trunc_expr = "strftime('%Y-%m-%d %H:%M', n.created_at)" if is_sqlite else "DATE_TRUNC('minute', n.created_at)"
-    dedup_rows = db.session.execute(sa_text(f"""
-        SELECT
-            MIN(n.id)         AS id,
-            n.title,
-            n.message,
-            n.type,
-            MIN(n.created_at) AS created_at,
-            COUNT(n.id)       AS recipient_count
-        FROM notifications n
-        JOIN users u ON n.user_id = u.id
-        WHERE u.institution_id = :iid
-          AND n.type = 'announcement'
-        GROUP BY n.title, n.message, n.type, {trunc_expr}
-        ORDER BY created_at DESC
-        LIMIT 20
-    """), {'iid': iid}).fetchall()
-
-    result = [{
-        'id':              r.id,
-        'title':           r.title,
-        'message':         r.message,
-        'type':            r.type,
-        'created_at':      r.created_at.isoformat() if r.created_at else None,
-        'recipient_count': r.recipient_count,
-    } for r in dedup_rows]
-
-    return jsonify({'announcements': result}), 200
 
 
 # ── Force Logout ───────────────────────────────────────────────────────────────
@@ -2055,28 +1951,39 @@ def get_audit_log():
     logs = (query.order_by(AuditLog.created_at.desc())
                  .offset(offset).limit(limit).all())
 
-    # Preload distinct options for dropdown filters
-    distinct_actors = (
-        db.session.query(AuditLog.actor_id)
-        .filter(AuditLog.institution_id == iid)
-        .distinct().all()
-    )
-    actor_ids = [a[0] for a in distinct_actors if a[0]]
-    filter_users = [
-        {'id': u.id, 'name': u.full_name, 'email': u.email, 'role': u.role}
-        for u in User.query.filter(User.id.in_(actor_ids)).all()
-    ] if actor_ids else []
+    # Filter dropdown choices: three DISTINCT scans over the whole audit
+    # table per page load is wasteful when the answer barely changes minute
+    # to minute. Cached per institution with a 60s TTL; ?refresh_filters=1
+    # forces a rebuild (the page calls it after a write).
+    import time as _time
+    now_ts = _time.monotonic()
+    cached = _AUDIT_FILTERS_CACHE.get(iid)
+    if cached and cached[0] > now_ts and not request.args.get('refresh_filters'):
+        filter_users, distinct_modules, distinct_actions = cached[1]
+    else:
+        distinct_actors = (
+            db.session.query(AuditLog.actor_id)
+            .filter(AuditLog.institution_id == iid)
+            .distinct().all()
+        )
+        actor_ids = [a[0] for a in distinct_actors if a[0]]
+        filter_users = [
+            {'id': u.id, 'name': u.full_name, 'email': u.email, 'role': u.role}
+            for u in User.query.filter(User.id.in_(actor_ids)).all()
+        ] if actor_ids else []
 
-    distinct_modules = [
-        m[0] for m in db.session.query(AuditLog.module)
-        .filter(AuditLog.institution_id == iid, AuditLog.module.isnot(None))
-        .distinct().all()
-    ]
-    distinct_actions = [
-        a[0] for a in db.session.query(AuditLog.action)
-        .filter(AuditLog.institution_id == iid)
-        .distinct().all()
-    ]
+        distinct_modules = [
+            m[0] for m in db.session.query(AuditLog.module)
+            .filter(AuditLog.institution_id == iid, AuditLog.module.isnot(None))
+            .distinct().all()
+        ]
+        distinct_actions = [
+            a[0] for a in db.session.query(AuditLog.action)
+            .filter(AuditLog.institution_id == iid)
+            .distinct().all()
+        ]
+        _AUDIT_FILTERS_CACHE[iid] = (
+            now_ts + 60, (filter_users, distinct_modules, distinct_actions))
 
     total_pages = max(1, (total + limit - 1) // limit)
 
@@ -2399,49 +2306,28 @@ def _write_audit(actor_id, institution_id, action, target_type, target_id, detai
     write_audit(actor_id, institution_id, action, target_type, target_id, detail, *args, **kwargs)
 
 
-# ── Per-Institution Analytics ──────────────────────────────────────────────────
+# ── Per-Institution Analytics (Canonical Redesign) ───────────────────────────
 
 @institution_bp.route('/analytics/overview', methods=['GET'])
 @require_role('institution_admin')
 def analytics_overview():
     """
-    High-level institution analytics with flexible date range.
-
-    Query params:
-      ?days=30          — convenience: last N days from now (default 30)
-      ?from=YYYY-MM-DD  — explicit start date (overrides days)
-      ?to=YYYY-MM-DD    — explicit end date (defaults to now)
+    High-level institution analytics using canonical metric layer and Unified Risk Score.
+    Includes sessions, peak hours, active instructors, risk distribution, and WoW deltas.
     """
-    from app.models.submission import CodeAttempt
-    from app.models.knowledge import ConceptMastery
-    from app.models.academic import SectionSubject
+    from collections import defaultdict
+    from app.analytics.metrics import resolve_window, batch_student_atomic_metrics
+    from app.analytics.risk import compute_student_risk, compute_cohort_risk_summary
+    from app.analytics.config import get_analytics_config
+    from app.models.analytics_snapshot import InstitutionDailyKPI, StudentMetricSnapshot
 
     iid = g.institution_id
+    date_from, date_to, days = resolve_window(
+        request.args.get('from'), request.args.get('to'), request.args.get('days')
+    )
+    cfg = get_analytics_config(iid)
 
-    # ── Date range resolution ────────────────────────────────────────────────
-    date_to   = datetime.utcnow()
-    date_from = date_to - timedelta(days=30)
-    days      = 30
-
-    from_str = request.args.get('from')
-    to_str   = request.args.get('to')
-    if from_str:
-        try:
-            date_from = datetime.strptime(from_str, '%Y-%m-%d')
-        except ValueError:
-            return jsonify({'error': 'Invalid `from` date; use YYYY-MM-DD'}), 400
-    elif request.args.get('days'):
-        days      = _int_arg('days', 30, lo=1, hi=365)
-        date_from = date_to - timedelta(days=days)
-    if to_str:
-        try:
-            date_to = datetime.strptime(to_str, '%Y-%m-%d')
-        except ValueError:
-            return jsonify({'error': 'Invalid `to` date; use YYYY-MM-DD'}), 400
-
-    days = max(1, (date_to - date_from).days)
-
-    # Sessions in window
+    # 1. Sessions in window
     total_sessions = LabSession.query.filter(
         LabSession.institution_id == iid,
         LabSession.scheduled_at >= date_from,
@@ -2455,24 +2341,67 @@ def analytics_overview():
         LabSession.scheduled_at <= date_to,
     ).count()
 
-    # Total students
-    total_students = User.query.filter_by(
+    # 2. Total active students
+    all_students = User.query.filter_by(
         institution_id=iid, role='student', is_active=True
-    ).count()
+    ).all()
+    total_students = len(all_students)
+    student_ids = [s.id for s in all_students]
 
-    # Students at risk — avg mastery < 40%
-    at_risk_subq = db.session.query(
-        ConceptMastery.student_id,
-        func.avg(ConceptMastery.mastery_score).label('avg_mastery')
-    ).filter_by(institution_id=iid).group_by(
-        ConceptMastery.student_id
-    ).subquery()
+    # 3. Canonical Unified Risk Score
+    # Check for recent cached KPI snapshot if full-month default window
+    today_date = datetime.utcnow().date()
+    cached_kpi = InstitutionDailyKPI.query.filter_by(
+        institution_id=iid, snapshot_date=today_date
+    ).first()
 
-    at_risk_count = db.session.query(at_risk_subq).filter(
-        at_risk_subq.c.avg_mastery < 40
-    ).count()
+    if cached_kpi and cached_kpi.kpis and days == 30:
+        kpi_data = cached_kpi.kpis
+        at_risk_count = kpi_data.get('at_risk_count', 0)
+        at_risk_pct = kpi_data.get('at_risk_pct', 0.0)
+        bands = kpi_data.get('bands', {'critical': 0, 'high': 0, 'watch': 0, 'ok': 0})
+        avg_risk_score = kpi_data.get('avg_risk_score', 0.0)
+        top_risk_drivers = kpi_data.get('top_risk_drivers', {})
+    else:
+        # Live calculation via canonical metric engine
+        atomic_map = batch_student_atomic_metrics(
+            student_ids=student_ids,
+            institution_id=iid,
+            window_start=date_from,
+            window_end=date_to,
+            min_sample_size=cfg.get('min_sample_size', 3),
+            halflife_days=cfg.get('mastery_halflife_days', 30),
+        )
+        students_risk = []
+        for sid in student_ids:
+            m = atomic_map.get(sid, {})
+            r = compute_student_risk(m, cfg)
+            students_risk.append({'student_id': sid, 'risk': r})
 
-    # Active instructors in window — via SectionSubject join
+        cohort_summary = compute_cohort_risk_summary(students_risk, cfg)
+        at_risk_count = cohort_summary['at_risk_count']
+        at_risk_pct = cohort_summary['at_risk_pct']
+        bands = cohort_summary['bands']
+        avg_risk_score = cohort_summary['avg_risk_score']
+        top_risk_drivers = cohort_summary['top_risk_drivers']
+
+    # 4. Week-over-Week (WoW) deltas from snapshots
+    prev_week_date = today_date - timedelta(days=7)
+    prev_kpi = InstitutionDailyKPI.query.filter_by(
+        institution_id=iid, snapshot_date=prev_week_date
+    ).first()
+
+    wow_deltas = {
+        'sessions_delta': 0,
+        'at_risk_delta': 0,
+        'avg_risk_delta': 0.0,
+    }
+    if prev_kpi and prev_kpi.kpis:
+        p_data = prev_kpi.kpis
+        wow_deltas['at_risk_delta'] = at_risk_count - p_data.get('at_risk_count', 0)
+        wow_deltas['avg_risk_delta'] = round(avg_risk_score - p_data.get('avg_risk_score', 0.0), 1)
+
+    # 5. Active instructors in window
     active_session_ssids = db.session.query(
         func.distinct(LabSession.section_subject_id)
     ).filter(
@@ -2486,20 +2415,20 @@ def analytics_overview():
         func.count(func.distinct(SectionSubject.instructor_id))
     ).filter(
         SectionSubject.id.in_(active_ssids)
-    ).scalar() or 0
+    ).scalar() or 0 if active_ssids else 0
 
-    # Peak usage: count sessions per hour-of-day in SQL (was a full-table Python loop).
-    hour_rows = (db.session.query(
-        func.extract('hour', LabSession.started_at).label('h'),
-        func.count(LabSession.id).label('c'),
-    ).filter(
+    # 6. Peak usage hours (DB-agnostic)
+    hour_rows = LabSession.query.filter(
         LabSession.institution_id == iid,
         LabSession.started_at.isnot(None),
         LabSession.started_at >= date_from,
         LabSession.started_at <= date_to,
-    ).group_by('h').all())
+    ).with_entities(LabSession.started_at).all()
 
-    hour_counts = {int(r.h): int(r.c) for r in hour_rows if r.h is not None}
+    hour_counts = defaultdict(int)
+    for r in hour_rows:
+        if r.started_at:
+            hour_counts[r.started_at.hour] += 1
 
     peak_hours = sorted(hour_counts.items(), key=lambda x: x[1], reverse=True)[:3]
 
@@ -2517,105 +2446,921 @@ def analytics_overview():
         'students': {
             'total': total_students,
             'at_risk': at_risk_count,
-            'at_risk_pct': round(
-                (at_risk_count / total_students * 100) if total_students else 0, 1
-            ),
+            'at_risk_pct': at_risk_pct,
+            'bands': bands,
+            'avg_risk_score': avg_risk_score,
         },
+        'top_risk_drivers': top_risk_drivers,
+        'wow_deltas': wow_deltas,
         'instructors': {'active_this_period': active_instructors},
         'peak_hours': [{'hour': h, 'session_count': c} for h, c in peak_hours],
+        'generated_at': datetime.utcnow().isoformat(),
     }), 200
 
 
 @institution_bp.route('/analytics/students-at-risk', methods=['GET'])
 @require_role('institution_admin')
 def students_at_risk():
-    """List of students with avg concept mastery below threshold (default 40%)"""
-    from app.models.knowledge import ConceptMastery
-    from sqlalchemy import func
+    """
+    Unified Student Risk Score ranking (0–100).
+    Returns per-component breakdown, primary_reason, risk band, and trend.
+    """
+    from app.analytics.metrics import resolve_window, batch_student_atomic_metrics
+    from app.analytics.risk import compute_student_risk
+    from app.analytics.config import get_analytics_config
+    from app.models.analytics_snapshot import StudentMetricSnapshot
 
-    threshold = float(request.args.get('threshold', 40.0))
+    iid = g.institution_id
+    date_from, date_to, days = resolve_window(
+        request.args.get('from'), request.args.get('to'), request.args.get('days')
+    )
+    cfg = get_analytics_config(iid)
+    bands_cfg = cfg.get('risk_bands', {})
+    default_threshold = float(bands_cfg.get('watch', 30.0))
 
-    at_risk = db.session.query(
-        ConceptMastery.student_id,
-        func.avg(ConceptMastery.mastery_score).label('avg_mastery'),
-        func.count(ConceptMastery.concept).label('concepts_tracked'),
-        User.id.label('user_pk'),
-        User.full_name.label('full_name'),
-        User.email.label('email'),
-        User.roll_number.label('roll_number'),
-    ).join(
-        User, ConceptMastery.student_id == User.id
-    ).filter(
-        ConceptMastery.institution_id == g.institution_id,
+    threshold = float(request.args.get('threshold', default_threshold))
+    band_filter = request.args.get('band')  # 'critical', 'high', 'watch', etc.
+    section_id = request.args.get('section_id')
+    department_id = request.args.get('department_id')
+
+    # Filter target students
+    q = User.query.filter(
+        User.institution_id == iid,
         User.role == 'student',
-    ).group_by(
-        ConceptMastery.student_id, User.id
-    ).having(
-        func.avg(ConceptMastery.mastery_score) < threshold
-    ).all()
+        User.is_active == True,
+    )
+    if department_id:
+        q = q.filter(User.department_id == department_id)
 
-    # Single query — the per-row User.query.get() N+1 is gone.
-    result = [{
-        'student_id':       row.student_id,
-        'full_name':        row.full_name,
-        'email':            row.email,
-        'roll_number':      row.roll_number,
-        'avg_mastery':      round(float(row.avg_mastery), 1),
-        'concepts_tracked': row.concepts_tracked,
-    } for row in at_risk]
+    students = q.all()
+    if section_id:
+        enrolled_ids = {
+            r[0] for r in db.session.query(SectionStudent.student_id).filter_by(section_id=section_id).all()
+        }
+        students = [s for s in students if s.id in enrolled_ids]
 
-    result.sort(key=lambda x: x['avg_mastery'])
-    return jsonify({'at_risk_students': result, 'threshold': threshold}), 200
+    student_map = {s.id: s for s in students}
+    student_ids = list(student_map.keys())
+
+    if not student_ids:
+        return jsonify({
+            'at_risk_students': [],
+            'threshold': threshold,
+            'total_evaluated': 0,
+            'period': {'from': date_from.strftime('%Y-%m-%d'), 'to': date_to.strftime('%Y-%m-%d')},
+        }), 200
+
+    # 1. Fetch previous snapshots for trend arrows
+    prev_date = datetime.utcnow().date() - timedelta(days=7)
+    prev_snaps = StudentMetricSnapshot.query.filter(
+        StudentMetricSnapshot.institution_id == iid,
+        StudentMetricSnapshot.snapshot_date <= prev_date,
+        StudentMetricSnapshot.student_id.in_(student_ids),
+    ).order_by(StudentMetricSnapshot.snapshot_date.desc()).all()
+
+    prev_risk_map = {}
+    for ps in prev_snaps:
+        if ps.student_id not in prev_risk_map and isinstance(ps.metrics, dict):
+            prev_risk_map[ps.student_id] = float(ps.metrics.get('risk', {}).get('risk_score', 0.0))
+
+    # 2. Canonical batch metric loading
+    atomic_metrics = batch_student_atomic_metrics(
+        student_ids=student_ids,
+        institution_id=iid,
+        window_start=date_from,
+        window_end=date_to,
+        min_sample_size=cfg.get('min_sample_size', 3),
+        halflife_days=cfg.get('mastery_halflife_days', 30),
+    )
+
+    results = []
+    for sid in student_ids:
+        m = atomic_metrics.get(sid, {})
+        u = student_map[sid]
+        prev_r = prev_risk_map.get(sid)
+        risk_info = compute_student_risk(m, cfg, previous_risk=prev_r)
+
+        score = risk_info['risk_score']
+        band = risk_info['risk_band']
+
+        # Apply threshold or band filter
+        if band_filter and band_filter.lower() != 'all':
+            if band.lower() != band_filter.lower():
+                continue
+        elif score < threshold:
+            continue
+
+        results.append({
+            'student_id': sid,
+            'full_name': u.full_name,
+            'email': u.email,
+            'roll_number': u.roll_number,
+            'risk_score': score,
+            'risk_band': band,
+            'is_at_risk': risk_info['is_at_risk'],
+            'primary_reason': risk_info['primary_reason'],
+            'primary_component': risk_info['primary_component'],
+            'trend_arrow': risk_info['trend_arrow'],
+            'risk_delta': risk_info['risk_delta'],
+            'components': risk_info['components'],
+            'risk_contributions': risk_info['risk_contributions'],
+            'sample_size': m.get('mastery_avg', {}).get('sample_size', 0),
+            'is_sufficient': m.get('mastery_avg', {}).get('is_sufficient', False),
+        })
+
+    # Sort descending by risk score (most critical first)
+    results.sort(key=lambda x: x['risk_score'], reverse=True)
+
+    return jsonify({
+        'at_risk_students': results,
+        'threshold': threshold,
+        'total_evaluated': len(student_ids),
+        'risk_bands_config': bands_cfg,
+        'period': {'from': date_from.strftime('%Y-%m-%d'), 'to': date_to.strftime('%Y-%m-%d'), 'days': days},
+        'generated_at': datetime.utcnow().isoformat(),
+    }), 200
 
 
 @institution_bp.route('/analytics/section-comparison', methods=['GET'])
 @require_role('institution_admin')
 def section_comparison():
     """
-    Compare grade-based performance across all sections.
-    Uses Grade.final_grade (actual graded scores) averaged per section
-    — not the holistic rank_score engagement metric.
+    Multi-dimensional section performance benchmark.
+    Includes grades, attendance, focus, risk distribution, and z-scores vs campus baseline.
     """
-    from app.models.grading import Grade
-    from app.models.academic import SectionSubject
-    from app.models.session import LabSession
+    from app.analytics.metrics import resolve_window, batch_student_atomic_metrics
+    from app.analytics.risk import compute_student_risk
+    from app.analytics.benchmark import compute_cohort_benchmarks
+    from app.analytics.config import get_analytics_config
 
-    sections = Section.query.filter_by(institution_id=g.institution_id).all()
+    iid = g.institution_id
+    date_from, date_to, days = resolve_window(
+        request.args.get('from'), request.args.get('to'), request.args.get('days')
+    )
+    cfg = get_analytics_config(iid)
 
-    # Three aggregate queries total (was: 3–4 queries PER section).
-    grade_rows = (db.session.query(
-        SectionSubject.section_id,
-        func.avg(Grade.final_grade).label('avg_grade'),
-        func.count(Grade.id).label('grade_count'),
-    ).join(LabSession, Grade.session_id == LabSession.id)
-     .join(SectionSubject, LabSession.section_subject_id == SectionSubject.id)
-     .filter(
-         SectionSubject.institution_id == g.institution_id,
-         Grade.final_grade.isnot(None),
-     ).group_by(SectionSubject.section_id).all())
-    grade_map = {r.section_id: (round(float(r.avg_grade), 1), r.grade_count)
-                 for r in grade_rows if r.avg_grade is not None}
+    sections = Section.query.filter_by(institution_id=iid).all()
+    if not sections:
+        return jsonify({'sections': [], 'baselines': {}}), 200
 
-    enrolled_rows = (db.session.query(
-        SectionStudent.section_id,
-        func.count(SectionStudent.student_id),
-    ).filter(SectionStudent.section_id.in_([s.id for s in sections]))
-     .group_by(SectionStudent.section_id).all())
-    enrolled_map = dict(enrolled_rows)
+    # Get all students and section memberships
+    memberships = SectionStudent.query.filter(
+        SectionStudent.section_id.in_([s.id for s in sections])
+    ).all()
+    sec_student_map = defaultdict(list)
+    all_sids = set()
+    for m in memberships:
+        sec_student_map[m.section_id].append(m.student_id)
+        all_sids.add(m.student_id)
 
-    result = []
+    # Batch compute metrics for all students across all sections
+    atomic_map = batch_student_atomic_metrics(
+        student_ids=list(all_sids),
+        institution_id=iid,
+        window_start=date_from,
+        window_end=date_to,
+        min_sample_size=cfg.get('min_sample_size', 3),
+        halflife_days=cfg.get('mastery_halflife_days', 30),
+    )
+
+    student_risk_map = {}
+    for sid in all_sids:
+        student_risk_map[sid] = compute_student_risk(atomic_map.get(sid, {}), cfg)
+
+    section_entities = []
     for sec in sections:
-        avg_grade, grade_count = grade_map.get(sec.id, (None, 0))
-        result.append({
-            'section_id':    sec.id,
-            'section_name':  sec.name,
-            'enrolled':      enrolled_map.get(sec.id, 0),
-            'avg_grade':     avg_grade,   # None = no grades yet
-            'graded_count':  grade_count,
+        sids = sec_student_map.get(sec.id, [])
+        enrolled_count = len(sids)
+
+        if not sids:
+            section_entities.append({
+                'section_id': sec.id,
+                'section_name': sec.name,
+                'enrolled': 0,
+                'avg_grade': 0.0,
+                'attendance_rate': 0.0,
+                'focus_avg': 50.0,
+                'risk_score': 0.0,
+                'at_risk_count': 0,
+                'sample_size': 0,
+                'is_sufficient': False,
+            })
+            continue
+
+        sec_grades = [atomic_map[sid]['grade_avg']['value'] for sid in sids if atomic_map.get(sid, {}).get('grade_avg', {}).get('value') is not None]
+        sec_atts = [atomic_map[sid]['attendance_rate']['value'] for sid in sids if atomic_map.get(sid, {}).get('attendance_rate', {}).get('value') is not None]
+        sec_focus = [atomic_map[sid]['focus_avg']['value'] for sid in sids if atomic_map.get(sid, {}).get('focus_avg', {}).get('value') is not None]
+        sec_risks = [student_risk_map[sid]['risk_score'] for sid in sids if sid in student_risk_map]
+        crit_high_count = sum(1 for sid in sids if student_risk_map.get(sid, {}).get('is_at_risk'))
+
+        avg_g = round(sum(sec_grades) / len(sec_grades), 1) if sec_grades else 0.0
+        avg_a = round(sum(sec_atts) / len(sec_atts), 1) if sec_atts else 0.0
+        avg_f = round(sum(sec_focus) / len(sec_focus), 1) if sec_focus else 50.0
+        avg_r = round(sum(sec_risks) / len(sec_risks), 1) if sec_risks else 0.0
+
+        section_entities.append({
+            'section_id': sec.id,
+            'section_name': sec.name,
+            'enrolled': enrolled_count,
+            'avg_grade': avg_g,
+            'attendance_rate': avg_a,
+            'focus_avg': avg_f,
+            'risk_score': avg_r,
+            'at_risk_count': crit_high_count,
+            'sample_size': enrolled_count,
+            'is_sufficient': enrolled_count >= cfg.get('min_sample_size', 3),
         })
 
-    result.sort(key=lambda x: (x['avg_grade'] or 0), reverse=True)
-    return jsonify({'sections': result}), 200
+    # Benchmark sections against campus baseline
+    benchmark_result = compute_cohort_benchmarks(
+        section_entities,
+        metric_keys=['avg_grade', 'attendance_rate', 'focus_avg', 'risk_score']
+    )
+
+    enriched_sections = benchmark_result['entities']
+    enriched_sections.sort(key=lambda x: (x.get('avg_grade') or 0), reverse=True)
+
+    return jsonify({
+        'sections': enriched_sections,
+        'baselines': benchmark_result['baselines'],
+        'period': {'from': date_from.strftime('%Y-%m-%d'), 'to': date_to.strftime('%Y-%m-%d'), 'days': days},
+        'generated_at': datetime.utcnow().isoformat(),
+    }), 200
+
+
+# ── New Redesigned Analytics Endpoints ────────────────────────────────────────
+
+@institution_bp.route('/analytics/risk/overview', methods=['GET'])
+@require_role('institution_admin')
+def risk_overview():
+    """
+    Campus-wide risk heatmap and distribution summary.
+    Returns counts per band, top 10 critical students, and campus risk drivers.
+    """
+    from app.analytics.metrics import resolve_window, batch_student_atomic_metrics
+    from app.analytics.risk import compute_student_risk, compute_cohort_risk_summary
+    from app.analytics.config import get_analytics_config
+
+    iid = g.institution_id
+    date_from, date_to, days = resolve_window(
+        request.args.get('from'), request.args.get('to'), request.args.get('days')
+    )
+    cfg = get_analytics_config(iid)
+
+    students = User.query.filter_by(institution_id=iid, role='student', is_active=True).all()
+    student_map = {s.id: s for s in students}
+    student_ids = list(student_map.keys())
+
+    if not student_ids:
+        return jsonify({
+            'total_students': 0,
+            'at_risk_count': 0,
+            'bands': {'critical': 0, 'high': 0, 'watch': 0, 'ok': 0},
+            'critical_students': [],
+            'top_risk_drivers': {},
+        }), 200
+
+    atomic_map = batch_student_atomic_metrics(
+        student_ids=student_ids,
+        institution_id=iid,
+        window_start=date_from,
+        window_end=date_to,
+        min_sample_size=cfg.get('min_sample_size', 3),
+        halflife_days=cfg.get('mastery_halflife_days', 30),
+    )
+
+    cohort_list = []
+    for sid in student_ids:
+        r = compute_student_risk(atomic_map.get(sid, {}), cfg)
+        cohort_list.append({
+            'student_id': sid,
+            'risk': r,
+            'user': student_map[sid],
+        })
+
+    summary = compute_cohort_risk_summary(
+        [{'risk': c['risk']} for c in cohort_list],
+        cfg
+    )
+
+    # Top 10 critical students
+    critical_only = [c for c in cohort_list if c['risk']['risk_band'] in ('critical', 'high')]
+    critical_only.sort(key=lambda x: x['risk']['risk_score'], reverse=True)
+    top_critical = [{
+        'student_id': c['student_id'],
+        'full_name': c['user'].full_name,
+        'email': c['user'].email,
+        'roll_number': c['user'].roll_number,
+        'risk_score': c['risk']['risk_score'],
+        'risk_band': c['risk']['risk_band'],
+        'primary_reason': c['risk']['primary_reason'],
+        'components': c['risk']['components'],
+        'risk_contributions': c['risk']['risk_contributions'],
+    } for c in critical_only[:10]]
+
+    return jsonify({
+        'summary': summary,
+        'top_critical_students': top_critical,
+        'risk_bands_config': cfg.get('risk_bands', {}),
+        'period': {'from': date_from.strftime('%Y-%m-%d'), 'to': date_to.strftime('%Y-%m-%d'), 'days': days},
+        'generated_at': datetime.utcnow().isoformat(),
+    }), 200
+
+
+@institution_bp.route('/analytics/risk/trends', methods=['GET'])
+@require_role('institution_admin')
+def risk_trends():
+    """
+    Predictive risk slope: highlights students whose risk score is escalating fastest
+    over snapshot history (early warning before critical failure).
+    """
+    from app.models.analytics_snapshot import StudentMetricSnapshot
+
+    iid = g.institution_id
+    days = int(request.args.get('days', 14))
+    limit = int(request.args.get('limit', 20))
+    since_date = datetime.utcnow().date() - timedelta(days=days)
+
+    snapshots = StudentMetricSnapshot.query.filter(
+        StudentMetricSnapshot.institution_id == iid,
+        StudentMetricSnapshot.snapshot_date >= since_date,
+        StudentMetricSnapshot.section_subject_id.is_(None),
+    ).order_by(StudentMetricSnapshot.snapshot_date.asc()).all()
+
+    student_history = defaultdict(list)
+    for s in snapshots:
+        if isinstance(s.metrics, dict) and 'risk' in s.metrics:
+            score = float(s.metrics['risk'].get('risk_score', 0.0))
+            student_history[s.student_id].append({
+                'date': s.snapshot_date.isoformat(),
+                'risk_score': score,
+            })
+
+    rising_students = []
+    student_ids = list(student_history.keys())
+    users = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
+
+    for sid, hist in student_history.items():
+        if len(hist) < 2:
+            continue
+        first_score = hist[0]['risk_score']
+        last_score = hist[-1]['risk_score']
+        risk_increase = round(last_score - first_score, 1)
+
+        # Focus on students with positive risk trajectory
+        if risk_increase > 0:
+            u = users.get(sid)
+            rising_students.append({
+                'student_id': sid,
+                'full_name': u.full_name if u else sid,
+                'email': u.email if u else None,
+                'roll_number': u.roll_number if u else None,
+                'start_risk': first_score,
+                'current_risk': last_score,
+                'risk_increase': risk_increase,
+                'snapshots_count': len(hist),
+                'history': hist[-7:],  # last 7 points for sparkline
+            })
+
+    rising_students.sort(key=lambda x: x['risk_increase'], reverse=True)
+
+    return jsonify({
+        'rising_risk_students': rising_students[:limit],
+        'lookback_days': days,
+        'total_analyzed': len(student_history),
+        'generated_at': datetime.utcnow().isoformat(),
+    }), 200
+
+
+@institution_bp.route('/analytics/funnel', methods=['GET'])
+@require_role('institution_admin')
+def analytics_funnel():
+    """
+    Cohort conversion funnel: enrolled -> active -> submitting -> passing -> mastered.
+    Monotonically non-increasing stage verification and drop-off analysis.
+    """
+    from app.analytics.metrics import resolve_window
+    from app.analytics.funnel import compute_student_funnel
+
+    date_from, date_to, _ = resolve_window(
+        request.args.get('from'), request.args.get('to'), request.args.get('days')
+    )
+    section_id = request.args.get('section_id')
+    section_subject_id = request.args.get('section_subject_id')
+    pass_grade = float(request.args.get('pass_grade', 50.0))
+    mastery_th = float(request.args.get('mastery_threshold', 75.0))
+
+    funnel_data = compute_student_funnel(
+        institution_id=g.institution_id,
+        window_start=date_from,
+        window_end=date_to,
+        section_id=section_id,
+        section_subject_id=section_subject_id,
+        pass_grade_threshold=pass_grade,
+        mastery_threshold=mastery_th,
+    )
+
+    funnel_data['period'] = {
+        'from': date_from.strftime('%Y-%m-%d'),
+        'to': date_to.strftime('%Y-%m-%d')
+    }
+    funnel_data['generated_at'] = datetime.utcnow().isoformat()
+    return jsonify(funnel_data), 200
+
+
+@institution_bp.route('/analytics/benchmark', methods=['GET'])
+@require_role('institution_admin')
+def analytics_benchmark():
+    """
+    Entity benchmarking against campus baseline (z-score + percentiles).
+    Supports ?type=section (default) or ?type=department.
+    """
+    from app.analytics.metrics import resolve_window, batch_student_atomic_metrics
+    from app.analytics.risk import compute_student_risk
+    from app.analytics.benchmark import compute_cohort_benchmarks
+    from app.analytics.config import get_analytics_config
+
+    iid = g.institution_id
+    date_from, date_to, days = resolve_window(
+        request.args.get('from'), request.args.get('to'), request.args.get('days')
+    )
+    b_type = request.args.get('type', 'section')
+    cfg = get_analytics_config(iid)
+
+    if b_type == 'department':
+        from app.models.academic import Department
+        depts = Department.query.filter_by(institution_id=iid).all()
+        entities = []
+        for d in depts:
+            students = User.query.filter_by(institution_id=iid, department_id=d.id, role='student', is_active=True).all()
+            sids = [s.id for s in students]
+            if not sids:
+                continue
+            atomic = batch_student_atomic_metrics(sids, iid, date_from, date_to)
+            grades = [atomic[s]['grade_avg']['value'] for s in sids if atomic[s]['grade_avg']['value'] > 0]
+            atts = [atomic[s]['attendance_rate']['value'] for s in sids]
+            focus = [atomic[s]['focus_avg']['value'] for s in sids if atomic[s]['focus_avg']['value'] is not None]
+            risks = [compute_student_risk(atomic[s], cfg)['risk_score'] for s in sids]
+
+            entities.append({
+                'id': d.id,
+                'name': d.name,
+                'student_count': len(sids),
+                'avg_grade': round(sum(grades) / len(grades), 1) if grades else 0.0,
+                'attendance_rate': round(sum(atts) / len(atts), 1) if atts else 0.0,
+                'focus_avg': round(sum(focus) / len(focus), 1) if focus else 50.0,
+                'risk_score': round(sum(risks) / len(risks), 1) if risks else 0.0,
+            })
+    else:
+        # Default section benchmarking
+        sections = Section.query.filter_by(institution_id=iid).all()
+        memberships = SectionStudent.query.filter(SectionStudent.section_id.in_([s.id for s in sections])).all()
+        sec_map = defaultdict(list)
+        for m in memberships:
+            sec_map[m.section_id].append(m.student_id)
+
+        all_sids = list({m.student_id for m in memberships})
+        atomic = batch_student_atomic_metrics(all_sids, iid, date_from, date_to) if all_sids else {}
+
+        entities = []
+        for sec in sections:
+            sids = sec_map.get(sec.id, [])
+            if not sids:
+                continue
+            grades = [atomic[s]['grade_avg']['value'] for s in sids if s in atomic and atomic[s]['grade_avg']['value'] > 0]
+            atts = [atomic[s]['attendance_rate']['value'] for s in sids if s in atomic]
+            focus = [atomic[s]['focus_avg']['value'] for s in sids if s in atomic and atomic[s]['focus_avg']['value'] is not None]
+            risks = [compute_student_risk(atomic[s], cfg)['risk_score'] for s in sids if s in atomic]
+
+            entities.append({
+                'id': sec.id,
+                'name': sec.name,
+                'student_count': len(sids),
+                'avg_grade': round(sum(grades) / len(grades), 1) if grades else 0.0,
+                'attendance_rate': round(sum(atts) / len(atts), 1) if atts else 0.0,
+                'focus_avg': round(sum(focus) / len(focus), 1) if focus else 50.0,
+                'risk_score': round(sum(risks) / len(risks), 1) if risks else 0.0,
+            })
+
+    result = compute_cohort_benchmarks(entities, metric_keys=['avg_grade', 'attendance_rate', 'focus_avg', 'risk_score'])
+    result['benchmark_type'] = b_type
+    result['period'] = {'from': date_from.strftime('%Y-%m-%d'), 'to': date_to.strftime('%Y-%m-%d'), 'days': days}
+    result['generated_at'] = datetime.utcnow().isoformat()
+    return jsonify(result), 200
+
+
+@institution_bp.route('/analytics/integrity', methods=['GET'])
+@require_role('institution_admin')
+def analytics_integrity():
+    """
+    True Proctoring & Integrity Analytics from discrete ProctorEvent records.
+    Disentangles behavioral focus from integrity violations.
+    """
+    from collections import defaultdict
+    from app.analytics.metrics import resolve_window
+    from app.models.proctor_event import ProctorEvent
+
+    iid = g.institution_id
+    date_from, date_to, days = resolve_window(
+        request.args.get('from'), request.args.get('to'), request.args.get('days')
+    )
+    session_id = request.args.get('session_id')
+
+    q = ProctorEvent.query.filter(
+        ProctorEvent.institution_id == iid,
+        ProctorEvent.recorded_at >= date_from,
+        ProctorEvent.recorded_at <= date_to,
+    )
+    if session_id:
+        q = q.filter(ProctorEvent.session_id == session_id)
+
+    events = q.all()
+    total_events = len(events)
+
+    # Event counts by type and severity
+    by_type = defaultdict(int)
+    by_severity = defaultdict(int)
+    by_student = defaultdict(lambda: {'count': 0, 'weighted': 0.0})
+    by_session = defaultdict(int)
+
+    sev_weights = {'high': 3.0, 'medium': 2.0, 'low': 1.0}
+
+    for ev in events:
+        by_type[ev.event_type] += 1
+        sev = (ev.severity or 'medium').lower()
+        by_severity[sev] += 1
+        w = sev_weights.get(sev, 1.0)
+        by_student[ev.student_id]['count'] += 1
+        by_student[ev.student_id]['weighted'] += w
+        by_session[ev.session_id] += 1
+
+    # Overall campus integrity score (100 - weighted_penalties / scale)
+    total_weighted = sum(by_severity[k] * sev_weights.get(k, 1.0) for k in by_severity)
+    campus_integrity_score = max(0.0, 100.0 - min(100.0, (total_weighted / max(1, len(by_student))) * 5.0)) if by_student else 100.0
+
+    # Repeat offenders
+    repeat_offenders = []
+    top_sids = sorted(by_student.keys(), key=lambda s: by_student[s]['weighted'], reverse=True)[:10]
+    if top_sids:
+        users = {u.id: u for u in User.query.filter(User.id.in_(top_sids)).all()}
+        for s in top_sids:
+            u = users.get(s)
+            repeat_offenders.append({
+                'student_id': s,
+                'full_name': u.full_name if u else s,
+                'email': u.email if u else None,
+                'event_count': by_student[s]['count'],
+                'weighted_violations': round(by_student[s]['weighted'], 1),
+            })
+
+    # Session hotspots
+    top_sessions = sorted(by_session.keys(), key=lambda s: by_session[s], reverse=True)[:5]
+    session_hotspots = [{'session_id': s, 'event_count': by_session[s]} for s in top_sessions]
+
+    return jsonify({
+        'total_violations': total_events,
+        'campus_integrity_score': round(campus_integrity_score, 1),
+        'by_event_type': dict(by_type),
+        'by_severity': dict(by_severity),
+        'repeat_offenders': repeat_offenders,
+        'session_hotspots': session_hotspots,
+        'period': {'from': date_from.strftime('%Y-%m-%d'), 'to': date_to.strftime('%Y-%m-%d'), 'days': days},
+        'generated_at': datetime.utcnow().isoformat(),
+    }), 200
+
+
+@institution_bp.route('/analytics/outcomes', methods=['GET'])
+@require_role('institution_admin')
+def analytics_outcomes():
+    """
+    Subject-level outcome rollup across all unified grades.
+    Reports pass rate, avg score, grade band distribution (A-F), and student reach.
+    """
+    from app.models.grading import Grade
+    from app.models.experiment import Experiment
+
+    iid = g.institution_id
+    subjects = Subject.query.filter_by(institution_id=iid).all()
+    if not subjects:
+        return jsonify({'subjects': [], 'institution_pass_rate': 0.0}), 200
+
+    subject_results = []
+    total_passed = 0
+    total_evaluated = 0
+
+    for sub in subjects:
+        # Experiments belonging to this subject
+        exp_ids = [e.id for e in Experiment.query.filter_by(subject_id=sub.id).all()]
+        if not exp_ids:
+            continue
+
+        grades = Grade.query.filter(
+            Grade.experiment_id.in_(exp_ids),
+            Grade.final_grade.isnot(None)
+        ).all()
+
+        if not grades:
+            continue
+
+        vals = [float(g.final_grade) for g in grades]
+        count = len(vals)
+        passed = sum(1 for v in vals if v >= 50.0)
+        total_passed += passed
+        total_evaluated += count
+
+        bands = {
+            'A (90+)': sum(1 for v in vals if v >= 90),
+            'B (80-89)': sum(1 for v in vals if 80 <= v < 90),
+            'C (70-79)': sum(1 for v in vals if 70 <= v < 80),
+            'D (50-69)': sum(1 for v in vals if 50 <= v < 70),
+            'F (<50)': sum(1 for v in vals if v < 50),
+        }
+
+        subject_results.append({
+            'subject_id': sub.id,
+            'subject_name': sub.name,
+            'code': sub.code,
+            'graded_count': count,
+            'pass_count': passed,
+            'pass_rate_pct': round((passed / count) * 100.0, 1),
+            'avg_grade': round(sum(vals) / count, 1),
+            'grade_bands': bands,
+        })
+
+    inst_pass_rate = round((total_passed / total_evaluated) * 100.0, 1) if total_evaluated else 0.0
+    avg_grade = round(sum(s['avg_grade'] * s['graded_count'] for s in subject_results) / total_evaluated, 1) if total_evaluated else 0.0
+    summary = {
+        'campus_avg_grade': avg_grade,
+        'campus_mastery_rate': inst_pass_rate,
+        'campus_completion_rate': inst_pass_rate,
+    }
+
+    return jsonify({
+        'subjects': subject_results,
+        'institution_pass_rate_pct': inst_pass_rate,
+        'total_graded_records': total_evaluated,
+        'summary': summary,
+        'generated_at': datetime.utcnow().isoformat(),
+    }), 200
+
+
+@institution_bp.route('/analytics/config', methods=['GET', 'PUT'])
+@require_role('institution_admin')
+def analytics_config_endpoint():
+    """
+    Get or customize institution analytics weights and risk thresholds.
+    """
+    from app.analytics.config import get_analytics_config, save_analytics_config
+
+    iid = g.institution_id
+    if request.method == 'GET':
+        return jsonify({'config': get_analytics_config(iid)}), 200
+
+    payload = request.get_json() or {}
+    try:
+        updated = save_analytics_config(iid, payload)
+        return jsonify({'message': 'Analytics configuration updated.', 'config': updated}), 200
+    except ValueError as e:
+        return jsonify({'error': str(e)}), 400
+
+
+@institution_bp.route('/analytics/snapshots/run', methods=['POST'])
+@require_role('institution_admin')
+def run_snapshots_endpoint():
+    """
+    Manual trigger to execute daily metric snapshot and optional history backfill.
+    """
+    from app.analytics.snapshots import record_daily_snapshot_for_institution, backfill_snapshots
+
+    iid = g.institution_id
+    do_backfill = request.args.get('backfill', 'false').lower() in ('true', '1')
+    backfill_days = int(request.args.get('days', 14))
+
+    if do_backfill:
+        res = backfill_snapshots(iid, days=backfill_days)
+        return jsonify({'message': f'Backfilled {len(res)} daily snapshots.', 'results': res}), 200
+
+    res = record_daily_snapshot_for_institution(iid)
+    return jsonify({'message': 'Daily snapshot recorded successfully.', 'result': res}), 200
+
+
+@institution_bp.route('/analytics/student-360/<student_id>', methods=['GET'])
+@require_role('institution_admin')
+def student_360_profile(student_id):
+    """
+    Student 360 Drilldown:
+    Returns complete profile, risk score & explainability, KPI badges (mastery,
+    institution rank, platform rank, completion), concept mastery radar,
+    grade breakdown, proctoring events timeline, and attendance history.
+    """
+    from app.analytics.metrics import compute_student_atomic_metrics
+    from app.analytics.risk import compute_student_risk
+    from app.models.knowledge import ConceptMastery, FocusScore
+    from app.models.grading import Grade
+    from app.models.session import LabSession, SessionAttendance
+    from app.models.proctor_event import ProctorEvent
+    from app.models.submission import CodeAttempt
+    from app.models.analytics_snapshot import StudentMetricSnapshot
+
+    iid = g.institution_id
+    student = User.query.filter_by(id=student_id, institution_id=iid).first_or_404()
+
+    # Academic affiliations
+    dept = Department.query.get(student.department_id) if student.department_id else None
+    sec_link = (
+        db.session.query(SectionStudent, Section)
+        .join(Section, Section.id == SectionStudent.section_id)
+        .filter(SectionStudent.student_id == student_id)
+        .first()
+    )
+    section_name = sec_link[1].name if sec_link else '—'
+    section_id = sec_link[1].id if sec_link else None
+
+    # Pure metric & risk calculation
+    metrics = compute_student_atomic_metrics(student_id, iid)
+    risk_info = compute_student_risk(metrics)
+
+    # Concept masteries for Radar Chart
+    masteries = (
+        ConceptMastery.query.filter_by(student_id=student_id)
+        .order_by(ConceptMastery.mastery_score.desc())
+        .all()
+    )
+    radar_data = [
+        {
+            'concept': m.concept,
+            'mastery_score': round(float(m.mastery_score or 0.0), 1),
+            'attempts': getattr(m, 'attempts_count', 1),
+            'last_practiced': m.last_practiced_at.isoformat() if getattr(m, 'last_practiced_at', None) else None,
+        }
+        for m in masteries
+    ]
+
+    # Grades & experiment performance
+    grades = (
+        db.session.query(Grade, Experiment)
+        .outerjoin(Experiment, Experiment.id == Grade.experiment_id)
+        .filter(Grade.student_id == student_id)
+        .order_by(Grade.created_at.desc())
+        .limit(100)
+        .all()
+    )
+    grades_data = [
+        {
+            'id': g_row.id,
+            'experiment_id': g_row.experiment_id,
+            'title': exp.title if exp else 'Assessment',
+            'type': getattr(exp, 'assignment_type', 'experiment') if exp else 'experiment',
+            'final_grade': float(g_row.final_grade or 0.0),
+            'max_marks': float(exp.total_marks if exp and exp.total_marks else 100),
+            'auto_grade': float(g_row.auto_grade or 0.0) if g_row.auto_grade is not None else None,
+            'manual_grade': float(g_row.manual_grade or 0.0) if g_row.manual_grade is not None else None,
+            'viva_score': float(g_row.viva_score or 0.0) if g_row.viva_score is not None else None,
+            'quality_score': float(g_row.quality_score or 0.0) if g_row.quality_score is not None else None,
+            'hint_penalty': float(g_row.hint_penalty or 0.0) if g_row.hint_penalty is not None else None,
+            'is_passing': bool(g_row.final_grade and g_row.final_grade >= 40),
+            'graded_at': g_row.created_at.isoformat() if g_row.created_at else None,
+        }
+        for g_row, exp in grades
+    ]
+
+    # Attendance
+    attendances = (
+        db.session.query(SessionAttendance, LabSession)
+        .join(LabSession, LabSession.id == SessionAttendance.session_id)
+        .filter(SessionAttendance.student_id == student_id)
+        .order_by(LabSession.scheduled_at.desc())
+        .limit(30)
+        .all()
+    )
+    att_present = sum(1 for a, _ in attendances if a.status == 'present')
+    att_total = len(attendances)
+    att_rate = round((att_present / att_total * 100), 1) if att_total > 0 else 0.0
+    attendance_records = [
+        {
+            'session_id': s.id,
+            'session_title': s.title or 'Session',
+            'scheduled_at': s.scheduled_at.isoformat() if s.scheduled_at else None,
+            'status': a.status,
+            'joined_at': a.joined_at.isoformat() if a.joined_at else None,
+        }
+        for a, s in attendances
+    ]
+
+    # Proctor events (Integrity)
+    proctor_events = (
+        ProctorEvent.query.filter_by(student_id=student_id)
+        .order_by(ProctorEvent.recorded_at.desc())
+        .limit(50)
+        .all()
+    )
+    integrity_events = [
+        {
+            'id': pe.id,
+            'session_id': pe.session_id,
+            'event_type': pe.event_type,
+            'severity': pe.severity or 'medium',
+            'recorded_at': pe.recorded_at.isoformat() if pe.recorded_at else None,
+            'payload': pe.payload or {},
+        }
+        for pe in proctor_events
+    ]
+
+    # Historical trends (from StudentMetricSnapshot or recent grades)
+    snapshots = (
+        StudentMetricSnapshot.query.filter_by(student_id=student_id)
+        .order_by(StudentMetricSnapshot.snapshot_date.asc())
+        .limit(30)
+        .all()
+    )
+    trend_series = [
+        {
+            'date': sn.snapshot_date.isoformat(),
+            'risk_score': round(float(sn.risk_score or 0.0), 1),
+            'grade_avg': round(float(sn.grade_avg or 0.0), 1),
+            'mastery_avg': round(float(sn.mastery_avg or 0.0), 1),
+            'attendance_rate': round(float(sn.attendance_rate or 0.0), 1),
+            'focus_avg': round(float(sn.focus_avg or 0.0), 1),
+        }
+        for sn in snapshots
+    ]
+
+    # Institution rank calculation
+    total_inst_students = User.query.filter_by(institution_id=iid, role='student', is_active=True).count()
+    student_grade = metrics['grade_avg']['value'] or 0.0
+    higher_grade_cnt = (
+        db.session.query(func.count(Grade.student_id.distinct()))
+        .join(User, User.id == Grade.student_id)
+        .filter(User.institution_id == iid, User.role == 'student')
+        .group_by(Grade.student_id)
+        .having(func.avg(Grade.final_grade) > student_grade)
+        .all()
+    )
+    inst_rank = len(higher_grade_cnt) + 1
+
+    # Global platform rank calculation
+    total_platform_students = User.query.filter_by(role='student', is_active=True).count()
+    higher_platform_cnt = (
+        db.session.query(func.count(Grade.student_id.distinct()))
+        .join(User, User.id == Grade.student_id)
+        .filter(User.role == 'student')
+        .group_by(Grade.student_id)
+        .having(func.avg(Grade.final_grade) > student_grade)
+        .all()
+    )
+    platform_rank = len(higher_platform_cnt) + 1
+
+    # Completion calculation
+    total_experiments = Experiment.query.filter_by(institution_id=iid, is_active=True).count()
+    completed_experiments = len(grades_data)
+    completion_pct = round((completed_experiments / total_experiments * 100), 1) if total_experiments > 0 else 0.0
+
+    return jsonify({
+        'student': {
+            'id': student.id,
+            'full_name': student.full_name,
+            'email': student.email,
+            'roll_number': student.roll_number or '—',
+            'department_id': student.department_id,
+            'department_name': dept.name if dept else '—',
+            'section_id': section_id,
+            'section_name': section_name,
+            'year_of_study': student.year_of_study,
+            'semester': student.semester,
+            'profile_pic_url': student.profile_pic_url,
+            'is_active': student.is_active,
+            'created_at': student.created_at.isoformat() if student.created_at else None,
+        },
+        'kpis': {
+            'current_mastery': round(metrics['mastery_avg']['value'] or 0.0, 1),
+            'institution_rank': inst_rank,
+            'total_institution_students': total_inst_students,
+            'platform_rank': platform_rank,
+            'total_platform_students': total_platform_students,
+            'completion_pct': min(100.0, completion_pct),
+            'completed_count': completed_experiments,
+            'total_assigned': total_experiments,
+            'grade_avg': round(metrics['grade_avg']['value'] or 0.0, 1),
+            'attendance_rate': att_rate,
+            'focus_avg': round(metrics['focus_avg']['value'] or 0.0, 1),
+        },
+        'risk': risk_info,
+        'metrics': metrics,
+        'radar': radar_data,
+        'grades': grades_data,
+        'attendance': {
+            'rate': att_rate,
+            'present_count': att_present,
+            'total_count': att_total,
+            'records': attendance_records,
+        },
+        'integrity': {
+            'total_violations': len(integrity_events),
+            'events': integrity_events,
+        },
+        'trends': trend_series,
+    }), 200
+
 
 
 # ── Single-record GETs (subject + section-subject) ────────────────────────────
@@ -2640,194 +3385,7 @@ def get_section_subject(ss_id):
     return jsonify({'section_subject': _ss_dict(ss)}), 200
 
 
-# ── Announcement management (edit / delete / resend + rich targeting) ─────────
 
-@institution_bp.route('/announcements/<notification_id>', methods=['PATCH'])
-@require_role('institution_admin')
-def edit_announcement(notification_id):
-    """
-    Edit the title/message of one announcement broadcast.
-    Updates ALL Notification rows that share the same (title, message, minute-bucket)
-    so all recipients see the corrected text.
-
-    Body: {title?, message?}
-    """
-    from sqlalchemy import text as sa_text
-    data = request.get_json() or {}
-    new_title   = data.get('title')
-    new_message = data.get('message')
-
-    if not new_title and not new_message:
-        return jsonify({'error': 'Provide at least one of title or message'}), 400
-
-    # Find the anchor row — must belong to a user in this institution
-    anchor = db.session.execute(sa_text("""
-        SELECT n.id, n.title, n.message, n.created_at
-        FROM notifications n
-        JOIN users u ON n.user_id = u.id
-        WHERE n.id = :nid
-          AND u.institution_id = :iid
-          AND n.type = 'announcement'
-        LIMIT 1
-    """), {'nid': notification_id, 'iid': g.institution_id}).fetchone()
-
-    if not anchor:
-        return jsonify({'error': 'Announcement not found'}), 404
-
-    # Propagate the edit to all rows that are part of the same broadcast
-    is_sqlite = db.engine.dialect.name == 'sqlite'
-    minute_match = "strftime('%Y-%m-%d %H:%M', n.created_at) = strftime('%Y-%m-%d %H:%M', :created_at)" if is_sqlite else "DATE_TRUNC('minute', n.created_at) = DATE_TRUNC('minute', :created_at)"
-    db.session.execute(sa_text(f"""
-        UPDATE notifications
-        SET title   = COALESCE(:new_title, title),
-            message = COALESCE(:new_message, message)
-        WHERE id IN (
-            SELECT n.id
-            FROM notifications n
-            JOIN users u ON n.user_id = u.id
-            WHERE u.institution_id = :iid
-              AND n.type = 'announcement'
-              AND n.title = :old_title
-              AND n.message = :old_message
-              AND {minute_match}
-        )
-    """), {
-        'new_title':   new_title,
-        'new_message': new_message,
-        'iid':         g.institution_id,
-        'old_title':   anchor.title,
-        'old_message': anchor.message,
-        'created_at':  anchor.created_at,
-    })
-    db.session.commit()
-
-    _write_audit(g.user_id, g.institution_id, 'edit_announcement', 'announcement',
-                 notification_id, f'Edited announcement "{anchor.title}"')
-    return jsonify({'message': 'Announcement updated'}), 200
-
-
-@institution_bp.route('/announcements/<notification_id>', methods=['DELETE'])
-@require_role('institution_admin')
-def delete_announcement(notification_id):
-    """
-    Delete all Notification rows belonging to one announcement broadcast.
-    Identified by the same (title, message, minute-bucket) group as the given row.
-    """
-    from sqlalchemy import text as sa_text
-
-    anchor = db.session.execute(sa_text("""
-        SELECT n.id, n.title, n.message, n.created_at
-        FROM notifications n
-        JOIN users u ON n.user_id = u.id
-        WHERE n.id = :nid
-          AND u.institution_id = :iid
-          AND n.type = 'announcement'
-        LIMIT 1
-    """), {'nid': notification_id, 'iid': g.institution_id}).fetchone()
-
-    if not anchor:
-        return jsonify({'error': 'Announcement not found'}), 404
-
-    is_sqlite = db.engine.dialect.name == 'sqlite'
-    minute_match = "strftime('%Y-%m-%d %H:%M', n.created_at) = strftime('%Y-%m-%d %H:%M', :created_at)" if is_sqlite else "DATE_TRUNC('minute', n.created_at) = DATE_TRUNC('minute', :created_at)"
-    result = db.session.execute(sa_text(f"""
-        DELETE FROM notifications
-        WHERE id IN (
-            SELECT n.id
-            FROM notifications n
-            JOIN users u ON n.user_id = u.id
-            WHERE u.institution_id = :iid
-              AND n.type = 'announcement'
-              AND n.title = :title
-              AND n.message = :message
-              AND {minute_match}
-        )
-    """), {
-        'iid':        g.institution_id,
-        'title':      anchor.title,
-        'message':    anchor.message,
-        'created_at': anchor.created_at,
-    })
-    db.session.commit()
-
-    _write_audit(g.user_id, g.institution_id, 'delete_announcement', 'announcement',
-                 notification_id, f'Deleted announcement "{anchor.title}" ({result.rowcount} rows removed)')
-    return jsonify({'message': 'Announcement deleted', 'rows_removed': result.rowcount}), 200
-
-
-@institution_bp.route('/announcements/<notification_id>/resend', methods=['POST'])
-@require_role('institution_admin')
-def resend_announcement(notification_id):
-    """
-    Resend an existing announcement to users who currently lack a copy.
-    Useful when new students join after the original broadcast.
-
-    Body: {target: 'all'|'students'|'instructors', section_id?: '...'}
-    """
-    from sqlalchemy import text as sa_text
-
-    # Fetch the original broadcast text
-    anchor = db.session.execute(sa_text("""
-        SELECT n.id, n.title, n.message
-        FROM notifications n
-        JOIN users u ON n.user_id = u.id
-        WHERE n.id = :nid
-          AND u.institution_id = :iid
-          AND n.type = 'announcement'
-        LIMIT 1
-    """), {'nid': notification_id, 'iid': g.institution_id}).fetchone()
-
-    if not anchor:
-        return jsonify({'error': 'Announcement not found'}), 404
-
-    data       = request.get_json() or {}
-    target     = data.get('target', 'all')
-    section_id = data.get('section_id')
-
-    # Determine target users — same logic as send_announcement
-    query = User.query.filter_by(institution_id=g.institution_id, is_active=True)
-    if target == 'students':
-        query = query.filter_by(role='student')
-    elif target == 'instructors':
-        query = query.filter_by(role='instructor')
-    if section_id:
-        _own_section(section_id)
-        enrolled_ids = [e.student_id for e in SectionStudent.query.filter_by(section_id=section_id).all()]
-        query = query.filter(User.id.in_(enrolled_ids))
-
-    # Only send to users who don't already have this notification
-    target_users = query.all()
-    if target_users:
-        target_uid_list = [u.id for u in target_users]
-        existing_ids = {
-            r[0] for r in db.session.execute(sa_text("""
-                SELECT user_id FROM notifications
-                WHERE title = :title AND message = :message AND type = 'announcement'
-                  AND user_id IN :uids
-            """), {
-                'title':   anchor.title,
-                'message': anchor.message,
-                'uids':    tuple(target_uid_list),
-            }).fetchall()
-        }
-    else:
-        existing_ids = set()
-
-    created = 0
-    for user in target_users:
-        if user.id not in existing_ids:
-            db.session.add(Notification(
-                user_id=user.id,
-                type='announcement',
-                title=anchor.title,
-                message=anchor.message,
-            ))
-            created += 1
-
-    db.session.commit()
-    _write_audit(g.user_id, g.institution_id, 'resend_announcement', 'announcement',
-                 notification_id, f'Resent "{anchor.title}" to {created} new recipients')
-    return jsonify({'resent_to': created, 'target': target}), 200
 
 
 def _send_targeted_announcement(data: dict, institution_id: str = None, actor_id: str = None):
@@ -2945,122 +3503,7 @@ def _send_targeted_announcement(data: dict, institution_id: str = None, actor_id
     return {'sent_to': created, 'target': target}, 201
 
 
-@institution_bp.route('/announcements/targeted', methods=['POST'])
-@require_role('institution_admin')
-def send_targeted_announcement():
-    """
-    Send an announcement with rich targeting: department, batch, year, or a
-    combination of those — in addition to the existing all/students/section targets.
 
-    Body: {
-        title, message,
-        target: 'all' | 'students' | 'instructors',   # base filter
-        department_id?: '...',  # further narrow by department
-        batch_id?:      '...',  # further narrow to one batch
-        academic_year?: 2024,   # further narrow to one year (Batch.year)
-        section_id?:    '...',  # further narrow to one section
-    }
-    """
-    payload, status = _send_targeted_announcement(request.get_json() or {})
-    return jsonify(payload), status
-
-
-# ── Scheduled announcements (P5) ──────────────────────────────────────────────
-
-@institution_bp.route('/announcements/schedule', methods=['POST'])
-@require_role('institution_admin')
-def schedule_announcement():
-    """
-    Draft an announcement for delivery at a future time (e.g. exam notice
-    written Friday, delivered Monday 08:00). Dispatched by the scheduler
-    through the same core as the immediate-send endpoint.
-
-    Body: same as POST /announcements/targeted, plus:
-        send_at: ISO datetime (future) — required
-    """
-    from app.models.scheduled_announcement import ScheduledAnnouncement
-    data = request.get_json() or {}
-
-    title   = (data.get('title') or '').strip()
-    message = (data.get('message') or '').strip()
-    if not title or not message:
-        return jsonify({'error': 'title and message are required'}), 400
-    if len(title) > 500 or len(message) > 20_000:
-        return jsonify({'error': 'title or message too long'}), 400
-
-    send_at_raw = data.get('send_at')
-    if not send_at_raw:
-        return jsonify({'error': 'send_at is required (ISO datetime, future)'}), 400
-    try:
-        send_at = datetime.fromisoformat(str(send_at_raw).replace('Z', ''))
-    except ValueError:
-        return jsonify({'error': 'Invalid send_at; use an ISO datetime'}), 400
-    if send_at <= datetime.utcnow():
-        return jsonify({'error': 'send_at must be in the future — use POST /announcements/targeted to send now'}), 400
-
-    target = data.get('target', 'all')
-    if target not in ('all', 'students', 'instructors'):
-        return jsonify({'error': "target must be 'all', 'students' or 'instructors'"}), 400
-
-    # Validate optional scope refs NOW so a typo doesn't silently send to 'all'
-    if data.get('department_id'):
-        if not Department.query.filter_by(
-                id=data['department_id'], institution_id=g.institution_id).first():
-            return jsonify({'error': 'department_id not found'}), 404
-    if data.get('section_id'):
-        _own_section(data['section_id'])
-
-    row = ScheduledAnnouncement(
-        institution_id=g.institution_id,
-        created_by=g.user_id,
-        title=title,
-        message=message,
-        target=target,
-        department_id=data.get('department_id'),
-        batch_id=data.get('batch_id'),
-        section_id=data.get('section_id'),
-        academic_year=data.get('academic_year'),
-        send_at=send_at,
-        status='pending',
-    )
-    db.session.add(row)
-    db.session.commit()
-
-    _write_audit(g.user_id, g.institution_id, 'schedule_announcement', 'announcement',
-                 row.id, f'Scheduled "{title}" for {send_at.isoformat()}')
-    return jsonify({'scheduled': row.to_dict()}), 201
-
-
-@institution_bp.route('/announcements/scheduled', methods=['GET'])
-@require_role('institution_admin')
-def list_scheduled_announcements():
-    """Pending (+ recently sent) scheduled announcements for this institution."""
-    from app.models.scheduled_announcement import ScheduledAnnouncement
-    rows = (ScheduledAnnouncement.query
-            .filter_by(institution_id=g.institution_id)
-            .filter(ScheduledAnnouncement.status.in_(('pending', 'sent')))
-            .order_by(ScheduledAnnouncement.send_at.asc())
-            .limit(100).all())
-    return jsonify({'scheduled': [r.to_dict() for r in rows]}), 200
-
-
-@institution_bp.route('/announcements/scheduled/<row_id>', methods=['DELETE'])
-@require_role('institution_admin')
-def cancel_scheduled_announcement(row_id):
-    """Cancel a pending scheduled announcement before it fires."""
-    from app.models.scheduled_announcement import ScheduledAnnouncement
-    row = ScheduledAnnouncement.query.filter_by(
-        id=row_id, institution_id=g.institution_id).first()
-    if not row:
-        return jsonify({'error': 'Scheduled announcement not found'}), 404
-    if row.status != 'pending':
-        return jsonify({'error': f'Cannot cancel — already {row.status}'}), 409
-
-    row.status = 'cancelled'
-    db.session.commit()
-    _write_audit(g.user_id, g.institution_id, 'cancel_scheduled_announcement',
-                 'announcement', row.id, f'Cancelled scheduled "{row.title}"')
-    return jsonify({'message': 'Scheduled announcement cancelled'}), 200
 
 
 # ── Session admin actions (cancel-with-reason, reschedule) ────────────────────

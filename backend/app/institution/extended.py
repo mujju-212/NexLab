@@ -8,6 +8,7 @@ Missing features added here and imported into institution/routes.py:
   5. Session management (view + terminate live sessions)
   6. Groq budget tracking (today's usage vs limit)
 """
+from collections import defaultdict
 from flask import Blueprint, request, jsonify, g, make_response
 from app.auth.utils import require_role
 from app.extensions import db
@@ -337,19 +338,40 @@ def experiment_usage():
             pass
 
     # Grade stats per experiment — attempt count + avg final grade
+    # Grade stats and completion funnel per experiment
     grade_stats = {}
     if exp_ids:
+        from app.models.experiment import Experiment
+        exp_diff_map = {e.id: (e.difficulty or 'medium').lower() for e in Experiment.query.filter(Experiment.id.in_(exp_ids)).all()}
+        diff_weights = {'easy': 0.9, 'medium': 1.0, 'hard': 1.15}
+
         grade_rows = db.session.query(
             Grade.experiment_id,
-            func.count(Grade.id).label('attempt_count'),
-            func.avg(Grade.final_grade).label('avg_score'),
+            Grade.final_grade,
         ).filter(
             Grade.experiment_id.in_(exp_ids),
-        ).group_by(Grade.experiment_id).all()
+            Grade.final_grade.isnot(None),
+        ).all()
+
+        grades_by_exp = defaultdict(list)
         for gr in grade_rows:
-            grade_stats[gr.experiment_id] = {
-                'attempt_count': gr.attempt_count,
-                'avg_score': round(float(gr.avg_score), 1) if gr.avg_score is not None else None,
+            grades_by_exp[gr.experiment_id].append(float(gr.final_grade))
+
+        for eid, g_list in grades_by_exp.items():
+            cnt = len(g_list)
+            passed = sum(1 for g in g_list if g >= 50.0)
+            avg_s = round(sum(g_list) / cnt, 1) if cnt else 0.0
+            diff = exp_diff_map.get(eid, 'medium')
+            diff_factor = diff_weights.get(diff, 1.0)
+            diff_adj_score = round(min(100.0, avg_s * diff_factor), 1)
+
+            grade_stats[eid] = {
+                'attempt_count': cnt,
+                'avg_score': avg_s,
+                'difficulty': diff,
+                'difficulty_adjusted_avg_score': diff_adj_score,
+                'passed_count': passed,
+                'pass_rate_pct': round((passed / cnt) * 100.0, 1) if cnt else 0.0,
             }
 
     result = [{
@@ -358,6 +380,13 @@ def experiment_usage():
         'session_count':   r[1],
         'attempt_count':   grade_stats.get(r[0], {}).get('attempt_count', 0),
         'avg_score':       grade_stats.get(r[0], {}).get('avg_score'),
+        'difficulty':      grade_stats.get(r[0], {}).get('difficulty', 'medium'),
+        'difficulty_adjusted_avg_score': grade_stats.get(r[0], {}).get('difficulty_adjusted_avg_score'),
+        'completion_funnel': {
+            'attempted': grade_stats.get(r[0], {}).get('attempt_count', 0),
+            'passed': grade_stats.get(r[0], {}).get('passed_count', 0),
+            'pass_rate_pct': grade_stats.get(r[0], {}).get('pass_rate_pct', 0.0),
+        }
     } for r in rows]
 
     return jsonify({
@@ -2207,38 +2236,27 @@ def analytics_attendance():
     }), 200
 
 
-# ── 3. Proctoring / Integrity Analytics ──────────────────────────────────────
-@institution_ext_bp.route('/analytics/proctoring', methods=['GET'])
+# ── 3. Behavior & Proctoring / Integrity Analytics ───────────────────────────
+
+@institution_ext_bp.route('/analytics/behavior', methods=['GET'])
 @require_role('institution_admin')
-def analytics_proctoring():
+def analytics_behavior():
     """
-    Aggregate FocusScore signals across institution sessions to surface
-    integrity risk indicators.
-
-    Optional filters:
-      ?session_id=   — single session
-      ?student_id=   — single student (admin can check one learner)
-      ?from=YYYY-MM-DD&to=YYYY-MM-DD  or  ?days=N
-
-    Signals aggregated (avg per record):
-      tab_switches_per_min, idle_seconds, typing_speed_wpm,
-      backspace_ratio, copy_paste_count, window_focus_ratio
-
-    Returns institution-level averages plus a per-student risk summary
-    (students sorted by lowest avg focus_score descending risk).
+    Aggregate FocusScore behavioral signals across institution sessions.
+    Signals: tab_switches_per_min, idle_seconds, typing_speed_wpm,
+             backspace_ratio, copy_paste_count, window_focus_ratio, focus_score.
     """
     from app.models.knowledge import FocusScore
-    from app.models.session  import LabSession as _LS
+    from app.models.session import LabSession as _LS
 
-    start, end     = _date_window(30)
+    start, end = _date_window(30)
     session_filter = request.args.get('session_id')
     student_filter = request.args.get('student_id')
 
-    # Scope to institution
     inst_session_ids = db.session.query(_LS.id).filter(
         _LS.institution_id == g.institution_id,
-        _LS.scheduled_at   >= start,
-        _LS.scheduled_at   <= end,
+        _LS.scheduled_at >= start,
+        _LS.scheduled_at <= end,
     )
     if session_filter:
         inst_session_ids = inst_session_ids.filter(_LS.id == session_filter)
@@ -2249,23 +2267,20 @@ def analytics_proctoring():
         return jsonify({
             'total_records': 0,
             'institution_avg': {},
-            'at_risk_students': [],
+            'students_behavior': [],
             'period': {'from': start.isoformat(), 'to': end.isoformat()},
         }), 200
 
-    fs_q = FocusScore.query.filter(
-        FocusScore.session_id.in_(inst_session_ids)
-    )
+    fs_q = FocusScore.query.filter(FocusScore.session_id.in_(inst_session_ids))
     if student_filter:
         fs_q = fs_q.filter(FocusScore.student_id == student_filter)
 
     fs_rows = fs_q.all()
-
     if not fs_rows:
         return jsonify({
             'total_records': 0,
             'institution_avg': {},
-            'at_risk_students': [],
+            'students_behavior': [],
             'period': {'from': start.isoformat(), 'to': end.isoformat()},
         }), 200
 
@@ -2283,75 +2298,100 @@ def analytics_proctoring():
         vals = [v for v in vals if v is not None]
         return round(sum(vals) / len(vals), 3) if vals else None
 
-    # Institution-level averages
-    inst_avg = {
-        key: _mean([_extract(r, key) for r in fs_rows])
-        for key in SIGNAL_KEYS
-    }
+    inst_avg = {key: _mean([_extract(r, key) for r in fs_rows]) for key in SIGNAL_KEYS}
     inst_avg['focus_score'] = _mean([r.focus_score for r in fs_rows])
 
-    # ── ProctorEvent discrete counts (fail-open — table may not exist yet) ──
-    try:
-        from app.models.proctor_event import ProctorEvent
-        pe_q = ProctorEvent.query.filter(
-            ProctorEvent.institution_id == g.institution_id,
-            ProctorEvent.session_id.in_(inst_session_ids),
-        )
-        if student_filter:
-            pe_q = pe_q.filter(ProctorEvent.student_id == student_filter)
-        pe_rows = pe_q.with_entities(
-            ProctorEvent.student_id, ProctorEvent.event_type
-        ).all()
-    except Exception:
-        pe_rows = []
-
-    # Build per-student event counts
-    from collections import defaultdict
-    pe_counts = defaultdict(lambda: defaultdict(int))  # student_id → {event_type: N}
-    pe_totals = defaultdict(int)                         # event_type → N (institution-wide)
-    for sid, etype in pe_rows:
-        pe_counts[sid][etype] += 1
-        pe_totals[etype] += 1
-
-    # Per-student aggregation (FocusScore + ProctorEvent)
     by_student = defaultdict(list)
     for r in fs_rows:
         by_student[r.student_id].append(r)
 
-    # Include students who only have ProctorEvents but no FocusScore rows
-    for sid in pe_counts:
-        if sid not in by_student:
-            by_student[sid] = []
-
-    sid_set   = list(by_student.keys())
+    sid_set = list(by_student.keys())
     users_map = {u.id: u for u in User.query.filter(User.id.in_(sid_set)).all()} if sid_set else {}
 
-    at_risk = []
+    students_behavior = []
     for sid, rows in by_student.items():
         u = users_map.get(sid)
         avg_focus = _mean([r.focus_score for r in rows]) if rows else None
-        record = {
-            'student_id':  sid,
-            'full_name':   u.full_name  if u else None,
+        students_behavior.append({
+            'student_id': sid,
+            'full_name': u.full_name if u else None,
             'roll_number': u.roll_number if u else None,
-            'samples':     len(rows),
+            'samples': len(rows),
             'avg_focus_score': avg_focus,
-            'signals': {
-                key: _mean([_extract(r, key) for r in rows])
-                for key in SIGNAL_KEYS
-            } if rows else {},
-            'proctor_events': dict(pe_counts.get(sid, {})),
-        }
-        at_risk.append(record)
+            'signals': {key: _mean([_extract(r, key) for r in rows]) for key in SIGNAL_KEYS},
+        })
 
-    # Sort by avg_focus_score ascending (lowest focus = most at risk)
-    at_risk.sort(key=lambda x: (x['avg_focus_score'] is None, x['avg_focus_score'] or 0))
+    students_behavior.sort(key=lambda x: (x['avg_focus_score'] is None, x['avg_focus_score'] or 0))
 
     return jsonify({
-        'total_records':         len(fs_rows),
-        'institution_avg':       inst_avg,
-        'proctor_event_totals':  dict(pe_totals),
-        'at_risk_students':      at_risk,
+        'total_records': len(fs_rows),
+        'institution_avg': inst_avg,
+        'students_behavior': students_behavior,
+        'period': {'from': start.isoformat(), 'to': end.isoformat()},
+    }), 200
+
+
+@institution_ext_bp.route('/analytics/proctoring', methods=['GET'])
+@require_role('institution_admin')
+def analytics_proctoring():
+    """
+    True Proctoring Analytics: discrete ProctorEvent records and integrity scoring.
+    """
+    from app.models.proctor_event import ProctorEvent
+    from app.models.session import LabSession as _LS
+
+    start, end = _date_window(30)
+    session_filter = request.args.get('session_id')
+    student_filter = request.args.get('student_id')
+
+    q = ProctorEvent.query.filter(
+        ProctorEvent.institution_id == g.institution_id,
+        ProctorEvent.recorded_at >= start,
+        ProctorEvent.recorded_at <= end,
+    )
+    if session_filter:
+        q = q.filter(ProctorEvent.session_id == session_filter)
+    if student_filter:
+        q = q.filter(ProctorEvent.student_id == student_filter)
+
+    events = q.all()
+    by_type = defaultdict(int)
+    by_severity = defaultdict(int)
+    by_student = defaultdict(lambda: {'count': 0, 'weighted': 0.0})
+    sev_weights = {'high': 3.0, 'medium': 2.0, 'low': 1.0}
+
+    for ev in events:
+        by_type[ev.event_type] += 1
+        sev = (ev.severity or 'medium').lower()
+        by_severity[sev] += 1
+        w = sev_weights.get(sev, 1.0)
+        by_student[ev.student_id]['count'] += 1
+        by_student[ev.student_id]['weighted'] += w
+
+    total_weighted = sum(by_severity[k] * sev_weights.get(k, 1.0) for k in by_severity)
+    campus_integrity_score = max(0.0, 100.0 - min(100.0, (total_weighted / max(1, len(by_student))) * 5.0)) if by_student else 100.0
+
+    top_sids = sorted(by_student.keys(), key=lambda s: by_student[s]['weighted'], reverse=True)
+    users = {u.id: u for u in User.query.filter(User.id.in_(top_sids)).all()} if top_sids else {}
+    at_risk = []
+    for s in top_sids:
+        u = users.get(s)
+        at_risk.append({
+            'student_id': s,
+            'full_name': u.full_name if u else s,
+            'roll_number': u.roll_number if u else None,
+            'samples': by_student[s]['count'],
+            'weighted_violations': round(by_student[s]['weighted'], 1),
+            'proctor_events': {'violations': by_student[s]['count']},
+        })
+
+    return jsonify({
+        'total_records': len(events),
+        'campus_integrity_score': round(campus_integrity_score, 1),
+        'institution_avg': {'integrity_score': round(campus_integrity_score, 1)},
+        'proctor_event_totals': dict(by_type),
+        'severity_totals': dict(by_severity),
+        'at_risk_students': at_risk,
         'period': {'from': start.isoformat(), 'to': end.isoformat()},
     }), 200
 
@@ -2361,118 +2401,144 @@ def analytics_proctoring():
 @require_role('institution_admin')
 def analytics_trends():
     """
-    Weekly time-series for 4 key institution metrics over a lookback window
-    (default 12 weeks, max 52 via ?weeks=N).
-
-    Metrics returned per ISO week (YYYY-WW):
-      - sessions_held     : LabSession rows that ended in that week
-      - avg_attendance    : mean attendance record count / session for that week
-      - avg_final_grade   : mean Grade.final_grade graded that week
-      - avg_focus_score   : mean FocusScore.focus_score recorded that week
+    Weekly time-series for key metrics over lookback window (DB-agnostic).
+    Reads from daily snapshots or computes cross-platform weekly aggregates.
+    Includes sessions, attendance, grades, focus, grade slope, and risk band migration.
     """
-    from app.models.session  import LabSession as _LS, SessionAttendance
-    from app.models.grading  import Grade
+    from app.models.session import LabSession as _LS, SessionAttendance
+    from app.models.grading import Grade
     from app.models.knowledge import FocusScore
+    from app.models.analytics_snapshot import StudentMetricSnapshot, InstitutionDailyKPI
 
     weeks = _int_arg('weeks', 12, lo=1, hi=52)
-    end   = datetime.utcnow()
+    end = datetime.utcnow()
     start = end - timedelta(weeks=weeks)
 
-    # ── sessions per week ──────────────────────────────────────────────────
-    # group by ISO week using DATE_TRUNC
-    sess_weekly = db.session.execute(
-        text("""
-            SELECT TO_CHAR(DATE_TRUNC('week', ended_at), 'IYYY-IW') AS wk,
-                   COUNT(*)                                         AS cnt
-            FROM lab_sessions
-            WHERE institution_id = :iid
-              AND status         = 'ended'
-              AND ended_at       >= :start
-              AND ended_at       <= :end
-            GROUP BY wk
-            ORDER BY wk
-        """),
-        {'iid': g.institution_id, 'start': start, 'end': end},
-    ).fetchall()
+    # 1. Fetch sessions in window
+    sessions = _LS.query.filter(
+        _LS.institution_id == g.institution_id,
+        _LS.status == 'ended',
+        _LS.ended_at >= start,
+        _LS.ended_at <= end,
+    ).all()
 
-    # ── avg attendance per session per week ────────────────────────────────
-    att_weekly = db.session.execute(
-        text("""
-            SELECT TO_CHAR(DATE_TRUNC('week', ls.ended_at), 'IYYY-IW') AS wk,
-                   COUNT(sa.student_id)::float / NULLIF(COUNT(DISTINCT sa.session_id), 0) AS avg_att
-            FROM session_attendance sa
-            JOIN lab_sessions ls ON ls.id = sa.session_id
-            WHERE ls.institution_id = :iid
-              AND ls.status         = 'ended'
-              AND ls.ended_at       >= :start
-              AND ls.ended_at       <= :end
-            GROUP BY wk
-            ORDER BY wk
-        """),
-        {'iid': g.institution_id, 'start': start, 'end': end},
-    ).fetchall()
+    # 2. Fetch grades in window
+    grades = db.session.query(
+        Grade.final_grade,
+        Grade.graded_at,
+    ).join(
+        User, Grade.student_id == User.id
+    ).filter(
+        User.institution_id == g.institution_id,
+        Grade.graded_at >= start,
+        Grade.graded_at <= end,
+        Grade.final_grade.isnot(None),
+    ).all()
 
-    # ── avg final grade per week ───────────────────────────────────────────
-    grade_weekly = db.session.execute(
-        text("""
-            SELECT TO_CHAR(DATE_TRUNC('week', g.graded_at), 'IYYY-IW') AS wk,
-                   AVG(g.final_grade)                                   AS avg_fg
-            FROM grades g
-            JOIN users u ON u.id = g.student_id
-            WHERE u.institution_id = :iid
-              AND g.graded_at      >= :start
-              AND g.graded_at      <= :end
-              AND g.final_grade    IS NOT NULL
-            GROUP BY wk
-            ORDER BY wk
-        """),
-        {'iid': g.institution_id, 'start': start, 'end': end},
-    ).fetchall()
+    # 3. Fetch focus records in window
+    focuses = db.session.query(
+        FocusScore.focus_score,
+        FocusScore.recorded_at,
+    ).join(
+        _LS, FocusScore.session_id == _LS.id
+    ).filter(
+        _LS.institution_id == g.institution_id,
+        FocusScore.recorded_at >= start,
+        FocusScore.recorded_at <= end,
+        FocusScore.focus_score.isnot(None),
+    ).all()
 
-    # ── avg focus score per week ───────────────────────────────────────────
-    focus_weekly = db.session.execute(
-        text("""
-            SELECT TO_CHAR(DATE_TRUNC('week', fs.recorded_at), 'IYYY-IW') AS wk,
-                   AVG(fs.focus_score)                                     AS avg_fs
-            FROM focus_scores fs
-            JOIN lab_sessions ls ON ls.id = fs.session_id
-            WHERE ls.institution_id = :iid
-              AND fs.recorded_at    >= :start
-              AND fs.recorded_at    <= :end
-              AND fs.focus_score    IS NOT NULL
-            GROUP BY wk
-            ORDER BY wk
-        """),
-        {'iid': g.institution_id, 'start': start, 'end': end},
-    ).fetchall()
+    # 4. Fetch attendance records in window
+    session_ids = [s.id for s in sessions]
+    att_rows = SessionAttendance.query.filter(
+        SessionAttendance.session_id.in_(session_ids)
+    ).all() if session_ids else []
 
-    # Build unified week map
-    from collections import defaultdict
+    # Map session attendance counts
+    sess_att_map = defaultdict(int)
+    for a in att_rows:
+        if a.status in ('present', 'late', 'partial', 'inactive_present'):
+            sess_att_map[a.session_id] += 1
+
+    # 5. Snapshots for risk band migration
+    snapshots = StudentMetricSnapshot.query.filter(
+        StudentMetricSnapshot.institution_id == g.institution_id,
+        StudentMetricSnapshot.snapshot_date >= start.date(),
+        StudentMetricSnapshot.snapshot_date <= end.date(),
+        StudentMetricSnapshot.section_subject_id.is_(None),
+    ).all()
+
+    # DB-agnostic ISO week key helper
+    def _week_key(dt):
+        if not dt:
+            return None
+        year, week_num, _ = dt.isocalendar()
+        return f"{year}-W{week_num:02d}"
+
     week_data = defaultdict(lambda: {
-        'sessions_held':   0,
-        'avg_attendance':  None,
-        'avg_final_grade': None,
-        'avg_focus_score': None,
+        'sessions_held': 0,
+        'attendance_counts': [],
+        'grades': [],
+        'focus_scores': [],
+        'risk_bands': {'critical': 0, 'high': 0, 'watch': 0, 'ok': 0},
     })
 
-    for row in sess_weekly:
-        week_data[row[0]]['sessions_held'] = row[1]
-    for row in att_weekly:
-        week_data[row[0]]['avg_attendance'] = round(float(row[1]), 2) if row[1] is not None else None
-    for row in grade_weekly:
-        week_data[row[0]]['avg_final_grade'] = round(float(row[1]), 2) if row[1] is not None else None
-    for row in focus_weekly:
-        week_data[row[0]]['avg_focus_score'] = round(float(row[1]), 2) if row[1] is not None else None
+    for s in sessions:
+        wk = _week_key(s.ended_at)
+        if wk:
+            week_data[wk]['sessions_held'] += 1
+            week_data[wk]['attendance_counts'].append(sess_att_map.get(s.id, 0))
 
-    series = [
-        {'week': wk, **vals}
-        for wk, vals in sorted(week_data.items())
-    ]
+    for g_val, g_dt in grades:
+        wk = _week_key(g_dt)
+        if wk and g_val is not None:
+            week_data[wk]['grades'].append(float(g_val))
+
+    for f_val, f_dt in focuses:
+        wk = _week_key(f_dt)
+        if wk and f_val is not None:
+            week_data[wk]['focus_scores'].append(float(f_val))
+
+    for snap in snapshots:
+        wk = _week_key(snap.snapshot_date)
+        if wk and isinstance(snap.metrics, dict):
+            band = snap.metrics.get('risk', {}).get('risk_band', 'ok')
+            week_data[wk]['risk_bands'][band] = week_data[wk]['risk_bands'].get(band, 0) + 1
+
+    series = []
+    prev_avg_grade = None
+    for wk in sorted(week_data.keys()):
+        item = week_data[wk]
+        g_list = item['grades']
+        f_list = item['focus_scores']
+        a_list = item['attendance_counts']
+
+        avg_grade = round(sum(g_list) / len(g_list), 2) if g_list else None
+        avg_focus = round(sum(f_list) / len(f_list), 2) if f_list else None
+        avg_att = round(sum(a_list) / len(a_list), 2) if a_list else None
+
+        # Grade slope WoW
+        grade_slope = 0.0
+        if avg_grade is not None and prev_avg_grade is not None:
+            grade_slope = round(avg_grade - prev_avg_grade, 2)
+        if avg_grade is not None:
+            prev_avg_grade = avg_grade
+
+        series.append({
+            'week': wk,
+            'sessions_held': item['sessions_held'],
+            'avg_attendance': avg_att,
+            'avg_final_grade': avg_grade,
+            'avg_focus_score': avg_focus,
+            'grade_trend_slope': grade_slope,
+            'risk_bands': item['risk_bands'],
+        })
 
     return jsonify({
         'weeks_requested': weeks,
-        'series':          series,
+        'series': series,
         'period': {'from': start.strftime('%Y-%m-%d'), 'to': end.strftime('%Y-%m-%d')},
+        'generated_at': datetime.utcnow().isoformat(),
     }), 200
 
 
@@ -2481,150 +2547,128 @@ def analytics_trends():
 @require_role('institution_admin')
 def analytics_engagement():
     """
-    Learner engagement and retention metrics for the institution.
-
-    Defines:
-      - active_student    : has at least 1 SessionAttendance record in the window
-                            where status in (present/late/partial/inactive_present)
-      - dormant_student   : enrolled (role=student) but zero attendance in the window
-      - at_risk_student   : attended < 50% of sessions they were enrolled in
-
-    Optional: ?days=N (default 30) / ?from=YYYY-MM-DD&to=YYYY-MM-DD
+    Learner engagement and retention analytics.
+    Uses the Canonical Unified Student Risk Score for at-risk metrics.
+    Includes active/dormant breakdown, attendance concerns, and engagement trend.
     """
-    from app.models.session  import LabSession as _LS, SessionAttendance
+    from app.models.session import LabSession as _LS, SessionAttendance
     from app.models.academic import SectionStudent, SectionSubject
+    from app.analytics.metrics import batch_student_atomic_metrics
+    from app.analytics.risk import compute_student_risk
+    from app.analytics.config import get_analytics_config
 
     start, end = _date_window(30)
+    iid = g.institution_id
+    cfg = get_analytics_config(iid)
 
-    # All students in the institution
     all_students = User.query.filter(
-        User.institution_id == g.institution_id,
+        User.institution_id == iid,
         User.role == 'student',
-        User.is_active.is_(True),
+        User.is_active == True,
     ).all()
     all_ids = {s.id for s in all_students}
+    student_map = {s.id: s for s in all_students}
 
-    # Sessions in window for this institution
+    # Sessions in window
     sessions_in_window = db.session.query(_LS.id, _LS.section_subject_id).filter(
-        _LS.institution_id == g.institution_id,
-        _LS.scheduled_at   >= start,
-        _LS.scheduled_at   <= end,
-        _LS.status         != 'cancelled',
+        _LS.institution_id == iid,
+        _LS.scheduled_at >= start,
+        _LS.scheduled_at <= end,
+        _LS.status != 'cancelled',
     ).all()
     sess_ids = [r[0] for r in sessions_in_window]
 
-    if not sess_ids:
+    if not sess_ids or not all_ids:
         return jsonify({
-            'active_students':   0,
-            'dormant_students':  len(all_ids),
-            'at_risk_students':  0,
-            'engagement_rate':   0.0,
-            'retention': [],
+            'total_students': len(all_ids),
+            'active_students': 0,
+            'dormant_students': len(all_ids),
+            'at_risk_count': 0,
+            'engagement_rate': 0.0,
+            'at_risk_students': [],
             'period': {'from': start.isoformat(), 'to': end.isoformat()},
         }), 200
 
-    # Attendance rows for these sessions
+    # 1. Attendance active check
     PRESENT_STATUSES = ('present', 'late', 'partial', 'inactive_present')
-    att_rows = SessionAttendance.query.filter(
-        SessionAttendance.session_id.in_(sess_ids),
-    ).all()
-
-    # Students with at least one present-equivalent record
-    attended_by = {}   # student_id -> set of session_ids attended
+    att_rows = SessionAttendance.query.filter(SessionAttendance.session_id.in_(sess_ids)).all()
+    attended_by = defaultdict(set)
     for row in att_rows:
         if row.status in PRESENT_STATUSES:
-            attended_by.setdefault(row.student_id, set()).add(row.session_id)
+            attended_by[row.student_id].add(row.session_id)
 
-    active_ids  = {sid for sid in attended_by if sid in all_ids}
+    active_ids = {sid for sid in attended_by if sid in all_ids}
     dormant_ids = all_ids - active_ids
 
-    # Sessions per SectionSubject → sessions per enrolled student
-    # Build: section_subject_id → [session_ids]
-    ss_to_sessions = {}
-    for r in sessions_in_window:
-        ss_to_sessions.setdefault(r[1], []).append(r[0])
-
-    # Enrolled students per SectionSubject
-    ss_enroll = db.session.query(
-        SectionStudent.student_id,
-        SectionSubject.id,
-    ).join(
-        SectionSubject,
-        SectionStudent.section_id == SectionSubject.section_id,
-    ).filter(
-        SectionSubject.institution_id == g.institution_id,
-        SectionStudent.student_id.in_(list(all_ids)),
-    ).all()
-
-    # student → set of sessions they SHOULD attend
-    expected = {}   # student_id -> set of session_ids
-    for student_id, ss_id in ss_enroll:
-        for sess_id in ss_to_sessions.get(ss_id, []):
-            expected.setdefault(student_id, set()).add(sess_id)
-
-    at_risk = []
-    for student_id, exp_sessions in expected.items():
-        if not exp_sessions:
-            continue
-        attended = attended_by.get(student_id, set())
-        rate = len(attended & exp_sessions) / len(exp_sessions)
-        if rate < 0.5:
-            u = next((s for s in all_students if s.id == student_id), None)
-            at_risk.append({
-                'student_id':     student_id,
-                'full_name':      u.full_name  if u else None,
-                'roll_number':    u.roll_number if u else None,
-                'expected_sessions': len(exp_sessions),
-                'attended_sessions': len(attended & exp_sessions),
-                'attendance_rate':   round(rate * 100, 1),
-            })
-
-    at_risk.sort(key=lambda x: x['attendance_rate'])
-
-    engagement_rate = (
-        round(len(active_ids) / len(all_ids) * 100, 1)
-        if all_ids else 0.0
+    # 2. Canonical Unified Risk Score
+    atomic_map = batch_student_atomic_metrics(
+        student_ids=list(all_ids),
+        institution_id=iid,
+        window_start=start,
+        window_end=end,
+        min_sample_size=cfg.get('min_sample_size', 3),
+        halflife_days=cfg.get('mastery_halflife_days', 30),
     )
 
+    at_risk_list = []
+    for sid in all_ids:
+        r = compute_student_risk(atomic_map.get(sid, {}), cfg)
+        if r['is_at_risk']:  # critical or high band
+            u = student_map.get(sid)
+            at_risk_list.append({
+                'student_id': sid,
+                'full_name': u.full_name if u else None,
+                'roll_number': u.roll_number if u else None,
+                'risk_score': r['risk_score'],
+                'risk_band': r['risk_band'],
+                'primary_reason': r['primary_reason'],
+                'components': r['components'],
+            })
+
+    at_risk_list.sort(key=lambda x: x['risk_score'], reverse=True)
+
+    engagement_rate = round(len(active_ids) / len(all_ids) * 100, 1) if all_ids else 0.0
+
     return jsonify({
-        'total_students':    len(all_ids),
-        'active_students':   len(active_ids),
-        'dormant_students':  len(dormant_ids),
-        'at_risk_count':     len(at_risk),
-        'engagement_rate':   engagement_rate,
-        'at_risk_students':  at_risk,
+        'total_students': len(all_ids),
+        'active_students': len(active_ids),
+        'dormant_students': len(dormant_ids),
+        'at_risk_count': len(at_risk_list),
+        'engagement_rate': engagement_rate,
+        'at_risk_students': at_risk_list,
         'period': {'from': start.isoformat(), 'to': end.isoformat()},
+        'generated_at': datetime.utcnow().isoformat(),
     }), 200
 
 
-# ── 6. Instructor Performance Analytics (B5 — requires ProctorEvent table) ────
+# ── 6. Instructor Performance Analytics (Enriched with Turnaround & Fairness) ─
 @institution_ext_bp.route('/analytics/instructors', methods=['GET'])
 @require_role('institution_admin')
 def analytics_instructors():
     """
-    Per-instructor performance and workload metrics for the institution.
+    Per-instructor performance, turnaround time, workload, and grading variance.
 
     Metrics per instructor:
-      - sessions_run     : number of sessions they ran (status != 'cancelled')
-      - avg_attendance   : mean attendance_rate across their sessions
-      - avg_final_grade  : mean final-grade score from Grade rows for their sessions
-      - avg_focus_score  : mean student focus score across their sessions
-      - avg_feedback     : mean session feedback rating (1–5)
-      - subjects_count   : distinct subjects they teach
-      - sections_count   : distinct sections they are assigned to
-
-    Optional: ?days=N (default 60) / ?from=YYYY-MM-DD&to=YYYY-MM-DD
+      - sessions_run          : number of sessions run
+      - avg_attendance        : mean attendance_rate across sessions
+      - avg_final_grade       : mean final grade awarded
+      - avg_turnaround_hours  : mean turnaround time to grade (graded_at - session ended_at)
+      - grade_variance        : standard deviation of grades awarded (grading fairness indicator)
+      - avg_focus_score       : mean student focus score
+      - avg_feedback          : mean student feedback rating (1–5)
+      - subjects_count        : distinct subjects taught
+      - sections_count        : distinct sections assigned
     """
+    import statistics
     from app.models.academic import SectionSubject
-    from app.models.session  import SessionAttendance
-    from app.models.grading  import Grade
+    from app.models.session import SessionAttendance
+    from app.models.grading import Grade
     from app.models.knowledge import FocusScore
-    from app.models.feedback  import SessionFeedback
+    from app.models.feedback import SessionFeedback
     from collections import defaultdict
 
     start, end = _date_window(60)
 
-    # All instructors at this institution
     instructors = User.query.filter(
         User.institution_id == g.institution_id,
         User.role == 'instructor',
@@ -2634,53 +2678,42 @@ def analytics_instructors():
 
     instr_ids = [i.id for i in instructors]
 
-    # SectionSubject rows for these instructors → subject + section counts
     ss_rows = SectionSubject.query.filter(
         SectionSubject.institution_id == g.institution_id,
         SectionSubject.instructor_id.in_(instr_ids),
     ).all()
-    # instructor_id → sets of subject_id / section_id
-    instr_subjects  = defaultdict(set)
-    instr_sections  = defaultdict(set)
-    ss_to_instr     = {}   # ss_id → instructor_id
+    instr_subjects = defaultdict(set)
+    instr_sections = defaultdict(set)
+    ss_to_instr = {}
     for ss in ss_rows:
         instr_subjects[ss.instructor_id].add(ss.subject_id)
         instr_sections[ss.instructor_id].add(ss.section_id)
         ss_to_instr[ss.id] = ss.instructor_id
 
-    # Sessions in date window scoped to this institution
     sessions_in_window = LabSession.query.filter(
         LabSession.institution_id == g.institution_id,
-        LabSession.scheduled_at  >= start,
-        LabSession.scheduled_at  <= end,
-        LabSession.status        != 'cancelled',
+        LabSession.scheduled_at >= start,
+        LabSession.scheduled_at <= end,
+        LabSession.status != 'cancelled',
     ).all()
 
-    # Bucket sessions by instructor via SectionSubject
     instr_sessions = defaultdict(list)
     for sess in sessions_in_window:
-        iid = ss_to_instr.get(sess.section_subject_id)
-        if iid:
-            instr_sessions[iid].append(sess)
+        iid_assigned = ss_to_instr.get(sess.section_subject_id)
+        if iid_assigned:
+            instr_sessions[iid_assigned].append(sess)
 
-    # Attendance per session: attendance_rate = present / enrolled
     sess_ids = [s.id for s in sessions_in_window]
     if sess_ids:
-        att_rows      = SessionAttendance.query.filter(
-            SessionAttendance.session_id.in_(sess_ids)).all()
-        grade_rows    = Grade.query.filter(
-            Grade.session_id.in_(sess_ids),
-        ).all()
-        focus_rows    = FocusScore.query.filter(
-            FocusScore.session_id.in_(sess_ids)).all()
-        feedback_rows = SessionFeedback.query.filter(
-            SessionFeedback.session_id.in_(sess_ids)).all()
+        att_rows = SessionAttendance.query.filter(SessionAttendance.session_id.in_(sess_ids)).all()
+        grade_rows = Grade.query.filter(Grade.session_id.in_(sess_ids)).all()
+        focus_rows = FocusScore.query.filter(FocusScore.session_id.in_(sess_ids)).all()
+        feedback_rows = SessionFeedback.query.filter(SessionFeedback.session_id.in_(sess_ids)).all()
     else:
         att_rows = grade_rows = focus_rows = feedback_rows = []
 
-    # Index by session_id
     PRESENT_STATUSES = ('present', 'late', 'partial', 'inactive_present')
-    att_by_sess   = defaultdict(list)
+    att_by_sess = defaultdict(list)
     for r in att_rows:
         att_by_sess[r.session_id].append(r)
     grade_by_sess = defaultdict(list)
@@ -2689,7 +2722,7 @@ def analytics_instructors():
     focus_by_sess = defaultdict(list)
     for r in focus_rows:
         focus_by_sess[r.session_id].append(r)
-    feed_by_sess  = defaultdict(list)
+    feed_by_sess = defaultdict(list)
     for r in feedback_rows:
         feed_by_sess[r.session_id].append(r)
 
@@ -2701,25 +2734,31 @@ def analytics_instructors():
     for instr in instructors:
         my_sessions = instr_sessions.get(instr.id, [])
 
-        # Per-session attendance rate then averaged
         att_rates = []
+        turnaround_hours = []
         for sess in my_sessions:
             rows = att_by_sess[sess.id]
-            if not rows:
-                continue
-            total    = len(rows)
-            present  = sum(1 for r in rows if r.status in PRESENT_STATUSES)
-            att_rates.append(present / total * 100 if total else 0)
+            if rows:
+                total = len(rows)
+                present = sum(1 for r in rows if r.status in PRESENT_STATUSES)
+                att_rates.append(present / total * 100 if total else 0)
 
-        # Grades (final_grade is the blended percentage)
+            # Turnaround time
+            for g_item in grade_by_sess[sess.id]:
+                if g_item.graded_at and sess.ended_at and g_item.graded_at >= sess.ended_at:
+                    hrs = (g_item.graded_at - sess.ended_at).total_seconds() / 3600.0
+                    turnaround_hours.append(hrs)
+
         grade_scores = [
-            r.final_grade
+            float(r.final_grade)
             for sess in my_sessions
             for r in grade_by_sess[sess.id]
             if r.final_grade is not None
         ]
 
-        # Focus
+        # Fairness variance
+        grade_stdev = round(statistics.stdev(grade_scores), 2) if len(grade_scores) > 1 else 0.0
+
         focus_scores = [
             r.focus_score
             for sess in my_sessions
@@ -2727,7 +2766,6 @@ def analytics_instructors():
             if r.focus_score is not None
         ]
 
-        # Feedback ratings
         feedback_vals = [
             r.overall_rating
             for sess in my_sessions
@@ -2736,24 +2774,26 @@ def analytics_instructors():
         ]
 
         result.append({
-            'instructor_id':   instr.id,
-            'full_name':       instr.full_name,
-            'email':           instr.email,
-            'sessions_run':    len(my_sessions),
-            'subjects_count':  len(instr_subjects.get(instr.id, set())),
-            'sections_count':  len(instr_sections.get(instr.id, set())),
-            'avg_attendance':  _safe_mean(att_rates),
+            'instructor_id': instr.id,
+            'full_name': instr.full_name,
+            'email': instr.email,
+            'sessions_run': len(my_sessions),
+            'subjects_count': len(instr_subjects.get(instr.id, set())),
+            'sections_count': len(instr_sections.get(instr.id, set())),
+            'avg_attendance': _safe_mean(att_rates),
             'avg_final_grade': _safe_mean(grade_scores),
+            'avg_turnaround_hours': _safe_mean(turnaround_hours),
+            'grade_variance': grade_stdev,
             'avg_focus_score': _safe_mean(focus_scores),
-            'avg_feedback':    _safe_mean(feedback_vals),
+            'avg_feedback': _safe_mean(feedback_vals),
         })
 
-    # Sort by sessions_run desc
     result.sort(key=lambda x: x['sessions_run'], reverse=True)
 
     return jsonify({
         'instructors': result,
         'period': {'from': start.isoformat(), 'to': end.isoformat()},
+        'generated_at': datetime.utcnow().isoformat(),
     }), 200
 
 
@@ -2912,10 +2952,41 @@ def analytics_ai_usage():
         key=lambda x: x['tokens'], reverse=True,
     )[:25]
 
+    # Cost projection vs budget
+    # Benchmark rate: ~$0.002 per 1,000 blended tokens
+    cost_usd = round((total_tokens / 1000.0) * 0.002, 3)
+    days_count = max(1, (end - start).days)
+    monthly_proj_usd = round((cost_usd / days_count) * 30.0, 2)
+    budget_cap_usd = 50.0
+    budget_util_pct = round((cost_usd / budget_cap_usd) * 100.0, 1)
+
+    # Outlier detection (consumers exceeding 2.5x the mean consumption)
+    outliers = []
+    if top_consumers:
+        all_tokens = [c['tokens'] for c in top_consumers]
+        mean_tokens = sum(all_tokens) / len(all_tokens)
+        threshold = mean_tokens * 2.5
+        for c in top_consumers:
+            if c['tokens'] >= threshold and c['tokens'] > 5000:
+                multiplier = round(c['tokens'] / mean_tokens, 1) if mean_tokens else 1.0
+                outliers.append({
+                    **c,
+                    'multiplier_vs_average': multiplier,
+                    'reason': f"High token consumption ({multiplier}x cohort average)",
+                })
+
     return jsonify({
         'total_calls':    total_calls,
         'total_tokens':   total_tokens,
         'by_feature':     dict(by_feature),
         'top_consumers':  top_consumers,
+        'outliers':       outliers,
+        'cost_projection': {
+            'cost_usd': cost_usd,
+            'monthly_projection_usd': monthly_proj_usd,
+            'budget_cap_usd': budget_cap_usd,
+            'budget_utilization_pct': budget_util_pct,
+        },
         'period':         {'from': start.isoformat(), 'to': end.isoformat()},
+        'generated_at':   datetime.utcnow().isoformat(),
     }), 200

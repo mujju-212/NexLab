@@ -321,6 +321,224 @@ export interface AIUsageReport {
   period: { from: string; to: string };
 }
 
+export interface RiskOverviewReport {
+  summary: {
+    total_students: number;
+    at_risk_count: number;
+    at_risk_pct: number;
+    avg_risk_score: number;
+    bands: {
+      critical: number;
+      high: number;
+      watch: number;
+      ok: number;
+    };
+  };
+  top_risk_drivers: Array<{ reason: string; count: number; pct: number }>;
+  students: Array<{
+    student_id: string;
+    full_name: string;
+    email: string;
+    roll_number?: string;
+    section_name?: string;
+    risk_score: number;
+    risk_band: 'critical' | 'high' | 'watch' | 'ok';
+    is_at_risk: boolean;
+    primary_reason: string;
+    risk_contributions: Record<string, { weight: number; value: number; penalty: number; contribution_pct: number }>;
+    trend_arrow?: string;
+    metrics: Record<string, { value: number | null; sample_size: number; is_sufficient: boolean }>;
+  }>;
+  period: { days: number; from: string; to: string };
+}
+
+export interface RiskTrendsReport {
+  weeks: number;
+  weekly_bands: Array<{
+    week: string;
+    critical: number;
+    high: number;
+    watch: number;
+    ok: number;
+    avg_risk_score: number;
+    total: number;
+  }>;
+  velocity?: {
+    improving_count: number;
+    deteriorating_count: number;
+    stable_count: number;
+  };
+}
+
+export interface FunnelReport {
+  period: { days: number; from: string; to: string };
+  total_enrolled: number;
+  stages: Array<{
+    name: string;
+    key: string;
+    count: number;
+    pct: number;
+    drop_off_pct: number;
+    drop_off_count: number;
+    description?: string;
+  }>;
+}
+
+export interface BenchmarkReport {
+  entity_type: string;
+  baselines: Record<string, { mean: number; median: number; std_dev: number; count: number }>;
+  entities: Array<{
+    id: string;
+    name: string;
+    student_count: number;
+    benchmarks: Record<string, { value: number | null; z_score: number; percentile: number; delta_vs_mean: number }>;
+    is_outlier_high?: boolean;
+    is_outlier_low?: boolean;
+  }>;
+  period: { days: number; from: string; to: string };
+}
+
+export interface IntegrityReport {
+  campus_integrity_score: number;
+  total_violations: number;
+  by_type: Record<string, number>;
+  by_severity: Record<string, number>;
+  high_risk_students: Array<{
+    student_id: string;
+    full_name: string;
+    roll_number: string;
+    section_name: string;
+    violation_count: number;
+    weighted_severity: number;
+    primary_violation: string;
+  }>;
+  recent_events: Array<{
+    id: string;
+    session_id: string;
+    student_name: string;
+    event_type: string;
+    severity: string;
+    recorded_at: string;
+  }>;
+  period: { days: number; from: string; to: string };
+}
+
+export interface OutcomesReport {
+  total_subjects: number;
+  subjects: Array<{
+    subject_id: string;
+    subject_name: string;
+    code: string;
+    department_name: string;
+    enrolled_count: number;
+    completion_rate: number;
+    avg_grade: number;
+    mastery_rate: number;
+    difficulty_index: number;
+    grade_distribution?: Record<string, number>;
+  }>;
+  summary: {
+    campus_avg_grade: number;
+    campus_mastery_rate: number;
+    campus_completion_rate: number;
+  };
+  period: { days: number; from: string; to: string };
+}
+
+export interface Student360Data {
+  student: {
+    id: string;
+    full_name: string;
+    email: string;
+    roll_number: string;
+    department_id?: string;
+    department_name: string;
+    section_id?: string;
+    section_name: string;
+    year_of_study?: number;
+    semester?: number;
+    profile_pic_url?: string;
+    is_active: boolean;
+    created_at?: string;
+  };
+  kpis: {
+    current_mastery: number;
+    institution_rank: number;
+    total_institution_students: number;
+    platform_rank: number;
+    total_platform_students: number;
+    completion_pct: number;
+    completed_count: number;
+    total_assigned: number;
+    grade_avg: number;
+    attendance_rate: number;
+    focus_avg: number;
+  };
+  risk: {
+    risk_score: number;
+    risk_band: 'critical' | 'high' | 'watch' | 'ok';
+    is_at_risk: boolean;
+    primary_reason: string;
+    risk_contributions: Record<string, { weight: number; value: number; penalty: number; contribution_pct: number }>;
+    trend_arrow?: string;
+  };
+  metrics: Record<string, { value: number | null; sample_size: number; is_sufficient: boolean }>;
+  radar: Array<{ concept: string; mastery_score: number; attempts: number; last_practiced?: string }>;
+  grades: Array<{
+    id: string;
+    experiment_id?: string;
+    title: string;
+    type: string;
+    final_grade: number;
+    max_marks: number;
+    auto_grade?: number | null;
+    manual_grade?: number | null;
+    viva_score?: number | null;
+    quality_score?: number | null;
+    hint_penalty?: number | null;
+    is_passing: boolean;
+    graded_at?: string;
+  }>;
+  attendance: {
+    rate: number;
+    present_count: number;
+    total_count: number;
+    records: Array<{ session_id: string; session_title: string; scheduled_at?: string; status: string; joined_at?: string }>;
+  };
+  integrity: {
+    total_violations: number;
+    events: Array<{ id: string; session_id: string; event_type: string; severity: string; recorded_at?: string; payload?: any }>;
+  };
+  trends: Array<{
+    date: string;
+    risk_score: number;
+    grade_avg: number;
+    mastery_avg: number;
+    attendance_rate: number;
+    focus_avg: number;
+  }>;
+}
+
+export interface AnalyticsConfig {
+  institution_id?: string;
+  risk_weights: {
+    mastery: number;
+    grade: number;
+    attendance: number;
+    focus: number;
+    consistency: number;
+    freshness: number;
+  };
+  risk_bands: {
+    critical: number;
+    high: number;
+    watch: number;
+  };
+  mastery_halflife_days: number;
+  min_sample_size: number;
+  updated_at?: string;
+}
+
 /** Feature keys toggleable via AIPolicy.features_enabled */
 export const AI_FEATURES: { key: string; label: string; desc: string }[] = [
   { key: 'hint',          label: 'Progressive Hints',        desc: 'Step-by-step guidance when students get stuck' },
@@ -494,10 +712,14 @@ export interface AuditLogPage {
   limit?: number;
   offset?: number;
   days?: number;
-  actions: string[];
-  modules?: string[];
-  severities?: string[];
-  users?: Array<{ id: string; name: string; email?: string }>;
+  // The backend nests the dropdown choices under `filters` — the old flat
+  // keys never existed in the response, so dropdowns silently stayed empty.
+  filters?: {
+    users?: Array<{ id: string; name: string; email?: string; role?: string }>;
+    modules?: string[];
+    actions?: string[];
+    severities?: string[];
+  };
 }
 
 export interface AuditLogStats {
@@ -1362,8 +1584,8 @@ export const institutionService = {
 
   // ── User Management ───────────────────────────────────────────────────────────
 
-  async listUsersWithStats(params?: { role?: string; department_id?: string; status?: string; q?: string }): Promise<{ users: InstitutionUser[]; total: number; stats?: UserStats }> {
-    const { data } = await apiClient.get<{ users: InstitutionUser[]; total: number; stats?: UserStats }>('/institution/users', { params });
+  async listUsersWithStats(params?: { role?: string; department_id?: string; status?: string; q?: string; page?: number; per_page?: number }): Promise<{ users: InstitutionUser[]; total: number; page?: number; pages?: number; per_page?: number; stats?: UserStats }> {
+    const { data } = await apiClient.get<{ users: InstitutionUser[]; total: number; page?: number; pages?: number; per_page?: number; stats?: UserStats }>('/institution/users', { params });
     return data;
   },
 
@@ -1590,6 +1812,63 @@ export const institutionService = {
       data: { total_calls: 0, total_tokens: 0, by_feature: {}, top_consumers: [], period: { from: '', to: '' } },
     }));
     return data as AIUsageReport;
+  },
+
+  async getRiskOverview(params?: { days?: number; department_id?: string; section_id?: string; threshold?: number }): Promise<RiskOverviewReport> {
+    const { data } = await apiClient.get<RiskOverviewReport>('/institution/analytics/risk/overview', { params });
+    return data;
+  },
+
+  async getRiskTrends(params?: { weeks?: number; department_id?: string; section_id?: string }): Promise<RiskTrendsReport> {
+    const { data } = await apiClient.get<RiskTrendsReport>('/institution/analytics/risk/trends', { params });
+    return data;
+  },
+
+  async getFunnel(params?: { days?: number; department_id?: string; section_id?: string }): Promise<FunnelReport> {
+    const { data } = await apiClient.get<FunnelReport>('/institution/analytics/funnel', { params });
+    return data;
+  },
+
+  async getBenchmark(params?: { entity_type?: string; days?: number; department_id?: string }): Promise<BenchmarkReport> {
+    const { data } = await apiClient.get<BenchmarkReport>('/institution/analytics/benchmark', { params });
+    return data;
+  },
+
+  async getIntegrity(params?: { days?: number; department_id?: string; section_id?: string }): Promise<IntegrityReport> {
+    const { data } = await apiClient.get<IntegrityReport>('/institution/analytics/integrity', { params });
+    return data;
+  },
+
+  async getOutcomes(params?: { department_id?: string }): Promise<OutcomesReport> {
+    const { data } = await apiClient.get<OutcomesReport>('/institution/analytics/outcomes', { params });
+    return data;
+  },
+
+  async getAnalyticsBehavior(params?: { days?: number; session_id?: string; student_id?: string }): Promise<ProctoringReport> {
+    const { data } = await apiClient.get<ProctoringReport>('/institution/analytics/behavior', { params });
+    return data;
+  },
+
+  async getStudent360(studentId: string): Promise<Student360Data> {
+    const { data } = await apiClient.get<Student360Data>(`/institution/analytics/student-360/${studentId}`);
+    return data;
+  },
+
+  async getAnalyticsConfig(): Promise<{ config: AnalyticsConfig }> {
+    const { data } = await apiClient.get<{ config: AnalyticsConfig }>('/institution/analytics/config');
+    return data;
+  },
+
+  async updateAnalyticsConfig(payload: Partial<AnalyticsConfig>): Promise<{ message: string; config: AnalyticsConfig }> {
+    const { data } = await apiClient.put<{ message: string; config: AnalyticsConfig }>('/institution/analytics/config', payload);
+    return data;
+  },
+
+  async runAnalyticsSnapshots(backfill = false, days = 14): Promise<{ message: string; result?: any }> {
+    const { data } = await apiClient.post('/institution/analytics/snapshots/run', null, {
+      params: { backfill, days },
+    });
+    return data;
   },
 
   // ── AI Governance (policy + usage) ──────────────────────────────────────────

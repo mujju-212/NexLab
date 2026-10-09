@@ -98,15 +98,19 @@ def init_ai_routes(bp: Blueprint):
         display_blocked = max(blocked_count, 34)
 
         # ── Usage Trend (Last 30 days)
+        # func.date() not func.strftime(): strftime is sqlite-only and 500s on
+        # Postgres (the AI Usage page's Overview tab was dead there). Grouping
+        # by the label object rather than its name — same result, but explicit.
+        log_date = func.date(AIUsageLog.created_at).label('log_date')
         trend_rows = db.session.query(
-            func.strftime('%Y-%m-%d', AIUsageLog.created_at).label('log_date'),
+            log_date,
             func.count(AIUsageLog.id).label('calls'),
             func.count(func.distinct(AIUsageLog.user_id)).label('unique_users'),
             func.sum(AIUsageLog.total_tokens).label('tokens')
         ).filter(
             AIUsageLog.institution_id == iid,
             AIUsageLog.created_at >= since
-        ).group_by('log_date').order_by('log_date').all()
+        ).group_by(log_date).order_by(log_date).all()
 
         trend_map = {str(r.log_date): {'calls': int(r.calls), 'unique_users': int(r.unique_users), 'tokens': int(r.tokens or 0)} for r in trend_rows}
 
@@ -167,7 +171,11 @@ def init_ai_routes(bp: Blueprint):
             .join(AIUsageLog, AIUsageLog.user_id == User.id)
             .outerjoin(Department, Department.id == User.department_id)
             .filter(AIUsageLog.institution_id == iid)
-            .group_by(User.id)
+            # Postgres strict GROUP BY: users.* is covered functionally by the
+            # PK, but the joined departments.name must be named explicitly.
+            # (This endpoint silently 500'd on PG while dev fell back to
+            # sqlite, which doesn't enforce the rule.)
+            .group_by(User.id, Department.name)
             .order_by(desc('call_count'))
             .limit(10)
             .all()

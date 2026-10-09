@@ -301,6 +301,11 @@ def peak_usage():
     rows = db.session.query(
         func.extract('hour', LabSession.started_at).label('hour'),
         func.count(LabSession.id).label('count')
+    ).filter(
+        # PG (unlike sqlite) surfaces rows where started_at is NULL as a NULL
+        # bucket; int(None) then 500'd the whole endpoint. Never started =
+        # no hour of usage to report.
+        LabSession.started_at.isnot(None)
     ).group_by('hour').order_by('hour').all()
     return jsonify({
         'peak_by_hour': [{'hour': int(r[0]), 'sessions': r[1]} for r in rows],
