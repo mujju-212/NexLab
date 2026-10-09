@@ -16,6 +16,7 @@ from app.models.feedback import Notification
 from app.models.academic import SectionSubject, Section, SectionStudent
 from app.models.experiment import Experiment, ContentModule, ContentProgress
 from app.models.intervention import Intervention, Extension
+from sqlalchemy import func
 from datetime import datetime
 
 mgmt_bp = Blueprint('instructor_mgmt', __name__)
@@ -289,19 +290,29 @@ def instructor_announce():
 @require_role('instructor')
 def announcement_recipients():
     """My section-subjects with headcounts — powers the dropdown."""
+    from app.models.subject import Subject
     my_ss = SectionSubject.query.filter_by(
         institution_id=g.institution_id, instructor_id=g.user_id).all()
+    # Perf pass: was 3 queries (section, subject, count) per section-subject.
+    sec_ids = {ss.section_id for ss in my_ss if ss.section_id}
+    subj_ids = {ss.subject_id for ss in my_ss if ss.subject_id}
+    sections = {s.id: s for s in Section.query.filter(
+        Section.id.in_(sec_ids)).all()} if sec_ids else {}
+    subjects = {s.id: s for s in Subject.query.filter(
+        Subject.id.in_(subj_ids)).all()} if subj_ids else {}
+    counts = dict(db.session.query(
+        SectionStudent.section_id, func.count(SectionStudent.student_id)
+    ).filter(SectionStudent.section_id.in_(sec_ids)
+    ).group_by(SectionStudent.section_id).all()) if sec_ids else {}
     out = []
     for ss in my_ss:
-        from app.models.subject import Subject
-        section = Section.query.get(ss.section_id)
-        subject = Subject.query.get(ss.subject_id)
-        count = SectionStudent.query.filter_by(section_id=ss.section_id).count()
+        section = sections.get(ss.section_id)
+        subject = subjects.get(ss.subject_id)
         out.append({
             'section_subject_id': ss.id,
             'subject_name': subject.name if subject else '—',
             'section_name': section.name if section else '—',
-            'student_count': count,
+            'student_count': counts.get(ss.section_id, 0),
         })
     return jsonify({'recipients': out}), 200
 

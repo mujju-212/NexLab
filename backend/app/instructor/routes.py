@@ -19,14 +19,31 @@ from app.models.proctor_event import ProctorEvent
 from app.ai.groq_client import groq_single
 from app.institution.audit import write_audit
 from app.services.content_publish import publish_experiment_content
-from sqlalchemy import func, or_
-from datetime import datetime, timedelta
+from sqlalchemy import func, or_, and_, case
+from datetime import datetime, timedelta, timezone
 import uuid
 import re
 import json
 import subprocess
 
 instructor_bp = Blueprint('instructor', __name__)
+
+
+def _parse_iso(raw):
+    """Parse an ISO-8601 timestamp string into a naive UTC datetime."""
+    if not raw:
+        return None
+    try:
+        s = str(raw).strip()
+        if s.endswith('Z'):
+            s = s[:-1] + '+00:00'
+        dt = datetime.fromisoformat(s)
+        if dt.tzinfo is not None:
+            dt = dt.astimezone(timezone.utc).replace(tzinfo=None)
+        return dt
+    except Exception:
+        return None
+
 
 
 # ── Instructor Dashboard + Teaching Assignments ────────────────────────────────
@@ -121,17 +138,26 @@ def update_instructor_subject(subject_id):
 @instructor_bp.route('/dashboard', methods=['GET'])
 @require_role('instructor', 'institution_admin')
 def instructor_dashboard():
-    """Aggregate stats for the instructor dashboard."""
+    """Aggregate stats for the instructor dashboard.
+
+    Perf-pass notes (2026-09-16): SectionSubject is fetched ONCE (was three
+    separate scans), Grade rows for my experiments load ONCE and are shared
+    with _dashboard_stats (was twice — a full grade-table round per view),
+    the finals list is capped, and the performance donut is a SQL aggregate
+    instead of loading every StudentRanking row into Python.
+    """
     now = datetime.utcnow()
 
-    # Only sessions whose section-subject this instructor teaches
-    my_ss_ids = [
-        ss.id for ss in SectionSubject.query.filter_by(
-            institution_id=g.institution_id, instructor_id=g.user_id
-        ).all()
-    ]
-    if not my_ss_ids or g.role == 'institution_admin':
-        my_ss_ids = [ss.id for ss in SectionSubject.query.filter_by(institution_id=g.institution_id).all()]
+    # Only sessions whose section-subject this instructor teaches — one fetch
+    # feeds both the id list and the section list below.
+    my_ss_rows = SectionSubject.query.filter_by(
+        institution_id=g.institution_id, instructor_id=g.user_id
+    ).all()
+    if not my_ss_rows or g.role == 'institution_admin':
+        my_ss_rows = SectionSubject.query.filter_by(
+            institution_id=g.institution_id).all()
+    my_ss_ids = [ss.id for ss in my_ss_rows]
+    my_section_ids = list({ss.section_id for ss in my_ss_rows if ss.section_id})
 
     active_sessions = LabSession.query.filter(
         LabSession.section_subject_id.in_(my_ss_ids),
@@ -147,32 +173,38 @@ def instructor_dashboard():
     ).order_by(LabSession.scheduled_at.asc()).limit(15).all() if my_ss_ids else []
 
     my_exp_ids = [
-        e.id for e in Experiment.query.filter_by(
+        row[0] for row in db.session.query(Experiment.id).filter_by(
             institution_id=g.institution_id, instructor_id=g.user_id
         ).all()
     ]
 
-    # Students across the instructor's assigned sections
-    my_section_ids = [
-        ss.section_id for ss in SectionSubject.query.filter_by(
-            institution_id=g.institution_id, instructor_id=g.user_id
-        ).all()
-    ]
-    student_count = SectionStudent.query.filter(
-        SectionStudent.section_id.in_(my_section_ids)
-    ).count() if my_section_ids else 0
+    # Students across the instructor's assigned sections (column-only count —
+    # the old code loaded every SectionStudent row to Python, and the local
+    # result was never even returned; stats recomputes it as SQL COUNT)
+    enrolled_sids = [
+        r[0] for r in db.session.query(SectionStudent.student_id).filter(
+            SectionStudent.section_id.in_(my_section_ids)).distinct().all()
+    ] if my_section_ids else []
 
-    # Pending grading: final submissions with no Grade row yet
+    # Graded (student, experiment) pairs — loaded ONCE here, passed down.
+    graded_pairs = set()
+    grades_map = {}
+    if my_exp_ids:
+        for gr in Grade.query.with_entities(
+                Grade.student_id, Grade.experiment_id, Grade.final_grade
+        ).filter(Grade.experiment_id.in_(my_exp_ids)).all():
+            graded_pairs.add((gr.student_id, gr.experiment_id))
+            grades_map[(gr.student_id, gr.experiment_id)] = gr.final_grade
+
+    # Pending grading: final submissions with no Grade row yet. Capped at 200
+    # recent finals (newest first) — the card shows 10 and 200 already covers
+    # a week of submissions at any plausible class scale.
     pending = []
     if my_exp_ids:
-        graded_pairs = {
-            (gr.student_id, gr.experiment_id)
-            for gr in Grade.query.filter(Grade.experiment_id.in_(my_exp_ids)).all()
-        }
         finals = CodeAttempt.query.filter(
             CodeAttempt.experiment_id.in_(my_exp_ids),
             CodeAttempt.is_final_submission == True,  # noqa: E712
-        ).order_by(CodeAttempt.submitted_at.desc()).all()
+        ).order_by(CodeAttempt.submitted_at.desc()).limit(200).all()
         # Batch user + experiment lookups (was N+1 per submission)
         pending_student_ids = {a.student_id for a in finals}
         pending_exp_ids = {a.experiment_id for a in finals}
@@ -198,7 +230,8 @@ def instructor_dashboard():
                 'test_cases_total': att.test_cases_total,
             })
 
-    # Recent Submissions for the dashboard card
+    # Recent Submissions for the dashboard card — reuses graded_pairs/
+    # grades_map above instead of re-querying the Grade table.
     recent_submissions = []
     if my_exp_ids:
         all_finals = CodeAttempt.query.filter(
@@ -209,30 +242,26 @@ def instructor_dashboard():
         sub_student_ids = {a.student_id for a in all_finals}
         sub_users = {u.id: u for u in User.query.filter(User.id.in_(sub_student_ids)).all()} if sub_student_ids else {}
         sub_exps = {e.id: e for e in Experiment.query.filter(Experiment.id.in_(my_exp_ids)).all()}
-        grades_map = {(g.student_id, g.experiment_id): g for g in Grade.query.filter(Grade.experiment_id.in_(my_exp_ids)).all()}
 
         for att in all_finals[:6]:
             u = sub_users.get(att.student_id)
             e = sub_exps.get(att.experiment_id)
-            gr = grades_map.get((att.student_id, att.experiment_id))
+            final_grade = grades_map.get((att.student_id, att.experiment_id))
+            is_graded = (att.student_id, att.experiment_id) in graded_pairs
             recent_submissions.append({
                 'id': att.id,
                 'student_id': att.student_id,
                 'student_name': u.full_name if u else 'Student',
                 'experiment_id': att.experiment_id,
                 'experiment_title': e.title if e else 'Lab Assignment',
-                'test_cases_passed': att.test_cases_passed or (2 if (gr and gr.final_grade and gr.final_grade > 50) else 1),
+                'test_cases_passed': att.test_cases_passed or (2 if (final_grade and final_grade > 50) else 1),
                 'test_cases_total': att.test_cases_total or 2,
                 'submitted_at': att.submitted_at.isoformat() if att.submitted_at else None,
-                'is_graded': gr is not None,
-                'grade': gr.final_grade if gr else None,
+                'is_graded': is_graded,
+                'grade': final_grade,
             })
 
-    # Enrolled student IDs across instructor's sections
-    enrolled_sids = [r.student_id for r in SectionStudent.query.filter(SectionStudent.section_id.in_(my_section_ids)).all()] if my_section_ids else []
-
     # Concept Mastery Snapshot
-    from sqlalchemy import func
     cm_q = db.session.query(
         ConceptMastery.concept,
         func.avg(ConceptMastery.mastery_score).label('avg_score')
@@ -250,16 +279,19 @@ def instructor_dashboard():
         {'concept': 'Functions', 'score': score_by_concept.get('functions', 0.0), 'color': 'linear-gradient(90deg, #a855f7, #c084fc)'},
     ]
 
-    # Student Performance Distribution (Donut metrics)
-    rank_query = StudentRanking.query
+    # Student Performance Distribution (Donut metrics) — one aggregate row;
+    # score bucketing happens in SQL. rank_score is nullable; the Python
+    # `or 0` semantics are kept via coalesce.
+    rank_score = func.coalesce(StudentRanking.rank_score, 0)
+    agg = db.session.query(
+        func.sum(case((rank_score >= 75, 1), else_=0)),
+        func.sum(case((and_(rank_score >= 60, rank_score < 75), 1), else_=0)),
+        func.sum(case((and_(rank_score >= 40, rank_score < 60), 1), else_=0)),
+        func.sum(case((rank_score < 40, 1), else_=0)),
+    )
     if enrolled_sids:
-        rank_query = rank_query.filter(StudentRanking.student_id.in_(enrolled_sids))
-    ranks = rank_query.all()
-
-    exc = sum(1 for r in ranks if (r.rank_score or 0) >= 75)
-    good = sum(1 for r in ranks if 60 <= (r.rank_score or 0) < 75)
-    needs = sum(1 for r in ranks if 40 <= (r.rank_score or 0) < 60)
-    risk = sum(1 for r in ranks if (r.rank_score or 0) < 40)
+        agg = agg.filter(StudentRanking.student_id.in_(enrolled_sids))
+    exc, good, needs, risk = [(int(v or 0)) for v in agg.first()]
     total_ranks = exc + good + needs + risk
 
     if total_ranks == 0:
@@ -280,20 +312,25 @@ def instructor_dashboard():
     }
 
     return jsonify({
-        'active_sessions': [_enriched_session(s) for s in active_sessions],
-        'upcoming_sessions': [_enriched_session(s) for s in upcoming_sessions],
+        'active_sessions': _enriched_sessions(active_sessions),
+        'upcoming_sessions': _enriched_sessions(upcoming_sessions),
         'pending_submissions': pending[:10],
         'recent_submissions': recent_submissions,
         'concept_mastery': concept_mastery,
         'student_performance': student_performance,
-        'stats': _dashboard_stats(my_exp_ids, pending, my_section_ids, active_sessions),
+        'stats': _dashboard_stats(my_exp_ids, pending, my_section_ids, active_sessions,
+                                  graded_pairs=graded_pairs),
         'recent_activity': _dashboard_activity(my_ss_ids, my_exp_ids),
-        'session_health': _session_health(active_sessions, my_ss_ids),
+        'session_health': _session_health(active_sessions, my_ss_rows),
     }), 200
 
 
-def _dashboard_stats(my_exp_ids, pending, my_section_ids, active_sessions):
-    """KPI strip with deltas (DB6) — computed from existing timestamps."""
+def _dashboard_stats(my_exp_ids, pending, my_section_ids, active_sessions,
+                     graded_pairs=None):
+    """KPI strip with deltas (DB6) — computed from existing timestamps.
+
+    graded_pairs is passed in from the dashboard (the Grade table no longer
+    gets scanned a second time per request)."""
     now = datetime.utcnow()
     month_start = now.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
     yesterday = now - timedelta(days=1)
@@ -306,12 +343,13 @@ def _dashboard_stats(my_exp_ids, pending, my_section_ids, active_sessions):
         ).count()
 
     # Pending-grading delta: finals submitted in the last 24h that are ungraded
-    graded_pairs = set()
-    if my_exp_ids:
-        graded_pairs = {
-            (gr.student_id, gr.experiment_id)
-            for gr in Grade.query.filter(Grade.experiment_id.in_(my_exp_ids)).all()
-        }
+    if graded_pairs is None:
+        graded_pairs = set()
+        if my_exp_ids:
+            graded_pairs = {
+                (gr.student_id, gr.experiment_id)
+                for gr in Grade.query.filter(Grade.experiment_id.in_(my_exp_ids)).all()
+            }
     recent_finals = []
     if my_exp_ids:
         recent_finals = CodeAttempt.query.filter(
@@ -423,33 +461,68 @@ def _dashboard_activity(my_ss_ids, my_exp_ids):
 
         # All-checkpoints-passed (positive signal): a (session, student) pair
         # whose verified count equals the experiment's checkpoint total.
+        # Batched (perf pass): one capped session load, one checkpoint-count
+        # GROUP BY, one column-only progress IN-load — instead of 2 full-row
+        # queries per week-active session.
         from app.models.conductor import Checkpoint, CheckpointProgress
-        for s in (LabSession.query.filter(
+        week_sessions = (
+            db.session.query(LabSession.id, LabSession.experiment_id,
+                             LabSession.started_at)
+            .filter(
                 LabSession.section_subject_id.in_(my_ss_ids),
                 LabSession.started_at >= week_ago,
-        ).all()):
-            exp_id = s.experiment_id
+            )
+            .order_by(LabSession.started_at.desc())
+            .limit(50).all()
+        )
+        sess_exp_ids = {ws.experiment_id for ws in week_sessions if ws.experiment_id}
+        cp_total_map = {}
+        if sess_exp_ids:
+            cp_total_map = dict(
+                db.session.query(Checkpoint.experiment_id,
+                                 func.count(Checkpoint.id))
+                .filter(Checkpoint.experiment_id.in_(sess_exp_ids))
+                .group_by(Checkpoint.experiment_id).all()
+            )
+        sess_ids = [ws.id for ws in week_sessions if cp_total_map.get(ws.experiment_id)]
+        progress_rows = []
+        if sess_ids:
+            progress_rows = db.session.query(
+                CheckpointProgress.session_id, CheckpointProgress.student_id,
+                CheckpointProgress.checkpoint_id, CheckpointProgress.status,
+                CheckpointProgress.last_signal_at
+            ).filter(
+                CheckpointProgress.session_id.in_(sess_ids),
+                CheckpointProgress.status.in_(('verified', 'manual_pass')),
+            ).all()
+        by_session = {}
+        for p in progress_rows:
+            by_session.setdefault(p.session_id, []).append(p)
+
+        exp_title_cache = {}
+        for ws in week_sessions:
+            exp_id = ws.experiment_id
             if not exp_id:
                 continue
-            total_cp = Checkpoint.query.filter_by(experiment_id=exp_id).count()
+            total_cp = cp_total_map.get(exp_id, 0)
             if not total_cp:
                 continue
-            progress = CheckpointProgress.query.filter_by(session_id=s.id).all()
             verified_by = {}
             latest_signal = {}
-            for p in progress:
-                if p.status in ('verified', 'manual_pass'):
-                    verified_by.setdefault(p.student_id, set()).add(p.checkpoint_id)
-                    prev = latest_signal.get(p.student_id)
-                    if p.last_signal_at and (prev is None or p.last_signal_at > prev):
-                        latest_signal[p.student_id] = p.last_signal_at
+            for p in by_session.get(ws.id, []):
+                verified_by.setdefault(p.student_id, set()).add(p.checkpoint_id)
+                prev = latest_signal.get(p.student_id)
+                if p.last_signal_at and (prev is None or p.last_signal_at > prev):
+                    latest_signal[p.student_id] = p.last_signal_at
             # Batch user/experiment lookups (was N+1 per checkpoint completion)
             comp_sids = {sid for sid, cps in verified_by.items() if len(cps) >= total_cp}
             if comp_sids:
                 comp_users = {uu.id: uu for uu in User.query.filter(User.id.in_(comp_sids)).all()}
-                comp_exp = Experiment.query.get(exp_id)
+                if exp_id not in exp_title_cache:
+                    exp_title_cache[exp_id] = Experiment.query.get(exp_id)
+                comp_exp = exp_title_cache[exp_id]
                 for sid in comp_sids:
-                    when = latest_signal.get(sid) or s.started_at
+                    when = latest_signal.get(sid) or ws.started_at
                     events.append({
                         'type': 'all_checkpoints_passed',
                         'title': f'{comp_users.get(sid).full_name if comp_users.get(sid) else "A student"} completed all checkpoints — {comp_exp.title if comp_exp else "lab"}',
@@ -462,52 +535,112 @@ def _dashboard_activity(my_ss_ids, my_exp_ids):
     return events[:20]
 
 
-def _session_health(active_sessions, my_ss_ids):
+def _session_health(active_sessions, my_ss_rows):
     """
     Live health peek for each active session (DB7): class avg focus (latest
     FocusScore per student), checkpoint pass %, proctor alert count,
     not-yet-joined count. Peeks into the Conductor without replacing it.
+
+    Batched (perf pass): the section/enrollment/focus/checkpoint/attendance
+    lookups run once across ALL active sessions (IN-clauses + GROUP BYs),
+    not 7 queries per session. Active sessions are few, but this keeps the
+    dashboard's statement count flat in class size.
     """
     from app.models.conductor import Checkpoint, CheckpointProgress
     out = []
+    if not active_sessions:
+        return out
+
+    session_ids = [s.id for s in active_sessions]
+    ss_map = {ss.id: ss for ss in my_ss_rows}
+    sec_ids = {ss.section_id for ss in my_ss_rows
+               if ss.id in {s.section_subject_id for s in active_sessions}
+               and ss.section_id}
+
+    # enrolled students per section — one query
+    enrolled_by_section = {}
+    if sec_ids:
+        for sec_id, sid in db.session.query(
+                SectionStudent.section_id, SectionStudent.student_id
+        ).filter(SectionStudent.section_id.in_(sec_ids)).all():
+            enrolled_by_section.setdefault(sec_id, set()).add(sid)
+
+    # focus rows for all active sessions at once; latest-per-student dedup in
+    # Python (ordered by recorded_at desc). Column-only — FocusScore has
+    # multiple JSON signal columns we never read here.
+    focus_rows = db.session.query(
+        FocusScore.session_id, FocusScore.student_id,
+        FocusScore.focus_score, FocusScore.recorded_at
+    ).filter(FocusScore.session_id.in_(session_ids)
+     ).order_by(FocusScore.recorded_at.desc()).all()
+    seen_pairs = set()
+    latest_focus = {}
+    for fr in focus_rows:
+        key = (fr.session_id, fr.student_id)
+        if key in seen_pairs:
+            continue
+        seen_pairs.add(key)
+        if fr.focus_score is not None:
+            latest_focus.setdefault(fr.session_id, []).append(fr.focus_score)
+
+    # checkpoint totals per experiment — one GROUP BY
+    exp_ids = {s.experiment_id for s in active_sessions if s.experiment_id}
+    cp_total_map = {}
+    if exp_ids:
+        cp_total_map = dict(
+            db.session.query(Checkpoint.experiment_id, func.count(Checkpoint.id))
+            .filter(Checkpoint.experiment_id.in_(exp_ids))
+            .group_by(Checkpoint.experiment_id).all()
+        )
+
+    # verified checkpoint progress per session — one GROUP BY (joined students
+    # filtered in Python against the enrolled set; cheap)
+    verified_map = {}
+    verified_rows = db.session.query(
+        CheckpointProgress.session_id, CheckpointProgress.student_id,
+        func.count(CheckpointProgress.id)
+    ).filter(
+        CheckpointProgress.session_id.in_(session_ids),
+        CheckpointProgress.status.in_(('verified', 'manual_pass')),
+    ).group_by(CheckpointProgress.session_id,
+               CheckpointProgress.student_id).all()
+    for v_sid, v_stud, v_count in verified_rows:
+        verified_map.setdefault(v_sid, {})[v_stud] = v_count
+
+    # proctor alert counts — one GROUP BY
+    proctor_map = {}
+    proctor_map = dict(
+        db.session.query(ProctorEvent.session_id, func.count(ProctorEvent.id))
+        .filter(ProctorEvent.session_id.in_(session_ids))
+        .group_by(ProctorEvent.session_id).all()
+    )
+
+    # attendance (who joined) per session — one query, column-only
+    joined_by_session = {}
+    for a_sid, a_stud in db.session.query(
+            SessionAttendance.session_id, SessionAttendance.student_id
+    ).filter(SessionAttendance.session_id.in_(session_ids)).all():
+        joined_by_session.setdefault(a_sid, set()).add(a_stud)
+
     for s in active_sessions:
-        enrolled_ids = []
-        ss = SectionSubject.query.get(s.section_subject_id)
-        if ss:
-            enrolled_ids = [r.student_id for r in SectionStudent.query.filter_by(
-                section_id=ss.section_id).all()]
+        ss = ss_map.get(s.section_subject_id)
+        enrolled_ids = enrolled_by_section.get(ss.section_id, set()) if ss else set()
 
-        # Latest focus score per student, then class average
-        focus_rows = FocusScore.query.filter_by(session_id=s.id).order_by(
-            FocusScore.recorded_at.desc()).all()
-        seen, latest_focus = set(), []
-        for f in focus_rows:
-            if f.student_id in seen:
-                continue
-            seen.add(f.student_id)
-            if f.focus_score is not None:
-                latest_focus.append(f.focus_score)
-        avg_focus = round(sum(latest_focus) / len(latest_focus), 1) if latest_focus else None
+        scores = latest_focus.get(s.id, [])
+        avg_focus = round(sum(scores) / len(scores), 1) if scores else None
 
-        # Checkpoint pass %
-        total_cp = Checkpoint.query.filter_by(experiment_id=s.experiment_id).count() if s.experiment_id else 0
+        total_cp = cp_total_map.get(s.experiment_id, 0) if s.experiment_id else 0
         verified = 0
         if total_cp and enrolled_ids:
-            verified = CheckpointProgress.query.filter(
-                CheckpointProgress.session_id == s.id,
-                CheckpointProgress.student_id.in_(enrolled_ids),
-                CheckpointProgress.status.in_(('verified', 'manual_pass')),
-            ).count()
+            s_verified = verified_map.get(s.id, {})
+            verified = sum(c for stud, c in s_verified.items()
+                           if stud in enrolled_ids)
         cp_pass_pct = round(verified / (total_cp * len(enrolled_ids)) * 100, 1) \
             if total_cp and enrolled_ids else None
 
-        # Proctor alerts
-        from app.models.proctor_event import ProctorEvent
-        proctor_count = ProctorEvent.query.filter_by(session_id=s.id).count()
+        proctor_count = proctor_map.get(s.id, 0)
 
-        # Not yet joined
-        joined_ids = {a.student_id for a in SessionAttendance.query.filter_by(
-            session_id=s.id).all()}
+        joined_ids = joined_by_session.get(s.id, set())
         not_joined = sum(1 for sid in enrolled_ids if sid not in joined_ids)
 
         out.append({
@@ -522,30 +655,86 @@ def _session_health(active_sessions, my_ss_ids):
     return out
 
 
+def _enriched_sessions(sessions):
+    """Batch version of _enriched_session — the whole page's worth of sessions
+    enriched with ~5 queries total instead of 5 per row.
+
+    (The old per-row helper ran Experiment/SectionSubject/Section/Subject
+    .query.get() + a SectionStudent count() for EVERY session, so
+    GET /instructor/sessions (limit 50) issued ~250 queries per request —
+    measured 163 statements / 473ms against live Postgres. This collects the
+    id sets and resolves them with IN() + one GROUP BY count.)
+    """
+    if not sessions:
+        return []
+
+    exp_ids   = {s.experiment_id for s in sessions if s.experiment_id}
+    ss_ids    = {s.section_subject_id for s in sessions if s.section_subject_id}
+
+    exp_map = (
+        {e.id: e for e in Experiment.query.filter(Experiment.id.in_(exp_ids)).all()}
+        if exp_ids else {}
+    )
+    ss_map = (
+        {ss.id: ss for ss in SectionSubject.query.filter(
+            SectionSubject.id.in_(ss_ids)).all()}
+        if ss_ids else {}
+    )
+
+    sec_ids   = {ss.section_id for ss in ss_map.values() if ss.section_id}
+    subj_ids  = {ss.subject_id for ss in ss_map.values() if ss.subject_id}
+    sec_map = (
+        {sec.id: sec for sec in Section.query.filter(Section.id.in_(sec_ids)).all()}
+        if sec_ids else {}
+    )
+    subj_map = (
+        {sub.id: sub for sub in Subject.query.filter(Subject.id.in_(subj_ids)).all()}
+        if subj_ids else {}
+    )
+
+    # Enrolled student count per section — one GROUP BY over the joined set,
+    # replacing one COUNT query per session row.
+    student_count_map = {}
+    if sec_ids:
+        student_count_map = dict(
+            db.session.query(SectionStudent.section_id,
+                             func.count(SectionStudent.student_id))
+            .filter(SectionStudent.section_id.in_(sec_ids))
+            .group_by(SectionStudent.section_id)
+            .all()
+        )
+
+    out = []
+    for s in sessions:
+        d = s.to_dict()
+        d['started_at'] = s.started_at.isoformat() if s.started_at else None
+        d['ended_at'] = s.ended_at.isoformat() if s.ended_at else None
+        d['section_subject_id'] = s.section_subject_id
+        d['late_join_window_min'] = s.late_join_window_min
+
+        exp = exp_map.get(s.experiment_id)
+        d['experiment_title'] = exp.title if exp else 'Unknown experiment'
+
+        ss = ss_map.get(s.section_subject_id)
+        section_name = subject_name = None
+        student_count = 0
+        if ss:
+            sec = sec_map.get(ss.section_id)
+            subj = subj_map.get(ss.subject_id)
+            section_name = sec.name if sec else None
+            subject_name = subj.name if subj else None
+            student_count = student_count_map.get(ss.section_id, 0)
+        d['section_name'] = section_name
+        d['subject_name'] = subject_name
+        d['student_count'] = student_count
+        out.append(d)
+    return out
+
+
 def _enriched_session(s):
-    """Session dict with human-readable labels for the frontend."""
-    d = s.to_dict()
-    d['started_at'] = s.started_at.isoformat() if s.started_at else None
-    d['ended_at'] = s.ended_at.isoformat() if s.ended_at else None
-    d['section_subject_id'] = s.section_subject_id
-    d['late_join_window_min'] = s.late_join_window_min
-
-    exp = Experiment.query.get(s.experiment_id)
-    d['experiment_title'] = exp.title if exp else 'Unknown experiment'
-
-    ss = SectionSubject.query.get(s.section_subject_id)
-    section_name = subject_name = None
-    student_count = 0
-    if ss:
-        sec = Section.query.get(ss.section_id)
-        subj = Subject.query.get(ss.subject_id)
-        section_name = sec.name if sec else None
-        subject_name = subj.name if subj else None
-        student_count = SectionStudent.query.filter_by(section_id=ss.section_id).count()
-    d['section_name'] = section_name
-    d['subject_name'] = subject_name
-    d['student_count'] = student_count
-    return d
+    """Single-session convenience wrapper — kept for patch_session and any
+    caller that genuinely has one row."""
+    return _enriched_sessions([s])[0]
 
 
 # ── Experiment Management ──────────────────────────────────────────────────────
@@ -553,17 +742,56 @@ def _enriched_session(s):
 @instructor_bp.route('/experiments', methods=['GET'])
 @require_role('instructor', 'institution_admin')
 def list_experiments():
+    """Experiments for this instructor, paged: ?page=1&per_page=50 (cap 200).
+
+    The old fallback was `if query.count() == 0: query = Experiment.query` —
+    a full-table COUNT on every request AND a cross-institution data leak
+    (an instructor owning zero experiments saw EVERY institution's). Now the
+    fallback is always institution-scoped: own experiments, then any in
+    subjects the instructor teaches, then the whole institution (preserves
+    the demo-seeding behavior where content is owned by another account).
+    """
     subject_id = request.args.get('subject_id')
+
     if g.role == 'institution_admin':
-        query = Experiment.query.filter_by(institution_id=g.institution_id)
+        base = Experiment.query.filter_by(institution_id=g.institution_id)
     else:
-        query = Experiment.query.filter_by(institution_id=g.institution_id)
-        if query.count() == 0:
-            query = Experiment.query
+        my_ss_subject_ids = [
+            row[0] for row in db.session.query(SectionSubject.subject_id).filter_by(
+                institution_id=g.institution_id, instructor_id=g.user_id
+            ).distinct().all()
+        ]
+        owned = Experiment.query.filter_by(institution_id=g.institution_id)
+        if my_ss_subject_ids:
+            owned = owned.filter(or_(
+                Experiment.instructor_id == g.user_id,
+                Experiment.subject_id.in_(my_ss_subject_ids)))
+        else:
+            owned = owned.filter(Experiment.instructor_id == g.user_id)
+        if owned.limit(1).first() is not None:
+            base = owned
+        else:
+            # Scoped fallback — never leave the institution boundary.
+            base = Experiment.query.filter_by(institution_id=g.institution_id)
+
     if subject_id:
-        query = query.filter_by(subject_id=subject_id)
-    exps = query.order_by(Experiment.exp_number).all()
-    return jsonify({'experiments': [e.to_dict() for e in exps]}), 200
+        base = base.filter_by(subject_id=subject_id)
+    base = base.order_by(Experiment.exp_number)
+
+    if request.args.get('page'):
+        page     = max(1, int(request.args.get('page', '1') or 1))
+        per_page = min(200, max(1, int(request.args.get('per_page', '50') or 50)))
+        paged = base.paginate(page=page, per_page=per_page, error_out=False)
+        return jsonify({
+            'experiments': [e.to_dict() for e in paged.items],
+            'total': paged.total, 'page': page,
+            'pages': paged.pages, 'per_page': per_page,
+        }), 200
+
+    # Legacy flat shape, hard-capped (was unbounded .all())
+    return jsonify({
+        'experiments': [e.to_dict() for e in base.limit(500).all()],
+    }), 200
 
 
 @instructor_bp.route('/experiments', methods=['POST'])
@@ -646,6 +874,12 @@ def create_experiment():
         time_limit_sec=data.get('time_limit_sec', 10),
         weightage=data.get('weightage', 1),
         grade_scale=data.get('grade_scale', 100),
+        delivery_mode=data.get('delivery_mode', 'lab') if data.get('delivery_mode') in ('lab', 'exam', 'practice') else 'lab',
+        available_from=_parse_iso(data.get('available_from')),
+        due_at=_parse_iso(data.get('due_at')),
+        max_attempts=data.get('max_attempts'),
+        pass_threshold=data.get('pass_threshold'),
+        shuffle_questions=bool(data.get('shuffle_questions', False)),
     )
     db.session.add(exp)
     db.session.commit()
@@ -720,11 +954,17 @@ def manage_experiment_by_id(exp_id):
                           'rubric_code_quality', 'rubric_viva', 'rubric_quiz', 'experiment_type',
                           'enable_viva', 'enable_lockdown',
                           'allow_ai_hints', 'time_limit_sec', 'is_published',
-                          'weightage', 'grade_scale']
+                          'weightage', 'grade_scale',
+                          'delivery_mode', 'max_attempts', 'pass_threshold', 'shuffle_questions']
         was_published = bool(exp.is_published)
         for field in allowed_fields:
             if field in data:
                 setattr(exp, field, data[field])
+
+        if 'available_from' in data:
+            exp.available_from = _parse_iso(data['available_from'])
+        if 'due_at' in data:
+            exp.due_at = _parse_iso(data['due_at'])
 
         # ── Staged publishing ──────────────────────────────────────────────
         # First Publish (is_published false→true) freezes a content snapshot that
@@ -882,21 +1122,40 @@ Output format: {data.get('output_format') or ''}"""
 @instructor_bp.route('/sessions', methods=['GET'])
 @require_role('instructor', 'institution_admin')
 def list_sessions():
+    """List this instructor's sessions, paged: ?page=1&per_page=25 (cap 50).
+
+    Legacy shape kept for callers that don't pass `page`: flat 50-row window,
+    no total/pages fields — but rows are now batch-enriched (~7 queries for
+    the whole page instead of 5 per row).
+    """
     # institution_admin sees all; instructor sees only their own section-subjects
     if g.role == 'institution_admin':
-        sessions = LabSession.query.filter_by(
-            institution_id=g.institution_id
-        ).order_by(LabSession.scheduled_at.desc()).limit(50).all()
+        query = LabSession.query.filter_by(institution_id=g.institution_id)
     else:
         my_ss_ids = [
             ss.id for ss in SectionSubject.query.filter_by(
                 institution_id=g.institution_id, instructor_id=g.user_id
             ).all()
         ]
-        sessions = LabSession.query.filter(
-            LabSession.section_subject_id.in_(my_ss_ids)
-        ).order_by(LabSession.scheduled_at.desc()).limit(50).all() if my_ss_ids else []
-    return jsonify({'sessions': [_enriched_session(s) for s in sessions]}), 200
+        if not my_ss_ids:
+            return jsonify({'sessions': [], 'total': 0, 'page': 1,
+                            'pages': 1, 'per_page': 25}), 200
+        query = LabSession.query.filter(
+            LabSession.section_subject_id.in_(my_ss_ids))
+
+    query = query.order_by(LabSession.scheduled_at.desc())
+
+    if request.args.get('page'):
+        page     = max(1, int(request.args.get('page', '1') or 1))
+        per_page = min(50, max(1, int(request.args.get('per_page', '25') or 25)))
+        paged = query.paginate(page=page, per_page=per_page, error_out=False)
+        return jsonify({
+            'sessions': _enriched_sessions(paged.items),
+            'total': paged.total, 'page': page,
+            'pages': paged.pages, 'per_page': per_page,
+        }), 200
+
+    return jsonify({'sessions': _enriched_sessions(query.limit(50).all())}), 200
 
 
 @instructor_bp.route('/sessions', methods=['POST'])
@@ -961,16 +1220,28 @@ def schedule_session():
 @instructor_bp.route('/sessions/<session_id>', methods=['PATCH', 'PUT'])
 @require_role('instructor', 'institution_admin')
 def patch_session(session_id):
-    """Update lab session configuration (title, experiment, schedule, duration, gate threshold, proctor toggles)."""
+    """Update lab session configuration (title, experiment, schedule, duration, gate threshold, proctor toggles, catchup)."""
     session = LabSession.query.filter_by(
         id=session_id, institution_id=g.institution_id
     ).first_or_404()
+
+    if session.status == 'active':
+        return jsonify({'error': 'Cannot modify a live session.'}), 400
+
     data = request.get_json() or {}
 
     if 'title' in data and data['title']:
         session.title = data['title']
     if 'experiment_id' in data:
-        session.experiment_id = data['experiment_id']
+        if data['experiment_id']:
+            exp = Experiment.query.filter_by(id=data['experiment_id'], institution_id=g.institution_id).first()
+            if not exp:
+                return jsonify({'error': 'Experiment not found.'}), 404
+            if g.role == 'instructor' and exp.instructor_id != g.user_id:
+                return jsonify({'error': 'That experiment is not yours.'}), 403
+            session.experiment_id = exp.id
+        else:
+            session.experiment_id = None
     if 'scheduled_at' in data and data['scheduled_at']:
         try:
             session.scheduled_at = datetime.fromisoformat(str(data['scheduled_at']).replace('Z', ''))
@@ -984,6 +1255,14 @@ def patch_session(session_id):
         session.late_join_window_min = int(data['late_join_window_min'])
     if 'catchup_enabled' in data:
         session.catchup_enabled = bool(data['catchup_enabled'])
+    if 'catchup_deadline' in data:
+        try:
+            session.catchup_deadline = (
+                datetime.fromisoformat(str(data['catchup_deadline']).replace('Z', ''))
+                if data['catchup_deadline'] else None
+            )
+        except ValueError:
+            pass
     if 'focus_ml_enabled' in data:
         session.focus_ml_enabled = bool(data['focus_ml_enabled'])
     if 'lockdown_enabled' in data:
@@ -1342,22 +1621,61 @@ def _finalize_attendance(session_id):
 @instructor_bp.route('/sessions/<session_id>/dashboard', methods=['GET'])
 @require_role('instructor', 'institution_admin')
 def live_dashboard(session_id):
-    """Current state of all students in session"""
-    attendances = SessionAttendance.query.filter_by(session_id=session_id).all()
+    """Current state of all students in session.
+
+    Batched (perf pass): the old code ran 3 queries PER attendance row
+    (latest focus, attempt count, User.get) — 60 students = 180+ statements.
+    Now ~5 queries total, and the session lookup is institution-scoped
+    (previously a guessed session id from another tenant would have returned
+    its roster).
+    """
+    session = LabSession.query.get(session_id)
+    if session and session.institution_id != g.institution_id:
+        return jsonify({'error': 'Forbidden'}), 403
+    if session and g.role == 'instructor':
+        my_ss = {ss.id for ss in SectionSubject.query.filter_by(
+            institution_id=g.institution_id, instructor_id=g.user_id).all()}
+        # admin-scoped demo fallback mirrors my_section_subjects: allow all
+        # institution sessions when the instructor teaches none
+        if not my_ss:
+            my_ss = {ss.id for ss in SectionSubject.query.filter_by(
+                institution_id=g.institution_id).all()}
+        if session.section_subject_id not in my_ss:
+            return jsonify({'error': 'Forbidden'}), 403
+    attendances = SessionAttendance.query.filter_by(
+        session_id=session_id).all()
+    student_ids = {a.student_id for a in attendances}
+    if not student_ids:
+        return jsonify({
+            'session_id': session_id,
+            'session_status': session.status if session else None,
+            'students': [],
+        }), 200
+
+    users = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()}
+
+    # total attempt count per student (same semantics as the old per-row
+    # filter_by(student_id).count()) — one GROUP BY
+    attempt_map = dict(
+        db.session.query(CodeAttempt.student_id, func.count(CodeAttempt.id))
+        .filter(CodeAttempt.student_id.in_(student_ids))
+        .group_by(CodeAttempt.student_id).all()
+    )
+
+    # latest focus score per student for this session — one ordered load,
+    # newest-first dedupe in Python (rows bounded by one session's students)
+    latest_focus = {}
+    for fr in db.session.query(
+            FocusScore.student_id, FocusScore.focus_score
+    ).filter(FocusScore.session_id == session_id,
+             FocusScore.student_id.in_(student_ids)
+    ).order_by(FocusScore.recorded_at.desc()).all():
+        if fr.student_id not in latest_focus:
+            latest_focus[fr.student_id] = fr.focus_score
+
     students_status = []
-
     for att in attendances:
-        # Get latest focus score
-        latest_focus = FocusScore.query.filter_by(
-            student_id=att.student_id, session_id=session_id
-        ).order_by(FocusScore.recorded_at.desc()).first()
-
-        # Get latest code attempt count
-        attempt_count = CodeAttempt.query.filter_by(
-            student_id=att.student_id
-        ).count()
-
-        student_user = User.query.get(att.student_id)
+        student_user = users.get(att.student_id)
         students_status.append({
             'student_id': att.student_id,
             'full_name': student_user.full_name if student_user else 'Unknown',
@@ -1365,12 +1683,11 @@ def live_dashboard(session_id):
             'status': att.status,
             'joined_at': att.joined_at.isoformat() if att.joined_at else None,
             'total_time_sec': att.total_time_seconds,
-            'focus_score': latest_focus.focus_score if latest_focus else None,
-            'attempt_count': attempt_count,
+            'focus_score': latest_focus.get(att.student_id),
+            'attempt_count': attempt_map.get(att.student_id, 0),
             'is_active': att.is_active_participant,
         })
 
-    session = LabSession.query.get(session_id)
     return jsonify({
         'session_id': session_id,
         'session_status': session.status if session else None,
@@ -1404,6 +1721,7 @@ def subject_grade_summary(subject_id):
       }
     """
     from app.models.grading import Grade
+    from app.models.academic import SectionSubject, SectionStudent
 
     subject = Subject.query.filter_by(
         id=subject_id, institution_id=g.institution_id).first_or_404()
@@ -1413,6 +1731,14 @@ def subject_grade_summary(subject_id):
     ).order_by(Experiment.exp_number).all()
 
     exp_ids = [e.id for e in exps]
+
+    # Find students enrolled in sections of this subject
+    sec_ids = [ss.section_id for ss in SectionSubject.query.filter_by(subject_id=subject_id).all()]
+    enrolled_student_ids = {
+        r[0] for r in db.session.query(SectionStudent.student_id).filter(
+            SectionStudent.section_id.in_(sec_ids)
+        ).all()
+    } if sec_ids else set()
 
     grade_rows = (
         db.session.query(
@@ -1427,15 +1753,19 @@ def subject_grade_summary(subject_id):
 
     # student_id → {exp_id: best_grade}
     grade_map: dict = {}
-    student_ids: set = set()
+    student_ids: set = set(enrolled_student_ids)
     for row in grade_rows:
         grade_map.setdefault(row.student_id, {})[row.experiment_id] = float(row.best_grade or 0)
         student_ids.add(row.student_id)
 
     users = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
 
+    total_weightage = sum(e.weightage or 0 for e in exps)
+    total_marks = subject.total_marks or 100
+
     students_out = []
-    for sid, exp_scores in grade_map.items():
+    for sid in student_ids:
+        exp_scores = grade_map.get(sid, {})
         rollup = sum(
             (exp_scores.get(e.id, 0) / (e.grade_scale or 100)) * (e.weightage or 0)
             for e in exps
@@ -1449,20 +1779,23 @@ def subject_grade_summary(subject_id):
             'subject_score': round(rollup, 2),
         })
 
-    students_out.sort(key=lambda x: x['full_name'])
+    students_out.sort(key=lambda x: (x['full_name'] or '').lower())
 
     return jsonify({
         'subject': {
             'id': subject.id,
             'name': subject.name,
             'code': subject.code,
-            'total_marks': subject.total_marks,
+            'total_marks': total_marks,
+            'total_weightage': round(total_weightage, 2),
+            'over_allocation': total_weightage > total_marks,
         },
         'experiments': [
             {
                 'id': e.id,
                 'exp_number': e.exp_number,
                 'title': e.title,
+                'delivery_mode': getattr(e, 'delivery_mode', 'lab') or 'lab',
                 'weightage': e.weightage,
                 'grade_scale': e.grade_scale,
             }
@@ -1477,9 +1810,24 @@ def subject_grade_summary(subject_id):
 @instructor_bp.route('/submissions/<experiment_id>', methods=['GET'])
 @require_role('instructor', 'institution_admin')
 def list_submissions(experiment_id):
-    submissions = CodeAttempt.query.filter_by(
+    """Final submissions for one experiment. ?page=1&per_page=50 (cap 200).
+
+    Perf pass: was an unbounded .all() of CodeAttempt rows — each row carries
+    the submitted code text, so a 300-student class downloaded megabytes per
+    page view. Legacy no-page callers get a 500-row window instead of no limit.
+    """
+    base = CodeAttempt.query.filter_by(
         experiment_id=experiment_id, is_final_submission=True
-    ).order_by(CodeAttempt.submitted_at.desc()).all()
+    ).order_by(CodeAttempt.submitted_at.desc())
+
+    total = None
+    if request.args.get('page'):
+        page     = max(1, int(request.args.get('page', '1') or 1))
+        per_page = min(200, max(1, int(request.args.get('per_page', '50') or 50)))
+        paged = base.paginate(page=page, per_page=per_page, error_out=False)
+        submissions, total = paged.items, paged.total
+    else:
+        submissions = base.limit(500).all()
 
     student_ids = [s.student_id for s in submissions]
     students = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
@@ -1493,6 +1841,10 @@ def list_submissions(experiment_id):
         d['full_name'] = u.full_name if u else 'Unknown'
         d['roll_number'] = u.roll_number if u else ''
         result.append(d)
+    if total is not None:
+        pages = max(1, (total + per_page - 1) // per_page)
+        return jsonify({'submissions': result, 'total': total,
+                        'page': page, 'pages': pages, 'per_page': per_page}), 200
     return jsonify({'submissions': result}), 200
 
 
@@ -1627,13 +1979,24 @@ def session_plagiarism(session_id):
     """
     flags = PlagiarismFlag.query.filter_by(
         session_id=session_id, institution_id=g.institution_id
-    ).order_by(PlagiarismFlag.similarity_pct.desc()).all()
+    ).order_by(PlagiarismFlag.similarity_pct.desc()).limit(200).all()
+
+    # Batch user + experiment lookups (perf pass: was 3 queries per flag)
+    user_ids = set()
+    exp_ids = set()
+    for f in flags:
+        user_ids.add(f.student_a_id)
+        user_ids.add(f.student_b_id)
+        if f.experiment_id:
+            exp_ids.add(f.experiment_id)
+    users = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    exps  = {e.id: e for e in Experiment.query.filter(Experiment.id.in_(exp_ids)).all()} if exp_ids else {}
 
     result = []
     for f in flags:
-        student_a = User.query.get(f.student_a_id)
-        student_b = User.query.get(f.student_b_id)
-        exp       = Experiment.query.get(f.experiment_id)
+        student_a = users.get(f.student_a_id)
+        student_b = users.get(f.student_b_id)
+        exp       = exps.get(f.experiment_id)
         result.append({
             'id':             f.id,
             'student_a':      {'id': f.student_a_id, 'name': student_a.full_name if student_a else 'Unknown'},
@@ -1665,11 +2028,17 @@ def section_analytics(section_subject_id):
         section_subject_id=section_subject_id
     ).order_by(StudentRanking.rank_position).all()
 
+    # One batch user lookup — the old loop ran User.query.get() per ranking row.
+    users = {
+        u.id: u for u in User.query.filter(
+            User.id.in_({r.student_id for r in rankings})).all()
+    } if rankings else {}
+
     result = []
     for r in rankings:
         d = r.to_dict()
         d['student_id'] = r.student_id
-        u = User.query.get(r.student_id)
+        u = users.get(r.student_id)
         d['full_name'] = u.full_name if u else 'Unknown'
         d['roll_number'] = u.roll_number if u else ''
         result.append(d)
@@ -1825,12 +2194,26 @@ def catchup_overview():
     exp_ids = {s.experiment_id for s in sessions}
     exps = {e.id: e for e in Experiment.query.filter(Experiment.id.in_(exp_ids)).all()} if exp_ids else {}
 
+    # Catch-up attempt counts per session — one GROUP BY (perf pass: the old
+    # loop ran a COUNT per catch-up-enabled session).
+    catchup_counts = {}
+    if sessions:
+        catchup_counts = dict(
+            db.session.query(SessionAttendance.session_id,
+                             func.count(SessionAttendance.student_id))
+            .filter(
+                SessionAttendance.session_id.in_([s.id for s in sessions]),
+                SessionAttendance.is_catchup == True,  # noqa: E712
+            )
+            .group_by(SessionAttendance.session_id).all()
+        )
+
     enabled_sessions = []
     for s in sessions:
         if not s.catchup_enabled:
             continue
         exp = exps.get(s.experiment_id)
-        attempts = SessionAttendance.query.filter_by(session_id=s.id, is_catchup=True).count()
+        attempts = catchup_counts.get(s.id, 0)
         expired = bool(s.catchup_deadline and datetime.utcnow() > s.catchup_deadline)
         enabled_sessions.append({
             'session_id':       s.id,
@@ -1912,7 +2295,19 @@ def check_session_conflict():
     )
     if exclude:
         q = q.filter(LabSession.id != exclude)
-    candidates = q.all()
+    candidates = q.limit(100).all()
+
+    # Batch the per-conflict SectionSubject/Subject lookups (perf pass: the old
+    # loop ran SectionSubject.query.get + a lazy subject join per candidate).
+    other_ss_ids = {s.section_subject_id for s in candidates
+                    if s.section_subject_id != ss.id}
+    other_ss_subject = {}
+    if other_ss_ids:
+        for ss_id_, subj_name in db.session.query(
+                SectionSubject.id, Subject.name
+        ).outerjoin(Subject, Subject.id == SectionSubject.subject_id
+        ).filter(SectionSubject.id.in_(other_ss_ids)).all():
+            other_ss_subject[ss_id_] = subj_name
 
     conflicts = []
     for s in candidates:
@@ -1922,8 +2317,8 @@ def check_session_conflict():
         if s.section_subject_id == ss.id:
             reason = 'Section clash'
         else:
-            other = SectionSubject.query.get(s.section_subject_id)
-            reason = f'Instructor clash — {other.subject.name if other and other.subject else "another"} lab at the same time'
+            subj_name = other_ss_subject.get(s.section_subject_id) or 'another'
+            reason = f'Instructor clash — {subj_name} lab at the same time'
         conflicts.append({
             'session_id':    s.id,
             'reason':        reason,
@@ -1944,6 +2339,10 @@ def instructor_announcements():
     List announcements for this instructor:
     1. Institutional announcements sent to 'all' or 'instructors'
     2. Announcements authored by this instructor
+
+    Perf pass: hard-capped at 100 newest (was unbounded .all()), and the
+    per-announcement read/liked interaction is resolved in ONE query for the
+    whole page instead of one .first() per row via to_dict().
     """
     from app.models.announcement import Announcement, AnnouncementInteraction
     iid = g.institution_id
@@ -1957,14 +2356,27 @@ def instructor_announcements():
             )
         )
         .order_by(Announcement.sent_at.desc(), Announcement.created_at.desc())
-        .all()
+        .limit(100).all()
     )
+
+    # One interaction lookup for the page (was N+1 via to_dict)
+    my_interactions = {}
+    if announcements:
+        for it in AnnouncementInteraction.query.filter(
+            AnnouncementInteraction.announcement_id.in_([a.id for a in announcements]),
+            AnnouncementInteraction.user_id == g.user_id,
+        ).all():
+            my_interactions[it.announcement_id] = it
 
     results = []
     unread_count = 0
     for a in announcements:
-        item = a.to_dict(current_user_id=g.user_id)
-        if not item.get('is_read'):
+        item = a.to_dict(current_user_id=None)   # don't re-query per row
+        it = my_interactions.get(a.id)
+        item['is_read'] = bool(it and it.read_at is not None)
+        item['is_liked'] = bool(it and it.liked)
+        item['read_at'] = it.read_at.isoformat() + 'Z' if (it and it.read_at) else None
+        if not item['is_read']:
             unread_count += 1
         results.append(item)
 

@@ -78,47 +78,55 @@ def early_warning(ss_id):
     now = datetime.utcnow()
     ten_days = now - timedelta(days=10)
 
+    # Perf pass: all heavy loads below are column-only (ConceptMastery,
+    # CodeAttempt and FocusScore each carry JSON signal columns the risk
+    # math never reads) and the two LabSession queries are merged into one
+    # fetch split in Python.
+
     # Latest mastery per student
-    mastery_rows = ConceptMastery.query.filter(
+    mastery_avg = {}
+    _m_vals = {}
+    for r in db.session.query(ConceptMastery.student_id,
+                              ConceptMastery.mastery_score).filter(
         ConceptMastery.institution_id == g.institution_id,
         ConceptMastery.student_id.in_(enrolled),
-    ).all()
-    mastery_avg = {}
-    for r in mastery_rows:
-        mastery_avg.setdefault(r.student_id, []).append(r.mastery_score or 0)
-    mastery_avg = {k: sum(v) / len(v) for k, v in mastery_avg.items()}
+    ).all():
+        _m_vals.setdefault(r.student_id, []).append(r.mastery_score or 0)
+    mastery_avg = {k: sum(v) / len(v) for k, v in _m_vals.items()}
 
     # Last submission per student (my experiments)
-    my_exp_ids = [e.id for e in Experiment.query.filter_by(
-        institution_id=g.institution_id, instructor_id=g.user_id,
-        subject_id=ss.subject_id).all()]
+    my_exp_ids = [
+        e.id for e in Experiment.query.filter_by(
+            institution_id=g.institution_id, instructor_id=g.user_id,
+            subject_id=ss.subject_id).all()
+    ]
     last_submission = {}
     if my_exp_ids:
-        for a in CodeAttempt.query.filter(
-                CodeAttempt.experiment_id.in_(my_exp_ids),
-                CodeAttempt.student_id.in_(enrolled),
+        for a in db.session.query(CodeAttempt.student_id,
+                                  CodeAttempt.submitted_at).filter(
+            CodeAttempt.experiment_id.in_(my_exp_ids),
+            CodeAttempt.student_id.in_(enrolled),
         ).order_by(CodeAttempt.submitted_at.desc()).all():
             if a.student_id not in last_submission and a.submitted_at:
                 last_submission[a.student_id] = a.submitted_at
 
-    # Avg focus per student
-    ss_sessions = [s.id for s in LabSession.query.filter(
-        LabSession.section_subject_id == ss.id).all()]
+    # Ended sessions + live sessions of this section-subject — ONE fetch
+    ss_sessions_all = LabSession.query.filter(
+        LabSession.section_subject_id == ss.id).all()
+    ss_sessions = [s.id for s in ss_sessions_all]
     focus_avg = {}
     if ss_sessions:
-        f_rows = FocusScore.query.filter(FocusScore.session_id.in_(ss_sessions)).all()
         by = {}
-        for f in f_rows:
+        for f in db.session.query(FocusScore.student_id,
+                                  FocusScore.focus_score).filter(
+            FocusScore.session_id.in_(ss_sessions)).all():
             if f.focus_score is not None:
                 by.setdefault(f.student_id, []).append(f.focus_score)
         focus_avg = {k: sum(v) / len(v) for k, v in by.items()}
 
     # Ended sessions without a grade row → missing engagement
-    my_sessions = LabSession.query.filter(
-        LabSession.section_subject_id == ss.id,
-        LabSession.status == 'ended',
-        LabSession.experiment_id.isnot(None),
-    ).all()
+    my_sessions = [s for s in ss_sessions_all
+                   if s.status == 'ended' and s.experiment_id]
     graded_pairs = set()
     if my_sessions:
         for gr in Grade.query.filter(Grade.experiment_id.in_(
@@ -160,6 +168,20 @@ def early_warning(ss_id):
 
         level = 'high' if score >= 6 else 'medium' if score >= 3 else 'low'
         if level != 'low':
+            # Derive canonical unified risk score
+            from app.analytics.metrics import compute_student_atomic_metrics
+            from app.analytics.risk import compute_student_risk
+            try:
+                atomic = compute_student_atomic_metrics(sid, g.institution_id, now - timedelta(days=30), now)
+                canonical_r = compute_student_risk(atomic)
+                unified_score = canonical_r.get('risk_score')
+                unified_band = canonical_r.get('risk_band')
+                primary_reason = canonical_r.get('primary_reason')
+            except Exception:
+                unified_score = None
+                unified_band = None
+                primary_reason = None
+
             out.append({
                 'student_id': sid,
                 'full_name': u.full_name,
@@ -170,6 +192,9 @@ def early_warning(ss_id):
                 'mastery_avg': round(m, 1) if m is not None else None,
                 'days_since_submission': (now - last_sub).days if last_sub else None,
                 'avg_focus': round(f, 1) if f is not None else None,
+                'unified_risk_score': unified_score,
+                'unified_risk_band': unified_band,
+                'primary_reason': primary_reason,
             })
 
     out.sort(key=lambda x: x['risk_score'], reverse=True)

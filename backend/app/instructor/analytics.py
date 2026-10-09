@@ -251,11 +251,18 @@ def student_trajectory(student_id):
             'rank_position': ranking.rank_position,
         }
 
+    from app.analytics.ranking import get_student_all_ranks
+    from app.analytics.advanced import forecast_student_trajectory
+    all_ranks = get_student_all_ranks(student_id=student_id, institution_id=g.institution_id)
+    forecast = forecast_student_trajectory(student_id=student_id, institution_id=g.institution_id)
+
     return jsonify({
         'student': {'id': student.id, 'full_name': student.full_name, 'roll_number': student.roll_number},
         'grade_timeline': grade_timeline,
         'concepts': concepts,
         'ranking_components': components,
+        'multi_scope_ranks': all_ranks,
+        'forecast': forecast,
     }), 200
 
 
@@ -649,9 +656,10 @@ def ai_usage_analytics():
     if ss_filter:
         logs = logs.filter(AIUsageLog.section_subject_id == ss_filter)
 
-    logs = logs.all()
-
-    if not logs:
+    # Perf pass: `logs` only ever fed a truthiness gate below, but the old
+    # code materialized every AIUsageLog row in the window (full ORM objects
+    # with prompt/response text) into RAM to answer it. A LIMIT 1 probe does.
+    if logs.first() is None:
         return jsonify({'ai_usage': [], 'by_feature': []}), 200
 
     exp_count = len(my_exp_ids) or 1

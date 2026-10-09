@@ -61,52 +61,6 @@ def _require_my_session(session_id):
     return sess
 
 
-# ══════════════════════════════════════════════════════════════════════════════
-# Session — attach experiment (PATCH)
-# ══════════════════════════════════════════════════════════════════════════════
-
-@features_bp.route('/sessions/<session_id>', methods=['PATCH'])
-@require_role('instructor', 'institution_admin')
-def patch_session(session_id):
-    """Attach/swap the experiment on a (possibly admin-created) session,
-    or update scheduling fields — before going live."""
-    sess = _require_my_session(session_id)
-    if not sess:
-        return jsonify({'error': 'Session not found or not assigned to you.'}), 404
-
-    data = request.get_json() or {}
-
-    if sess.status == 'active':
-        return jsonify({'error': 'Cannot modify a live session.'}), 400
-
-    if 'experiment_id' in data:
-        if data['experiment_id']:
-            exp = Experiment.query.get(data['experiment_id'])
-            if not exp:
-                return jsonify({'error': 'Experiment not found.'}), 404
-            if exp.instructor_id != g.user_id:
-                return jsonify({'error': 'That experiment is not yours.'}), 403
-        sess.experiment_id = data['experiment_id'] or None
-
-    if 'scheduled_at' in data and data['scheduled_at']:
-        sess.scheduled_at = datetime.fromisoformat(data['scheduled_at'])
-    if 'duration_minutes' in data:
-        sess.duration_minutes = int(data['duration_minutes'])
-    if 'gate_score_threshold' in data:
-        sess.gate_score_threshold = int(data['gate_score_threshold'])
-    if 'focus_ml_enabled' in data:
-        sess.focus_ml_enabled = bool(data['focus_ml_enabled'])
-    if 'lockdown_enabled' in data:
-        sess.lockdown_enabled = bool(data['lockdown_enabled'])
-    if 'catchup_enabled' in data:
-        sess.catchup_enabled = bool(data['catchup_enabled'])
-    if 'catchup_deadline' in data:
-        sess.catchup_deadline = (
-            datetime.fromisoformat(data['catchup_deadline'])
-            if data['catchup_deadline'] else None)
-
-    db.session.commit()
-    return jsonify({'session': sess.to_dict()}), 200
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -722,9 +676,10 @@ def dashboard_attention():
     if my_ss_ids:
         section_ids = {ss.section_id for ss in SectionSubject.query.filter(
             SectionSubject.id.in_(my_ss_ids)).all()}
-        students = SectionStudent.query.filter(
-            SectionStudent.section_id.in_(section_ids)).all() if section_ids else []
-        student_ids = [st.student_id for st in students]
+        student_ids = [
+            r[0] for r in db.session.query(SectionStudent.student_id).filter(
+                SectionStudent.section_id.in_(section_ids)).distinct().all()
+        ] if section_ids else []
 
         at_risk_count = 0
         if student_ids:
@@ -779,12 +734,16 @@ def dashboard_attention():
         })
 
     # ── plagiarism: open flags ─────────────────────────────────────────────
-    open_flags = PlagiarismFlag.query.filter(
-        PlagiarismFlag.status == 'pending',
-        PlagiarismFlag.experiment_id.in_(my_exp_ids),
-    ).all() if my_exp_ids else []
+    # column-only + capped (perf pass: was full ORM rows, unbounded)
+    open_flags = [
+        row.similarity_pct for row in db.session.query(
+            PlagiarismFlag.similarity_pct).filter(
+            PlagiarismFlag.status == 'pending',
+            PlagiarismFlag.experiment_id.in_(my_exp_ids),
+        ).limit(200).all()
+    ] if my_exp_ids else []
     if open_flags:
-        max_sim = max(f.similarity_pct or 0 for f in open_flags)
+        max_sim = max(f or 0 for f in open_flags)
         sev = 1 if max_sim < 70 else (2 if max_sim < 90 else 3)
         attention.append({
             'signal': 'plagiarism',
@@ -795,14 +754,22 @@ def dashboard_attention():
         })
 
     # ── ungraded: final submissions with no Grade, age > 48h escalates ─────
+    # Column-only loads + caps (perf pass: the old code materialized every
+    # Grade and every final CodeAttempt — full ORM rows incl. code/text —
+    # to compute two counts). The 48h age signal needs only submitted_at.
     graded_pairs = {
-        (gr.student_id, gr.experiment_id)
-        for gr in Grade.query.filter(Grade.experiment_id.in_(my_exp_ids)).all()
+        (gr[0], gr[1]) for gr in db.session.query(
+            Grade.student_id, Grade.experiment_id).filter(
+            Grade.experiment_id.in_(my_exp_ids)).all()
     } if my_exp_ids else set()
-    finals = CodeAttempt.query.filter(
+    finals = db.session.query(
+        CodeAttempt.student_id, CodeAttempt.experiment_id,
+        CodeAttempt.submitted_at
+    ).filter(
         CodeAttempt.experiment_id.in_(my_exp_ids),
         CodeAttempt.is_final_submission == True,
-    ).all() if my_exp_ids else []
+    ).order_by(CodeAttempt.submitted_at.desc()).limit(1000).all() \
+        if my_exp_ids else []
     ungraded = [
         a for a in finals if (a.student_id, a.experiment_id) not in graded_pairs
     ]
@@ -820,12 +787,16 @@ def dashboard_attention():
         })
 
     # ── starting_soon: sessions within 30 min ──────────────────────────────
-    upcoming = LabSession.query.filter(
+    # The 30-minute window pushed into SQL (perf pass: was "every future
+    # scheduled session, sorted in Python"). Column-only.
+    soon = db.session.query(
+        LabSession.id, LabSession.title, LabSession.scheduled_at
+    ).filter(
         LabSession.section_subject_id.in_(my_ss_ids),
         LabSession.status == 'scheduled',
         LabSession.scheduled_at >= now,
+        LabSession.scheduled_at <= now + timedelta(minutes=30),
     ).order_by(LabSession.scheduled_at.asc()).all() if my_ss_ids else []
-    soon = [sess for sess in upcoming if (sess.scheduled_at - now) <= timedelta(minutes=30)]
     if soon:
         mins = int((soon[0].scheduled_at - now).total_seconds() / 60)
         sev = 1 if mins > 10 else (2 if mins > 3 else 3)
