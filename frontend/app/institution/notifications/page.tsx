@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { useAuthStore } from '@/store/auth-store';
 import {
@@ -44,10 +45,10 @@ import styles from './notifications.module.css';
 
 export default function NotificationsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user } = useAuthStore();
 
   // Loading & Action states
-  const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [resetting, setResetting] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
@@ -93,31 +94,26 @@ export default function NotificationsPage() {
     }
   }, [user]);
 
-  // Load notification settings from backend
-  const loadSettings = async () => {
-    try {
-      setLoading(true);
-      const data: NotificationSettingsResponse = await institutionService.getNotificationSettings();
-      if (data.channels) {
-        setChannels(data.channels);
-      }
-      if (data.categories) {
-        setCategories(data.categories);
-      }
-      if (data.recent_notifications) {
-        setRecentNotifs(data.recent_notifications);
-      }
-    } catch (err: any) {
-      console.error('Failed to load notification settings:', err);
-      showToast('Could not load notification preferences. Please try again.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
+  // Load notification settings from backend — cached; the editable
+  // channel/category/recipient state below mirrors it on first arrival so
+  // local edits aren't clobbered by background refetches.
+  const { data: settingsData, isPending: loading } = useQuery({
+    queryKey: ['institution', 'notification-settings'],
+    queryFn: () => institutionService.getNotificationSettings(),
+    staleTime: 30 * 1000,
+  });
+  const [syncedSettings, setSyncedSettings] = useState(false);
   useEffect(() => {
-    loadSettings();
-  }, []);
+    if (!settingsData || syncedSettings) return;
+    if (settingsData.channels) setChannels(settingsData.channels);
+    if (settingsData.categories) setCategories(settingsData.categories);
+    if (settingsData.recent_notifications) setRecentNotifs(settingsData.recent_notifications);
+    setSyncedSettings(true);
+  }, [settingsData, syncedSettings]);
+  const reloadSettings = () => {
+    setSyncedSettings(false);
+    return queryClient.invalidateQueries({ queryKey: ['institution', 'notification-settings'] });
+  };
 
   // Toggle category accordion
   const toggleAccordion = (catId: string) => {
@@ -185,6 +181,10 @@ export default function NotificationsPage() {
       });
       if (res.channels) setChannels(res.channels);
       if (res.categories) setCategories(res.categories);
+      // keep the cache honest so revisiting shows saved values
+      queryClient.setQueryData(['institution', 'notification-settings'],
+        (old: NotificationSettingsResponse | undefined) =>
+          old ? { ...old, channels: res.channels ?? old.channels, categories: res.categories ?? old.categories } : old);
       showToast('Notification preferences saved successfully!');
     } catch (err: any) {
       console.error('Save failed:', err);
@@ -204,6 +204,7 @@ export default function NotificationsPage() {
       const res = await institutionService.resetNotificationSettings();
       if (res.channels) setChannels(res.channels);
       if (res.categories) setCategories(res.categories);
+      reloadSettings();
       showToast('Notification preferences reset to default!');
     } catch (err: any) {
       console.error('Reset failed:', err);
@@ -225,7 +226,11 @@ export default function NotificationsPage() {
       showToast(res.message || `Test notification sent via ${testChannel.toUpperCase()}!`);
       // Refresh recent notifications if In-App test was triggered
       if (testChannel === 'in_app') {
-        const fresh = await institutionService.getNotificationSettings();
+        const fresh = await queryClient.fetchQuery({
+          queryKey: ['institution', 'notification-settings'],
+          queryFn: () => institutionService.getNotificationSettings(),
+          staleTime: 0,
+        });
         if (fresh.recent_notifications) {
           setRecentNotifs(fresh.recent_notifications);
         }

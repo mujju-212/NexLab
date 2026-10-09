@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery } from '@tanstack/react-query';
 import {
   ShieldCheck, AlertTriangle, Users, CheckCircle2, Lock,
   Download, Settings, TrendingUp, Sparkles, ChevronRight
@@ -18,7 +19,6 @@ type SecurityTab = 'overview' | 'access' | 'privacy' | 'compliance' | 'logs' | '
 export default function SecurityCompliancePage() {
   const router = useRouter();
   const [activeTab, setActiveTab] = useState<SecurityTab>('overview');
-  const [securityData, setSecurityData] = useState<AISecurityOverviewResponse | null>(null);
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -26,18 +26,12 @@ export default function SecurityCompliancePage() {
     setTimeout(() => setToast(null), 3000);
   };
 
-  const fetchSecurity = useCallback(async () => {
-    try {
-      const res = await institutionService.getAISecurity();
-      setSecurityData(res);
-    } catch (err: any) {
-      showToast(err?.response?.data?.error || 'Failed to load security overview');
-    }
-  }, []);
-
-  useEffect(() => {
-    fetchSecurity();
-  }, [fetchSecurity]);
+  // Cached overview — shared with the AI Usage page (same query key).
+  const { data: securityData } = useQuery({
+    queryKey: ['institution', 'ai-security'],
+    queryFn: () => institutionService.getAISecurity(),
+    staleTime: 30 * 1000,
+  });
 
   const handleExportLogs = async () => {
     try {

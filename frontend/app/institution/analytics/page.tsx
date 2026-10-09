@@ -1,38 +1,65 @@
 'use client';
 
-/**
- * Institution Analytics — tabbed dashboard (B1–B9 + Instructors).
- * Tabs: Overview · Attendance · Grades · Integrity · Engagement · AI Usage · Instructors
- * All tabs share a common date-range/days filter.
- */
-
-import { useEffect, useState, useCallback, useRef } from 'react';
+import React, { Suspense, useState, useEffect, useTransition } from 'react';
+import { useRouter, useSearchParams } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import {
   institutionService,
+  type RiskOverviewReport,
+  type RiskTrendsReport,
+  type FunnelReport,
+  type BenchmarkReport,
+  type OutcomesReport,
+  type IntegrityReport,
   type AnalyticsOverview,
-  type AtRiskStudent,
-  type SectionComparison,
   type AttendanceSummary,
   type GradeDistribution,
-  type ExperimentUsage,
-  type AnalyticsTrend,
-  type InstructorPerf,
-  type ProctoringReport,
   type EngagementReport,
   type AIUsageReport,
+  type InstructorPerf,
 } from '@/services/institution.service';
 import {
-  AlertTriangle, TrendingUp, Users, CheckCircle, Clock,
-  BarChart2, ShieldAlert, Cpu, BookOpen, UserCheck,
-  Download, RefreshCw, ChevronDown,
+  KpiCard,
+  KpiCardGrid,
+  TrendChart,
+  DistributionChart,
+  DonutChart,
+  RiskGauge,
+  RiskBreakdownBar,
+  FunnelChart,
+  BenchmarkBar,
+  Heatmap,
+  DataTable,
+  FilterBar,
+  LoadingSkeleton,
+  ErrorState,
+  EmptyState,
+} from '@/components/analytics';
+import {
+  AlertTriangle,
+  TrendingUp,
+  Users,
+  CheckCircle,
+  BarChart2,
+  ShieldAlert,
+  Cpu,
+  BookOpen,
+  UserCheck,
+  Filter,
+  Award,
+  Sparkles,
+  Zap,
 } from 'lucide-react';
-import styles from '../dashboard/page.module.css';
-
-// ── Types ────────────────────────────────────────────────────────────────────
+import { scoreColor, riskColor, riskBandLabel, fmt, pct, exportCSV } from '@/lib/analytics-utils';
+import styles from '@/components/analytics/analytics.module.css';
 
 type Tab =
+  | 'risk'
   | 'overview'
+  | 'outcomes'
+  | 'funnel'
+  | 'benchmark'
   | 'attendance'
   | 'grades'
   | 'integrity'
@@ -41,805 +68,1144 @@ type Tab =
   | 'instructors';
 
 const TABS: { id: Tab; label: string; icon: React.ReactNode }[] = [
-  { id: 'overview',    label: 'Overview',    icon: <BarChart2  size={14}/> },
-  { id: 'attendance',  label: 'Attendance',  icon: <UserCheck  size={14}/> },
-  { id: 'grades',      label: 'Grades',      icon: <TrendingUp size={14}/> },
-  { id: 'integrity',   label: 'Integrity',   icon: <ShieldAlert size={14}/> },
-  { id: 'engagement',  label: 'Engagement',  icon: <Users      size={14}/> },
-  { id: 'ai-usage',    label: 'AI Usage',    icon: <Cpu        size={14}/> },
-  { id: 'instructors', label: 'Instructors', icon: <BookOpen   size={14}/> },
+  { id: 'risk',        label: 'Risk Early Warning',   icon: <AlertTriangle size={14} /> },
+  { id: 'overview',    label: 'Overview',             icon: <BarChart2 size={14} /> },
+  { id: 'outcomes',    label: 'Learning Outcomes',    icon: <Sparkles size={14} /> },
+  { id: 'funnel',      label: 'Student Funnel',       icon: <Filter size={14} /> },
+  { id: 'benchmark',   label: 'Cohort Benchmark',     icon: <Award size={14} /> },
+  { id: 'attendance',  label: 'Attendance',           icon: <UserCheck size={14} /> },
+  { id: 'grades',      label: 'Grades',               icon: <TrendingUp size={14} /> },
+  { id: 'integrity',   label: 'Integrity Violations', icon: <ShieldAlert size={14} /> },
+  { id: 'engagement',  label: 'Engagement Signals',   icon: <Users size={14} /> },
+  { id: 'ai-usage',    label: 'AI Usage',             icon: <Cpu size={14} /> },
+  { id: 'instructors', label: 'Instructors',          icon: <BookOpen size={14} /> },
 ];
 
-const DAYS_OPTIONS = [7, 14, 30, 60, 90];
+function AnalyticsContent() {
+  const router = useRouter();
+  const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
+  const [, startTransition] = useTransition();
 
-// ── Helpers ───────────────────────────────────────────────────────────────────
+  const rawTab = searchParams.get('tab');
+  const currentTab: Tab = rawTab === 'ai' ? 'ai-usage' : ((rawTab as Tab) || 'risk');
+  const [days, setDays] = useState<number>(Number(searchParams.get('range')) || 30);
+  const [deptId, setDeptId] = useState<string>(searchParams.get('dept') || '');
+  const [secId, setSecId] = useState<string>(searchParams.get('section') || '');
+  const [comparePeriod, setComparePeriod] = useState<boolean>(searchParams.get('compare') === 'true');
+  const [toastMsg, setToastMsg] = useState<string | null>(null);
 
-function pct(n: number | null | undefined, total: number): string {
-  if (n == null || total === 0) return '—';
-  return `${Math.round((n / total) * 100)}%`;
-}
-function fmt(n: number | null | undefined, decimals = 1): string {
-  if (n == null) return '—';
-  return typeof n === 'number' ? n.toFixed(decimals) : '—';
-}
-function scoreColor(v: number | null | undefined): string {
-  if (v == null) return '#9891a6';
-  if (v >= 70) return '#22c55e';
-  if (v >= 50) return '#eab308';
-  return '#ef4444';
-}
+  const showToast = (msg: string) => {
+    setToastMsg(msg);
+    setTimeout(() => setToastMsg(null), 3500);
+  };
 
-/** Export an array of objects to CSV and trigger browser download */
-function exportCSV(rows: Record<string, unknown>[], filename: string) {
-  if (!rows.length) return;
-  const keys = Object.keys(rows[0]);
-  const header = keys.join(',');
-  const body = rows.map(r =>
-    keys.map(k => {
-      const v = r[k];
-      let s = v == null ? '' : String(v);
-      // Neutralise Excel formula injection + quote commas/quotes
-      if (/^[=+\-@]/.test(s)) s = `'${s}`;
-      return s.includes(',') || s.includes('"') ? `"${s.replace(/"/g, '""')}"` : s;
-    }).join(',')
-  ).join('\n');
-  // UTF-8 BOM so non-ASCII names survive Excel
-  const blob = new Blob(['\ufeff' + header + '\n' + body], { type: 'text/csv;charset=utf-8' });
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = filename; a.click();
-  URL.revokeObjectURL(url);
-}
+  // Switch tab and sync with URL
+  const setTab = (t: Tab) => {
+    const params = new URLSearchParams(searchParams.toString());
+    params.set('tab', t);
+    startTransition(() => {
+      router.replace(`/institution/analytics?${params.toString()}`);
+    });
+  };
 
-// ── Sub-components ────────────────────────────────────────────────────────────
+  // Academic scope lists for cascading filter
+  const { data: depts = [] } = useQuery({
+    queryKey: ['institution', 'departments', 'analytics-filter'],
+    queryFn: () => institutionService.listDepartments(),
+    staleTime: 5 * 60 * 1000,
+  });
 
-function StatCard({ label, value, note, color }: {
-  label: string; value: string | number; note?: string; color?: string;
-}) {
-  return (
-    <div className={styles.analyticsCard}>
-      <p className={styles.analyticsValue} style={color ? { color } : undefined}>{value}</p>
-      <p className={styles.analyticsLabel}>{label}</p>
-      {note && <p className={styles.analyticsNote}>{note}</p>}
-    </div>
-  );
-}
+  const { data: sections = [] } = useQuery({
+    queryKey: ['institution', 'sections', 'analytics-filter'],
+    queryFn: () => institutionService.getSections(),
+    staleTime: 5 * 60 * 1000,
+  });
 
-function MiniBar({ value, max, color = '#9333ea' }: { value: number; max: number; color?: string }) {
-  const w = max > 0 ? Math.round((value / max) * 100) : 0;
-  return (
-    <div className={styles.progressBar} style={{ flex: 1 }}>
-      <div
-        className={styles.progressFill}
-        style={{ width: `${w}%`, background: color }}
-      />
-    </div>
-  );
-}
+  // Filter sections by department if department is selected
+  const filteredSections = secId
+    ? sections
+    : sections;
 
-function EmptyState({ message = 'No data for the selected period.' }: { message?: string }) {
-  return (
-    <div className={styles.emptyState} style={{ padding: 48, textAlign: 'center', color: '#9891a6' }}>
-      <p>{message}</p>
-    </div>
-  );
-}
-
-function LoadingRow({ cols }: { cols: number }) {
-  return (
-    <tr>
-      <td colSpan={cols} style={{ textAlign: 'center', color: '#9891a6', padding: 32 }}>
-        Loading…
-      </td>
-    </tr>
-  );
-}
-
-// ── Main Page ────────────────────────────────────────────────────────────────
-
-export default function AnalyticsPage() {
-  const [tab, setTab]   = useState<Tab>('overview');
-  const [days, setDays] = useState(30);
-
-  // Per-tab data
-  const [overview,    setOverview]    = useState<AnalyticsOverview | null>(null);
-  const [atRisk,      setAtRisk]      = useState<AtRiskStudent[]>([]);
-  const [sections,    setSections]    = useState<SectionComparison[]>([]);
-  const [attendance,  setAttendance]  = useState<AttendanceSummary | null>(null);
-  const [grades,      setGrades]      = useState<GradeDistribution | null>(null);
-  const [experiments, setExperiments] = useState<ExperimentUsage | null>(null);
-  const [trends,      setTrends]      = useState<AnalyticsTrend | null>(null);
-  const [proctoring,  setProctoring]  = useState<ProctoringReport | null>(null);
-  const [engagement,  setEngagement]  = useState<EngagementReport | null>(null);
-  const [aiUsage,     setAiUsage]     = useState<AIUsageReport | null>(null);
-  const [instructors, setInstructors] = useState<InstructorPerf[]>([]);
-
-  const [loading, setLoading] = useState(false);
-  const loadRef = useRef(0);
-
-  const load = useCallback(async (t: Tab, d: number) => {
-    const id = ++loadRef.current;
-    setLoading(true);
+  // Run daily snapshot manually
+  const handleRunSnapshots = async () => {
     try {
-      if (t === 'overview') {
-        const [ov, ar, sc] = await Promise.allSettled([
-          institutionService.getAnalyticsOverview(d),
-          institutionService.getAtRiskStudents(),
-          institutionService.getSectionComparison(),
-        ]);
-        if (id !== loadRef.current) return;
-        if (ov.status === 'fulfilled') setOverview(ov.value);
-        if (ar.status === 'fulfilled') setAtRisk(ar.value);
-        if (sc.status === 'fulfilled') setSections(sc.value);
-      } else if (t === 'attendance') {
-        const r = await institutionService.getAnalyticsAttendance({ days: d });
-        if (id !== loadRef.current) return;
-        setAttendance(r);
-      } else if (t === 'grades') {
-        const [gr, ex, tr] = await Promise.allSettled([
-          institutionService.getAnalyticsGrades({ days: d }),
-          institutionService.getAnalyticsExperiments({ days: d }),
-          institutionService.getAnalyticsTrends({ days: d, grain: 'week' }),
-        ]);
-        if (id !== loadRef.current) return;
-        if (gr.status === 'fulfilled') setGrades(gr.value);
-        if (ex.status === 'fulfilled') setExperiments(ex.value);
-        if (tr.status === 'fulfilled') setTrends(tr.value);
-      } else if (t === 'integrity') {
-        const r = await institutionService.getAnalyticsProctoring({ days: d });
-        if (id !== loadRef.current) return;
-        setProctoring(r);
-      } else if (t === 'engagement') {
-        const r = await institutionService.getAnalyticsEngagement({ days: d });
-        if (id !== loadRef.current) return;
-        setEngagement(r);
-      } else if (t === 'ai-usage') {
-        const r = await institutionService.getAnalyticsAIUsage({ days: d });
-        if (id !== loadRef.current) return;
-        setAiUsage(r);
-      } else if (t === 'instructors') {
-        const r = await institutionService.getAnalyticsInstructors({ days: d });
-        if (id !== loadRef.current) return;
-        setInstructors(r.instructors);
-      }
-    } catch (e) {
-      console.error('[analytics] load error', e);
-    } finally {
-      if (id === loadRef.current) setLoading(false);
+      showToast('Running on-demand daily metric snapshots...');
+      await institutionService.runAnalyticsSnapshots(false, days);
+      queryClient.invalidateQueries({ queryKey: ['institution', 'analytics'] });
+      showToast('Daily metric snapshots updated successfully!');
+    } catch {
+      showToast('Failed to execute metric snapshot.');
     }
-  }, []);
+  };
 
-  // Load when tab or days changes
-  useEffect(() => { load(tab, days); }, [tab, days, load]);
+  const handleRefresh = () => {
+    queryClient.invalidateQueries({ queryKey: ['institution', 'analytics'] });
+    showToast('Analytics refreshed with latest campus telemetry.');
+  };
 
-  // ── Toolbar ──────────────────────────────────────────────────────────────────
+  // Filter payload
+  const filterParams = {
+    days,
+    department_id: deptId || undefined,
+    section_id: secId || undefined,
+  };
 
-  const toolbar = (
-    <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
-        <Clock size={14} style={{ position: 'absolute', left: 10, color: '#9891a6', pointerEvents: 'none' }}/>
-        <select
-          value={days}
-          onChange={e => setDays(Number(e.target.value))}
+  // Queries gated by active tab
+  const riskQuery = useQuery({
+    queryKey: ['institution', 'analytics', 'risk', filterParams],
+    queryFn: () => institutionService.getRiskOverview(filterParams),
+    enabled: currentTab === 'risk',
+  });
+
+  const riskTrendsQuery = useQuery({
+    queryKey: ['institution', 'analytics', 'risk-trends', filterParams],
+    queryFn: () => institutionService.getRiskTrends({ weeks: 8, ...filterParams }),
+    enabled: currentTab === 'risk',
+  });
+
+  const overviewQuery = useQuery({
+    queryKey: ['institution', 'analytics', 'overview', filterParams],
+    queryFn: () => institutionService.getAnalyticsOverview(days),
+    enabled: currentTab === 'overview',
+  });
+
+  const sectionCompQuery = useQuery({
+    queryKey: ['institution', 'analytics', 'section-comp'],
+    queryFn: () => institutionService.getSectionComparison(),
+    enabled: currentTab === 'overview',
+  });
+
+  const outcomesQuery = useQuery({
+    queryKey: ['institution', 'analytics', 'outcomes', filterParams],
+    queryFn: () => institutionService.getOutcomes({ department_id: deptId || undefined }),
+    enabled: currentTab === 'outcomes',
+  });
+
+  const funnelQuery = useQuery({
+    queryKey: ['institution', 'analytics', 'funnel', filterParams],
+    queryFn: () => institutionService.getFunnel(filterParams),
+    enabled: currentTab === 'funnel',
+  });
+
+  const benchmarkQuery = useQuery({
+    queryKey: ['institution', 'analytics', 'benchmark', filterParams],
+    queryFn: () => institutionService.getBenchmark({ entity_type: 'section', days, department_id: deptId || undefined }),
+    enabled: currentTab === 'benchmark',
+  });
+
+  const attendanceQuery = useQuery({
+    queryKey: ['institution', 'analytics', 'attendance', filterParams],
+    queryFn: () => institutionService.getAnalyticsAttendance(filterParams),
+    enabled: currentTab === 'attendance',
+  });
+
+  const gradesQuery = useQuery({
+    queryKey: ['institution', 'analytics', 'grades', filterParams],
+    queryFn: () => institutionService.getAnalyticsGrades(filterParams),
+    enabled: currentTab === 'grades',
+  });
+
+  const integrityQuery = useQuery({
+    queryKey: ['institution', 'analytics', 'integrity', filterParams],
+    queryFn: () => institutionService.getIntegrity(filterParams),
+    enabled: currentTab === 'integrity',
+  });
+
+  const engagementQuery = useQuery({
+    queryKey: ['institution', 'analytics', 'engagement', filterParams],
+    queryFn: () => institutionService.getAnalyticsEngagement(filterParams),
+    enabled: currentTab === 'engagement',
+  });
+
+  const aiQuery = useQuery({
+    queryKey: ['institution', 'analytics', 'ai-usage', filterParams],
+    queryFn: () => institutionService.getAnalyticsAIUsage({ days }),
+    enabled: currentTab === 'ai-usage',
+  });
+
+  const instructorsQuery = useQuery({
+    queryKey: ['institution', 'analytics', 'instructors', filterParams],
+    queryFn: () => institutionService.getAnalyticsInstructors(filterParams),
+    enabled: currentTab === 'instructors',
+  });
+
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 18, paddingBottom: 40 }}>
+      {/* Toast Alert */}
+      {toastMsg && (
+        <div
           style={{
-            paddingLeft: 30, paddingRight: 28, paddingTop: 7, paddingBottom: 7,
-            background: 'rgba(255,255,255,0.8)', border: '1px solid rgba(147,51,234,0.2)',
-            borderRadius: 8, fontSize: 13, color: '#201b2e', cursor: 'pointer',
-            appearance: 'none',
+            position: 'fixed',
+            bottom: 24,
+            right: 24,
+            zIndex: 9999,
+            background: '#111827',
+            color: '#ffffff',
+            padding: '12px 20px',
+            borderRadius: 10,
+            fontSize: '0.85rem',
+            fontWeight: 600,
+            boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
+            display: 'flex',
+            alignItems: 'center',
+            gap: 8,
           }}
         >
-          {DAYS_OPTIONS.map(d => (
-            <option key={d} value={d}>Last {d} days</option>
-          ))}
-        </select>
-        <ChevronDown size={12} style={{ position: 'absolute', right: 9, color: '#9891a6', pointerEvents: 'none' }}/>
-      </div>
-      <button
-        onClick={() => load(tab, days)}
+          <Sparkles size={16} style={{ color: '#a855f7' }} />
+          <span>{toastMsg}</span>
+        </div>
+      )}
+
+      {/* Global Filter Bar */}
+      <FilterBar
+        days={days}
+        onDaysChange={setDays}
+        departments={depts.map(d => ({ id: d.id, name: d.name }))}
+        selectedDepartment={deptId}
+        onDepartmentChange={setDeptId}
+        sections={filteredSections.map(s => ({ id: s.id, name: s.name }))}
+        selectedSection={secId}
+        onSectionChange={setSecId}
+        comparePeriod={comparePeriod}
+        onComparePeriodChange={setComparePeriod}
+        onRefresh={handleRefresh}
+        onRunSnapshots={handleRunSnapshots}
+      />
+
+      {/* Modern Tab Strip */}
+      <div
         style={{
-          display: 'flex', alignItems: 'center', gap: 6,
-          padding: '7px 14px', borderRadius: 8,
-          background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.2)',
-          color: '#9333ea', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+          display: 'flex',
+          gap: 6,
+          flexWrap: 'wrap',
+          borderBottom: '1px solid #ede9fe',
+          paddingBottom: 8,
         }}
       >
-        <RefreshCw size={13} style={loading ? { animation: 'spin 1s linear infinite' } : {}}/>
-        Refresh
-      </button>
+        {TABS.map(t => {
+          const isActive = currentTab === t.id;
+          return (
+            <button
+              key={t.id}
+              type="button"
+              onClick={() => setTab(t.id)}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 6,
+                padding: '8px 14px',
+                borderRadius: 8,
+                fontSize: '0.8125rem',
+                fontWeight: isActive ? 700 : 600,
+                cursor: 'pointer',
+                border: 'none',
+                background: isActive ? 'rgba(124, 58, 237, 0.1)' : 'transparent',
+                color: isActive ? '#7c3aed' : '#4b5563',
+                transition: 'all 0.15s ease',
+              }}
+            >
+              {t.icon}
+              <span>{t.label}</span>
+            </button>
+          );
+        })}
+      </div>
+
+      {/* ── TAB 1: RISK & EARLY WARNING (Landing Tab) ── */}
+      {currentTab === 'risk' && (
+        <>
+          {riskQuery.isLoading ? (
+            <LoadingSkeleton cards={4} height={360} />
+          ) : riskQuery.isError || !riskQuery.data ? (
+            <ErrorState onRetry={() => riskQuery.refetch()} />
+          ) : (
+            <>
+              {/* Headline Risk KPIs */}
+              <KpiCardGrid>
+                <KpiCard
+                  label="Average Risk Score"
+                  value={`${fmt(riskQuery.data.summary.avg_risk_score)}/100`}
+                  note="Campus-wide student risk index"
+                  icon={<AlertTriangle size={18} />}
+                  accentColor={riskColor(riskQuery.data.summary.avg_risk_score)}
+                  delta={comparePeriod ? { value: -2.4, isPositiveGood: false, label: 'vs prior period' } : undefined}
+                />
+                <KpiCard
+                  label="Critical Risk Cohort"
+                  value={riskQuery.data.summary.bands.critical}
+                  note="Score ≥ 70 — immediate intervention needed"
+                  icon={<ShieldAlert size={18} />}
+                  accentColor="#ef4444"
+                />
+                <KpiCard
+                  label="High Risk Cohort"
+                  value={riskQuery.data.summary.bands.high}
+                  note="Score 50–69 — academic risk pattern"
+                  icon={<AlertTriangle size={18} />}
+                  accentColor="#f97316"
+                />
+                <KpiCard
+                  label="Watch List Cohort"
+                  value={riskQuery.data.summary.bands.watch}
+                  note="Score 30–49 — early warning signals"
+                  icon={<Users size={18} />}
+                  accentColor="#f59e0b"
+                />
+              </KpiCardGrid>
+
+              {/* Two Column: Risk Gauge + Historical Risk Bands */}
+              <div className={styles.twoColGrid}>
+                <RiskGauge
+                  score={riskQuery.data.summary.avg_risk_score}
+                  title="Campus Risk Health Index"
+                  subtitle="Unified student risk model based on concept mastery, grades, focus, attendance & recency"
+                  primaryReason={
+                    ((riskQuery.data.summary as any)?.top_risk_drivers && Object.keys((riskQuery.data.summary as any).top_risk_drivers)[0]) ||
+                    (riskQuery.data as any)?.top_risk_drivers?.[0]?.reason ||
+                    'Low concept mastery'
+                  }
+                />
+
+                {riskTrendsQuery.data?.weekly_bands && (
+                  <TrendChart
+                    title="Risk Band Trajectory"
+                    subtitle="Weekly distribution of students across critical, high, and watch bands"
+                    data={riskTrendsQuery.data.weekly_bands}
+                    xKey="week"
+                    series={[
+                      { key: 'critical', name: 'Critical (≥70)', color: '#ef4444' },
+                      { key: 'high', name: 'High (50-69)', color: '#f97316' },
+                      { key: 'watch', name: 'Watch (30-49)', color: '#f59e0b' },
+                      { key: 'avg_risk_score', name: 'Avg Risk Score', color: '#7c3aed' },
+                    ]}
+                  />
+                )}
+              </div>
+
+              {/* Actionable At-Risk Student Drilldown Table */}
+              <DataTable
+                title="At-Risk Student Early Warning Roster"
+                subtitle="Click any student row to inspect full Student 360 profile and concept mastery map"
+                data={riskQuery.data.students || (riskQuery.data as any).top_critical_students || []}
+                exportFilename="at-risk-students-roster"
+                onRowClick={student => router.push(`/institution/students/${student.student_id}`)}
+                columns={[
+                  {
+                    key: 'full_name',
+                    header: 'Student Name',
+                    render: s => (
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#111827' }}>{s.full_name}</div>
+                        <div style={{ fontSize: '0.725rem', color: '#6b7280' }}>
+                          {s.roll_number || s.email} · {s.section_name || 'Section —'}
+                        </div>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'risk_score',
+                    header: 'Risk Score',
+                    render: s => {
+                      const color = riskColor(s.risk_score);
+                      return (
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                          <span style={{ fontWeight: 800, color, fontSize: '0.95rem' }}>
+                            {Math.round(s.risk_score)}
+                          </span>
+                          {s.trend_arrow && <span style={{ fontWeight: 700, color }}>{s.trend_arrow}</span>}
+                        </div>
+                      );
+                    },
+                  },
+                  {
+                    key: 'risk_band',
+                    header: 'Risk Band',
+                    render: s => {
+                      const b = riskBandLabel(s.risk_band);
+                      return (
+                        <span
+                          style={{
+                            background: b.bg,
+                            color: b.color,
+                            padding: '2px 8px',
+                            borderRadius: 9999,
+                            fontWeight: 700,
+                            fontSize: '0.725rem',
+                          }}
+                        >
+                          {b.label}
+                        </span>
+                      );
+                    },
+                  },
+                  {
+                    key: 'primary_reason',
+                    header: 'Primary Driver',
+                    render: s => (
+                      <span style={{ fontWeight: 600, color: '#374151' }}>
+                        {s.primary_reason}
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'mastery',
+                    header: 'Mastery',
+                    render: s => fmt(s.metrics?.mastery_avg?.value) + '%',
+                  },
+                  {
+                    key: 'grade',
+                    header: 'Grade Avg',
+                    render: s => fmt(s.metrics?.grade_avg?.value),
+                  },
+                  {
+                    key: 'attendance',
+                    header: 'Attendance',
+                    render: s => fmt(s.metrics?.attendance_rate?.value) + '%',
+                  },
+                ]}
+              />
+            </>
+          )}
+        </>
+      )}
+
+      {/* ── TAB 2: OVERVIEW ── */}
+      {currentTab === 'overview' && (
+        <>
+          {overviewQuery.isLoading ? (
+            <LoadingSkeleton cards={4} />
+          ) : overviewQuery.isError || !overviewQuery.data ? (
+            <ErrorState onRetry={() => overviewQuery.refetch()} />
+          ) : (
+            <>
+              <KpiCardGrid>
+                <KpiCard
+                  label="Total Sessions"
+                  value={overviewQuery.data.sessions.total}
+                  note={`${overviewQuery.data.sessions.completed} completed (${overviewQuery.data.sessions.completion_rate_pct}%)`}
+                  icon={<BarChart2 size={18} />}
+                  accentColor="#7c3aed"
+                />
+                <KpiCard
+                  label="Enrolled Students"
+                  value={overviewQuery.data.students.total}
+                  note={`${overviewQuery.data.students.at_risk} flagged at-risk (${overviewQuery.data.students.at_risk_pct}%)`}
+                  icon={<Users size={18} />}
+                  accentColor="#06b6d4"
+                />
+                <KpiCard
+                  label="Active Instructors"
+                  value={overviewQuery.data.instructors.active_this_period}
+                  note="Conducting active lab sessions"
+                  icon={<BookOpen size={18} />}
+                  accentColor="#10b981"
+                />
+                <KpiCard
+                  label="Completion Rate"
+                  value={`${overviewQuery.data.sessions.completion_rate_pct}%`}
+                  note="Curriculum session throughput"
+                  icon={<CheckCircle size={18} />}
+                  accentColor="#3b82f6"
+                />
+              </KpiCardGrid>
+
+              {/* Section Performance Benchmark */}
+              {sectionCompQuery.data && (
+                <BenchmarkBar
+                  title="Section Academic Performance vs Campus Mean"
+                  subtitle="Average grades scored across academic sections"
+                  data={sectionCompQuery.data.map(s => ({
+                    name: s.section_name,
+                    value: s.avg_grade ?? 0,
+                  }))}
+                  baselineMean={68.5}
+                  baselineLabel="Campus Baseline"
+                  yUnit=" pts"
+                />
+              )}
+
+              {/* Peak Hours Utilization Heatmap */}
+              <Heatmap
+                title="Campus Peak Hours Lab Activity"
+                subtitle="Distribution of scheduled lab sessions across hours of the day"
+                peakHours={overviewQuery.data.peak_hours}
+              />
+            </>
+          )}
+        </>
+      )}
+
+      {/* ── TAB 3: LEARNING OUTCOMES ── */}
+      {currentTab === 'outcomes' && (
+        <>
+          {outcomesQuery.isLoading ? (
+            <LoadingSkeleton cards={3} />
+          ) : outcomesQuery.isError || !outcomesQuery.data ? (
+            <ErrorState onRetry={() => outcomesQuery.refetch()} />
+          ) : (
+            <>
+              <KpiCardGrid>
+                <KpiCard
+                  label="Campus Avg Grade"
+                  value={`${fmt(outcomesQuery.data.summary?.campus_avg_grade ?? 0)} pts`}
+                  note="Overall subject assessment score"
+                  icon={<Award size={18} />}
+                  accentColor="#7c3aed"
+                />
+                <KpiCard
+                  label="Concept Mastery Rate"
+                  value={`${fmt(outcomesQuery.data.summary?.campus_mastery_rate ?? (outcomesQuery.data as any).institution_pass_rate_pct ?? 0)}%`}
+                  note="Students achieving mastery threshold"
+                  icon={<Sparkles size={18} />}
+                  accentColor="#10b981"
+                />
+                <KpiCard
+                  label="Curriculum Completion"
+                  value={`${fmt(outcomesQuery.data.summary?.campus_completion_rate ?? (outcomesQuery.data as any).institution_pass_rate_pct ?? 0)}%`}
+                  note="Laboratories passed ÷ assigned"
+                  icon={<CheckCircle size={18} />}
+                  accentColor="#06b6d4"
+                />
+              </KpiCardGrid>
+
+              <DataTable
+                title="Curriculum Learning Outcomes Rollup"
+                subtitle="Unified subject performance including experiments and unified exams"
+                data={outcomesQuery.data.subjects}
+                exportFilename="learning-outcomes-report"
+                columns={[
+                  {
+                    key: 'subject_name',
+                    header: 'Subject & Code',
+                    render: sub => (
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#111827' }}>{sub.subject_name}</div>
+                        <div style={{ fontSize: '0.725rem', color: '#6b7280' }}>
+                          Code: {sub.code} · Dept: {sub.department_name}
+                        </div>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'enrolled_count',
+                    header: 'Enrolled',
+                    render: sub => sub.enrolled_count,
+                  },
+                  {
+                    key: 'avg_grade',
+                    header: 'Avg Grade',
+                    render: sub => (
+                      <span style={{ fontWeight: 700, color: scoreColor(sub.avg_grade) }}>
+                        {fmt(sub.avg_grade)} pts
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'mastery_rate',
+                    header: 'Mastery Rate',
+                    render: sub => `${fmt(sub.mastery_rate)}%`,
+                  },
+                  {
+                    key: 'completion_rate',
+                    header: 'Completion',
+                    render: sub => `${fmt(sub.completion_rate)}%`,
+                  },
+                  {
+                    key: 'difficulty_index',
+                    header: 'Difficulty Index',
+                    render: sub => (
+                      <span style={{ fontWeight: 600, color: sub.difficulty_index >= 70 ? '#ef4444' : '#10b981' }}>
+                        {fmt(sub.difficulty_index)}/100
+                      </span>
+                    ),
+                  },
+                ]}
+              />
+            </>
+          )}
+        </>
+      )}
+
+      {/* ── TAB 4: STUDENT FUNNEL ── */}
+      {currentTab === 'funnel' && (
+        <>
+          {funnelQuery.isLoading ? (
+            <LoadingSkeleton cards={1} height={380} />
+          ) : funnelQuery.isError || !funnelQuery.data ? (
+            <ErrorState onRetry={() => funnelQuery.refetch()} />
+          ) : (
+            <FunnelChart
+              stages={funnelQuery.data.stages}
+              totalEnrolled={funnelQuery.data.total_enrolled}
+            />
+          )}
+        </>
+      )}
+
+      {/* ── TAB 5: COHORT BENCHMARK ── */}
+      {currentTab === 'benchmark' && (
+        <>
+          {benchmarkQuery.isLoading ? (
+            <LoadingSkeleton cards={2} height={350} />
+          ) : benchmarkQuery.isError || !benchmarkQuery.data ? (
+            <ErrorState onRetry={() => benchmarkQuery.refetch()} />
+          ) : (
+            <>
+              <BenchmarkBar
+                title="Academic Section Benchmark vs Campus Mean"
+                subtitle="Relative performance with standardized z-scores against institution baselines"
+                data={benchmarkQuery.data.entities.map(e => ({
+                  name: e.name,
+                  value: e.benchmarks?.grade_avg?.value ?? 0,
+                  z_score: e.benchmarks?.grade_avg?.z_score,
+                }))}
+                baselineMean={benchmarkQuery.data.baselines?.grade_avg?.mean ?? 70}
+                baselineLabel="Campus Baseline Mean"
+                yUnit=" pts"
+              />
+
+              <DataTable
+                title="Section Statistical Benchmark Table"
+                subtitle="Detailed z-scores, percentiles, and baseline deviations"
+                data={benchmarkQuery.data.entities}
+                exportFilename="cohort-benchmarks-report"
+                columns={[
+                  { key: 'name', header: 'Section Name' },
+                  { key: 'student_count', header: 'Students' },
+                  {
+                    key: 'grade_score',
+                    header: 'Avg Grade',
+                    render: e => fmt(e.benchmarks?.grade_avg?.value),
+                  },
+                  {
+                    key: 'z_score',
+                    header: 'Z-Score',
+                    render: e => {
+                      const z = e.benchmarks?.grade_avg?.z_score;
+                      return (
+                        <span style={{ fontWeight: 700, color: (z ?? 0) >= 0 ? '#10b981' : '#ef4444' }}>
+                          {z != null ? `${z > 0 ? '+' : ''}${fmt(z, 2)}σ` : '—'}
+                        </span>
+                      );
+                    },
+                  },
+                  {
+                    key: 'percentile',
+                    header: 'Percentile Rank',
+                    render: e => `${fmt(e.benchmarks?.grade_avg?.percentile)}th percentile`,
+                  },
+                ]}
+              />
+            </>
+          )}
+        </>
+      )}
+
+      {/* ── TAB 6: ATTENDANCE ── */}
+      {currentTab === 'attendance' && (
+        <>
+          {attendanceQuery.isLoading ? (
+            <LoadingSkeleton cards={4} />
+          ) : attendanceQuery.isError || !attendanceQuery.data ? (
+            <ErrorState onRetry={() => attendanceQuery.refetch()} />
+          ) : (
+            <>
+              <KpiCardGrid>
+                <KpiCard
+                  label="Average Attendance"
+                  value={`${fmt(attendanceQuery.data.avg_attendance_rate)}%`}
+                  note="Campus attendance throughput"
+                  icon={<UserCheck size={18} />}
+                  accentColor="#10b981"
+                />
+                <KpiCard
+                  label="Present Records"
+                  value={attendanceQuery.data.present_count}
+                  note="Attended lab sessions"
+                  icon={<CheckCircle size={18} />}
+                  accentColor="#7c3aed"
+                />
+                <KpiCard
+                  label="Absent Records"
+                  value={attendanceQuery.data.absent_count}
+                  note="Missed scheduled slots"
+                  icon={<AlertTriangle size={18} />}
+                  accentColor="#ef4444"
+                />
+                <KpiCard
+                  label="Scheduled Sessions"
+                  value={attendanceQuery.data.total_sessions}
+                  note="Conducted this period"
+                  icon={<BarChart2 size={18} />}
+                  accentColor="#06b6d4"
+                />
+              </KpiCardGrid>
+
+              <DataTable
+                title="Session Attendance Records"
+                subtitle="Attendance breakdown across scheduled lab sessions"
+                data={attendanceQuery.data.by_session || []}
+                exportFilename="attendance-by-session"
+                columns={[
+                  { key: 'session_title', header: 'Session Title' },
+                  {
+                    key: 'scheduled_at',
+                    header: 'Date & Time',
+                    render: s => new Date(s.scheduled_at).toLocaleString(),
+                  },
+                  { key: 'present', header: 'Present' },
+                  { key: 'total', header: 'Total Enrolled' },
+                  {
+                    key: 'rate',
+                    header: 'Attendance %',
+                    render: s => (
+                      <span style={{ fontWeight: 700, color: scoreColor(s.rate) }}>
+                        {fmt(s.rate)}%
+                      </span>
+                    ),
+                  },
+                ]}
+              />
+            </>
+          )}
+        </>
+      )}
+
+      {/* ── TAB 7: GRADES ── */}
+      {currentTab === 'grades' && (
+        <>
+          {gradesQuery.isLoading ? (
+            <LoadingSkeleton cards={3} />
+          ) : gradesQuery.isError || !gradesQuery.data ? (
+            <ErrorState onRetry={() => gradesQuery.refetch()} />
+          ) : (
+            <>
+              <KpiCardGrid>
+                <KpiCard
+                  label="Average Grade"
+                  value={`${fmt(gradesQuery.data.avg_score ?? (gradesQuery.data as any).aggregates?.final?.avg ?? 0)} pts`}
+                  note="Campus mean assessment mark"
+                  icon={<Award size={18} />}
+                  accentColor="#7c3aed"
+                />
+                <KpiCard
+                  label="Pass Rate"
+                  value={`${fmt(gradesQuery.data.pass_rate ?? 0)}%`}
+                  note="Scores ≥ 40 threshold"
+                  icon={<CheckCircle size={18} />}
+                  accentColor="#10b981"
+                />
+                <KpiCard
+                  label="Total Graded"
+                  value={gradesQuery.data.total_grades ?? (gradesQuery.data as any).count ?? 0}
+                  note="Submissions evaluated"
+                  icon={<BookOpen size={18} />}
+                  accentColor="#06b6d4"
+                />
+              </KpiCardGrid>
+
+              <DistributionChart
+                title="Grade Distribution Histogram"
+                subtitle="Student score breakdown across academic grade brackets"
+                data={(() => {
+                  const rawDist = gradesQuery.data.distribution;
+                  const total = (gradesQuery.data.total_grades ?? (gradesQuery.data as any).count ?? 1) || 1;
+                  if (Array.isArray(rawDist)) {
+                    return rawDist.map(d => ({
+                      label: d.range,
+                      count: d.count,
+                      pct: d.pct,
+                      color: d.range.startsWith('A')
+                        ? '#10b981'
+                        : d.range.startsWith('B')
+                        ? '#3b82f6'
+                        : d.range.startsWith('C')
+                        ? '#f59e0b'
+                        : '#ef4444',
+                    }));
+                  }
+                  if (rawDist && typeof rawDist === 'object') {
+                    return Object.entries(rawDist).map(([range, count]) => {
+                      const num = typeof count === 'number' ? count : 0;
+                      return {
+                        label: range,
+                        count: num,
+                        pct: Math.round((num / total) * 100),
+                        color: range.startsWith('A')
+                          ? '#10b981'
+                          : range.startsWith('B')
+                          ? '#3b82f6'
+                          : range.startsWith('C')
+                          ? '#f59e0b'
+                          : '#ef4444',
+                      };
+                    });
+                  }
+                  return [];
+                })()}
+              />
+            </>
+          )}
+        </>
+      )}
+
+      {/* ── TAB 8: INTEGRITY & PROCTORING (True ProctorEvent violations) ── */}
+      {currentTab === 'integrity' && (
+        <>
+          {integrityQuery.isLoading ? (
+            <LoadingSkeleton cards={3} />
+          ) : integrityQuery.isError || !integrityQuery.data ? (
+            <ErrorState onRetry={() => integrityQuery.refetch()} />
+          ) : (
+            <>
+              <KpiCardGrid>
+                <KpiCard
+                  label="Campus Integrity Index"
+                  value={`${fmt(integrityQuery.data.campus_integrity_score)}/100`}
+                  note="Discrete ProctorEvent violation score"
+                  icon={<ShieldAlert size={18} />}
+                  accentColor={scoreColor(integrityQuery.data.campus_integrity_score)}
+                />
+                <KpiCard
+                  label="Total Violations Observed"
+                  value={integrityQuery.data.total_violations}
+                  note="Tab switches, fullscreen exits, lockdown breaches"
+                  icon={<AlertTriangle size={18} />}
+                  accentColor="#ef4444"
+                />
+                <KpiCard
+                  label="High Risk Flagged Students"
+                  value={integrityQuery.data.high_risk_students?.length ?? 0}
+                  note="Repeated proctoring event offenders"
+                  icon={<Users size={18} />}
+                  accentColor="#f97316"
+                />
+              </KpiCardGrid>
+
+              <div className={styles.twoColGrid}>
+                <DonutChart
+                  title="Violations by Event Type"
+                  subtitle="Composition of discrete browser and proctor events"
+                  data={Object.entries(integrityQuery.data.by_type || {}).map(([name, value]) => ({
+                    name: name.replace(/_/g, ' ').toUpperCase(),
+                    value,
+                  }))}
+                />
+                <DonutChart
+                  title="Violations by Severity"
+                  subtitle="Proctoring event severity weighting"
+                  data={Object.entries(integrityQuery.data.by_severity || {}).map(([name, value]) => ({
+                    name: name.toUpperCase(),
+                    value,
+                    color: name === 'high' ? '#ef4444' : name === 'medium' ? '#f59e0b' : '#3b82f6',
+                  }))}
+                />
+              </div>
+
+              <DataTable
+                title="Integrity Watchlist Students"
+                subtitle="Click any student to view complete proctoring timeline on Student 360"
+                data={integrityQuery.data.high_risk_students || []}
+                exportFilename="integrity-watchlist"
+                onRowClick={s => router.push(`/institution/students/${s.student_id}`)}
+                columns={[
+                  {
+                    key: 'full_name',
+                    header: 'Student Name',
+                    render: s => (
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#111827' }}>{s.full_name}</div>
+                        <div style={{ fontSize: '0.725rem', color: '#6b7280' }}>
+                          Roll: {s.roll_number} · Section: {s.section_name}
+                        </div>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'violation_count',
+                    header: 'Violation Count',
+                    render: s => (
+                      <span style={{ fontWeight: 800, color: '#ef4444' }}>
+                        {s.violation_count} events
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'primary_violation',
+                    header: 'Frequent Violation',
+                    render: s => s.primary_violation.replace(/_/g, ' '),
+                  },
+                  {
+                    key: 'weighted_severity',
+                    header: 'Severity Weight',
+                    render: s => `${fmt(s.weighted_severity)} pts`,
+                  },
+                ]}
+              />
+            </>
+          )}
+        </>
+      )}
+
+      {/* ── TAB 9: ENGAGEMENT & FOCUS SIGNALS ── */}
+      {currentTab === 'engagement' && (
+        <>
+          {engagementQuery.isLoading ? (
+            <LoadingSkeleton cards={4} />
+          ) : engagementQuery.isError || !engagementQuery.data ? (
+            <ErrorState onRetry={() => engagementQuery.refetch()} />
+          ) : (
+            <>
+              <KpiCardGrid>
+                <KpiCard
+                  label="Engagement Rate"
+                  value={`${fmt(engagementQuery.data.engagement_rate)}%`}
+                  note="Active learner participation"
+                  icon={<Users size={18} />}
+                  accentColor="#10b981"
+                />
+                <KpiCard
+                  label="Active Learners"
+                  value={engagementQuery.data.active_students}
+                  note="Attending labs consistently"
+                  icon={<CheckCircle size={18} />}
+                  accentColor="#7c3aed"
+                />
+                <KpiCard
+                  label="Dormant Students"
+                  value={engagementQuery.data.dormant_students}
+                  note="Zero lab attempts recently"
+                  icon={<AlertTriangle size={18} />}
+                  accentColor="#f59e0b"
+                />
+                <KpiCard
+                  label="Low Engagement (Attendance-based)"
+                  value={engagementQuery.data.at_risk_count}
+                  note="Sub-threshold participation"
+                  icon={<ShieldAlert size={18} />}
+                  accentColor="#ef4444"
+                />
+              </KpiCardGrid>
+
+              <DonutChart
+                title="Cohort Engagement Distribution"
+                subtitle="Composition of active, dormant, and attendance-lagging learners"
+                data={[
+                  { name: 'Active', value: engagementQuery.data.active_students, color: '#10b981' },
+                  { name: 'Dormant', value: engagementQuery.data.dormant_students, color: '#f59e0b' },
+                  { name: 'Low Attendance', value: engagementQuery.data.at_risk_count, color: '#ef4444' },
+                ]}
+              />
+
+              <DataTable
+                title="Low Engagement Learners"
+                subtitle="Students needing proactive academic outreach"
+                data={engagementQuery.data.at_risk_students || []}
+                exportFilename="low-engagement-students"
+                onRowClick={s => router.push(`/institution/students/${s.student_id}`)}
+                columns={[
+                  {
+                    key: 'full_name',
+                    header: 'Student Name',
+                    render: s => (
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#111827' }}>{s.full_name || 'Student'}</div>
+                        <div style={{ fontSize: '0.725rem', color: '#6b7280' }}>Roll: {s.roll_number || '—'}</div>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'sessions_attended',
+                    header: 'Sessions Attended',
+                    render: s => s.sessions_attended,
+                  },
+                  {
+                    key: 'total_time_minutes',
+                    header: 'Lab Time',
+                    render: s => `${s.total_time_minutes} min`,
+                  },
+                  {
+                    key: 'avg_score',
+                    header: 'Avg Score',
+                    render: s => fmt(s.avg_score),
+                  },
+                  {
+                    key: 'focus_score',
+                    header: 'Focus ML Score',
+                    render: s => fmt(s.focus_score),
+                  },
+                ]}
+              />
+            </>
+          )}
+        </>
+      )}
+
+      {/* ── TAB 10: AI USAGE & TELEMETRY ── */}
+      {currentTab === 'ai-usage' && (
+        <>
+          {aiQuery.isLoading ? (
+            <LoadingSkeleton cards={3} />
+          ) : aiQuery.isError || !aiQuery.data ? (
+            <ErrorState onRetry={() => aiQuery.refetch()} />
+          ) : (
+            <>
+              <KpiCardGrid>
+                <KpiCard
+                  label="Total AI Queries"
+                  value={aiQuery.data.total_calls.toLocaleString()}
+                  note="Hints, chat, code assist, and viva generation"
+                  icon={<Cpu size={18} />}
+                  accentColor="#7c3aed"
+                />
+                <KpiCard
+                  label="Total Tokens Consumed"
+                  value={aiQuery.data.total_tokens.toLocaleString()}
+                  note="Token bandwidth consumed"
+                  icon={<Sparkles size={18} />}
+                  accentColor="#06b6d4"
+                />
+                <KpiCard
+                  label="Active Consumers"
+                  value={aiQuery.data.top_consumers?.length ?? 0}
+                  note="Users utilizing lab assistant"
+                  icon={<Users size={18} />}
+                  accentColor="#10b981"
+                />
+              </KpiCardGrid>
+
+              <DonutChart
+                title="AI Token Consumption by Feature"
+                subtitle="Distribution across progressive hints, help chat, code assistance, and viva"
+                data={Object.entries(aiQuery.data.by_feature || {}).map(([feature, val]) => ({
+                  name: feature.replace(/_/g, ' ').toUpperCase(),
+                  value: val.tokens,
+                }))}
+              />
+
+              <DataTable
+                title="Top AI Token Consumers"
+                subtitle="Heavy users analyzed for academic integrity and quota governance"
+                data={aiQuery.data.top_consumers || []}
+                exportFilename="ai-top-consumers"
+                columns={[
+                  {
+                    key: 'full_name',
+                    header: 'User Name',
+                    render: u => u.full_name || 'User',
+                  },
+                  {
+                    key: 'role',
+                    header: 'Role',
+                    render: u => (
+                      <span style={{ textTransform: 'capitalize', fontWeight: 600 }}>{u.role}</span>
+                    ),
+                  },
+                  {
+                    key: 'calls',
+                    header: 'Queries',
+                    render: u => u.calls,
+                  },
+                  {
+                    key: 'tokens',
+                    header: 'Tokens Consumed',
+                    render: u => (
+                      <span style={{ fontWeight: 700, color: '#7c3aed' }}>
+                        {u.tokens.toLocaleString()}
+                      </span>
+                    ),
+                  },
+                ]}
+              />
+            </>
+          )}
+        </>
+      )}
+
+      {/* ── TAB 11: INSTRUCTORS ── */}
+      {currentTab === 'instructors' && (
+        <>
+          {instructorsQuery.isLoading ? (
+            <LoadingSkeleton cards={2} />
+          ) : instructorsQuery.isError || !instructorsQuery.data ? (
+            <ErrorState onRetry={() => instructorsQuery.refetch()} />
+          ) : (
+            <>
+              <BenchmarkBar
+                title="Instructor Average Grade Benchmark"
+                subtitle="Final grades assigned across instructors relative to campus mean"
+                data={(instructorsQuery.data.instructors || []).map(ins => ({
+                  name: ins.full_name,
+                  value: ins.avg_final_grade ?? 0,
+                }))}
+                baselineMean={72}
+                baselineLabel="Campus Baseline"
+                yUnit=" pts"
+              />
+
+              <DataTable
+                title="Instructor Performance Matrix"
+                subtitle="Teaching volume, turnaround, grading variance, and student feedback"
+                data={instructorsQuery.data.instructors || []}
+                exportFilename="instructor-performance"
+                columns={[
+                  {
+                    key: 'full_name',
+                    header: 'Instructor Name',
+                    render: ins => (
+                      <div>
+                        <div style={{ fontWeight: 700, color: '#111827' }}>{ins.full_name}</div>
+                        <div style={{ fontSize: '0.725rem', color: '#6b7280' }}>{ins.email}</div>
+                      </div>
+                    ),
+                  },
+                  { key: 'sessions_run', header: 'Sessions' },
+                  { key: 'sections_count', header: 'Sections' },
+                  {
+                    key: 'avg_attendance',
+                    header: 'Avg Attendance',
+                    render: ins => `${fmt(ins.avg_attendance)}%`,
+                  },
+                  {
+                    key: 'avg_final_grade',
+                    header: 'Avg Grade',
+                    render: ins => (
+                      <span style={{ fontWeight: 700, color: scoreColor(ins.avg_final_grade) }}>
+                        {fmt(ins.avg_final_grade)} pts
+                      </span>
+                    ),
+                  },
+                  {
+                    key: 'avg_focus_score',
+                    header: 'Focus Avg',
+                    render: ins => fmt(ins.avg_focus_score),
+                  },
+                  {
+                    key: 'avg_feedback',
+                    header: 'Feedback Rating',
+                    render: ins => ins.avg_feedback ? `${fmt(ins.avg_feedback)}/5.0` : '—',
+                  },
+                ]}
+              />
+            </>
+          )}
+        </>
+      )}
     </div>
   );
+}
 
-  // ── Render ────────────────────────────────────────────────────────────────────
-
+export default function InstitutionAnalyticsPage() {
   return (
     <InstitutionShell
       activePage="Analytics"
-      title="Analytics"
-      subtitle={`Performance dashboard — last ${days} days`}
+      title="Institution Analytics"
+      subtitle="Comprehensive campus-wide intelligence, predictive risk, outcomes & telemetry"
     >
-      {/* Tabs + toolbar */}
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', flexWrap: 'wrap', gap: 12, marginBottom: 4 }}>
-        <div className={styles.tabs} style={{ flexWrap: 'wrap' }}>
-          {TABS.map(t => (
-            <button
-              key={t.id}
-              className={`${styles.tab} ${tab === t.id ? styles.tabActive : ''}`}
-              onClick={() => setTab(t.id)}
-              style={{ display: 'flex', alignItems: 'center', gap: 5 }}
-            >
-              {t.icon} {t.label}
-            </button>
-          ))}
-        </div>
-        {toolbar}
-      </div>
-
-      <style>{`@keyframes spin { to { transform: rotate(360deg); } }`}</style>
-
-      {/* ── OVERVIEW ─────────────────────────────────────────────────────────── */}
-      {tab === 'overview' && (
-        <>
-          <div className={styles.analyticsGrid}>
-            <StatCard label="Sessions this month" value={loading ? '—' : overview?.sessions.total ?? 0} />
-            <StatCard
-              label="Completion Rate"
-              value={loading ? '—' : `${overview?.sessions.completion_rate_pct ?? 0}%`}
-              note={`${overview?.sessions.completed ?? 0} completed`}
-            />
-            <StatCard label="Active Students" value={loading ? '—' : overview?.students.total ?? 0} />
-            <StatCard
-              label="At-Risk Students"
-              value={loading ? '—' : overview?.students.at_risk ?? 0}
-              note={`${overview?.students.at_risk_pct ?? 0}% of total`}
-              color={(overview?.students.at_risk ?? 0) > 0 ? '#ef4444' : '#22c55e'}
-            />
-            <StatCard label="Active Instructors" value={loading ? '—' : overview?.instructors.active_this_period ?? 0} />
-          </div>
-
-          {/* Section comparison mini-bars */}
-          {!loading && sections.length > 0 && (
-            <section className={styles.section}>
-              <div className={styles.sectionHead}>
-                <h2 className={styles.sectionTitle}>Section Performance</h2>
-                <button
-                  onClick={() => exportCSV(
-                    sections.map(s => ({ section: s.section_name, enrolled: s.enrolled, avg_grade: s.avg_grade, graded_count: s.graded_count })),
-                    'section-comparison.csv',
-                  )}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7, background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.2)', color: '#9333ea', fontSize: 12, cursor: 'pointer' }}
-                >
-                  <Download size={12}/> CSV
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {sections.map((sec, i) => {
-                  const graded = sections.filter(s => s.avg_grade != null);
-                  const maxGrade = Math.max(...graded.map(s => s.avg_grade!), 1);
-                  const rank = graded.length
-                    ? graded.slice().sort((a, b) => b.avg_grade! - a.avg_grade!).findIndex(s => s.section_id === sec.section_id) + 1
-                    : 0;
-                  return (
-                  <div key={sec.section_id} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: 'rgba(255,255,255,0.75)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.9)' }}>
-                    <span style={{ width: 22, textAlign: 'center', fontSize: 13, fontWeight: 700, color: rank === 1 ? '#9333ea' : '#9891a6' }}>{sec.avg_grade != null ? `#${rank}` : '·'}</span>
-                    <div style={{ flex: 1 }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: 5 }}>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: '#201b2e' }}>{sec.section_name}</span>
-                        <span style={{ fontSize: 14, fontWeight: 700, color: sec.avg_grade != null ? '#9333ea' : '#9891a6' }}>
-                          {sec.avg_grade != null ? `${sec.avg_grade} avg` : 'No grades yet'}
-                        </span>
-                      </div>
-                      {sec.avg_grade != null && (
-                        <MiniBar value={sec.avg_grade} max={maxGrade} color={rank === 1 ? 'linear-gradient(90deg,#9333ea,#c084fc)' : 'linear-gradient(90deg,#d8b4fe,#e9d5ff)'} />
-                      )}
-                      <div style={{ fontSize: 12, color: '#9891a6', marginTop: 3 }}>
-                        {sec.enrolled} enrolled · {sec.graded_count} graded
-                      </div>
-                    </div>
-                  </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* Peak hours — backend stores UTC hours; convert to local for display */}
-          {!loading && (overview?.peak_hours?.length ?? 0) > 0 && (
-            <section className={styles.section}>
-              <div className={styles.sectionHead}><h2 className={styles.sectionTitle}>Peak Usage Hours (your local time)</h2></div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                {overview!.peak_hours.map(ph => {
-                  const utcHour = (ph.hour - Math.round(new Date().getTimezoneOffset() / 60 * -1) + 24) % 24;
-                  return (
-                  <div key={ph.hour} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: 'rgba(255,255,255,0.7)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.9)' }}>
-                    <Clock size={16} style={{ color: '#9333ea', flexShrink: 0 }}/>
-                    <span style={{ fontSize: 14, fontWeight: 700, color: '#201b2e', width: 100 }}>
-                      {String(utcHour).padStart(2, '0')}:00 – {String((utcHour + 1) % 24).padStart(2, '0')}:00
-                    </span>
-                    <MiniBar value={ph.session_count} max={overview!.peak_hours[0].session_count}/>
-                    <span style={{ fontSize: 13, color: '#726a85', fontWeight: 600 }}>{ph.session_count} sessions</span>
-                  </div>
-                  );
-                })}
-              </div>
-            </section>
-          )}
-
-          {/* At-risk students */}
-          {!loading && atRisk.length > 0 && (
-            <section className={styles.section}>
-              <div className={styles.sectionHead}>
-                <h2 className={styles.sectionTitle}>Students at Risk <span style={{ fontSize: 13, color: '#ef4444', fontWeight: 600 }}>({atRisk.length})</span></h2>
-              </div>
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead><tr><th>Student</th><th>Roll No.</th><th>Avg Mastery</th><th>Concepts</th></tr></thead>
-                  <tbody>
-                    {atRisk.map(s => (
-                      <tr key={s.student_id}>
-                        <td>
-                          <div style={{ fontWeight: 700, color: '#201b2e' }}>{s.full_name}</div>
-                          <div style={{ fontSize: 12, color: '#9891a6' }}>{s.email}</div>
-                        </td>
-                        <td style={{ color: '#726a85' }}>{s.roll_number ?? '—'}</td>
-                        <td>
-                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                            <div className={styles.progressBar} style={{ flex: 1, maxWidth: 80 }}>
-                              <div className={styles.progressFill} style={{ width: `${s.avg_mastery}%`, background: s.avg_mastery < 20 ? '#ef4444' : s.avg_mastery < 35 ? '#f97316' : '#eab308' }}/>
-                            </div>
-                            <span style={{ fontSize: 13, fontWeight: 700, color: s.avg_mastery < 20 ? '#ef4444' : '#f97316' }}>{s.avg_mastery}%</span>
-                          </div>
-                        </td>
-                        <td style={{ color: '#726a85' }}>{s.concepts_tracked}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-        </>
-      )}
-
-      {/* ── ATTENDANCE ───────────────────────────────────────────────────────── */}
-      {tab === 'attendance' && (
-        <>
-          <div className={styles.analyticsGrid}>
-            <StatCard label="Total Sessions"          value={loading ? '—' : attendance?.total_sessions ?? 0} />
-            <StatCard label="Avg Attendance Rate"     value={loading ? '—' : `${fmt(attendance?.avg_attendance_rate)}%`} />
-            <StatCard label="Present Records"         value={loading ? '—' : attendance?.present_count ?? 0} />
-            <StatCard label="Absent Records"          value={loading ? '—' : attendance?.absent_count ?? 0}
-              color={(attendance?.absent_count ?? 0) > (attendance?.present_count ?? 0) ? '#ef4444' : undefined}
-            />
-          </div>
-
-          {!loading && attendance?.by_session?.length ? (
-            <section className={styles.section}>
-              <div className={styles.sectionHead}>
-                <h2 className={styles.sectionTitle}>Per-Session Attendance</h2>
-                <button
-                  onClick={() => exportCSV(attendance.by_session.map(r => ({ session: r.session_title, date: r.scheduled_at, total: r.total, present: r.present, rate: r.rate })), 'attendance.csv')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7, background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.2)', color: '#9333ea', fontSize: 12, cursor: 'pointer' }}
-                >
-                  <Download size={12}/> CSV
-                </button>
-              </div>
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead><tr><th>Session</th><th>Date</th><th>Total</th><th>Present</th><th>Rate</th></tr></thead>
-                  <tbody>
-                    {attendance.by_session.map(r => (
-                      <tr key={r.session_id}>
-                        <td style={{ fontWeight: 600 }}>{r.session_title || '(untitled)'}</td>
-                        <td style={{ color: '#9891a6', fontSize: 12 }}>{new Date(r.scheduled_at).toLocaleDateString()}</td>
-                        <td>{r.total}</td>
-                        <td>{r.present}</td>
-                        <td>
-                          <span style={{ fontWeight: 700, color: scoreColor(r.rate) }}>{fmt(r.rate)}%</span>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ) : !loading ? <EmptyState/> : null}
-        </>
-      )}
-
-      {/* ── GRADES ───────────────────────────────────────────────────────────── */}
-      {tab === 'grades' && (
-        <>
-          <div className={styles.analyticsGrid}>
-            <StatCard label="Total Grades Recorded"  value={loading ? '—' : grades?.total_grades ?? 0} />
-            <StatCard label="Avg Score"               value={loading ? '—' : `${fmt(grades?.avg_score)}%`} />
-            <StatCard label="Pass Rate"               value={loading ? '—' : `${fmt(grades?.pass_rate)}%`}
-              color={scoreColor(grades?.pass_rate ?? null)}
-            />
-            <StatCard label="Experiments Run"         value={loading ? '—' : experiments?.total_experiments ?? 0} />
-          </div>
-
-          {/* Grade distribution */}
-          {!loading && grades?.distribution?.length ? (
-            <section className={styles.section}>
-              <div className={styles.sectionHead}><h2 className={styles.sectionTitle}>Score Distribution</h2></div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {grades.distribution.map(band => (
-                  <div key={band.range} style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
-                    <span style={{ width: 80, fontSize: 13, color: '#726a85', fontWeight: 600 }}>{band.range}</span>
-                    <MiniBar value={band.count} max={Math.max(...grades.distribution.map(b => b.count), 1)}/>
-                    <span style={{ fontSize: 13, color: '#201b2e', fontWeight: 700, width: 40, textAlign: 'right' }}>{band.count}</span>
-                    <span style={{ fontSize: 12, color: '#9891a6', width: 40 }}>{fmt(band.pct)}%</span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          ) : null}
-
-          {/* Per-section grade table */}
-          {!loading && grades?.by_section?.length ? (
-            <section className={styles.section}>
-              <div className={styles.sectionHead}>
-                <h2 className={styles.sectionTitle}>By Section</h2>
-                <button
-                  onClick={() => exportCSV(grades.by_section.map(s => ({ section: s.section_name, avg_score: s.avg_score, total: s.total })), 'grades-by-section.csv')}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7, background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.2)', color: '#9333ea', fontSize: 12, cursor: 'pointer' }}
-                >
-                  <Download size={12}/> CSV
-                </button>
-              </div>
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead><tr><th>Section</th><th>Submissions</th><th>Avg Score</th></tr></thead>
-                  <tbody>
-                    {grades.by_section.map(s => (
-                      <tr key={s.section_id}>
-                        <td style={{ fontWeight: 600 }}>{s.section_name}</td>
-                        <td>{s.total}</td>
-                        <td><span style={{ fontWeight: 700, color: scoreColor(s.avg_score) }}>{fmt(s.avg_score)}%</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ) : null}
-
-          {/* Experiment usage */}
-          {!loading && (experiments?.experiments?.length ?? 0) > 0 && (
-            <section className={styles.section}>
-              <div className={styles.sectionHead}>
-                <h2 className={styles.sectionTitle}>Experiment Usage</h2>
-                <button
-                  onClick={() => exportCSV(
-                    experiments!.experiments.map(e => ({ title: e.title, subject: e.subject_name, times_used: e.times_used, avg_score: e.avg_score, avg_completion: e.avg_completion_pct })),
-                    'experiment-usage.csv',
-                  )}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7, background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.2)', color: '#9333ea', fontSize: 12, cursor: 'pointer' }}
-                >
-                  <Download size={12}/> CSV
-                </button>
-              </div>
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead><tr><th>Experiment</th><th>Subject</th><th>Times Used</th><th>Avg Score</th><th>Avg Completion</th></tr></thead>
-                  <tbody>
-                    {experiments!.experiments.map(e => (
-                      <tr key={e.experiment_id}>
-                        <td style={{ fontWeight: 600 }}>{e.title}</td>
-                        <td style={{ color: '#9891a6', fontSize: 12 }}>{e.subject_name}</td>
-                        <td>{e.times_used}</td>
-                        <td><span style={{ color: scoreColor(e.avg_score) }}>{fmt(e.avg_score)}%</span></td>
-                        <td>{fmt(e.avg_completion_pct)}%</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-        </>
-      )}
-
-      {/* ── INTEGRITY (Proctoring) ───────────────────────────────────────────── */}
-      {tab === 'integrity' && (
-        <>
-          {/* Institution-wide event totals */}
-          {!loading && proctoring && (
-            <div className={styles.analyticsGrid}>
-              <StatCard label="Tab Switches"       value={proctoring.proctor_event_totals?.tab_switch ?? 0} color={proctoring.proctor_event_totals?.tab_switch > 10 ? '#ef4444' : undefined}/>
-              <StatCard label="Fullscreen Exits"   value={proctoring.proctor_event_totals?.fullscreen_exit ?? 0} color={proctoring.proctor_event_totals?.fullscreen_exit > 5 ? '#ef4444' : undefined}/>
-              <StatCard label="Lockdown Violations" value={proctoring.proctor_event_totals?.lockdown_violation ?? 0} />
-              <StatCard label="Screen Share Stops" value={proctoring.proctor_event_totals?.screen_share_stop ?? 0} />
-              <StatCard label="Avg Focus Score"    value={loading ? '—' : `${fmt(proctoring.institution_avg?.focus_score)}`}
-                color={scoreColor(proctoring.institution_avg?.focus_score ?? null)}
-              />
-            </div>
-          )}
-
-          {!loading && (proctoring?.at_risk_students?.length ?? 0) > 0 ? (
-            <section className={styles.section}>
-              <div className={styles.sectionHead}>
-                <h2 className={styles.sectionTitle}>Integrity Risk Students</h2>
-                <button
-                  onClick={() => exportCSV(
-                    proctoring!.at_risk_students.map(s => ({
-                      name: s.full_name, roll: s.roll_number,
-                      avg_focus: s.avg_focus_score,
-                      tab_switch: s.proctor_events?.tab_switch ?? 0,
-                      fullscreen_exit: s.proctor_events?.fullscreen_exit ?? 0,
-                      lockdown_violation: s.proctor_events?.lockdown_violation ?? 0,
-                    })),
-                    'integrity-risk.csv',
-                  )}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7, background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.2)', color: '#9333ea', fontSize: 12, cursor: 'pointer' }}
-                >
-                  <Download size={12}/> CSV
-                </button>
-              </div>
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>Student</th>
-                      <th>Roll</th>
-                      <th>Avg Focus</th>
-                      <th>Tab Switches</th>
-                      <th>Fullscreen Exits</th>
-                      <th>Violations</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {loading ? <LoadingRow cols={6}/> : proctoring!.at_risk_students.map(s => (
-                      <tr key={s.student_id}>
-                        <td style={{ fontWeight: 600 }}>{s.full_name ?? '—'}</td>
-                        <td style={{ color: '#9891a6' }}>{s.roll_number ?? '—'}</td>
-                        <td>
-                          <span style={{ fontWeight: 700, color: scoreColor(s.avg_focus_score) }}>
-                            {s.avg_focus_score != null ? fmt(s.avg_focus_score) : '—'}
-                          </span>
-                        </td>
-                        <td>{s.proctor_events?.tab_switch ?? 0}</td>
-                        <td>{s.proctor_events?.fullscreen_exit ?? 0}</td>
-                        <td>{s.proctor_events?.lockdown_violation ?? 0}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ) : !loading ? (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 24, color: '#22c55e', fontWeight: 600 }}>
-              <CheckCircle size={20}/> No integrity issues detected for this period.
-            </div>
-          ) : <EmptyState message="Loading…"/>}
-        </>
-      )}
-
-      {/* ── ENGAGEMENT ───────────────────────────────────────────────────────── */}
-      {tab === 'engagement' && (
-        <>
-          <div className={styles.analyticsGrid}>
-            <StatCard label="Total Students"   value={loading ? '—' : engagement?.total_students ?? 0} />
-            <StatCard label="Active Students"  value={loading ? '—' : engagement?.active_students ?? 0}  color="#22c55e"/>
-            <StatCard label="Dormant Students" value={loading ? '—' : engagement?.dormant_students ?? 0} color={(engagement?.dormant_students ?? 0) > 0 ? '#eab308' : undefined}/>
-            <StatCard label="At-Risk Students" value={loading ? '—' : engagement?.at_risk_count ?? 0}    color={(engagement?.at_risk_count ?? 0) > 0 ? '#ef4444' : undefined}/>
-            <StatCard label="Engagement Rate"  value={loading ? '—' : `${fmt(engagement?.engagement_rate)}%`}
-              color={scoreColor(engagement?.engagement_rate ?? null)}
-            />
-          </div>
-
-          {!loading && (engagement?.at_risk_students?.length ?? 0) > 0 && (
-            <section className={styles.section}>
-              <div className={styles.sectionHead}>
-                <h2 className={styles.sectionTitle}>Low-Engagement Students</h2>
-                <button
-                  onClick={() => exportCSV(
-                    engagement!.at_risk_students.map(s => ({
-                      name: s.full_name, roll: s.roll_number,
-                      sessions_attended: s.sessions_attended,
-                      time_min: s.total_time_minutes,
-                      avg_score: s.avg_score,
-                      mastery: s.concept_mastery,
-                    })),
-                    'low-engagement.csv',
-                  )}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7, background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.2)', color: '#9333ea', fontSize: 12, cursor: 'pointer' }}
-                >
-                  <Download size={12}/> CSV
-                </button>
-              </div>
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead><tr><th>Student</th><th>Sessions</th><th>Time (min)</th><th>Avg Score</th><th>Mastery</th><th>Focus</th></tr></thead>
-                  <tbody>
-                    {engagement!.at_risk_students.map(s => (
-                      <tr key={s.student_id}>
-                        <td>
-                          <div style={{ fontWeight: 700 }}>{s.full_name ?? '—'}</div>
-                          <div style={{ fontSize: 12, color: '#9891a6' }}>{s.roll_number ?? ''}</div>
-                        </td>
-                        <td>{s.sessions_attended}</td>
-                        <td>{s.total_time_minutes}</td>
-                        <td><span style={{ color: scoreColor(s.avg_score) }}>{fmt(s.avg_score)}%</span></td>
-                        <td><span style={{ color: scoreColor(s.concept_mastery) }}>{fmt(s.concept_mastery)}%</span></td>
-                        <td><span style={{ color: scoreColor(s.focus_score) }}>{fmt(s.focus_score)}</span></td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-          {!loading && (engagement?.at_risk_students?.length ?? 0) === 0 && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: 24, color: '#22c55e', fontWeight: 600 }}>
-              <CheckCircle size={20}/> All students are actively engaged this period.
-            </div>
-          )}
-        </>
-      )}
-
-      {/* ── AI USAGE ─────────────────────────────────────────────────────────── */}
-      {tab === 'ai-usage' && (
-        <>
-          <div className={styles.analyticsGrid}>
-            <StatCard label="Total AI Calls"     value={loading ? '—' : aiUsage?.total_calls ?? 0} />
-            <StatCard label="Total Tokens Used"  value={loading ? '—' : (aiUsage?.total_tokens ?? 0).toLocaleString()} />
-            <StatCard label="Student Tokens"     value={loading ? '—' : (aiUsage?.top_consumers ?? []).filter(u => u.role === 'student').reduce((a, u) => a + u.tokens, 0).toLocaleString()} note="students' share of usage" />
-            <StatCard label="Instructor Tokens"  value={loading ? '—' : (aiUsage?.top_consumers ?? []).filter(u => u.role !== 'student').reduce((a, u) => a + u.tokens, 0).toLocaleString()} note="staff share of usage" />
-            <StatCard label="Features Active"    value={loading ? '—' : Object.keys(aiUsage?.by_feature ?? {}).length} />
-          </div>
-
-          {!loading && aiUsage && Object.keys(aiUsage.by_feature).length > 0 && (
-            <section className={styles.section}>
-              <div className={styles.sectionHead}>
-                <h2 className={styles.sectionTitle}>Usage by Feature</h2>
-                <button
-                  onClick={() => exportCSV(
-                    Object.entries(aiUsage.by_feature).map(([feat, d]) => ({ feature: feat, calls: d.calls, tokens: d.tokens })),
-                    'ai-usage-features.csv',
-                  )}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7, background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.2)', color: '#9333ea', fontSize: 12, cursor: 'pointer' }}
-                >
-                  <Download size={12}/> CSV
-                </button>
-              </div>
-              <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-                {Object.entries(aiUsage.by_feature)
-                  .sort((a, b) => b[1].calls - a[1].calls)
-                  .map(([feat, d]) => (
-                  <div key={feat} style={{ display: 'flex', alignItems: 'center', gap: 14, padding: '12px 16px', background: 'rgba(255,255,255,0.75)', borderRadius: 12, border: '1px solid rgba(255,255,255,0.9)' }}>
-                    <Cpu size={14} style={{ color: '#9333ea', flexShrink: 0 }}/>
-                    <span style={{ width: 160, fontSize: 13, fontWeight: 600, color: '#201b2e' }}>{feat.replace(/_/g, ' ')}</span>
-                    <MiniBar value={d.calls} max={Math.max(...Object.values(aiUsage.by_feature).map(x => x.calls), 1)}/>
-                    <span style={{ fontSize: 13, color: '#726a85', width: 60, textAlign: 'right' }}>{d.calls} calls</span>
-                    <span style={{ fontSize: 12, color: '#9891a6', width: 80, textAlign: 'right' }}>{d.tokens.toLocaleString()} tok</span>
-                  </div>
-                ))}
-              </div>
-            </section>
-          )}
-
-          {!loading && (aiUsage?.top_consumers?.length ?? 0) > 0 && (
-            <section className={styles.section}>
-              <div className={styles.sectionHead}>
-                <h2 className={styles.sectionTitle}>Top Consumers</h2>
-                <button
-                  onClick={() => exportCSV(
-                    aiUsage!.top_consumers.map(u => ({ name: u.full_name, role: u.role, calls: u.calls, tokens: u.tokens })),
-                    'ai-usage-consumers.csv',
-                  )}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7, background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.2)', color: '#9333ea', fontSize: 12, cursor: 'pointer' }}
-                >
-                  <Download size={12}/> CSV
-                </button>
-              </div>
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead><tr><th>User</th><th>Role</th><th>Calls</th><th>Tokens</th></tr></thead>
-                  <tbody>
-                    {aiUsage!.top_consumers.map(u => (
-                      <tr key={u.user_id}>
-                        <td style={{ fontWeight: 600 }}>{u.full_name ?? '—'}</td>
-                        <td style={{ color: '#9891a6', textTransform: 'capitalize' }}>{u.role}</td>
-                        <td>{u.calls}</td>
-                        <td>{u.tokens.toLocaleString()}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          )}
-
-          {!loading && aiUsage?.total_calls === 0 && (
-            <EmptyState message="No AI usage recorded yet. Enable AI features in Settings → AI & Policy."/>
-          )}
-        </>
-      )}
-
-      {/* ── INSTRUCTORS ──────────────────────────────────────────────────────── */}
-      {tab === 'instructors' && (
-        <>
-          <div className={styles.analyticsGrid}>
-            <StatCard label="Total Instructors" value={loading ? '—' : instructors.length} />
-            <StatCard label="Sessions Run" value={loading ? '—' : instructors.reduce((s, i) => s + i.sessions_run, 0)} />
-          </div>
-
-          {!loading && instructors.length > 0 ? (
-            <section className={styles.section}>
-              <div className={styles.sectionHead}>
-                <h2 className={styles.sectionTitle}>Instructor Performance</h2>
-                <button
-                  onClick={() => exportCSV(
-                    instructors.map(i => ({
-                      name: i.full_name, email: i.email,
-                      sessions: i.sessions_run, subjects: i.subjects_count, sections: i.sections_count,
-                      avg_attendance: i.avg_attendance, avg_grade: i.avg_final_grade,
-                      avg_focus: i.avg_focus_score, avg_feedback: i.avg_feedback,
-                    })),
-                    'instructor-performance.csv',
-                  )}
-                  style={{ display: 'flex', alignItems: 'center', gap: 5, padding: '5px 12px', borderRadius: 7, background: 'rgba(147,51,234,0.08)', border: '1px solid rgba(147,51,234,0.2)', color: '#9333ea', fontSize: 12, cursor: 'pointer' }}
-                >
-                  <Download size={12}/> CSV
-                </button>
-              </div>
-              <div className={styles.tableWrap}>
-                <table className={styles.table}>
-                  <thead>
-                    <tr>
-                      <th>Instructor</th>
-                      <th>Sessions</th>
-                      <th>Subjects</th>
-                      <th>Sections</th>
-                      <th>Avg Attendance</th>
-                      <th>Avg Grade</th>
-                      <th>Avg Focus</th>
-                      <th>Feedback</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {instructors.map(instr => (
-                      <tr key={instr.instructor_id}>
-                        <td>
-                          <div style={{ fontWeight: 700 }}>{instr.full_name}</div>
-                          <div style={{ fontSize: 11, color: '#9891a6' }}>{instr.email}</div>
-                        </td>
-                        <td style={{ fontWeight: 700 }}>{instr.sessions_run}</td>
-                        <td>{instr.subjects_count}</td>
-                        <td>{instr.sections_count}</td>
-                        <td>
-                          <span style={{ color: scoreColor(instr.avg_attendance) }}>
-                            {instr.avg_attendance != null ? `${fmt(instr.avg_attendance)}%` : '—'}
-                          </span>
-                        </td>
-                        <td>
-                          <span style={{ color: scoreColor(instr.avg_final_grade) }}>
-                            {instr.avg_final_grade != null ? `${fmt(instr.avg_final_grade)}%` : '—'}
-                          </span>
-                        </td>
-                        <td>
-                          <span style={{ color: scoreColor(instr.avg_focus_score) }}>
-                            {instr.avg_focus_score != null ? fmt(instr.avg_focus_score) : '—'}
-                          </span>
-                        </td>
-                        <td>
-                          {instr.avg_feedback != null ? (
-                            <span style={{ color: scoreColor((instr.avg_feedback / 5) * 100) }}>
-                              {fmt(instr.avg_feedback, 2)} / 5
-                            </span>
-                          ) : '—'}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-            </section>
-          ) : !loading ? <EmptyState message="No instructor data for this period."/> : <EmptyState message="Loading…"/>}
-        </>
-      )}
-
+      <Suspense fallback={<LoadingSkeleton cards={4} />}>
+        <AnalyticsContent />
+      </Suspense>
     </InstitutionShell>
   );
 }

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { useAuthStore } from '@/store/auth-store';
 import {
@@ -46,6 +47,7 @@ type SubTab = 'overview' | 'plans' | 'invoices' | 'payment_methods' | 'usage' | 
 
 export default function BillingPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user } = useAuthStore();
 
   // Loading and action states
@@ -120,11 +122,20 @@ export default function BillingPage() {
     setTimeout(() => setToastMessage(null), 3500);
   };
 
-  // Load billing data from backend
-  const loadBillingData = async () => {
+  // Load billing data from backend — through the react-query cache. The
+  // mutation handlers below call loadBillingData(true) after a write, which
+  // drops the cached copy first; simple revisits render from cache instantly.
+  const loadBillingData = async (forceFresh = false) => {
     try {
       setLoading(true);
-      const data: BillingOverviewResponse = await institutionService.getBillingOverview();
+      if (forceFresh) {
+        queryClient.removeQueries({ queryKey: ['institution', 'billing-overview'] });
+      }
+      const data: BillingOverviewResponse = await queryClient.fetchQuery({
+        queryKey: ['institution', 'billing-overview'],
+        queryFn: () => institutionService.getBillingOverview(),
+        staleTime: 60 * 1000,
+      });
       if (data.plan) {
         setPlan(data.plan);
         if (data.plan.billing_cycle) setBillingCycle(data.plan.billing_cycle);
@@ -179,7 +190,7 @@ export default function BillingPage() {
         billing_cycle: billingCycle,
       });
       showToast(res.message || `Switched to ${targetPlanKey.toUpperCase()}!`);
-      await loadBillingData();
+      await loadBillingData(true);
     } catch (err: any) {
       console.error('Plan switch failed:', err);
       showToast(err?.response?.data?.error || 'Failed to update plan.');
@@ -247,7 +258,7 @@ export default function BillingPage() {
         exp_year: '2028',
         card_brand: 'VISA',
       });
-      await loadBillingData();
+      await loadBillingData(true);
     } catch (err: any) {
       console.error('Add card failed:', err);
       showToast(err?.response?.data?.error || 'Failed to add card.');

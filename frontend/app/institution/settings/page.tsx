@@ -2,6 +2,7 @@
 
 import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { useAuthStore } from '@/store/auth-store';
 import { apiClient } from '@/services/api-client';
@@ -66,6 +67,7 @@ const fmtNum = (n: number | null | undefined) => (n == null ? '—' : n.toLocale
 
 export default function SettingsPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user, setUser } = useAuthStore();
   const [tab, setTab] = useState<Tab>('plan');
   const [toast, setToast] = useState<string | null>(null);
@@ -120,41 +122,66 @@ export default function SettingsPage() {
   const [aiPolicy, setAiPolicy] = useState<AIPolicy | null>(null);
   const [aiUsage, setAiUsage] = useState<AIUsageSummary | null>(null);
   const [aiSaving, setAiSaving] = useState(false);
-  const [aiLoading, setAiLoading] = useState(false);
   const [aiDirty, setAiDirty] = useState(false);
 
   const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
-  // Load current profile (incl. phone), notification prefs, and plan usage on mount.
+  // Load current profile (incl. phone), notification prefs, and plan usage on
+  // mount — cached: revisiting settings renders instantly. AI-tab data comes
+  // from the gated queries below.
+  const { data: meData } = useQuery({
+    queryKey: ['auth', 'me'],
+    queryFn: async () => {
+      const { data } = await apiClient.get('/auth/me');
+      return (data.user ?? {}) as Record<string, string>;
+    },
+    staleTime: 5 * 60 * 1000,
+  });
   useEffect(() => {
-    (async () => {
-      try {
-        const { data } = await apiClient.get('/auth/me');
-        const u = data.user ?? {};
-        setProfileForm({ full_name: u.full_name ?? '', email: u.email ?? '', phone: u.phone ?? '' });
-      } catch { /* fall back to store values already set */ }
-      try { setNotifs(await institutionService.getNotificationPrefs()); } catch { /* keep defaults */ }
-      try { setPlan(await institutionService.getPlanUsage()); } catch { /* plan card hides live values */ }
-    })();
-  }, []);
+    const u = meData as { full_name?: string; email?: string; phone?: string } | undefined;
+    if (u) setProfileForm({ full_name: u.full_name ?? '', email: u.email ?? '', phone: u.phone ?? '' });
+  }, [meData]);
 
-  // Load AI policy + usage when the AI tab is active
+  const { data: notifPrefsData } = useQuery({
+    queryKey: ['institution', 'notification-prefs'],
+    queryFn: () => institutionService.getNotificationPrefs(),
+    staleTime: 60 * 1000,
+  });
   useEffect(() => {
-    if (tab !== 'ai') return;
-    let cancelled = false;
-    setAiLoading(true);
-    (async () => {
-      try {
-        const [policy, usage] = await Promise.all([
-          institutionService.getAiPolicy(),
-          institutionService.getAiUsageSummary({ days: 30, limit: 5 }),
-        ]);
-        if (!cancelled) { setAiPolicy(policy); setAiUsage(usage); }
-      } catch (e) { console.error('[ai] load error', e); }
-      if (!cancelled) setAiLoading(false);
-    })();
-    return () => { cancelled = true; };
-  }, [tab]);
+    if (notifPrefsData) setNotifs(notifPrefsData);
+  }, [notifPrefsData]);
+
+  const { data: planData } = useQuery({
+    queryKey: ['institution', 'plan-usage'],
+    queryFn: () => institutionService.getPlanUsage(),
+    staleTime: 60 * 1000,
+  });
+  useEffect(() => {
+    if (planData) setPlan(planData);
+  }, [planData]);
+
+  // AI policy + usage — gated on the AI tab; cached like everything else
+  const aiTabActive = tab === 'ai';
+  const { data: aiPolicyData, isFetching: aiFetching } = useQuery({
+    queryKey: ['institution', 'ai-policy'],
+    queryFn: () => institutionService.getAiPolicy(),
+    enabled: aiTabActive,
+    staleTime: 30 * 1000,
+  });
+  const { data: aiUsageData } = useQuery({
+    queryKey: ['institution', 'ai-usage-summary'],
+    queryFn: () => institutionService.getAiUsageSummary({ days: 30, limit: 5 }),
+    enabled: aiTabActive,
+    staleTime: 30 * 1000,
+  });
+  useEffect(() => {
+    if (aiPolicyData) setAiPolicy(aiPolicyData);
+  }, [aiPolicyData]);
+  useEffect(() => {
+    if (aiUsageData) setAiUsage(aiUsageData);
+  }, [aiUsageData]);
+  // Mirror aiLoading for the existing render code without a new state flag
+  const aiLoading = aiTabActive && aiFetching;
 
   const handleAiToggle = (field: string, value: boolean) => {
     if (!aiPolicy) return;
@@ -195,6 +222,7 @@ export default function SettingsPage() {
         hard_stop: aiPolicy.hard_stop,
       });
       setAiPolicy(updated);
+      queryClient.setQueryData(['institution', 'ai-policy'], updated);
       setAiDirty(false);
       toast3('AI governance policy saved!');
     } catch (e: any) {
@@ -202,13 +230,8 @@ export default function SettingsPage() {
     } finally { setAiSaving(false); }
   };
 
-  const refreshAiUsage = async () => {
-    setAiLoading(true);
-    try {
-      const usage = await institutionService.getAiUsageSummary({ days: 30, limit: 5 });
-      setAiUsage(usage);
-    } catch { /* ignore */ }
-    setAiLoading(false);
+  const refreshAiUsage = () => {
+    queryClient.invalidateQueries({ queryKey: ['institution', 'ai-usage-summary'] });
   };
 
   const saveProfile = async (e: React.FormEvent) => {
@@ -217,6 +240,8 @@ export default function SettingsPage() {
     try {
       const { data } = await apiClient.patch('/auth/profile', profileForm);
       if (data?.user && user) setUser({ ...user, full_name: data.user.full_name, email: data.user.email });
+      queryClient.invalidateQueries({ queryKey: ['auth', 'me'] });
+      queryClient.invalidateQueries({ queryKey: ['institution', 'profile'] });
       toast3('Profile updated successfully!');
     } catch (err: any) {
       toast3(err?.response?.data?.error ?? 'Failed to update profile.');
@@ -245,6 +270,7 @@ export default function SettingsPage() {
     try {
       const updated = await institutionService.updateNotificationPrefs(notifs);
       setNotifs(updated);
+      queryClient.invalidateQueries({ queryKey: ['institution', 'notification-prefs'] });
       toast3('Notification preferences saved!');
     } catch (err: any) {
       toast3(err?.response?.data?.error ?? 'Failed to save preferences.');

@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
+import { useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { institutionService } from '@/services/institution.service';
 import {
@@ -57,6 +58,8 @@ interface AnnouncementItem {
 }
 
 export default function AnnouncementsPage() {
+  const queryClient = useQueryClient();
+
   // Stats
   const [stats, setStats] = useState<StatData>({
     total_announcements: 0,
@@ -123,23 +126,38 @@ export default function AnnouncementsPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Load Data
-  const loadStats = async () => {
+  // Load Data — through the react-query cache. Mutations call these with
+  // fresh=true so the cached copy is dropped first; simple revisits render
+  // from cache instantly.
+  const loadStats = async (fresh = false) => {
     try {
-      const data = await institutionService.getAnnouncementStats();
+      if (fresh) queryClient.removeQueries({ queryKey: ['institution', 'announcements', 'stats'] });
+      const data = await queryClient.fetchQuery({
+        queryKey: ['institution', 'announcements', 'stats'],
+        queryFn: () => institutionService.getAnnouncementStats(),
+        staleTime: 30 * 1000,
+      });
       setStats(data);
     } catch {
       // keep fallback
     }
   };
 
-  const loadAnnouncements = async (statusOverride?: string) => {
+  const loadAnnouncements = async (statusOverride?: string, fresh = false) => {
     setLoading(true);
     try {
       const currentStatus = statusOverride ?? (activeTab === 'create' ? 'all' : activeTab);
-      const res = await institutionService.listAnnouncements({
-        status: currentStatus === 'templates' ? 'all' : currentStatus,
-        search: searchQuery || undefined,
+      const status = currentStatus === 'templates' ? 'all' : currentStatus;
+      if (fresh) {
+        queryClient.removeQueries({ queryKey: ['institution', 'announcements', 'list'] });
+      }
+      const res = await queryClient.fetchQuery({
+        queryKey: ['institution', 'announcements', 'list', status, searchQuery],
+        queryFn: () => institutionService.listAnnouncements({
+          status,
+          search: searchQuery || undefined,
+        }),
+        staleTime: 15 * 1000,
       });
       setAnnouncements(res.announcements);
     } catch {
@@ -149,13 +167,22 @@ export default function AnnouncementsPage() {
     }
   };
 
-  // Preload academic structure
+  // Preload academic structure — same cached reference data the other pages
+  // use (shared keys: departments here is the same list as the users page).
   useEffect(() => {
     loadStats();
     loadAnnouncements();
 
-    institutionService.listDepartments().then(setDepartments).catch(() => {});
-    institutionService.getAcademicYears().then(ys => {
+    queryClient.fetchQuery({
+      queryKey: ['institution', 'departments'],
+      queryFn: () => institutionService.listDepartments(),
+      staleTime: 5 * 60 * 1000,
+    }).then(setDepartments).catch(() => {});
+    queryClient.fetchQuery({
+      queryKey: ['institution', 'academic-years'],
+      queryFn: () => institutionService.getAcademicYears(),
+      staleTime: 5 * 60 * 1000,
+    }).then(ys => {
       setYears(ys);
       const active = ys.find((y: any) => y.is_active);
       if (active) {
@@ -163,6 +190,7 @@ export default function AnnouncementsPage() {
         institutionService.getBatches(active.id).then(setBatches).catch(() => {});
       }
     }).catch(() => {});
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Handle Tab Switch
@@ -311,8 +339,8 @@ export default function AnnouncementsPage() {
       setMessage('');
       setIsScheduled(false);
       setSendAtLocal('');
-      loadStats();
-      loadAnnouncements();
+      loadStats(true);
+      loadAnnouncements(undefined, true);
     } catch {
       showToast('Failed to create announcement. Please try again.');
     } finally {
@@ -326,17 +354,21 @@ export default function AnnouncementsPage() {
     try {
       await institutionService.deleteAnnouncement(id);
       showToast('Announcement deleted.');
-      loadStats();
-      loadAnnouncements();
+      loadStats(true);
+      loadAnnouncements(undefined, true);
     } catch {
       showToast('Could not delete announcement.');
     }
   };
 
-  // View Details Modal
+  // View Details Modal — per-id cache entry; the list stays untouched.
   const openDetails = async (item: AnnouncementItem) => {
     try {
-      const data = await institutionService.getAnnouncementDetails(item.id);
+      const data = await queryClient.fetchQuery({
+        queryKey: ['institution', 'announcements', 'details', item.id],
+        queryFn: () => institutionService.getAnnouncementDetails(item.id),
+        staleTime: 30 * 1000,
+      });
       setDetailModalItem(data.announcement);
     } catch {
       setDetailModalItem(item);

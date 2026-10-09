@@ -34,12 +34,26 @@ const SESSIONS_SUBNAV = [
   { id: 'history',  label: 'History',  route: '/institution/sessions?tab=history' },
 ];
 
+const ANALYTICS_SUBNAV = [
+  { id: 'risk',        label: 'Risk Early Warning',   route: '/institution/analytics?tab=risk' },
+  { id: 'overview',    label: 'Overview',             route: '/institution/analytics?tab=overview' },
+  { id: 'funnel',      label: 'Student Funnel',       route: '/institution/analytics?tab=funnel' },
+  { id: 'benchmark',   label: 'Cohort Benchmark',     route: '/institution/analytics?tab=benchmark' },
+  { id: 'outcomes',    label: 'Learning Outcomes',    route: '/institution/analytics?tab=outcomes' },
+  { id: 'integrity',   label: 'Integrity Violations', route: '/institution/analytics?tab=integrity' },
+  { id: 'grades',      label: 'Grades & Marks',       route: '/institution/analytics?tab=grades' },
+  { id: 'attendance',  label: 'Attendance Matrix',    route: '/institution/analytics?tab=attendance' },
+  { id: 'engagement',  label: 'Engagement Signals',   route: '/institution/analytics?tab=engagement' },
+  { id: 'ai-usage',    label: 'AI & Telemetry',       route: '/institution/analytics?tab=ai-usage' },
+  { id: 'instructors', label: 'Instructors',          route: '/institution/analytics?tab=instructors' },
+];
+
 const NAV_MAIN = [
   { id: 'Dashboard',      Icon: LayoutDashboard, route: '/institution/dashboard',     hasChevron: false },
   { id: 'Users',          Icon: Users,           route: '/institution/users',         hasChevron: false },
   { id: 'Academic',       Icon: GraduationCap,   route: '/institution/academic',      hasChevron: true },
   { id: 'Sessions',       Icon: Calendar,        route: '/institution/sessions?tab=live', hasChevron: true },
-  { id: 'Analytics',      Icon: BarChart3,       route: '/institution/analytics',     hasChevron: false },
+  { id: 'Analytics',      Icon: BarChart3,       route: '/institution/analytics?tab=risk', hasChevron: true },
   { id: 'Announcements',  Icon: Megaphone,       route: '/institution/announcements', hasChevron: false },
 ];
 
@@ -78,6 +92,7 @@ export default function InstitutionShell({
   const [mobileOpen, setMobileOpen] = useState(false);
   const [academicOpen, setAcademicOpen] = useState(activePage === 'Academic');
   const [sessionsOpen, setSessionsOpen] = useState(activePage === 'Sessions');
+  const [analyticsOpen, setAnalyticsOpen] = useState(activePage === 'Analytics');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
@@ -88,6 +103,8 @@ export default function InstitutionShell({
       setAcademicOpen(true);
     } else if (activePage === 'Sessions') {
       setSessionsOpen(true);
+    } else if (activePage === 'Analytics') {
+      setAnalyticsOpen(true);
     }
   }, [activePage]);
   // Live global search — hits the /institution/search endpoint (users,
@@ -281,6 +298,67 @@ export default function InstitutionShell({
                         <ul className={styles.subnavGroup}>
                           {SESSIONS_SUBNAV.map(sub => {
                             const isSubActive = isSessionsActive && (activeSubPage === sub.id || (!activeSubPage && sub.id === 'live'));
+                            return (
+                              <li
+                                key={sub.id}
+                                className={`${styles.subnavItem} ${isSubActive ? styles.subnavItemActive : ''}`}
+                                onClick={e => {
+                                  e.stopPropagation();
+                                  go(sub.id, sub.route);
+                                }}
+                              >
+                                <span className={`${styles.subnavDot} ${isSubActive ? styles.subnavDotActive : ''}`} />
+                                <span>{sub.label}</span>
+                              </li>
+                            );
+                          })}
+                        </ul>
+                      )}
+                    </li>
+                  );
+                }
+
+                if (id === 'Analytics') {
+                  const isAnalyticsActive = activePage === 'Analytics';
+                  return (
+                    <li key={id} style={{ display: 'flex', flexDirection: 'column' }}>
+                      <div
+                        className={navCls(id)}
+                        title={id}
+                        onClick={() => {
+                          if (collapsed) {
+                            setCollapsed(false);
+                            setAnalyticsOpen(true);
+                            go(id, route);
+                          } else if (isAnalyticsActive) {
+                            setAnalyticsOpen(p => !p);
+                          } else {
+                            setAnalyticsOpen(true);
+                            go(id, route);
+                          }
+                        }}
+                      >
+                        <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
+                        <span className={styles.label}>{id}</span>
+                        {!collapsed && (
+                          <button
+                            type="button"
+                            className={styles.navChevron}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              setAnalyticsOpen(p => !p);
+                            }}
+                            title={analyticsOpen ? "Collapse Analytics" : "Expand Analytics"}
+                          >
+                            {analyticsOpen ? <ChevronDown size={14} /> : <ChevronRight size={14} />}
+                          </button>
+                        )}
+                      </div>
+
+                      {!collapsed && analyticsOpen && (
+                        <ul className={styles.subnavGroup}>
+                          {ANALYTICS_SUBNAV.map(sub => {
+                            const isSubActive = isAnalyticsActive && (activeSubPage === sub.id || (!activeSubPage && sub.id === 'risk'));
                             return (
                               <li
                                 key={sub.id}

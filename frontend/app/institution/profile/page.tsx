@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { useAuthStore } from '@/store/auth-store';
 import { authService } from '@/services/auth.service';
@@ -72,6 +73,7 @@ function formatDateTime(isoString?: string): string {
 
 export default function ProfilePage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const { user: authUser, setUser: setAuthUser } = useAuthStore();
 
   // Active tab state
@@ -118,10 +120,15 @@ export default function ProfilePage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Load profile data from backend
+  // Load profile data from backend — through the react-query cache (shared
+  // with the settings page's 'auth/me'). Revisiting renders from cache.
   const loadProfile = async () => {
     try {
-      const data = await institutionService.getProfile();
+      const data = await queryClient.fetchQuery({
+        queryKey: ['institution', 'profile'],
+        queryFn: () => institutionService.getProfile(),
+        staleTime: 30 * 1000,
+      });
       setProfileData(data);
       setEditForm({
         fullName: data.user.full_name || '',
@@ -165,6 +172,10 @@ export default function ProfilePage() {
       if (authUser) {
         setAuthUser({ ...authUser, full_name: res.user.full_name });
       }
+      // Refresh the shared profile cache so a revisit shows saved values.
+      queryClient.setQueryData(['institution', 'profile'],
+        (old: InstitutionProfileResponse | undefined) =>
+          old ? { ...old, user: { ...old.user, ...res.user } } : old);
       setIsEditing(false);
       showToast('Profile updated successfully!');
     } catch (err: any) {

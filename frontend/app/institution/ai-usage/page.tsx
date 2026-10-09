@@ -2,6 +2,7 @@
 
 import React, { useCallback, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   Cpu, Users, Box, SlidersHorizontal, ShieldCheck, FileText,
   Calendar, Download, TrendingUp, AlertTriangle,
@@ -32,6 +33,7 @@ type TabKey = 'overview' | 'users' | 'quotas' | 'features' | 'safety' | 'logs';
 export default function AIUsagePage() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
   const initialTab = (searchParams.get('tab') as TabKey) || 'overview';
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
@@ -355,52 +357,64 @@ export default function AIUsagePage() {
     router.replace(`/institution/ai-usage?tab=${tab}`, { scroll: false });
   };
 
-  // ── 1. Fetch Data on Tab Switch ───────────────────────────────────────────
+  // ── 1. Fetch Data on Tab Switch — through the react-query cache ──────────
+  // Each fetcher keys its payload by the filters actually used, so revisiting
+  // a tab (or a previously-typed search) renders instantly from cache and the
+  // tab-effect + debounce-effect double-fetch collapses into one deduped call.
+  const cachedFetch = useCallback(<T,>(key: unknown[], fn: () => Promise<T>, staleMs = 30 * 1000) =>
+    queryClient.fetchQuery<T>({
+      queryKey: ['institution', 'ai-usage', ...key],
+      queryFn: fn,
+      staleTime: staleMs,
+    }), [queryClient]);
+
   const fetchOverview = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await institutionService.getAIOverview(days);
+      const res = await cachedFetch(['overview', days], () => institutionService.getAIOverview(days));
       setOverview(res);
     } catch (err: any) {
       showToast(err?.response?.data?.error || 'Failed to load AI overview');
     } finally {
       setLoading(false);
     }
-  }, [days]);
+  }, [days, cachedFetch]);
 
   const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await institutionService.getAIUsers({
-        role: userRoleFilter,
-        q: userSearchQuery,
-        page: userPage,
-        per_page: userRowsPerPage
-      });
+      const res = await cachedFetch(
+        ['users', userRoleFilter, userSearchQuery, userPage, userRowsPerPage],
+        () => institutionService.getAIUsers({
+          role: userRoleFilter,
+          q: userSearchQuery,
+          page: userPage,
+          per_page: userRowsPerPage
+        }));
       setUsersData(res);
     } catch (err: any) {
       showToast(err?.response?.data?.error || 'Failed to load user usage');
     } finally {
       setLoading(false);
     }
-  }, [userRoleFilter, userSearchQuery, userPage, userRowsPerPage]);
+  }, [userRoleFilter, userSearchQuery, userPage, userRowsPerPage, cachedFetch]);
 
   const fetchQuotas = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await institutionService.getAIQuotas();
+      const res = await cachedFetch(['quotas'], () => institutionService.getAIQuotas());
       setQuotasData(res);
     } catch (err: any) {
       showToast(err?.response?.data?.error || 'Failed to load quota data');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [cachedFetch]);
 
   const fetchFeatures = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await institutionService.getAIFeatures();
+      const res = await cachedFetch(['features'], () => institutionService.getAIFeatures(), 5 * 60 * 1000);
       setFeaturesData(res);
       if (!selectedFeature && res.features.length > 0) {
         setSelectedFeature(res.features[0]);
@@ -410,30 +424,38 @@ export default function AIUsagePage() {
     } finally {
       setLoading(false);
     }
-  }, [selectedFeature]);
+  }, [selectedFeature, cachedFetch]);
 
   const fetchSecurity = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await institutionService.getAISecurity();
+      // Same key the Security & Compliance page uses — the two pages share one
+      // cached copy instead of each fetching their own.
+      const res = await queryClient.fetchQuery({
+        queryKey: ['institution', 'ai-security'],
+        queryFn: () => institutionService.getAISecurity(),
+        staleTime: 30 * 1000,
+      });
       setSecurityData(res);
     } catch (err: any) {
       showToast(err?.response?.data?.error || 'Failed to load security overview');
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [queryClient]);
 
   const fetchLogs = useCallback(async () => {
     try {
       setLoading(true);
-      const res = await institutionService.getAILogs({
-        feature: logFeatureFilter,
-        status: logStatusFilter,
-        q: logSearch,
-        page: logPage,
-        per_page: logRowsPerPage
-      });
+      const res = await cachedFetch(
+        ['logs', logFeatureFilter, logStatusFilter, logSearch, logPage, logRowsPerPage],
+        () => institutionService.getAILogs({
+          feature: logFeatureFilter,
+          status: logStatusFilter,
+          q: logSearch,
+          page: logPage,
+          per_page: logRowsPerPage
+        }));
       setLogsData(res);
       if (res.logs && res.logs.length > 0) {
         setSelectedLog(prev => prev ? (res.logs.find(l => l.id === prev.id) || res.logs[0]) : res.logs[0]);
@@ -443,7 +465,12 @@ export default function AIUsagePage() {
     } finally {
       setLoading(false);
     }
-  }, [logFeatureFilter, logStatusFilter, logSearch, logPage, logRowsPerPage]);
+  }, [logFeatureFilter, logStatusFilter, logSearch, logPage, logRowsPerPage, cachedFetch]);
+
+  // Mutation helpers: drop this page's cached entries so the next fetcher call
+  // sees fresh server state (fetchQuery refetches when there's no cache).
+  const invalidateAI = () =>
+    queryClient.invalidateQueries({ queryKey: ['institution', 'ai-usage'] });
 
   // Trigger appropriate fetch
   useEffect(() => {
@@ -492,6 +519,7 @@ export default function AIUsagePage() {
 
     try {
       await institutionService.updateAIGovernance({ [key]: updated });
+      invalidateAI();
       showToast(`Governance setting "${key}" updated!`);
     } catch (err: any) {
       // Revert on error
@@ -521,6 +549,7 @@ export default function AIUsagePage() {
 
     try {
       await institutionService.updateAIFeature(feature.feature_id, { enabled: updatedStatus });
+      invalidateAI();
       showToast(`Feature "${feature.name}" ${updatedStatus ? 'enabled' : 'disabled'}`);
     } catch (err: any) {
       showToast(err?.response?.data?.error || 'Failed to update feature');
@@ -535,6 +564,7 @@ export default function AIUsagePage() {
       await institutionService.updateUserQuota(quotaModalUser.id, editQuotaVal);
       showToast(`Quota updated for ${quotaModalUser.name}`);
       setQuotaModalUser(null);
+      invalidateAI();
       if (activeTab === 'users') fetchUsers();
       if (activeTab === 'quotas') fetchQuotas();
     } catch (err: any) {
@@ -547,6 +577,7 @@ export default function AIUsagePage() {
     try {
       await institutionService.resetUserQuota(userId);
       showToast(`Usage reset for ${userName}`);
+      invalidateAI();
       if (activeTab === 'users') fetchUsers();
       if (activeTab === 'quotas') fetchQuotas();
     } catch (err: any) {
@@ -562,6 +593,7 @@ export default function AIUsagePage() {
       });
       showToast(`Bulk updated quotas for all ${bulkRole}s!`);
       setShowBulkQuotaModal(false);
+      invalidateAI();
       if (activeTab === 'quotas') fetchQuotas();
     } catch (err: any) {
       showToast(err?.response?.data?.error || 'Failed to bulk update quotas');
@@ -578,6 +610,7 @@ export default function AIUsagePage() {
       });
       showToast(`Updated configuration for ${editFeatureModal.name}`);
       setEditFeatureModal(null);
+      invalidateAI();
       fetchFeatures();
     } catch (err: any) {
       showToast(err?.response?.data?.error || 'Failed to update feature configuration');

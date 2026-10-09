@@ -3,15 +3,12 @@
 import { useEffect, useState, useRef, useMemo } from 'react';
 import { useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
+import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import {
   institutionService,
   type InstitutionUser,
   type CreateUserDto,
-  type Department,
-  type Section,
-  type UserStats,
-  type UserRecord,
 } from '@/services/institution.service';
 import {
   Plus, Upload, Download, Search, LayoutList, LayoutGrid, CheckCircle,
@@ -62,12 +59,19 @@ function formatDate(isoString?: string): string {
 export default function UsersPage() {
   const searchParams = useSearchParams();
   const router = useRouter();
+  const queryClient = useQueryClient();
 
-  // Primary data state
-  const [users, setUsers] = useState<InstitutionUser[]>([]);
-  const [departments, setDepartments] = useState<Department[]>([]);
-  const [stats, setStats] = useState<UserStats | null>(null);
-  const [loading, setLoading] = useState(true);
+  // Departments/sections are reference data — cached like everything else.
+  const { data: departments = [] } = useQuery({
+    queryKey: ['institution', 'departments'],
+    queryFn: () => institutionService.listDepartments(),
+    staleTime: 5 * 60 * 1000,
+  });
+  const { data: sections = [] } = useQuery({
+    queryKey: ['institution', 'sections'],
+    queryFn: () => institutionService.getSections(),
+    staleTime: 5 * 60 * 1000,
+  });
 
   // Filters & Controls
   const [activeTab, setActiveTab] = useState<'all' | 'student' | 'instructor'>('all');
@@ -83,8 +87,6 @@ export default function UsersPage() {
 
   // Selection & Side Drawer
   const [selectedUser, setSelectedUser] = useState<InstitutionUser | null>(null);
-  const [userRecord, setUserRecord] = useState<UserRecord | null>(null);
-  const [recordLoading, setRecordLoading] = useState(false);
   const [drawerTab, setDrawerTab] = useState<'overview' | 'academic' | 'activity'>('overview');
   const [selectedIds, setSelectedIds] = useState<string[]>([]);
   const [bulkBusy, setBulkBusy] = useState(false);
@@ -100,7 +102,6 @@ export default function UsersPage() {
   const [newRole, setNewRole] = useState<'student' | 'instructor' | 'institution_admin'>('student');
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<InstitutionUser | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
-  const [sections, setSections] = useState<Section[]>([]);
   const [toast, setToast] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
@@ -141,48 +142,58 @@ export default function UsersPage() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // ── 1. Fetch Users & Departments ──────────────────────────────────────────
-  const loadUsers = async () => {
-    setLoading(true);
-    try {
-      const res = await institutionService.listUsersWithStats();
-      setUsers(res.users || []);
-      if (res.stats) {
-        setStats(res.stats);
-      }
-      // If a user was selected, re-sync selection
-      if (selectedUser) {
-        const fresh = res.users.find(u => u.id === selectedUser.id);
-        if (fresh) setSelectedUser(fresh);
-      } else if (res.users && res.users.length > 0) {
-        // Auto-select first user (e.g. Aadhya Pillai) to match the reference preview!
-        setSelectedUser(res.users[0]);
-      }
-    } catch {
-      showToast('Could not load users. Please refresh.');
-    } finally {
-      setLoading(false);
-    }
+  // ── 1. Users list — server-side filtering + pagination, react-query cached ─
+  // Debounce the search box so typing doesn't fire one request per keystroke.
+  const [debouncedSearch, setDebouncedSearch] = useState(search);
+  useEffect(() => {
+    const t = setTimeout(() => setDebouncedSearch(search), 300);
+    return () => clearTimeout(t);
+  }, [search]);
+
+  // Tab and role dropdown both narrow by role — tab wins when a role isn't picked
+  const effectiveRole =
+    roleFilter !== 'all' ? roleFilter : activeTab !== 'all' ? activeTab : undefined;
+
+  const listParams = {
+    role: effectiveRole,
+    status: statusFilter !== 'all' ? statusFilter : undefined,
+    department_id: deptFilter !== 'all' ? deptFilter : undefined,
+    q: debouncedSearch.trim() || undefined,
+    page,
+    per_page: PAGE_SIZE,
   };
 
-  useEffect(() => {
-    loadUsers();
-    institutionService.listDepartments().then(setDepartments).catch(() => {});
-    institutionService.getSections().then(setSections).catch(() => {});
-  }, []);
+  const {
+    data: listData,
+    isPending: loading,
+  } = useQuery({
+    queryKey: ['institution', 'users', listParams],
+    queryFn: () => institutionService.listUsersWithStats(listParams),
+    // keep the previous page visible while the next one loads — no flicker
+    placeholderData: keepPreviousData,
+  });
+  const users = useMemo(() => listData?.users ?? [], [listData]);
+  const stats = listData?.stats ?? null;
+  const totalCount = listData?.total ?? 0;
 
-  // ── 2. Fetch Detailed User Record when Selected ───────────────────────────
+  // Re-sync the drawer selection when its row's data refreshes.
   useEffect(() => {
-    if (!selectedUser) {
-      setUserRecord(null);
-      return;
+    if (selectedUser) {
+      const fresh = users.find(u => u.id === selectedUser.id);
+      if (fresh) setSelectedUser(fresh);
+    } else if (users.length > 0) {
+      // Auto-select first user (e.g. Aadhya Pillai) to match the reference preview!
+      setSelectedUser(users[0]);
     }
-    setRecordLoading(true);
-    institutionService.getUser(selectedUser.id)
-      .then(rec => setUserRecord(rec))
-      .catch(() => {})
-      .finally(() => setRecordLoading(false));
-  }, [selectedUser?.id]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [users]);
+
+  // ── 2. Detailed User Record when Selected ─────────────────────────────────
+  const { data: userRecord, isFetching: recordLoading } = useQuery({
+    queryKey: ['institution', 'users', 'record', selectedUser?.id],
+    queryFn: () => institutionService.getUser(selectedUser!.id),
+    enabled: !!selectedUser,
+  });
 
   // Close floating action menu when clicking outside
   useEffect(() => {
@@ -191,61 +202,26 @@ export default function UsersPage() {
     return () => document.removeEventListener('click', handleDocClick);
   }, []);
 
-  // ── 3. Role Tab & Counts ──────────────────────────────────────────────────
-  const counts = useMemo(() => {
-    const all = users.length;
-    const student = users.filter(u => u.role === 'student').length;
-    const instructor = users.filter(u => u.role === 'instructor').length;
-    const active = users.filter(u => u.is_active).length;
-    return { all, student, instructor, active };
-  }, [users]);
+  // ── 3. Role Tab Counts — from the server's stats block (whole-institution) ─
+  const counts = useMemo(() => ({
+    all: stats?.total_users ?? 0,
+    student: stats?.students ?? 0,
+    instructor: stats?.instructors ?? 0,
+    active: stats?.active_accounts ?? 0,
+  }), [stats]);
 
-  // ── 4. Filtering & Pagination Logic ───────────────────────────────────────
-  const filteredUsers = useMemo(() => {
-    return users.filter(u => {
-      // Tab filter
-      if (activeTab === 'student' && u.role !== 'student') return false;
-      if (activeTab === 'instructor' && u.role !== 'instructor') return false;
-
-      // Role filter dropdown
-      if (roleFilter !== 'all' && u.role !== roleFilter) return false;
-
-      // Status filter dropdown
-      if (statusFilter !== 'all') {
-        const uStatus = u.is_active ? 'active' : 'inactive';
-        if (uStatus !== statusFilter) return false;
-      }
-
-      // Department filter dropdown
-      if (deptFilter !== 'all' && u.department_id !== deptFilter) return false;
-
-      // Search query
-      if (search.trim()) {
-        const query = search.toLowerCase().trim();
-        const matchesName = u.full_name?.toLowerCase().includes(query);
-        const matchesEmail = u.email?.toLowerCase().includes(query);
-        const matchesRoll = u.roll_number?.toLowerCase().includes(query);
-        const matchesStaff = u.staff_id?.toLowerCase().includes(query);
-        const matchesDept = u.department_name?.toLowerCase().includes(query);
-        if (!matchesName && !matchesEmail && !matchesRoll && !matchesStaff && !matchesDept) {
-          return false;
-        }
-      }
-
-      return true;
-    });
-  }, [users, activeTab, roleFilter, statusFilter, deptFilter, search]);
-
-  const totalPages = Math.max(1, Math.ceil(filteredUsers.length / PAGE_SIZE));
-  const pagedUsers = useMemo(() => {
-    const start = (page - 1) * PAGE_SIZE;
-    return filteredUsers.slice(start, start + PAGE_SIZE);
-  }, [filteredUsers, page]);
+  // ── 4. Pagination — driven by server totals now ───────────────────────────
+  const filteredUsers = users; // server already filtered; kept for render refs
+  const totalPages = Math.max(1, listData?.pages ?? 1);
+  const pagedUsers = users;
 
   // Reset page to 1 when filters change
   useEffect(() => {
     setPage(1);
-  }, [activeTab, roleFilter, statusFilter, deptFilter, search]);
+  }, [activeTab, roleFilter, statusFilter, deptFilter, debouncedSearch]);
+
+  const refreshUsers = () =>
+    queryClient.invalidateQueries({ queryKey: ['institution', 'users'] });
 
   // ── 5. Bulk Selection Handlers ────────────────────────────────────────────
   const toggleSelect = (id: string, e: React.MouseEvent) => {
@@ -271,7 +247,7 @@ export default function UsersPage() {
       await institutionService.bulkUserAction({ user_ids: selectedIds, action });
       showToast(`${selectedIds.length} user(s) successfully updated.`);
       setSelectedIds([]);
-      loadUsers();
+      refreshUsers();
     } catch {
       showToast('Bulk action failed. Please retry.');
     } finally {
@@ -285,10 +261,19 @@ export default function UsersPage() {
     try {
       const res = await institutionService.toggleUserActive(u.id);
       const updatedStatus = res.is_active ? 'active' : 'inactive';
-      setUsers(prev => prev.map(x => x.id === u.id ? { ...x, is_active: res.is_active, status: updatedStatus } : x));
+      // Optimistic cache patch on the LIST queries only (record query shares
+      // the ['institution','users'] prefix but has a different shape).
+      queryClient.setQueriesData<{ users: InstitutionUser[] }>(
+        { queryKey: ['institution', 'users'] },
+        (old) => (old && Array.isArray(old.users))
+          ? { ...old, users: old.users.map(x => x.id === u.id ? { ...x, is_active: res.is_active, status: updatedStatus } : x) }
+          : old
+      );
       if (selectedUser?.id === u.id) {
         setSelectedUser(prev => prev ? { ...prev, is_active: res.is_active, status: updatedStatus } : null);
       }
+      // stats (active counts) changed — refetch quietly in background
+      queryClient.invalidateQueries({ queryKey: ['institution', 'users', 'record', u.id] });
       showToast(`${u.full_name} is now ${res.is_active ? 'Active' : 'Deactivated'}.`);
     } catch {
       showToast('Could not toggle user status.');
@@ -332,7 +317,8 @@ export default function UsersPage() {
     setSaving(true);
     try {
       await institutionService.deleteUser(deleteConfirmUser.id);
-      setUsers(prev => prev.filter(x => x.id !== deleteConfirmUser.id));
+      refreshUsers();
+      queryClient.removeQueries({ queryKey: ['institution', 'users', 'record', deleteConfirmUser.id] });
       if (selectedUser?.id === deleteConfirmUser.id) {
         setSelectedUser(null);
       }
@@ -367,7 +353,13 @@ export default function UsersPage() {
     setSaving(true);
     try {
       const updated = await institutionService.updateUser(editUser.id, editForm);
-      setUsers(prev => prev.map(x => x.id === editUser.id ? { ...x, ...updated } : x));
+      queryClient.setQueriesData<{ users: InstitutionUser[] }>(
+        { queryKey: ['institution', 'users'] },
+        (old) => (old && Array.isArray(old.users))
+          ? { ...old, users: old.users.map(x => x.id === editUser.id ? { ...x, ...updated } : x) }
+          : old
+      );
+      queryClient.invalidateQueries({ queryKey: ['institution', 'users', 'record', editUser.id] });
       if (selectedUser?.id === editUser.id) {
         setSelectedUser(prev => prev ? { ...prev, ...updated } : null);
       }
@@ -393,7 +385,7 @@ export default function UsersPage() {
         full_name: '', email: '', role: 'student', password: '', roll_number: '', phone: '',
         staff_id: '', department_id: '', year_of_study: 2, semester: 3,
       });
-      loadUsers();
+      refreshUsers();
     } catch (err: any) {
       showToast(err?.response?.data?.error ?? 'Failed to create user.');
     } finally {
@@ -408,7 +400,7 @@ export default function UsersPage() {
       const result = await institutionService.bulkUploadUsers(file);
       showToast(`Imported ${result.created} users successfully! (${result.skipped} skipped)`);
       setShowAddModal(false);
-      loadUsers();
+      refreshUsers();
     } catch {
       showToast('Bulk CSV upload failed. Check format and try again.');
     }
@@ -542,7 +534,7 @@ export default function UsersPage() {
               <p className={styles.kpiLabel}>Active Accounts</p>
               <div className={styles.kpiMeta}>
                 <span className={styles.kpiGrowth}>
-                  {users.length > 0 ? `${Math.round((counts.active / users.length) * 100)}% active` : '100%'}
+                  {counts.all > 0 ? `${Math.round((counts.active / counts.all) * 100)}% active` : '100%'}
                 </span>
                 <span className={styles.kpiDelta}>
                   {counts.all - counts.active > 0 ? `${counts.all - counts.active} inactive` : 'All verified'}

@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useParams, useRouter } from 'next/navigation';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { institutionService, type InstitutionUser, type UserEnrolment, type SectionSubjectDetail } from '@/services/institution.service';
 import {
@@ -14,41 +15,47 @@ import styles from '../../dashboard/page.module.css';
 export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router  = useRouter();
+  const queryClient = useQueryClient();
   const [user,     setUser]     = useState<InstitutionUser | null>(null);
   const [sections, setSections] = useState<UserEnrolment[]>([]);
   const [teaching, setTeaching] = useState<SectionSubjectDetail[]>([]);
   const [sessions, setSessions] = useState<any[]>([]);
-  const [loading,  setLoading]  = useState(true);
   const [toast,    setToast]    = useState<string | null>(null);
 
   const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
 
-  useEffect(() => {
-    const load = async () => {
-      setLoading(true);
-      try {
-        // One call returns the profile, section enrolments, and teaching load.
-        const rec = await institutionService.getUser(id);
-        setUser(rec.user);
-        setSections(rec.enrolments ?? []);
-        setTeaching(rec.teaching ?? []);
+  // One call returns the profile, section enrolments, and teaching load.
+  // Shares the ['institution','users','record',id] cache key with the users
+  // list drawer — opening a profile right after browsing the list is instant.
+  const { isPending: loading, isError } = useQuery({
+    queryKey: ['institution', 'users', 'record', id],
+    queryFn: async () => {
+      const rec = await institutionService.getUser(id);
+      setUser(rec.user);
+      setSections(rec.enrolments ?? []);
+      setTeaching(rec.teaching ?? []);
+      // Instructors also get their conducted-session history.
+      if (rec.user.role === 'instructor') {
+        try { setSessions(await institutionService.getInstructorSessions(id)); } catch { /* non-fatal */ }
+      }
+      return rec;
+    },
+    staleTime: 30 * 1000,
+    retry: false,
+  });
 
-        // Instructors also get their conducted-session history.
-        if (rec.user.role === 'instructor') {
-          try { setSessions(await institutionService.getInstructorSessions(id)); } catch { /* non-fatal */ }
-        }
-      } catch {
-        router.push('/institution/users');
-      } finally { setLoading(false); }
-    };
-    load();
-  }, [id]);
+  // A failed load (deleted/foreign user) bounces back to the list.
+  useEffect(() => {
+    if (isError) router.push('/institution/users');
+  }, [isError, router]);
 
   const toggleActive = async () => {
     if (!user) return;
     try {
       await institutionService.toggleUserActive(user.id);
       setUser(u => u ? { ...u, is_active: !u.is_active } : u);
+      // keep list + record caches honest
+      queryClient.invalidateQueries({ queryKey: ['institution', 'users'] });
       toast3(`${user.full_name} ${user.is_active ? 'deactivated' : 'activated'}.`);
     } catch { toast3('Action failed.'); }
   };

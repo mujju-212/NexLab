@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useEffect, useState, useMemo, useCallback } from 'react';
+import { keepPreviousData, useQuery } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import {
   institutionService,
@@ -101,17 +102,9 @@ function formatTime(isoString: string): string {
 }
 
 export default function AuditLogPage() {
-  // Stats & KPIs state
-  const [stats, setStats] = useState<AuditLogStats | null>(null);
-  const [loadingStats, setLoadingStats] = useState(true);
-
-  // Table Logs & Pagination state
-  const [logs, setLogs] = useState<AuditLog[]>([]);
-  const [total, setTotal] = useState(0);
-  const [totalPages, setTotalPages] = useState(1);
+  // Table pagination state (data itself comes from react-query below)
   const [page, setPage] = useState(1);
   const [perPage, setPerPage] = useState(8);
-  const [loadingLogs, setLoadingLogs] = useState(true);
 
   // Filters state
   const [selectedUser, setSelectedUser] = useState('');
@@ -124,81 +117,55 @@ export default function AuditLogPage() {
   const [searchInput, setSearchInput] = useState('');
   const [appliedSearch, setAppliedSearch] = useState('');
 
-  // Dropdown lists populated from API
-  const [usersList, setUsersList] = useState<Array<{ id: string; name: string }>>([]);
-  const [modulesList, setModulesList] = useState<string[]>([]);
-  const [actionsList, setActionsList] = useState<string[]>([]);
-  const [severitiesList, setSeveritiesList] = useState<string[]>([]);
+  // ── Cached data layer (react-query) ──
+  // Was fetchStats/fetchLogs + useEffect: functionally the same triggers, but
+  // now revisiting this page renders from cache instantly instead of refetching.
+  const isCustomRange = dateRangePreset === 'custom';
+  const rangeParams = {
+    days: isCustomRange ? undefined : parseInt(dateRangePreset, 10) || 30,
+    from: isCustomRange ? customFrom : undefined,
+    to: isCustomRange ? customTo : undefined,
+  };
+
+  const { data: stats, isPending: loadingStats } = useQuery({
+    queryKey: ['institution', 'audit-log', 'stats', rangeParams],
+    queryFn: () => institutionService.getAuditLogStats(rangeParams),
+  });
+
+  const logParams: AuditLogFilterParams = {
+    page,
+    per_page: perPage,
+    user_id: selectedUser || undefined,
+    module: selectedModule || undefined,
+    action: selectedAction || undefined,
+    severity: selectedSeverity || undefined,
+    q: appliedSearch || undefined,
+    ...rangeParams,
+  };
+
+  const { data: logsPage, isPending: loadingLogs } = useQuery({
+    queryKey: ['institution', 'audit-log', 'logs', logParams],
+    queryFn: () => institutionService.getAuditLog(logParams),
+    placeholderData: keepPreviousData,
+  });
+
+  // Dropdown choices ride along with the logs response under `filters`
+  // (server caches them). The old code read res.users/res.modules — flat
+  // keys that were never in the payload, so the dropdowns stayed empty.
+  const logs = logsPage?.logs ?? [];
+  const total = logsPage?.total ?? 0;
+  const totalPages =
+    logsPage?.total_pages ?? Math.max(1, Math.ceil((logsPage?.total ?? 0) / perPage));
+  const usersList = logsPage?.filters?.users ?? [];
+  const modulesList = logsPage?.filters?.modules ?? [];
+  const actionsList = logsPage?.filters?.actions ?? [];
+  const severitiesList = logsPage?.filters?.severities ?? [];
 
   // Modals & Extras
   const [selectedEvent, setSelectedEvent] = useState<AuditLog | null>(null);
   const [showDatePicker, setShowDatePicker] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [timeframe, setTimeframe] = useState<'Daily' | 'Weekly'>('Daily');
-
-  // Load Dashboard Statistics (KPIs, Charts, Insights)
-  const fetchStats = useCallback(async () => {
-    setLoadingStats(true);
-    try {
-      const isCustom = dateRangePreset === 'custom';
-      const res = await institutionService.getAuditLogStats({
-        days: isCustom ? undefined : parseInt(dateRangePreset, 10) || 30,
-        from: isCustom ? customFrom : undefined,
-        to: isCustom ? customTo : undefined,
-      });
-      setStats(res);
-    } catch (err) {
-      console.error('Failed to load audit stats:', err);
-    } finally {
-      setLoadingStats(false);
-    }
-  }, [dateRangePreset, customFrom, customTo]);
-
-  // Load Audit Log Table Rows
-  const fetchLogs = useCallback(async () => {
-    setLoadingLogs(true);
-    try {
-      const isCustom = dateRangePreset === 'custom';
-      const params: AuditLogFilterParams = {
-        page,
-        per_page: perPage,
-        user_id: selectedUser || undefined,
-        module: selectedModule || undefined,
-        action: selectedAction || undefined,
-        severity: selectedSeverity || undefined,
-        q: appliedSearch || undefined,
-        days: isCustom ? undefined : parseInt(dateRangePreset, 10) || 30,
-        from: isCustom ? customFrom : undefined,
-        to: isCustom ? customTo : undefined,
-      };
-
-      const res = await institutionService.getAuditLog(params);
-      setLogs(res.logs || []);
-      setTotal(res.total || 0);
-      setTotalPages(res.total_pages || Math.max(1, Math.ceil((res.total || 0) / perPage)));
-
-      // Populate filter metadata dropdowns
-      if (res.users && res.users.length > 0) setUsersList(res.users);
-      if (res.modules && res.modules.length > 0) setModulesList(res.modules);
-      if (res.actions && res.actions.length > 0) setActionsList(res.actions);
-      if (res.severities && res.severities.length > 0) setSeveritiesList(res.severities);
-    } catch (err) {
-      console.error('Failed to load audit logs:', err);
-      setLogs([]);
-      setTotal(0);
-      setTotalPages(1);
-    } finally {
-      setLoadingLogs(false);
-    }
-  }, [page, perPage, selectedUser, selectedModule, selectedAction, selectedSeverity, appliedSearch, dateRangePreset, customFrom, customTo]);
-
-  useEffect(() => {
-    fetchStats();
-  }, [fetchStats]);
-
-  useEffect(() => {
-    fetchLogs();
-  }, [fetchLogs]);
 
   // Handle Apply Filters button
   const handleApplyFilters = () => {

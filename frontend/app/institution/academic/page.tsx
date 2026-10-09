@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import {
   institutionService,
@@ -33,6 +34,7 @@ export default function AcademicPage() {
 
 function AcademicPageContent() {
   const router = useRouter();
+  const queryClient = useQueryClient();
   const searchParams = useSearchParams();
 
   // Normalize initial tab from query param
@@ -77,11 +79,20 @@ function AcademicPageContent() {
     setTimeout(() => setToast(null), 3500);
   };
 
-  // Load everything in 1 consolidated round-trip (<25ms)
+  // Load everything in 1 consolidated round-trip, through the shared
+  // react-query cache: navigating back to this page renders from cache
+  // instead of refetching (same key the sessions page uses).
   const loadAll = useCallback(async (forceFresh = true) => {
+    if (forceFresh) {
+      queryClient.removeQueries({ queryKey: ['institution', 'academic-structure'] });
+    }
     setLoading(true);
     try {
-      const struct = await institutionService.getAcademicStructure(forceFresh);
+      const struct = await queryClient.fetchQuery({
+        queryKey: ['institution', 'academic-structure'],
+        queryFn: () => institutionService.getAcademicStructure(true),
+        staleTime: 30 * 1000,
+      });
       setYears(struct.years || []);
       setBatches(struct.batches || []);
       setSections(struct.sections || []);
@@ -95,24 +106,30 @@ function AcademicPageContent() {
     } finally {
       setLoading(false);
     }
-  }, []);
+  }, [queryClient]);
 
   // Lazy-load students list only when needed for enrollment
   const loadStudents = useCallback(async () => {
     if (students.length > 0 || studentsLoading) return;
     setStudentsLoading(true);
     try {
-      const studs = await institutionService.listUsers({ role: 'student' });
+      const studs = await queryClient.fetchQuery({
+        queryKey: ['institution', 'users', 'all-students'],
+        queryFn: () => institutionService.listUsers({ role: 'student' }),
+        staleTime: 60 * 1000,
+      });
       setStudents(studs);
     } catch {
       // silent
     } finally {
       setStudentsLoading(false);
     }
-  }, [students.length, studentsLoading]);
+  }, [students.length, studentsLoading, queryClient]);
 
   useEffect(() => {
-    loadAll();
+    // Mount uses the cache (30s window); every mutation handler calls
+    // loadAll(true), which drops the cached entry and refetches.
+    loadAll(false);
   }, [loadAll]);
 
   useEffect(() => {

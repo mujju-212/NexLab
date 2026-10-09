@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import {
   institutionService,
@@ -104,6 +105,7 @@ interface ChatMessage {
 
 export default function HelpFaqPage() {
   const router = useRouter();
+  const queryClient = useQueryClient();
 
   // Overview Data
   const [loading, setLoading] = useState(true);
@@ -164,13 +166,19 @@ export default function HelpFaqPage() {
     setTimeout(() => setToastMessage(null), 3800);
   };
 
-  // Fetch help overview from backend API
+  // Fetch help overview from backend API — through the react-query cache,
+  // keyed by category+query: coming back to a previously-viewed filter is
+  // instant, and repeated searches don't re-hit the server.
   const fetchOverview = async (categoryFilter?: string, query?: string) => {
     try {
       setLoading(true);
       const cat = categoryFilter && categoryFilter !== 'all' ? categoryFilter : undefined;
       const q = query && query.trim().length > 0 ? query.trim() : undefined;
-      const data: HelpOverviewResponse = await institutionService.getHelpOverview({ category: cat, q });
+      const data: HelpOverviewResponse = await queryClient.fetchQuery({
+        queryKey: ['institution', 'help-overview', cat ?? '', q ?? ''],
+        queryFn: () => institutionService.getHelpOverview({ category: cat, q }),
+        staleTime: 5 * 60 * 1000, // FAQ/help content is essentially static
+      });
       
       if (data.topics) setTopics(data.topics);
       if (data.popular_searches && data.popular_searches.length > 0) {

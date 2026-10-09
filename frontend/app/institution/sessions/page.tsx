@@ -2,6 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
+import { useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import { apiClient } from '@/services/api-client';
 import {
@@ -292,6 +293,7 @@ function EditModal({ session, onClose, onSaved, toast3 }: EditModalProps) {
 function SessionsPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
+  const queryClient = useQueryClient();
 
   const tabParam = searchParams.get('tab') as Tab | null;
   const [tab, setTab] = useState<Tab>(() => {
@@ -846,7 +848,8 @@ function SessionsPageContent() {
       we.setDate(we.getDate() + 35); // Fetch 5 weeks to ensure day/agenda/week/month coverage
       const fromISO = new Date(ws.getTime() - 7 * 86400000).toISOString();
       const toISO = we.toISOString();
-      const sessions = await institutionService.getSessionsRange(fromISO, toISO);
+      const sessions = await cachedFetch(['week', fromISO, toISO],
+        () => institutionService.getSessionsRange(fromISO, toISO));
       setWeekSessions(sessions);
     } catch {
       setWeekSessions([]);
@@ -1116,10 +1119,23 @@ function SessionsPageContent() {
     setShowStartModal(true);
   };
 
-  // Loaders
+  // Loaders — routed through the react-query cache (fetchQuery) instead of
+  // hitting the network every time. Re-opening a tab within STALE_MS renders
+  // instantly from cache; mutations invalidate the ['institution','sessions']
+  // namespace so the next loader call refetches.
+  const SESSIONS_STALE_MS = 30 * 1000;
+  const cachedFetch = <T,>(key: unknown[], fn: () => Promise<T>) =>
+    queryClient.fetchQuery<T>({
+      queryKey: ['institution', 'sessions', ...key],
+      queryFn: fn,
+      staleTime: SESSIONS_STALE_MS,
+    });
+  const invalidateSessions = () =>
+    queryClient.invalidateQueries({ queryKey: ['institution', 'sessions'] });
+
   const loadLive = async () => {
     try {
-      const data = await institutionService.getLiveSessions();
+      const data = await cachedFetch(['live'], () => institutionService.getLiveSessions());
       setLiveSessions(data.live_sessions ?? []);
       setLiveSummary(data.summary ?? null);
       setRecentActivity(data.recent_activity ?? []);
@@ -1132,6 +1148,7 @@ function SessionsPageContent() {
 
   const handleRefresh = async () => {
     setRefreshing(true);
+    invalidateSessions();
     await loadLive();
     setRefreshing(false);
     toast3('Live sessions refreshed.');
@@ -1139,10 +1156,12 @@ function SessionsPageContent() {
 
   const loadUpcoming = async () => {
     try {
-      const { data } = await apiClient.get('/institution/sessions', {
-        params: { status: 'scheduled', per_page: 200 },
+      const all = await cachedFetch(['upcoming'], async () => {
+        const { data } = await apiClient.get('/institution/sessions', {
+          params: { status: 'scheduled', per_page: 200 },
+        });
+        return (data.sessions ?? []) as SessionEnriched[];
       });
-      const all: SessionEnriched[] = data.sessions ?? [];
       setUpcomingSessions(
         all
           .filter(s => s.status === 'scheduled')
@@ -1165,7 +1184,12 @@ function SessionsPageContent() {
       if (historyInstructor !== 'all') params.instructor_id = historyInstructor;
       if (historySearch) params.search = historySearch;
 
-      const data = await institutionService.getSessionHistory(params);
+      const data = await cachedFetch(
+        ['history', pageToLoad, perPageToLoad,
+         params.department_id ?? '', params.batch_id ?? '', params.section_id ?? '',
+         params.subject_id ?? '', params.instructor_id ?? '', params.search ?? ''],
+        () => institutionService.getSessionHistory(params),
+      );
       if (data && data.sessions) {
         setHistorySessions(data.sessions);
         setHistoryTotal(data.total || 128);
@@ -1227,6 +1251,7 @@ function SessionsPageContent() {
       if (historySelectedSession?.id === sessionId) {
         setHistorySelectedSession(null);
       }
+      invalidateSessions();
       loadHistory(historyPage, historyPerPage);
     } catch (e) {
       console.error('Failed to delete session:', e);
@@ -1267,7 +1292,11 @@ function SessionsPageContent() {
 
   const loadAcademic = async () => {
     try {
-      const struct = await institutionService.getAcademicStructure();
+      const struct = await queryClient.fetchQuery({
+        queryKey: ['institution', 'academic-structure'],
+        queryFn: () => institutionService.getAcademicStructure(),
+        staleTime: 5 * 60 * 1000, // reference data — five minutes is plenty
+      });
       setAcademicYears(struct.years || []);
       setDepartments(struct.departments || []);
       setBatches(struct.batches || []);
@@ -1327,7 +1356,11 @@ function SessionsPageContent() {
       if (plannerBatch !== 'all') params.batch_id = plannerBatch;
       if (plannerSearch) params.search = plannerSearch;
 
-      const res = await institutionService.getRecurringPlans(params);
+      const res = await cachedFetch(
+        ['plans', params.status ?? '', params.department_id ?? '',
+         params.batch_id ?? '', params.search ?? ''],
+        () => institutionService.getRecurringPlans(params),
+      );
       if (res && res.plans) {
         setRecurringPlans(res.plans);
         if (res.stats) setPlannerStats(res.stats);
@@ -1399,6 +1432,7 @@ function SessionsPageContent() {
         instructor_id: instructors[0]?.id || '',
         status: 'active',
       });
+      invalidateSessions();
       loadPlanner();
       loadUpcoming();
     } catch (e: any) {
@@ -1412,6 +1446,7 @@ function SessionsPageContent() {
     try {
       await institutionService.duplicateRecurringPlan(p.id);
       toast3(`Duplicated "${p.name}" as draft`);
+      invalidateSessions();
       loadPlanner();
     } catch (e) {
       toast3('Failed to duplicate plan');
@@ -1423,6 +1458,7 @@ function SessionsPageContent() {
     try {
       await institutionService.updateRecurringPlan(p.id, { status: nextStatus });
       toast3(`Plan "${p.name}" is now ${nextStatus}`);
+      invalidateSessions();
       loadPlanner();
     } catch (e) {
       toast3('Failed to update plan status');
@@ -1434,6 +1470,7 @@ function SessionsPageContent() {
     try {
       await institutionService.deleteRecurringPlan(p.id);
       toast3(`Plan "${p.name}" deleted`);
+      invalidateSessions();
       loadPlanner();
     } catch (e) {
       toast3('Failed to delete plan');
@@ -1444,6 +1481,7 @@ function SessionsPageContent() {
     try {
       const res = await institutionService.generatePlanSessions(p.id);
       toast3(res.message || `Generated ${res.sessions_generated} sessions for ${p.name}`);
+      invalidateSessions();
       loadPlanner();
       loadUpcoming();
     } catch (e) {
@@ -1476,7 +1514,7 @@ function SessionsPageContent() {
 
   const handleLoadTemplates = async () => {
     try {
-      const res = await institutionService.getPlanTemplates();
+      const res = await cachedFetch(['templates'], () => institutionService.getPlanTemplates());
       if (res && res.templates) setPlanTemplates(res.templates);
     } catch (e) {
       console.error(e);
@@ -1485,7 +1523,7 @@ function SessionsPageContent() {
 
   const handleLoadConflicts = async () => {
     try {
-      const res = await institutionService.getPlanConflicts();
+      const res = await cachedFetch(['conflicts'], () => institutionService.getPlanConflicts());
       if (res) setPlanConflicts(res);
     } catch (e) {
       console.error(e);
@@ -1539,6 +1577,7 @@ function SessionsPageContent() {
     try {
       await institutionService.terminateSession(sessionId);
       toast3('Session ended successfully.');
+      invalidateSessions();
       loadLive();
       loadHistory();
       loadWeek(weekStart);
@@ -1583,6 +1622,7 @@ function SessionsPageContent() {
       });
       toast3(startForm.start_immediately ? '✓ Live session launched!' : '✓ Session scheduled on calendar.');
       setShowStartModal(false);
+      invalidateSessions();
       loadLive();
       loadUpcoming();
       loadWeek(weekStart);
@@ -1598,6 +1638,7 @@ function SessionsPageContent() {
     try {
       await institutionService.cancelSession(sessionId);
       toast3('Session cancelled.');
+      invalidateSessions();
       loadUpcoming();
       loadWeek(weekStart);
     } catch { toast3('Failed to cancel session.'); }
@@ -1624,6 +1665,7 @@ function SessionsPageContent() {
       setBulkResult(result);
       if (result.created_count > 0) {
         toast3(`✓ ${result.created_count} session${result.created_count > 1 ? 's' : ''} scheduled!`);
+        invalidateSessions();
         loadUpcoming();
         loadWeek(weekStart);
       } else {
@@ -1719,7 +1761,7 @@ function SessionsPageContent() {
         <EditModal
           session={editTarget}
           onClose={() => setEditTarget(null)}
-          onSaved={loadUpcoming}
+          onSaved={() => { invalidateSessions(); loadUpcoming(); loadWeek(weekStart); }}
           toast3={toast3}
         />
       )}
