@@ -182,6 +182,81 @@ def run_code():
             result['quality_metrics'] = quality_metrics
             result['quality_score']   = quality_score
 
+            # ── Real Data Collection: Persist Grade & Concept Mastery ──
+            try:
+                passed_cases = attempt.test_cases_passed or 0
+                total_cases = attempt.test_cases_total or 0
+                if total_cases > 0:
+                    grade_val = round((passed_cases / total_cases) * 100.0, 1)
+                else:
+                    grade_val = float(quality_score) if quality_score is not None else (100.0 if result.get('status') == 'success' else 0.0)
+
+                from app.models.grading import Grade
+                gr = Grade.query.filter_by(
+                    student_id=g.user_id,
+                    experiment_id=experiment_id,
+                    session_id=session_id
+                ).first()
+                if not gr:
+                    gr = Grade(
+                        student_id=g.user_id,
+                        experiment_id=experiment_id,
+                        session_id=session_id,
+                        auto_grade=grade_val,
+                        final_grade=grade_val,
+                        status='graded',
+                        graded_at=datetime.utcnow()
+                    )
+                    db.session.add(gr)
+                else:
+                    gr.auto_grade = max(gr.auto_grade or 0.0, grade_val)
+                    if gr.manual_grade is None:
+                        gr.final_grade = gr.auto_grade
+                    gr.status = 'graded'
+                    gr.graded_at = datetime.utcnow()
+                db.session.commit()
+
+                # Update Concept Mastery
+                from app.models.experiment import Experiment
+                from app.ml.knowledge_tracing import update_concept_mastery
+                exp = Experiment.query.get(experiment_id)
+                if exp:
+                    inst_id = getattr(g, 'institution_id', None)
+                    if not inst_id:
+                        from app.models.user import User
+                        u = User.query.get(g.user_id)
+                        inst_id = u.institution_id if u else None
+
+                    if inst_id:
+                        tags = list(exp.concept_tags or [])
+                        if not tags:
+                            if exp.title:
+                                tags.append(exp.title)
+                            if exp.subject and exp.subject.name:
+                                tags.append(exp.subject.name)
+                        if not tags:
+                            tags = ['Programming Fundamentals']
+
+                        is_passed = (passed_cases == total_cases and total_cases > 0) if total_cases > 0 else (grade_val >= 50.0)
+                        update_concept_mastery(
+                            student_id=g.user_id,
+                            institution_id=inst_id,
+                            concept_tags=tags,
+                            result={
+                                'passed': is_passed,
+                                'score_pct': grade_val / 100.0,
+                                'attempt_count': attempt.attempt_number or 1,
+                                'hints_used': 0,
+                                'difficulty': exp.difficulty_level or 1,
+                            }
+                        )
+            except Exception as exc:
+                current_app.logger.warning(f"[execution] Grade / Mastery persistence failed (non-fatal): {exc}")
+                try:
+                    db.session.rollback()
+                except Exception:
+                    pass
+
     return jsonify(result), 200
 
 
