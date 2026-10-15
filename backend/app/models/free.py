@@ -28,6 +28,8 @@ class FreeCourse(db.Model):
                                   order_by='FreeExercise.order_index', lazy='dynamic')
 
     def to_dict(self, with_stats=False):
+        exs = self.exercises.all()
+        calc_xp = sum(e.xp_reward or 10 for e in exs) if exs else 200
         d = {
             'id':           self.id,
             'slug':         self.slug,
@@ -39,7 +41,8 @@ class FreeCourse(db.Model):
             'language':     self.language,
             'is_published': self.is_published,
             'order_index':  self.order_index,
-            'exercise_count': self.exercises.count(),
+            'exercise_count': len(exs),
+            'total_xp':     calc_xp if calc_xp > 0 else 200,
         }
         return d
 
@@ -73,6 +76,10 @@ class FreeExercise(db.Model):
     mcq_answer       = db.Column(db.String(2))  # "A"|"B"|"C"|"D"
     mcq_explanation  = db.Column(db.Text)
 
+    tags             = db.Column(db.JSON)    # e.g. ["Arrays", "Searching"]
+    acceptance_rate  = db.Column(db.Float, default=70.0)
+    solves_count     = db.Column(db.Integer, default=1000)
+
     xp_reward        = db.Column(db.Integer, default=10)
     is_published     = db.Column(db.Boolean, default=True)
     created_at       = db.Column(db.DateTime, default=datetime.utcnow)
@@ -87,6 +94,9 @@ class FreeExercise(db.Model):
             'hint_text':    self.hint_text,
             'difficulty':   self.difficulty,
             'exercise_type':self.exercise_type,
+            'tags':         self.tags or [],
+            'acceptance_rate': round(self.acceptance_rate or 70.0, 1),
+            'solves_count': self.solves_count or 1000,
             'allowed_languages': self.allowed_languages or ['python'],
             'starter_code': self.starter_code or {},
             'xp_reward':    self.xp_reward,

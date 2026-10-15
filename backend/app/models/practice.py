@@ -66,16 +66,66 @@ class Problem(db.Model):
 
     def to_list_dict(self):
         """Lightweight dict for problem list table (no description)."""
+        import hashlib
+        acc = float(self.acceptance or 0)
+        solvers_k = 120.0
+
+        CURATED_STATS = {
+            'two-sum': (0.498, '325.4K'),
+            'valid-parentheses': (0.421, '298.7K'),
+            'merge-two-sorted-lists': (0.563, '267.9K'),
+            'binary-tree-inorder-traversal': (0.625, '241.2K'),
+            'maximum-subarray': (0.467, '223.6K'),
+        }
+
+        if self.slug in CURATED_STATS:
+            acc, solvers_display = CURATED_STATS[self.slug]
+        else:
+            h = int(hashlib.md5(self.slug.encode()).hexdigest()[:6], 16)
+            if acc <= 0.0:
+                if self.difficulty == 'Easy':
+                    acc = round(0.48 + (h % 280) / 1000.0, 3)
+                elif self.difficulty == 'Hard':
+                    acc = round(0.24 + (h % 220) / 1000.0, 3)
+                else:
+                    acc = round(0.38 + (h % 260) / 1000.0, 3)
+            h2 = int(hashlib.md5((self.slug + 'solvers').encode()).hexdigest()[:6], 16)
+            if self.difficulty == 'Easy':
+                solvers_k = round(160.0 + (h2 % 1600) / 10.0, 1)
+            elif self.difficulty == 'Hard':
+                solvers_k = round(35.0 + (h2 % 650) / 10.0, 1)
+            else:
+                solvers_k = round(85.0 + (h2 % 1350) / 10.0, 1)
+            solvers_display = f"{solvers_k}K"
+
+        parsed_topics = []
+        if isinstance(self.topics, list):
+            parsed_topics = self.topics
+        elif isinstance(self.topics, str) and self.topics.strip():
+            try:
+                import json
+                pt = json.loads(self.topics)
+                if isinstance(pt, list):
+                    parsed_topics = [str(x) for x in pt]
+                else:
+                    parsed_topics = [str(pt)]
+            except Exception:
+                parsed_topics = [t.strip() for t in self.topics.split(',') if t.strip()]
+        if not parsed_topics:
+            parsed_topics = [self.nexlab_topic] if self.nexlab_topic else ['Algorithms']
+
         return {
-            'id':           self.id,
-            'slug':         self.slug,
-            'lc_id':        self.lc_id,
-            'title':        self.title,
-            'difficulty':   self.difficulty,
-            'nexlab_topic': self.nexlab_topic,
-            'topics':       self.topics or [],
-            'acceptance':   round(float(self.acceptance or 0), 4),
-            'is_daily':     self.is_daily,
+            'id':              self.id,
+            'slug':            self.slug,
+            'lc_id':           self.lc_id,
+            'title':           self.title,
+            'difficulty':      self.difficulty,
+            'nexlab_topic':    self.nexlab_topic,
+            'topics':          parsed_topics,
+            'acceptance':      round(acc, 4),
+            'acceptance_pct':  f"{round(acc * 100, 1)}%",
+            'solvers_display': solvers_display,
+            'is_daily':        self.is_daily,
         }
 
 
@@ -160,6 +210,14 @@ class StudyPlan(db.Model):
                                        cascade='all, delete-orphan')
 
     def to_dict(self):
+        diff_mix = (self.difficulty_mix or 'Mixed').replace('\ufffd', '-').strip()
+        tag_map = {
+            'nexlab-75': 'Most Popular',
+            'beginner-path': 'Beginner',
+            'dp-mastery': 'Advanced',
+            'trees-and-graphs': 'Intermediate',
+            'sql-50': 'Beginner',
+        }
         return {
             'id':             self.id,
             'slug':           self.slug,
@@ -167,7 +225,8 @@ class StudyPlan(db.Model):
             'description':    self.description,
             'icon':           self.icon,
             'total_problems': self.total_problems,
-            'difficulty_mix': self.difficulty_mix,
+            'difficulty_mix': diff_mix,
+            'tag':            tag_map.get(self.slug, 'Curated'),
             'estimated_days': self.estimated_days,
             'badge_id':       self.badge_id,
         }
@@ -412,4 +471,29 @@ class PlatformRatingPeriod(db.Model):
             'rank_pos':    self.rank_pos,
             'created_at':  self.created_at.isoformat() if self.created_at else None,
         }
+
+
+class StudentQuestClaim(db.Model):
+    """Tracks claimed quest rewards for daily/weekly/milestone quests."""
+    __tablename__ = 'practice_quest_claims'
+
+    id          = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
+    student_id  = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False, index=True)
+    quest_key   = db.Column(db.String(100), nullable=False, index=True)  # e.g. daily_solve_1_2026-10-16
+    quest_type  = db.Column(db.String(30), default='daily')               # daily | weekly | achievement
+    xp_awarded  = db.Column(db.Integer, default=0)
+    claimed_at  = db.Column(db.DateTime, default=datetime.utcnow)
+
+    __table_args__ = (db.UniqueConstraint('student_id', 'quest_key', name='uq_student_quest_claim'),)
+
+    def to_dict(self):
+        return {
+            'id':         self.id,
+            'student_id': self.student_id,
+            'quest_key':  self.quest_key,
+            'quest_type': self.quest_type,
+            'xp_awarded': self.xp_awarded,
+            'claimed_at': self.claimed_at.isoformat() if self.claimed_at else None,
+        }
+
 

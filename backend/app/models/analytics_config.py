@@ -3,18 +3,17 @@ from datetime import datetime
 from app.extensions import db
 
 DEFAULT_RISK_WEIGHTS = {
-    'mastery': 0.25,
-    'grade': 0.25,
-    'attendance': 0.20,
-    'focus': 0.10,
-    'consistency': 0.10,
-    'freshness': 0.10,
+    'grade': 0.30,
+    'attendance': 0.25,
+    'mastery': 0.20,
+    'focus': 0.15,
+    'recency': 0.10,
 }
 
 DEFAULT_RISK_BANDS = {
     'critical': 70,
     'high': 50,
-    'watch': 30,
+    'watch': 35,
 }
 
 
