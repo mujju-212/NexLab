@@ -104,3 +104,13 @@ test_results.json
 check_models.py
 backend/test_session_notification.py
 
+# ── External reference & diagnostic scratch artifacts ──────────────────
+claw-code-main/
+test.md
+backend/lab_records/
+backend/*_dump.json
+backend/audit_endpoint_results.json
+backend/check_admin.py
+backend/scratch_check.py
+backend/inspect_*.py
+
