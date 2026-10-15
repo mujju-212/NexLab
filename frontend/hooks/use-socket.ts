@@ -253,8 +253,8 @@ export function useSocket({
 
     const socket = io(SOCKET_URL, {
       auth:       { token },
-      // polling MUST come before websocket for Flask-SocketIO threading mode
-      transports: ['polling', 'websocket'],
+      // polling-only avoids websocket handshake failure when running on development server
+      transports: ['polling'],
     });
 
     socketRef.current = socket;

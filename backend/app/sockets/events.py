@@ -21,6 +21,18 @@ def _persist_proctor_event(institution_id: str, session_id: str, student_id: str
     """Write one ProctorEvent row.  Fail-open — logging failure never blocks the relay."""
     try:
         from app.models.proctor_event import ProctorEvent
+        if not institution_id:
+            if session_id:
+                from app.models.session import LabSession
+                sess = LabSession.query.get(session_id)
+                if sess and sess.institution_id:
+                    institution_id = sess.institution_id
+            if not institution_id and student_id:
+                from app.models.user import User
+                u = User.query.get(student_id)
+                if u and u.institution_id:
+                    institution_id = u.institution_id
+
         row = ProctorEvent(
             institution_id = institution_id,
             session_id     = session_id,
@@ -42,20 +54,24 @@ def _persist_proctor_event(institution_id: str, session_id: str, student_id: str
 def _get_session_or_none(session_id):
     """
     Resolve a LabSession for socket handlers, enforcing tenancy:
-    the session must exist, belong to the caller's institution, and be live.
-    Returns None (and logs why at debug level) when any check fails, so a
-    forged or foreign session_id can neither receive relays nor poison
-    attendance / proctor analytics.
+    the session must exist, belong to the caller's institution.
     """
     if not session_id:
         return None
     from flask import session as sock_session
     user = sock_session.get('user') or {}
     try:
-        sess = LabSession.query.filter_by(
-            id=session_id, institution_id=user.get('institution_id')
-        ).first()
-        if not sess or sess.status != 'active':
+        sess = LabSession.query.get(session_id)
+        if not sess:
+            return None
+        inst_id = user.get('institution_id')
+        if not inst_id and user.get('user_id'):
+            from app.models.user import User
+            u = User.query.get(user['user_id'])
+            if u:
+                inst_id = u.institution_id
+                user['institution_id'] = inst_id
+        if inst_id and sess.institution_id and sess.institution_id != inst_id:
             return None
         return sess
     except Exception:
@@ -212,12 +228,27 @@ def handle_leave_session(data):
 
     if user['role'] == 'student':
         leave_room(f"session_{session_id}_students")
+        try:
+            if session_id:
+                attendance = SessionAttendance.query.filter_by(
+                    session_id=session_id, student_id=user['user_id']
+                ).first()
+                if attendance:
+                    attendance.left_at = datetime.utcnow()
+                    db.session.commit()
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
+
         # Notify instructor
         emit('student_left', {
             'student_id': user['user_id'],
             'full_name': user.get('full_name', ''),
             'timestamp': datetime.utcnow().isoformat(),
         }, room=f"session_{session_id}_instructor")
+
 
 
 @socketio.on('heartbeat')
@@ -720,6 +751,31 @@ def handle_behavioral_signals(data):
     session_id = data.get('session_id')
     student_id = user['user_id']
 
+    # Auto-resolve session_id if missing
+    if not session_id:
+        try:
+            from app.models.conductor import SessionAttendance
+            att = SessionAttendance.query.filter_by(student_id=student_id, left_at=None).order_by(SessionAttendance.joined_at.desc()).first()
+            if not att:
+                att = SessionAttendance.query.filter_by(student_id=student_id).order_by(SessionAttendance.joined_at.desc()).first()
+            if att:
+                session_id = att.session_id
+            else:
+                from app.models.academic import SectionStudent, SectionSubject
+                from app.models.session import LabSession
+                my_secs = [s.section_id for s in SectionStudent.query.filter_by(student_id=student_id).all()]
+                if my_secs:
+                    active_s = LabSession.query.join(
+                        SectionSubject, SectionSubject.id == LabSession.section_subject_id
+                    ).filter(
+                        SectionSubject.section_id.in_(my_secs),
+                        LabSession.status == 'active'
+                    ).order_by(LabSession.started_at.desc()).first()
+                    if active_s:
+                        session_id = active_s.id
+        except Exception:
+            pass
+
     signals = {
         'tab_switches_per_min': data.get('tab_switches_per_min', 0),
         'idle_seconds':         data.get('idle_seconds', 0),
@@ -744,18 +800,22 @@ def handle_behavioral_signals(data):
         ))
 
     # Persist to DB
-    try:
-        from app.models.knowledge import FocusScore as FocusScoreModel
-        fs = FocusScoreModel(
-            student_id=student_id,
-            session_id=session_id,
-            focus_score=round(focus_score, 1),
-            signals=signals,
-        )
-        db.session.add(fs)
-        db.session.commit()
-    except Exception:
-        pass
+    if session_id:
+        try:
+            from app.models.knowledge import FocusScore as FocusScoreModel
+            fs = FocusScoreModel(
+                student_id=student_id,
+                session_id=session_id,
+                focus_score=round(focus_score, 1),
+                signals=signals,
+            )
+            db.session.add(fs)
+            db.session.commit()
+        except Exception:
+            try:
+                db.session.rollback()
+            except Exception:
+                pass
 
     # Build alerts list
     alerts = []

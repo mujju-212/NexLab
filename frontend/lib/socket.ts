@@ -33,14 +33,11 @@ export function getGlobalSocket(): Socket | null {
     currentToken = token;
     socketInstance = io(SOCKET_URL, {
       auth: { token },
-      // websocket-first: each polling client pins a server HTTP thread for
-      // ~25s at a time (long-poll), which starved real API calls. WebSockets
-      // hold no request slot. Polling stays as fallback for proxies that
-      // break upgrades.
-      transports: ['websocket', 'polling'],
+      // Use polling-only for development server to prevent WebSocket upgrade failures
+      transports: ['polling'],
       reconnection: true,
-      reconnectionAttempts: 15,
-      reconnectionDelay: 1000,
+      reconnectionAttempts: 5,
+      reconnectionDelay: 2000,
     });
   }
 
