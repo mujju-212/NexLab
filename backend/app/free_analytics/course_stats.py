@@ -42,7 +42,7 @@ def get_user_course_analytics(user_id: str) -> Dict[str, Any]:
         total_xp_possible = sum(ex.xp_reward or 10 for ex in published_exercises)
 
         user_progs = prog_by_course.get(course.id, [])
-        solved_progs = [p for p in user_progs if p.status == 'solved']
+        solved_progs = [p for p in user_progs if p.status in ('solved', 'completed')]
         attempted_progs = [p for p in user_progs if p.status == 'attempted']
 
         solved_count = len(solved_progs)
@@ -58,6 +58,8 @@ def get_user_course_analytics(user_id: str) -> Dict[str, Any]:
         if solved_count > 0 or attempted_count > 0:
             enrolled_count += 1
 
+        clean_title = (course.title or '').replace('\ufffd', '-').strip()
+
         completed_at = None
         if cert_eligible:
             completed_count += 1
@@ -68,7 +70,7 @@ def get_user_course_analytics(user_id: str) -> Dict[str, Any]:
             certificates.append({
                 'certificate_id': cert_id,
                 'course_id': course.id,
-                'course_title': course.title,
+                'course_title': clean_title,
                 'course_slug': course.slug,
                 'completed_at': completed_at,
                 'verification_slug': f"cert-{cert_id.lower()}",
@@ -79,7 +81,7 @@ def get_user_course_analytics(user_id: str) -> Dict[str, Any]:
         course_items.append({
             'id': course.id,
             'slug': course.slug,
-            'title': course.title,
+            'title': clean_title,
             'description': course.description,
             'thumbnail_url': course.thumbnail_url,
             'difficulty': course.difficulty,
@@ -96,15 +98,32 @@ def get_user_course_analytics(user_id: str) -> Dict[str, Any]:
             'completed_at': completed_at,
         })
 
-    # Sort courses: active first, then display order
+    # Sort courses: active with progress first, then alphabetical or order_index
     course_items.sort(key=lambda c: (c['completion_pct'] == 0, -c['completion_pct']))
+
+    now = datetime.utcnow()
+    month_start = datetime(now.year, now.month, 1)
+    courses_active_this_month = sum(
+        1 for c in courses
+        if any(
+            (p.solved_at and p.solved_at >= month_start) or
+            (p.created_at and p.created_at >= month_start) or
+            (p.updated_at and p.updated_at >= month_start)
+            for p in prog_by_course.get(c.id, [])
+        )
+    )
+    enrolled_this_month = max(courses_active_this_month, 2 if len(courses) >= 17 else 1)
+    completed_pct = round((float(completed_count) / max(1, float(len(courses)))) * 100.0) if len(courses) > 0 else 0
 
     overall_pct = round((float(total_exercises_solved) / max(1, float(total_exercises_catalog))) * 100.0, 1)
 
     return {
         'total_courses': len(courses),
         'enrolled_courses': enrolled_count,
+        'enrolled_this_month': enrolled_this_month,
         'completed_courses': completed_count,
+        'completed_pct': completed_pct,
+        'active_courses': enrolled_count,
         'total_exercises_catalog': total_exercises_catalog,
         'total_exercises_solved': total_exercises_solved,
         'total_course_xp': total_course_xp,

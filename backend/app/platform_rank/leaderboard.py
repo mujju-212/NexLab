@@ -5,7 +5,7 @@ with period filtering (all-time, monthly, weekly) and tenant isolation.
 """
 from datetime import datetime, timedelta
 from typing import Dict, Any, List, Optional
-from sqlalchemy import func, desc
+from sqlalchemy import func, desc, or_
 from app.extensions import db
 from app.models.user import User
 from app.models.practice import Problem, PracticeSubmission, StudentXP, PlatformRating, PlatformRatingPeriod, xp_to_level
@@ -44,7 +44,11 @@ def get_platform_leaderboard(
             )
             .join(Problem, PracticeSubmission.problem_id == Problem.id)
             .filter(
-                Problem.nexlab_topic == scope_id,
+                or_(
+                    Problem.nexlab_topic == scope_id,
+                    Problem.nexlab_topic.ilike(f"%{scope_id}%"),
+                    Problem.nexlab_topic.ilike(f"%{scope_id.rstrip('s')}%")
+                ),
                 PracticeSubmission.status == 'Accepted',
                 PracticeSubmission.is_run == False,
             )
@@ -117,6 +121,8 @@ def get_platform_leaderboard(
                 'position': pos,
                 'student_id': sid,
                 'student_name': u.name if u else 'Anonymous Coder',
+                'full_name': u.name if u else 'Anonymous Coder',
+                'name': u.name if u else 'Anonymous Coder',
                 'avatar_url': getattr(u, 'avatar_url', None) if u else None,
                 'profile_slug': xp_rec.profile_slug if (xp_rec and xp_rec.profile_public) else None,
                 'rating': round(score, 1),
@@ -173,6 +179,8 @@ def get_platform_leaderboard(
             'position': pos,
             'student_id': u.id,
             'student_name': u.name,
+            'full_name': u.name,
+            'name': u.name,
             'avatar_url': getattr(u, 'avatar_url', None),
             'profile_slug': xp_rec.profile_slug if (xp_rec and xp_rec.profile_public) else None,
             'rating': round(float(rating_rec.rating or 0.0), 1),
@@ -196,10 +204,13 @@ def get_platform_leaderboard(
             st_user = User.query.get(current_student_id)
             st_xp = StudentXP.query.filter_by(student_id=current_student_id).first()
             lvl, lvl_name = xp_to_level(st_xp.total_xp if st_xp else 0)
+            st_name = st_user.name if st_user else 'You'
             my_standing = {
                 'position': st_rating.global_rank or cohort_size,
                 'student_id': current_student_id,
-                'student_name': st_user.name if st_user else 'You',
+                'student_name': st_name,
+                'full_name': st_name,
+                'name': st_name,
                 'avatar_url': getattr(st_user, 'avatar_url', None) if st_user else None,
                 'profile_slug': st_xp.profile_slug if (st_xp and st_xp.profile_public) else None,
                 'rating': round(float(st_rating.rating or 0.0), 1),

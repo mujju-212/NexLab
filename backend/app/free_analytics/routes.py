@@ -409,3 +409,46 @@ def toggle_showcase():
         'profile_slug': xp.profile_slug if xp.profile_public else None,
         'share_url': f"/u/{xp.profile_slug}" if (xp.profile_public and xp.profile_slug) else None,
     }), 200
+
+
+@free_analytics_bp.route('/submissions', methods=['GET'])
+@require_auth
+def get_user_submissions():
+    """
+    Returns recent practice submissions for the logged-in user with problem metadata.
+    """
+    limit = min(int(request.args.get('limit', 20)), 100)
+    subs = (
+        PracticeSubmission.query
+        .filter_by(student_id=g.user_id, is_run=False)
+        .order_by(PracticeSubmission.submitted_at.desc())
+        .limit(limit)
+        .all()
+    )
+
+    problem_ids = list(set([s.problem_id for s in subs]))
+    problems = {p.id: p for p in Problem.query.filter(Problem.id.in_(problem_ids)).all()} if problem_ids else {}
+
+    result = []
+    for s in subs:
+        p = problems.get(s.problem_id)
+        result.append({
+            'id': s.id,
+            'problem_id': s.problem_id,
+            'title': p.title if p else 'Problem',
+            'slug': p.slug if p else '',
+            'difficulty': p.difficulty if p else 'Easy',
+            'nexlab_topic': p.nexlab_topic if p else 'Algorithms',
+            'status': s.status,
+            'is_solved': s.status == 'Accepted',
+            'language': s.language,
+            'passed': s.passed,
+            'total': s.total,
+            'time_ms': s.time_ms,
+            'memory_kb': s.memory_kb,
+            'xp_earned': s.xp_earned,
+            'submitted_at': s.submitted_at.isoformat() + 'Z' if s.submitted_at else None,
+        })
+
+    return jsonify({'submissions': result, 'total': len(result)}), 200
+

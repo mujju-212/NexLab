@@ -45,36 +45,62 @@ def focus_score():
         }
     }
     """
-    data       = request.get_json()
+    data       = request.get_json() or {}
     signals    = data.get('signals', {})
     session_id = data.get('session_id')
 
-    if not signals or not session_id:
-        return jsonify({'error': 'signals and session_id required'}), 400
+    if not signals:
+        return jsonify({'error': 'signals required'}), 400
+
+    # Auto-resolve session_id if not explicitly provided
+    if not session_id:
+        from app.models.conductor import SessionAttendance
+        att = SessionAttendance.query.filter_by(student_id=g.user_id, left_at=None).order_by(SessionAttendance.joined_at.desc()).first()
+        if not att:
+            att = SessionAttendance.query.filter_by(student_id=g.user_id).order_by(SessionAttendance.joined_at.desc()).first()
+        if att:
+            session_id = att.session_id
+        else:
+            from app.models.academic import SectionStudent, SectionSubject
+            from app.models.session import LabSession
+            my_secs = [s.section_id for s in SectionStudent.query.filter_by(student_id=g.user_id).all()]
+            if my_secs:
+                active_s = LabSession.query.join(
+                    SectionSubject, SectionSubject.id == LabSession.section_subject_id
+                ).filter(
+                    SectionSubject.section_id.in_(my_secs),
+                    LabSession.status == 'active'
+                ).order_by(LabSession.started_at.desc()).first()
+                if active_s:
+                    session_id = active_s.id
 
     score  = predict_focus_score(signals)
     alerts = get_alerts(signals, score)
 
-    # Persist to DB
-    record = FocusScore(
-        student_id=g.user_id,
-        session_id=session_id,
-        focus_score=score,
-        signals=signals,
-        recorded_at=datetime.utcnow()
-    )
-    db.session.add(record)
-    db.session.commit()
+    # Persist to DB when session is identified
+    if session_id:
+        try:
+            record = FocusScore(
+                student_id=g.user_id,
+                session_id=session_id,
+                focus_score=score,
+                signals=signals,
+                recorded_at=datetime.utcnow()
+            )
+            db.session.add(record)
+            db.session.commit()
 
-    # Relay to instructor via Socket.io
-    from app.extensions import socketio
-    socketio.emit('student_focus_update', {
-        'student_id':  g.user_id,
-        'focus_score': score,
-        'alerts':      alerts,
-        'signals':     signals,
-        'timestamp':   datetime.utcnow().isoformat(),
-    }, room=f"session_{session_id}_instructor")
+            # Relay to instructor via Socket.io
+            from app.extensions import socketio
+            socketio.emit('student_focus_update', {
+                'student_id':  g.user_id,
+                'focus_score': score,
+                'alerts':      alerts,
+                'signals':     signals,
+                'timestamp':   datetime.utcnow().isoformat(),
+            }, room=f"session_{session_id}_instructor")
+        except Exception:
+            db.session.rollback()
 
     return jsonify({'focus_score': score, 'alerts': alerts}), 200
 
