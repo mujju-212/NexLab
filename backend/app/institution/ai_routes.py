@@ -90,17 +90,13 @@ def init_ai_routes(bp: Blueprint):
             AIUsageLog.success == False
         ).count()
 
-        # If zero or low, use realistic correlated defaults based on actual seeded database
-        display_calls = max(total_calls, 12438)
-        display_tokens = max(tokens_sum, 5400000)
-        display_cost = max(float(cost_sum), 2.18)
-        display_active = max(active_users_count, 428)
-        display_blocked = max(blocked_count, 34)
+        display_calls = total_calls
+        display_tokens = int(tokens_sum)
+        display_cost = float(cost_sum)
+        display_active = active_users_count
+        display_blocked = blocked_count
 
         # ── Usage Trend (Last 30 days)
-        # func.date() not func.strftime(): strftime is sqlite-only and 500s on
-        # Postgres (the AI Usage page's Overview tab was dead there). Grouping
-        # by the label object rather than its name — same result, but explicit.
         log_date = func.date(AIUsageLog.created_at).label('log_date')
         trend_rows = db.session.query(
             log_date,
@@ -119,14 +115,10 @@ def init_ai_routes(bp: Blueprint):
         end = datetime.utcnow()
         while cur <= end:
             d_str = cur.strftime('%Y-%m-%d')
-            lbl = cur.strftime('Sep %d') if cur.month == 9 else cur.strftime('%b %d')
+            lbl = cur.strftime('%b %d')
             entry = trend_map.get(d_str, None)
-            if entry:
-                calls_v = entry['calls']
-                users_v = max(entry['unique_users'], int(calls_v * 0.72))
-            else:
-                calls_v = random.randint(340, 480)
-                users_v = int(calls_v * 0.74)
+            calls_v = entry['calls'] if entry else 0
+            users_v = entry['unique_users'] if entry else 0
             trend_data.append({
                 'date': d_str,
                 'label': lbl,
@@ -135,15 +127,32 @@ def init_ai_routes(bp: Blueprint):
             })
             cur += timedelta(days=1)
 
-        # ── Usage by Feature Donut
-        feature_breakdown = [
-            {'feature': 'Chat Assistant', 'percent': 42, 'calls': int(display_calls * 0.42), 'color': '#7c3aed'},
-            {'feature': 'Code Help', 'percent': 24, 'calls': int(display_calls * 0.24), 'color': '#3b82f6'},
-            {'feature': 'Answer Evaluation', 'percent': 15, 'calls': int(display_calls * 0.15), 'color': '#10b981'},
-            {'feature': 'Content Generation', 'percent': 10, 'calls': int(display_calls * 0.10), 'color': '#f59e0b'},
-            {'feature': 'Data Analysis', 'percent': 6, 'calls': int(display_calls * 0.06), 'color': '#ec4899'},
-            {'feature': 'Others', 'percent': 3, 'calls': int(display_calls * 0.03), 'color': '#8b5cf6'},
-        ]
+        # ── Usage by Feature Donut (Genuine Database Counts)
+        feature_rows = db.session.query(
+            AIUsageLog.feature,
+            func.count(AIUsageLog.id).label('calls')
+        ).filter(
+            AIUsageLog.institution_id == iid,
+            AIUsageLog.created_at >= since
+        ).group_by(AIUsageLog.feature).all()
+
+        palette = ['#7c3aed', '#3b82f6', '#10b981', '#f59e0b', '#ec4899', '#8b5cf6', '#06b6d4', '#64748b']
+        feature_breakdown = []
+        f_total = sum(int(r.calls) for r in feature_rows) or 1
+        for idx, r in enumerate(feature_rows):
+            feat_name = (r.feature or 'general').replace('_', ' ').title()
+            pct = round((int(r.calls) / f_total) * 100, 1)
+            feature_breakdown.append({
+                'feature': feat_name,
+                'percent': pct,
+                'calls': int(r.calls),
+                'color': palette[idx % len(palette)]
+            })
+        if not feature_breakdown:
+            feature_breakdown = [
+                {'feature': 'Chat Assistant', 'percent': 0, 'calls': 0, 'color': '#7c3aed'},
+                {'feature': 'Code Help', 'percent': 0, 'calls': 0, 'color': '#3b82f6'},
+            ]
 
         # ── AI Governance Settings
         policy = AIPolicy.get_or_create(iid)
@@ -155,7 +164,7 @@ def init_ai_routes(bp: Blueprint):
             'data_retention': False,
         }
 
-        # ── Top Users by AI Usage
+        # ── Top Users by AI Usage (Genuine Database Records Only)
         top_user_rows = (
             db.session.query(
                 User.id,
@@ -171,13 +180,9 @@ def init_ai_routes(bp: Blueprint):
             .join(AIUsageLog, AIUsageLog.user_id == User.id)
             .outerjoin(Department, Department.id == User.department_id)
             .filter(AIUsageLog.institution_id == iid)
-            # Postgres strict GROUP BY: users.* is covered functionally by the
-            # PK, but the joined departments.name must be named explicitly.
-            # (This endpoint silently 500'd on PG while dev fell back to
-            # sqlite, which doesn't enforce the rule.)
             .group_by(User.id, Department.name)
             .order_by(desc('call_count'))
-            .limit(10)
+            .limit(20)
             .all()
         )
 
@@ -187,7 +192,7 @@ def init_ai_routes(bp: Blueprint):
             t_str = f"{tkns // 1000}K" if tkns >= 1000 else str(tkns)
             last_dt = u.last_call or datetime.utcnow()
             diff_mins = int((datetime.utcnow() - last_dt).total_seconds() // 60)
-            rel_time = f"{diff_mins} mins ago" if diff_mins < 60 else (f"{diff_mins // 60} hours ago" if diff_mins < 1440 else "1 day ago")
+            rel_time = f"{diff_mins} mins ago" if diff_mins < 60 else (f"{diff_mins // 60} hours ago" if diff_mins < 1440 else f"{diff_mins // 1440} days ago")
 
             top_users.append({
                 'rank': idx,
@@ -195,73 +200,111 @@ def init_ai_routes(bp: Blueprint):
                 'name': u.full_name,
                 'email': u.email,
                 'role': u.role.replace('_', ' ').capitalize() if u.role else 'Student',
-                'department': u.department_name or ('Computer Science' if idx % 2 == 1 else 'Electronics'),
+                'department': u.department_name or 'General',
                 'calls': int(u.call_count),
                 'tokens': t_str,
                 'tokens_raw': tkns,
-                'est_cost': f"${float(u.cost_count or 0.08):.2f}",
+                'est_cost': f"${float(u.cost_count or 0.0):.2f}",
                 'last_used': rel_time,
             })
 
-        # Ensure we have the top 5 prominently featured users matching mockup
-        if len(top_users) < 5:
-            named_top = [
-                {'rank': 1, 'name': 'Aryan Mehta', 'email': 'aryan.mehta@greenwood.edu', 'role': 'Student', 'calls': 1248, 'tokens': '520K', 'est_cost': '$0.21', 'last_used': '2 hours ago'},
-                {'rank': 2, 'name': 'Dr. Neha Iyer', 'email': 'neha.iyer@greenwood.edu', 'role': 'Instructor', 'calls': 892, 'tokens': '410K', 'est_cost': '$0.16', 'last_used': '5 hours ago'},
-                {'rank': 3, 'name': 'Rohan Kulkarni', 'email': 'rohan.k@greenwood.edu', 'role': 'Student', 'calls': 776, 'tokens': '312K', 'est_cost': '$0.12', 'last_used': '1 day ago'},
-                {'rank': 4, 'name': 'Sneha Patil', 'email': 'sneha.p@greenwood.edu', 'role': 'Instructor', 'calls': 642, 'tokens': '280K', 'est_cost': '$0.11', 'last_used': '1 day ago'},
-                {'rank': 5, 'name': 'Amit Sharma', 'email': 'amit.s@greenwood.edu', 'role': 'Student', 'calls': 590, 'tokens': '210K', 'est_cost': '$0.08', 'last_used': '2 days ago'},
-            ]
-            for nu in named_top:
-                if not any(x['name'] == nu['name'] for x in top_users):
-                    top_users.append(nu)
-
         # ── Quota Usage
-        inst_quota_total = (policy.monthly_token_quota or 5000000) * 2
-        inst_quota_used = display_tokens
+        inst_quota_total = policy.monthly_token_quota or 5000000
+        quota_pct = min(100, round((display_tokens / max(inst_quota_total, 1)) * 100, 1))
+
+        stud_avg_tokens = db.session.query(func.avg(AIUserQuota.current_month_tokens))\
+            .join(User, User.id == AIUserQuota.user_id)\
+            .filter(AIUserQuota.institution_id == iid, User.role == 'student')\
+            .scalar() or 0
+        inst_avg_tokens = db.session.query(func.avg(AIUserQuota.current_month_tokens))\
+            .join(User, User.id == AIUserQuota.user_id)\
+            .filter(AIUserQuota.institution_id == iid, User.role == 'instructor')\
+            .scalar() or 0
+
         quota_usage = {
             'institution': {
-                'used_formatted': '5.4M',
-                'limit_formatted': '10M tokens',
-                'percent': 54,
+                'used_formatted': f"{display_tokens // 1000}K" if display_tokens < 1000000 else f"{display_tokens / 1000000:.1f}M",
+                'limit_formatted': f"{inst_quota_total // 1000000}M tokens",
+                'percent': quota_pct,
             },
             'student_avg': {
-                'used_formatted': 'Avg. 12K',
+                'used_formatted': f"Avg. {int(stud_avg_tokens) // 1000}K" if int(stud_avg_tokens) >= 1000 else f"Avg. {int(stud_avg_tokens)}",
                 'limit_formatted': '50K',
-                'percent': 24,
+                'percent': min(100, round((float(stud_avg_tokens) / 50000) * 100, 1)),
             },
             'instructor_avg': {
-                'used_formatted': 'Avg. 28K',
+                'used_formatted': f"Avg. {int(inst_avg_tokens) // 1000}K" if int(inst_avg_tokens) >= 1000 else f"Avg. {int(inst_avg_tokens)}",
                 'limit_formatted': '200K',
-                'percent': 14,
+                'percent': min(100, round((float(inst_avg_tokens) / 200000) * 100, 1)),
             },
         }
 
-        # ── Department Usage
-        department_usage = [
-            {'name': 'Computer Science', 'percent': 38, 'color': '#7c3aed'},
-            {'name': 'Electronics', 'percent': 22, 'color': '#38bdf8'},
-            {'name': 'Mechanical', 'percent': 15, 'color': '#34d399'},
-            {'name': 'Civil', 'percent': 12, 'color': '#fbbf24'},
-            {'name': 'Applied Science', 'percent': 8, 'color': '#f472b6'},
-            {'name': 'Others', 'percent': 5, 'color': '#cbd5e1'},
-        ]
+        # ── Department Usage (Genuine DB Aggregation)
+        dept_rows = db.session.query(
+            Department.name,
+            func.count(AIUsageLog.id).label('calls')
+        ).join(User, User.department_id == Department.id)\
+         .join(AIUsageLog, AIUsageLog.user_id == User.id)\
+         .filter(AIUsageLog.institution_id == iid, AIUsageLog.created_at >= since)\
+         .group_by(Department.name)\
+         .order_by(desc('calls'))\
+         .all()
 
-        # ── Recent Activity
-        recent_activity = [
-            {'id': '1', 'type': 'answer', 'title': 'Answer generated', 'user': 'Aryan Mehta', 'time': '2 mins ago', 'color': '#10b981'},
-            {'id': '2', 'type': 'code', 'title': 'Code explanation', 'user': 'Rohan Kulkarni', 'time': '12 mins ago', 'color': '#3b82f6'},
-            {'id': '3', 'type': 'flagged', 'title': 'Content flagged (blocked)', 'user': 'Unknown User', 'time': '25 mins ago', 'color': '#ef4444'},
-            {'id': '4', 'type': 'report', 'title': 'Lab report summary', 'user': 'Sneha Patil', 'time': '1 hour ago', 'color': '#8b5cf6'},
-        ]
+        dept_palette = ['#7c3aed', '#38bdf8', '#34d399', '#fbbf24', '#f472b6', '#cbd5e1']
+        d_total = sum(int(r.calls) for r in dept_rows) or 1
+        department_usage = []
+        for idx, r in enumerate(dept_rows):
+            pct = round((int(r.calls) / d_total) * 100, 1)
+            department_usage.append({
+                'name': r.name,
+                'percent': pct,
+                'color': dept_palette[idx % len(dept_palette)]
+            })
+        if not department_usage:
+            inst_depts = Department.query.filter_by(institution_id=iid).all()
+            if inst_depts:
+                eq_pct = round(100 / len(inst_depts), 1)
+                department_usage = [{'name': d.name, 'percent': eq_pct, 'color': dept_palette[i % len(dept_palette)]} for i, d in enumerate(inst_depts)]
+            else:
+                department_usage = [{'name': 'Campus Wide', 'percent': 100, 'color': '#7c3aed'}]
+
+        # ── Recent Activity (Genuine AI Usage Logs)
+        recent_logs = (
+            db.session.query(AIUsageLog, User)
+            .outerjoin(User, User.id == AIUsageLog.user_id)
+            .filter(AIUsageLog.institution_id == iid)
+            .order_by(AIUsageLog.created_at.desc())
+            .limit(6)
+            .all()
+        )
+        recent_activity = []
+        for l, u in recent_logs:
+            u_name = u.full_name if u else 'System User'
+            diff_mins = int((datetime.utcnow() - l.created_at).total_seconds() // 60) if l.created_at else 0
+            rel_time = f"{diff_mins} mins ago" if diff_mins < 60 else (f"{diff_mins // 60} hours ago" if diff_mins < 1440 else f"{diff_mins // 1440} days ago")
+            act_type = 'flagged' if not l.success else ('code' if 'code' in (l.feature or '') else 'answer')
+            color = '#ef4444' if not l.success else ('#3b82f6' if act_type == 'code' else '#10b981')
+            feat_disp = (l.feature or 'interaction').replace('_', ' ').title()
+            title = f"Content blocked ({feat_disp})" if not l.success else f"{feat_disp} executed"
+            recent_activity.append({
+                'id': str(l.id),
+                'type': act_type,
+                'title': title,
+                'user': u_name,
+                'time': rel_time,
+                'color': color,
+            })
+
+        calls_delta = f"{round(((total_calls - prev_calls) / max(prev_calls, 1)) * 100, 1):+}% vs. last {days} days" if prev_calls else "Baseline period"
+        token_str = f"{display_tokens // 1000}K" if display_tokens < 1000000 else f"{display_tokens / 1000000:.1f}M"
 
         return jsonify({
             'kpis': {
-                'total_calls': {'value': f"{display_calls:,}", 'raw': display_calls, 'change': '+18% vs. last 30 days'},
-                'active_users': {'value': str(display_active), 'raw': display_active, 'change': '+12% used AI features'},
-                'total_tokens': {'value': '5.4M', 'raw': display_tokens, 'change': '+25% vs. last 30 days'},
-                'estimated_cost': {'value': f"${display_cost:.2f}", 'raw': display_cost, 'change': '+22% based on usage'},
-                'blocked_requests': {'value': str(display_blocked), 'raw': display_blocked, 'change': '+6% safety filters'},
+                'total_calls': {'value': f"{display_calls:,}", 'raw': display_calls, 'change': calls_delta},
+                'active_users': {'value': str(display_active), 'raw': display_active, 'change': f"{display_active} active users"},
+                'total_tokens': {'value': token_str, 'raw': display_tokens, 'change': 'Live telemetry'},
+                'estimated_cost': {'value': f"${display_cost:.2f}", 'raw': display_cost, 'change': 'Usage calculated'},
+                'blocked_requests': {'value': str(display_blocked), 'raw': display_blocked, 'change': 'Safety enforced'},
             },
             'trend': trend_data,
             'feature_breakdown': feature_breakdown,
@@ -356,44 +399,54 @@ def init_ai_routes(bp: Blueprint):
             limit_tokens = quota.monthly_token_quota if quota else 50000
             pct = min(100, round((used_tokens / max(limit_tokens, 1)) * 100))
 
-            call_count = AIUsageLog.query.filter_by(institution_id=iid, user_id=u.id).count() or random.randint(280, 890)
+            call_count = AIUsageLog.query.filter_by(institution_id=iid, user_id=u.id).count() or 0
             cost_val = _estimate_cost('openai/gpt-oss-120b', used_tokens)
 
             # Department name
-            dept_name = 'Computer Science'
+            dept_name = 'General'
             if u.department_id:
                 d = Department.query.get(u.department_id)
                 if d:
                     dept_name = d.name
-            else:
-                dept_names = ['Computer Science', 'Electronics', 'Mechanical', 'Civil', 'Applied Science', 'Administration']
-                dept_name = dept_names[idx % len(dept_names)]
 
             status = 'Warning' if pct >= 90 else ('Blocked' if pct >= 100 else 'Active')
+
+            last_log = AIUsageLog.query.filter_by(institution_id=iid, user_id=u.id).order_by(AIUsageLog.created_at.desc()).first()
+            if last_log and last_log.created_at:
+                diff_m = int((datetime.utcnow() - last_log.created_at).total_seconds() // 60)
+                rel_time = f"{diff_m} mins ago" if diff_m < 60 else (f"{diff_m // 60} hours ago" if diff_m < 1440 else f"{diff_m // 1440} days ago")
+            else:
+                rel_time = "Never"
 
             user_items.append({
                 'index': idx,
                 'id': u.id,
                 'name': u.full_name,
                 'email': u.email,
-                'role': 'TA' if 'patil' in u.full_name.lower() else (u.role.replace('_', ' ').capitalize() if u.role else 'Student'),
+                'role': u.role.replace('_', ' ').capitalize() if u.role else 'Student',
                 'department': dept_name,
                 'total_calls': call_count,
                 'tokens_used': f"{used_tokens // 1000}K" if used_tokens >= 1000 else str(used_tokens),
                 'tokens_used_raw': used_tokens,
                 'est_cost': f"${cost_val:.2f}",
-                'last_active': f"{idx + 1} hours ago" if idx < 5 else f"{idx // 2} days ago",
+                'last_active': rel_time,
                 'quota_percent': pct,
                 'status': status,
             })
 
+        tot_inst_users = User.query.filter_by(institution_id=iid).count()
+        active_inst_users = db.session.query(func.count(func.distinct(AIUsageLog.user_id))).filter(AIUsageLog.institution_id == iid).scalar() or 0
+        total_calls_all = AIUsageLog.query.filter_by(institution_id=iid).count()
+        tokens_all = db.session.query(func.sum(AIUsageLog.total_tokens)).filter_by(institution_id=iid).scalar() or 0
+        cost_all = db.session.query(func.sum(AIUsageLog.estimated_cost_usd)).filter_by(institution_id=iid).scalar() or 0.0
+
         return jsonify({
             'kpis': {
-                'total_users': 428,
-                'active_users': 312,
-                'total_api_calls': '12,438',
-                'total_tokens_used': '5.4M',
-                'estimated_cost': '$2.18',
+                'total_users': tot_inst_users,
+                'active_users': active_inst_users,
+                'total_api_calls': f"{total_calls_all:,}",
+                'total_tokens_used': f"{tokens_all // 1000}K" if tokens_all < 1000000 else f"{tokens_all / 1000000:.1f}M",
+                'estimated_cost': f"${float(cost_all):.2f}",
             },
             'users': user_items,
             'total': total_users,
@@ -410,26 +463,52 @@ def init_ai_routes(bp: Blueprint):
         policy = AIPolicy.get_or_create(iid)
 
         inst_quota = policy.monthly_token_quota or 5000000
-        total_allocated = 4320000
+        total_allocated = db.session.query(func.sum(AIUserQuota.monthly_token_quota)).filter_by(institution_id=iid).scalar() or 0
         remaining_quota = max(0, inst_quota - total_allocated)
+        alloc_pct = min(100, round((total_allocated / max(inst_quota, 1)) * 100, 1))
+        remain_pct = max(0, round(100 - alloc_pct, 1))
 
-        # Quota distribution by role
-        distribution = [
-            {'role': 'Students', 'percent': 52, 'amount': '2.24M', 'tokens': 2240000, 'color': '#7c3aed'},
-            {'role': 'Instructors', 'percent': 28, 'amount': '1.21M', 'tokens': 1210000, 'color': '#38bdf8'},
-            {'role': 'TAs', 'percent': 12, 'amount': '518K', 'tokens': 518000, 'color': '#10b981'},
-            {'role': 'Admins', 'percent': 8, 'amount': '346K', 'tokens': 346000, 'color': '#f59e0b'},
-        ]
+        # Genuine quota distribution by role
+        role_quotas = db.session.query(
+            User.role,
+            func.sum(AIUserQuota.current_month_tokens).label('tokens')
+        ).join(AIUserQuota, AIUserQuota.user_id == User.id)\
+         .filter(AIUserQuota.institution_id == iid)\
+         .group_by(User.role)\
+         .all()
+        role_total = sum(int(r.tokens or 0) for r in role_quotas) or 1
+        role_colors = {'student': '#7c3aed', 'instructor': '#38bdf8', 'ta': '#10b981', 'institution_admin': '#f59e0b'}
+        distribution = []
+        for r in role_quotas:
+            r_name = (r.role or 'student').replace('_', ' ').capitalize() + 's'
+            tkns = int(r.tokens or 0)
+            pct = round((tkns / role_total) * 100, 1)
+            amt_str = f"{tkns // 1000}K" if tkns < 1000000 else f"{tkns / 1000000:.2f}M"
+            distribution.append({
+                'role': r_name,
+                'percent': pct,
+                'amount': amt_str,
+                'tokens': tkns,
+                'color': role_colors.get(r.role, '#94a3b8')
+            })
+        if not distribution:
+            distribution = [
+                {'role': 'Students', 'percent': 100, 'amount': '0K', 'tokens': 0, 'color': '#7c3aed'},
+            ]
 
-        # Quota usage timeline
+        # Quota usage timeline from genuine log token counts
         trend = []
         now = datetime.utcnow()
         for i in range(30, -1, -5):
             d = now - timedelta(days=i)
+            d_start = d - timedelta(days=5)
+            used_in_window = db.session.query(func.sum(AIUsageLog.total_tokens))\
+                .filter(AIUsageLog.institution_id == iid, AIUsageLog.created_at >= d_start, AIUsageLog.created_at <= d)\
+                .scalar() or 0
             trend.append({
-                'label': d.strftime('Sep %d') if d.month == 9 else d.strftime('%b %d'),
-                'used_tokens': random.randint(240000, 380000),
-                'allocated_tokens': 400000,
+                'label': d.strftime('%b %d'),
+                'used_tokens': int(used_in_window),
+                'allocated_tokens': inst_quota // 6,
             })
 
         # User quota items (all users with quotas)
@@ -444,7 +523,7 @@ def init_ai_routes(bp: Blueprint):
         user_quotas = []
         for idx, (q, u) in enumerate(quotas_query, 1):
             pct = q.to_dict()['usage_percent']
-            dept = 'Computer Science' if idx % 2 == 1 else 'Electronics'
+            dept = 'General'
             if u.department_id:
                 d = Department.query.get(u.department_id)
                 if d:
@@ -456,24 +535,27 @@ def init_ai_routes(bp: Blueprint):
                 'user_id': u.id,
                 'name': u.full_name,
                 'email': u.email,
-                'role': 'TA' if 'patil' in u.full_name.lower() else (u.role.replace('_', ' ').capitalize() if u.role else 'Student'),
+                'role': u.role.replace('_', ' ').capitalize() if u.role else 'Student',
                 'department': dept,
-                'current_usage': f"{q.current_month_tokens // 1000}K",
+                'current_usage': f"{q.current_month_tokens // 1000}K" if q.current_month_tokens >= 1000 else str(q.current_month_tokens),
                 'current_usage_raw': q.current_month_tokens,
-                'allocated_quota': f"{q.monthly_token_quota // 1000}K",
+                'allocated_quota': f"{q.monthly_token_quota // 1000}K" if q.monthly_token_quota >= 1000 else str(q.monthly_token_quota),
                 'allocated_quota_raw': q.monthly_token_quota,
                 'remaining': f"{max(0, q.monthly_token_quota - q.current_month_tokens) // 1000}K",
                 'usage_percent': pct,
-                'reset_date': q.reset_date or '01 Oct 2026',
+                'reset_date': q.reset_date or datetime.utcnow().strftime('01 %b %Y'),
                 'status': 'Warning' if pct >= 90 else 'Active',
             })
 
+        allocated_users_cnt = AIUserQuota.query.filter_by(institution_id=iid).count()
+        total_active_users = db.session.query(func.count(func.distinct(AIUsageLog.user_id))).filter(AIUsageLog.institution_id == iid).scalar() or 0
+
         return jsonify({
             'kpis': {
-                'institution_quota': {'value': '5,000,000', 'raw': inst_quota, 'sub': 'Total tokens per month'},
-                'total_allocated': {'value': '4,320,000', 'raw': total_allocated, 'sub': '86.4% of total quota', 'percent': 86.4},
-                'remaining_quota': {'value': '680,000', 'raw': remaining_quota, 'sub': '13.6% left', 'percent': 13.6},
-                'active_users': {'value': '428', 'sub': '312 with quota allocated'},
+                'institution_quota': {'value': f"{inst_quota:,}", 'raw': inst_quota, 'sub': 'Total monthly token quota'},
+                'total_allocated': {'value': f"{total_allocated:,}", 'raw': total_allocated, 'sub': f"{alloc_pct}% of total quota", 'percent': alloc_pct},
+                'remaining_quota': {'value': f"{remaining_quota:,}", 'raw': remaining_quota, 'sub': f"{remain_pct}% unallocated", 'percent': remain_pct},
+                'active_users': {'value': str(total_active_users), 'sub': f"{allocated_users_cnt} with quota allocated"},
             },
             'distribution': distribution,
             'trend': trend,
@@ -662,27 +744,50 @@ def init_ai_routes(bp: Blueprint):
         now = datetime.utcnow()
         for i in range(30, -1, -5):
             d = now - timedelta(days=i)
+            d_start = d - timedelta(days=5)
+            succ_c = SecurityEvent.query.filter(
+                SecurityEvent.institution_id == iid,
+                SecurityEvent.event_type.in_(['login_success', 'auth_success']),
+                SecurityEvent.created_at >= d_start,
+                SecurityEvent.created_at <= d
+            ).count()
+            fail_c = SecurityEvent.query.filter(
+                SecurityEvent.institution_id == iid,
+                SecurityEvent.event_type.in_(['login_failure', 'auth_failure']),
+                SecurityEvent.created_at >= d_start,
+                SecurityEvent.created_at <= d
+            ).count()
+            viol_c = SecurityEvent.query.filter(
+                SecurityEvent.institution_id == iid,
+                SecurityEvent.event_type.in_(['policy_violation', 'blocked_prompt']),
+                SecurityEvent.created_at >= d_start,
+                SecurityEvent.created_at <= d
+            ).count()
             trend.append({
-                'label': d.strftime('Sep %d') if d.month == 9 else d.strftime('%b %d'),
-                'successful_logins': random.randint(35, 65),
-                'failed_logins': random.randint(8, 20),
-                'policy_violations': random.randint(1, 6),
+                'label': d.strftime('%b %d'),
+                'successful_logins': succ_c,
+                'failed_logins': fail_c,
+                'policy_violations': viol_c,
             })
+
+        active_users_cnt = User.query.filter_by(institution_id=iid, is_active=True).count()
+        alerts_cnt = SecurityEvent.query.filter(
+            SecurityEvent.institution_id == iid,
+            SecurityEvent.severity.in_(['high', 'critical'])
+        ).count()
+        elevated_cnt = User.query.filter(User.institution_id == iid, User.role.in_(['instructor', 'institution_admin'])).count()
 
         # Login locations
         locations = [
-            {'country': 'India', 'percent': 68, 'users': 292, 'color': '#7c3aed'},
-            {'country': 'United States', 'percent': 12, 'users': 51, 'color': '#38bdf8'},
-            {'country': 'United Kingdom', 'percent': 8, 'users': 34, 'color': '#fbbf24'},
-            {'country': 'Others', 'percent': 12, 'users': 51, 'color': '#94a3b8'},
+            {'country': 'India', 'percent': 100, 'users': active_users_cnt, 'color': '#7c3aed'},
         ]
 
         return jsonify({
             'kpis': {
-                'security_score': {'value': '96/100', 'change': '+4 vs. last month'},
-                'active_users': {'value': '428', 'sub': '5 with elevated access'},
-                'security_alerts': {'value': '3', 'sub': '1 critical, 2 medium'},
-                'compliance_status': {'value': 'Compliant', 'sub': 'Last assessed: 01 Oct 2026'},
+                'security_score': {'value': '98/100' if alerts_cnt == 0 else f"{max(60, 100 - alerts_cnt * 5)}/100", 'change': 'Monitored'},
+                'active_users': {'value': str(active_users_cnt), 'sub': f"{elevated_cnt} with elevated access"},
+                'security_alerts': {'value': str(alerts_cnt), 'sub': 'Security incidents recorded'},
+                'compliance_status': {'value': 'Compliant', 'sub': f"Last assessed: {now.strftime('%d %b %Y')}"},
             },
             'trend': trend,
             'locations': locations,
@@ -781,295 +886,97 @@ def init_ai_routes(bp: Blueprint):
             ),
         }
 
-        # Curated mockup seed logs for rich display
-        MOCK_LOGS = [
-            {
-                'id': '1',
-                'request_id': 'req_8f3a2d9e5c1b4f23',
-                'timestamp': '30 Sep 2026, 10:24:13',
-                'user_name': 'Aryan Mehta',
-                'user_email': 'aryan.mehta@greenwood.edu',
-                'role': 'Student',
-                'event_type': 'AI Request',
-                'feature': 'Chat Assistant',
-                'model': 'GPT-4o',
-                'tokens': 1250,
-                'input_tokens': 1000,
-                'output_tokens': 250,
-                'status': 'Success',
-                'response_time': '2.3s',
-                'ip_address': '203.122.67.91',
-                'location': 'Bengaluru, India',
-                'prompt': PREVIEWS['Chat Assistant'][0],
-                'response': PREVIEWS['Chat Assistant'][1],
-            },
-            {
-                'id': '2',
-                'request_id': 'req_91b7e40a1d8c23e4',
-                'timestamp': '30 Sep 2026, 10:22:45',
-                'user_name': 'Sneha Patil',
-                'user_email': 'sneha.p@greenwood.edu',
-                'role': 'TA',
-                'event_type': 'Quota Limit',
-                'feature': 'Answer Evaluation',
-                'model': '-',
-                'tokens': 0,
-                'input_tokens': 0,
-                'output_tokens': 0,
-                'status': 'Blocked',
-                'response_time': '0.5s',
-                'ip_address': '117.203.45.23',
-                'location': 'Pune, India',
-                'prompt': 'Batch evaluation of 45 lab submissions.',
-                'response': 'Request blocked: Monthly quota limit reached for current billing window.',
-            },
-            {
-                'id': '3',
-                'request_id': 'req_3a8c1f90e52b71d9',
-                'timestamp': '30 Sep 2026, 10:20:11',
-                'user_name': 'Rohan Kulkarni',
-                'user_email': 'rohan.k@greenwood.edu',
-                'role': 'Student',
-                'event_type': 'Feature Access',
-                'feature': 'Code Help',
-                'model': 'Claude 3.5',
-                'tokens': 982,
-                'input_tokens': 780,
-                'output_tokens': 202,
-                'status': 'Success',
-                'response_time': '3.1s',
-                'ip_address': '103.21.54.88',
-                'location': 'Mumbai, India',
-                'prompt': PREVIEWS['Code Help'][0],
-                'response': PREVIEWS['Code Help'][1],
-            },
-            {
-                'id': '4',
-                'request_id': 'req_4d2e71c9a08f53b1',
-                'timestamp': '30 Sep 2026, 10:18:37',
-                'user_name': 'Dr. Neha Iyer',
-                'user_email': 'neha.iyer@greenwood.edu',
-                'role': 'Instructor',
-                'event_type': 'AI Request',
-                'feature': 'Content Generation',
-                'model': 'GPT-4o',
-                'tokens': 2430,
-                'input_tokens': 1800,
-                'output_tokens': 630,
-                'status': 'Success',
-                'response_time': '4.2s',
-                'ip_address': '49.205.11.76',
-                'location': 'Chennai, India',
-                'prompt': PREVIEWS['Content Generation'][0],
-                'response': PREVIEWS['Content Generation'][1],
-            },
-            {
-                'id': '5',
-                'request_id': 'req_5e1f82b0c97a44d2',
-                'timestamp': '30 Sep 2026, 10:15:09',
-                'user_name': 'Pooja Krishna',
-                'user_email': 'pooja.k@greenwood.edu',
-                'role': 'Admin',
-                'event_type': 'Auth Event',
-                'feature': 'Login',
-                'model': '-',
-                'tokens': 0,
-                'input_tokens': 0,
-                'output_tokens': 0,
-                'status': 'Success',
-                'response_time': '0.8s',
-                'ip_address': '117.203.45.23',
-                'location': 'Delhi, India',
-                'prompt': 'Admin session authentication token verification.',
-                'response': 'Multi-factor authentication confirmed. Session created.',
-            },
-            {
-                'id': '6',
-                'request_id': 'req_6f0a93c1d86b55e3',
-                'timestamp': '30 Sep 2026, 10:12:21',
-                'user_name': 'Amit Sharma',
-                'user_email': 'amit.s@greenwood.edu',
-                'role': 'Student',
-                'event_type': 'AI Request',
-                'feature': 'Data Analysis',
-                'model': 'GPT-4o',
-                'tokens': 3120,
-                'input_tokens': 2500,
-                'output_tokens': 620,
-                'status': 'Success',
-                'response_time': '5.8s',
-                'ip_address': '203.122.67.91',
-                'location': 'Hyderabad, India',
-                'prompt': PREVIEWS['Data Analysis'][0],
-                'response': PREVIEWS['Data Analysis'][1],
-            },
-            {
-                'id': '7',
-                'request_id': 'req_7a1b04d2e95c66f4',
-                'timestamp': '30 Sep 2026, 10:08:44',
-                'user_name': 'Vikram Rao',
-                'user_email': 'vikram.r@greenwood.edu',
-                'role': 'Instructor',
-                'event_type': 'Error',
-                'feature': 'Image Analysis',
-                'model': 'DALL-E 3',
-                'tokens': 0,
-                'input_tokens': 0,
-                'output_tokens': 0,
-                'status': 'Failed',
-                'response_time': '1.2s',
-                'ip_address': '185.220.101.5',
-                'location': 'Frankfurt, DE',
-                'prompt': PREVIEWS['Image Analysis'][0],
-                'response': 'Error 503: Upstream model service timeout. Retry initiated.',
-            },
-            {
-                'id': '8',
-                'request_id': 'req_8b2c15e3f04d77a5',
-                'timestamp': '30 Sep 2026, 10:05:19',
-                'user_name': 'Nidhi Desai',
-                'user_email': 'nidhi.d@greenwood.edu',
-                'role': 'Student',
-                'event_type': 'AI Request',
-                'feature': 'Hint System',
-                'model': 'GPT-4o',
-                'tokens': 410,
-                'input_tokens': 320,
-                'output_tokens': 90,
-                'status': 'Success',
-                'response_time': '1.9s',
-                'ip_address': '223.176.12.34',
-                'location': 'Bengaluru, India',
-                'prompt': PREVIEWS['Hint System'][0],
-                'response': PREVIEWS['Hint System'][1],
-            },
-            {
-                'id': '9',
-                'request_id': 'req_9c3d26f4a13e88b6',
-                'timestamp': '30 Sep 2026, 10:02:33',
-                'user_name': 'TAs Group',
-                'user_email': 'tas@greenwood.edu',
-                'role': 'TA',
-                'event_type': 'System Event',
-                'feature': 'Model Updated',
-                'model': '-',
-                'tokens': 0,
-                'input_tokens': 0,
-                'output_tokens': 0,
-                'status': 'Success',
-                'response_time': '0.3s',
-                'ip_address': '127.0.0.1',
-                'location': 'Internal System',
-                'prompt': 'Feature configuration: Default model updated to GPT-4o.',
-                'response': 'Model configuration propagated across 12 AI services.',
-            },
-            {
-                'id': '10',
-                'request_id': 'req_0d4e37a5b24f99c7',
-                'timestamp': '30 Sep 2026, 09:58:07',
-                'user_name': 'Aryan Mehta',
-                'user_email': 'aryan.mehta@greenwood.edu',
-                'role': 'Student',
-                'event_type': 'AI Request',
-                'feature': 'Viva Question',
-                'model': 'GPT-4o',
-                'tokens': 1875,
-                'input_tokens': 1400,
-                'output_tokens': 475,
-                'status': 'Success',
-                'response_time': '3.8s',
-                'ip_address': '203.122.67.91',
-                'location': 'Bengaluru, India',
-                'prompt': PREVIEWS['Viva Question'][0],
-                'response': PREVIEWS['Viva Question'][1],
-            }
-        ]
-
-        # Combine database logs and mockup template logs
+        # Genuine database logs only (no mock array fallback)
         combined_logs = []
-        if logs_db:
-            for idx, l in enumerate(logs_db):
-                u = User.query.get(l.user_id) if l.user_id else None
-                u_name = u.full_name if u else 'Aryan Mehta'
-                u_email = u.email if u else 'aryan.mehta@greenwood.edu'
-                feat_name = l.feature.replace('_', ' ').title()
-                p_prev, r_prev = PREVIEWS.get(feat_name, ("Explain the experiment procedure step by step.", "Step 1: Ensure all calibration metrics are verified..."))
-                
-                combined_logs.append({
-                    'id': str(idx + 1),
-                    'request_id': f"req_{l.id.replace('-', '')[:16]}",
-                    'timestamp': l.created_at.strftime('%d %b %Y, %H:%M:%S') if l.created_at else '30 Sep 2026, 10:24:13',
-                    'user_name': u_name,
-                    'user_email': u_email,
-                    'role': (l.role or 'student').capitalize(),
-                    'event_type': 'AI Request' if l.success else ('Quota Limit' if 'quota' in (l.error_message or '').lower() else 'Error'),
-                    'feature': feat_name,
-                    'model': 'GPT-4o' if 'gpt' in (l.model or '').lower() else 'Claude 3.5',
-                    'tokens': l.total_tokens or 1250,
-                    'input_tokens': int((l.total_tokens or 1250) * 0.8),
-                    'output_tokens': int((l.total_tokens or 1250) * 0.2),
-                    'status': 'Success' if l.success else 'Blocked',
-                    'response_time': f"{(l.latency_ms or 2300) / 1000:.1f}s",
-                    'ip_address': '203.122.67.91',
-                    'location': 'Bengaluru, India',
-                    'prompt': p_prev,
-                    'response': r_prev,
-                })
-        else:
-            combined_logs = MOCK_LOGS
+        for idx, l in enumerate(logs_db, start=(page - 1) * per_page + 1):
+            u = User.query.get(l.user_id) if l.user_id else None
+            u_name = u.full_name if u else 'System User'
+            u_email = u.email if u else '-'
+            feat_name = (l.feature or 'general').replace('_', ' ').title()
+            p_prev, r_prev = PREVIEWS.get(feat_name, ("Explain the experiment procedure step by step.", "Step 1: Ensure all calibration metrics are verified..."))
 
-        # Filter by search q if provided
-        if q:
-            combined_logs = [
-                x for x in combined_logs
-                if q in x['user_name'].lower() or q in x['feature'].lower() or q in x['request_id'].lower()
-            ]
+            combined_logs.append({
+                'id': str(idx),
+                'request_id': f"req_{l.id.replace('-', '')[:16]}",
+                'timestamp': l.created_at.strftime('%d %b %Y, %H:%M:%S') if l.created_at else '',
+                'user_name': u_name,
+                'user_email': u_email,
+                'role': (l.role or 'student').replace('_', ' ').capitalize(),
+                'event_type': 'AI Request' if l.success else 'Error',
+                'feature': feat_name,
+                'model': l.model or 'GPT-4o',
+                'tokens': l.total_tokens or 0,
+                'input_tokens': l.prompt_tokens or int((l.total_tokens or 0) * 0.75),
+                'output_tokens': l.completion_tokens or int((l.total_tokens or 0) * 0.25),
+                'status': 'Success' if l.success else 'Blocked',
+                'response_time': f"{(l.latency_ms or 500) / 1000:.1f}s",
+                'ip_address': '127.0.0.1',
+                'location': 'Campus Network',
+                'prompt': p_prev,
+                'response': r_prev,
+            })
 
-        # ── 30-Day Activity Trend
+        # ── 30-Day Activity Trend (Genuine DB Group By)
+        log_day = func.date(AIUsageLog.created_at).label('log_day')
+        trend_stats = db.session.query(
+            log_day,
+            func.count(AIUsageLog.id).label('tot'),
+            func.sum(case((AIUsageLog.success == True, 1), else_=0)).label('succ'),
+            func.avg(AIUsageLog.latency_ms).label('avg_lat')
+        ).filter(
+            AIUsageLog.institution_id == iid,
+            AIUsageLog.created_at >= datetime.utcnow() - timedelta(days=30)
+        ).group_by(log_day).all()
+        stat_map = {str(r.log_day): r for r in trend_stats}
+
         trend_days = []
         now = datetime.utcnow()
         for i in range(29, -1, -1):
             day_dt = now - timedelta(days=i)
             d_str = day_dt.strftime('%Y-%m-%d')
             lbl = day_dt.strftime('%b %d')
-            tot = random.randint(3200, 8500)
-            succ = int(tot * random.uniform(0.94, 0.98))
+            r = stat_map.get(d_str)
+            tot = int(r.tot) if r else 0
+            succ = int(r.succ or 0) if r else 0
             fail = tot - succ
+            avg_rt = round((float(r.avg_lat or 1200) / 1000), 1) if r else 0.0
             trend_days.append({
                 'date': d_str,
                 'label': lbl,
                 'total_requests': tot,
                 'successful': succ,
                 'failed': fail,
-                'avg_response_time': round(random.uniform(1.8, 3.2), 1),
+                'avg_response_time': avg_rt,
             })
 
-        # Event type distribution
+        # Event type distribution from actual logs
+        total_inst_logs = AIUsageLog.query.filter_by(institution_id=iid).count()
+        succ_logs = AIUsageLog.query.filter_by(institution_id=iid, success=True).count()
+        fail_logs = total_inst_logs - succ_logs
         event_types = [
-            {'name': 'AI Request', 'percent': 68, 'color': '#7c3aed'},
-            {'name': 'Quota Limit', 'percent': 12, 'color': '#3b82f6'},
-            {'name': 'Feature Access', 'percent': 8, 'color': '#10b981'},
-            {'name': 'Auth Events', 'percent': 6, 'color': '#f59e0b'},
-            {'name': 'Errors', 'percent': 4, 'color': '#ef4444'},
-            {'name': 'System Events', 'percent': 2, 'color': '#64748b'},
+            {'name': 'AI Request', 'percent': round((succ_logs / max(total_inst_logs, 1)) * 100, 1), 'color': '#7c3aed'},
+            {'name': 'Blocked/Error', 'percent': round((fail_logs / max(total_inst_logs, 1)) * 100, 1), 'color': '#ef4444'},
         ]
 
-        display_total = max(total_db_logs, 124832)
+        unique_users_all = db.session.query(func.count(func.distinct(AIUsageLog.user_id))).filter(AIUsageLog.institution_id == iid).scalar() or 0
+        tokens_sum_all = db.session.query(func.sum(AIUsageLog.total_tokens)).filter(AIUsageLog.institution_id == iid).scalar() or 0
+        token_disp = f"{tokens_sum_all // 1000}K" if tokens_sum_all < 1000000 else f"{tokens_sum_all / 1000000:.1f}M"
+        total_pages = max(1, (total_db_logs + per_page - 1) // per_page)
 
         return jsonify({
             'kpis': {
-                'total_logs': {'value': '124,832', 'raw': display_total, 'change': '+18% vs. last 30 days'},
-                'unique_users': {'value': '428', 'raw': 428, 'change': '+12%'},
-                'total_tokens': {'value': '5.4M', 'raw': 5400000, 'change': '+25%'},
-                'failed_requests': {'value': '342', 'raw': 342, 'change': '+6%'},
+                'total_logs': {'value': f"{total_db_logs:,}", 'raw': total_db_logs, 'change': f"{total_db_logs} logged records"},
+                'unique_users': {'value': str(unique_users_all), 'raw': unique_users_all, 'change': 'Campus users'},
+                'total_tokens': {'value': token_disp, 'raw': tokens_sum_all, 'change': 'Tokens utilized'},
+                'failed_requests': {'value': str(fail_logs), 'raw': fail_logs, 'change': 'Safety enforced'},
             },
             'activity_trend': trend_days,
             'event_type_breakdown': event_types,
             'logs': combined_logs,
-            'total': display_total,
+            'total': total_db_logs,
             'page': page,
             'per_page': per_page,
-            'total_pages': 12484,
+            'total_pages': total_pages,
         }), 200
 
     # ── 8. Export Usage Report ──────────────────────────────────────────────────
