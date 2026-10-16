@@ -186,11 +186,39 @@ def cohort_leaderboard():
         scope_id=scope_id,
         institution_id=g.institution_id,
     )
+
+    from app.models.user import User
+    student_ids = [r['student_id'] for r in results if r.get('student_id')]
+    users_map = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
+
+    current_user_entry = None
+    for r in results:
+        sid = r.get('student_id')
+        u = users_map.get(sid)
+        display_name = u.full_name if (u and u.full_name) else (u.name if (u and u.name) else 'Student')
+        r['name'] = display_name
+        r['student_name'] = display_name
+        r['full_name'] = display_name
+        r['roll_number'] = u.roll_number if u else None
+        r['avatar_url'] = getattr(u, 'profile_pic_url', None) if u else None
+        r['mastery'] = r.get('mastery_score', 0)
+        r['engagement'] = r.get('engagement_score', 0)
+        r['effort'] = r.get('effort_score', 0)
+        r['efficiency'] = r.get('efficiency_score', 0)
+        r['consistency'] = r.get('consistency_score', 0)
+        r['position'] = r.get('rank_position', 1)
+
+        is_me = (sid == g.user_id)
+        r['is_current_user'] = is_me
+        if is_me:
+            current_user_entry = r
+
     return jsonify({
         'scope_level': scope_level,
         'scope_id': scope_id,
         'cohort_size': len(results),
         'leaderboard': results[:limit],
+        'current_user': current_user_entry,
     }), 200
 
 

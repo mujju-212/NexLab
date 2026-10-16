@@ -60,10 +60,17 @@ def resolve_scope_entities(
                 session_ids.add(sr.id)
 
     elif scope_level == 'subject' and scope_id:
-        exps = Experiment.query.filter_by(subject_id=scope_id).all()
+        actual_subj_id = scope_id
+        ss_match = SectionSubject.query.get(scope_id)
+        if ss_match:
+            actual_subj_id = ss_match.subject_id
+            ss_ids.add(ss_match.id)
+            section_ids.add(ss_match.section_id)
+
+        exps = Experiment.query.filter_by(subject_id=actual_subj_id).all()
         for e in exps:
             experiment_ids.add(e.id)
-        sss = SectionSubject.query.filter_by(subject_id=scope_id).all()
+        sss = SectionSubject.query.filter_by(subject_id=actual_subj_id).all()
         for s in sss:
             ss_ids.add(s.id)
             section_ids.add(s.section_id)
