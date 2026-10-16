@@ -24,11 +24,11 @@ from app.models.session import LabSession, SessionAttendance
 from app.models.academic import Section, SectionStudent, SectionSubject, Batch, Department
 from app.models.analytics_rank import RankSnapshot
 from app.analytics.scope import resolve_scope_entities
-from app.analytics.metrics import compute_student_atomic_metrics
+from app.analytics.metrics import compute_student_atomic_metrics, batch_student_atomic_metrics
 
 
 _RANK_CACHE: Dict[tuple, tuple] = {}
-_RANK_CACHE_TTL = 180  # 3 minutes cache
+_RANK_CACHE_TTL = 300  # 5 minutes cache
 
 
 def compute_rank_for_scope(
@@ -75,15 +75,31 @@ def compute_rank_for_scope(
     else:
         window_start = window_end - timedelta(days=90)
 
-    # Compute 5 components for each student
+    # High performance batch metric computation (replaces slow N+1 single queries)
+    all_metrics = batch_student_atomic_metrics(
+        student_ids=student_ids,
+        institution_id=institution_id,
+        window_start=window_start,
+        window_end=window_end,
+    )
+
+    # Bulk load submission counts in 1 query
+    sub_counts = dict(
+        db.session.query(CodeAttempt.student_id, func.count(CodeAttempt.id))
+        .filter(CodeAttempt.student_id.in_(student_ids))
+        .group_by(CodeAttempt.student_id)
+        .all()
+    ) if student_ids else {}
+
+    users_map = {
+        u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()
+    } if student_ids else {}
+
     candidates = []
     for sid in student_ids:
-        metrics = compute_student_atomic_metrics(
-            sid,
-            institution_id,
-            window_start=window_start,
-            window_end=window_end
-        )
+        u = users_map.get(sid)
+        display_name = u.full_name if (u and u.full_name) else (u.name if (u and u.name) else 'Student')
+        metrics = all_metrics.get(sid, {})
         mastery = float(metrics.get('mastery_avg', {}).get('value') or 0.0)
         att_rate = float(metrics.get('attendance_rate', {}).get('value') or 0.0)
         focus = float(metrics.get('focus_avg', {}).get('value') or 50.0)
@@ -92,8 +108,8 @@ def compute_rank_for_scope(
         if effort_hours > 0:
             effort = min(100.0, (effort_hours / 40.0) * 100.0)
         else:
-            sub_count = CodeAttempt.query.filter_by(student_id=sid).count()
-            effort = min(100.0, float(sub_count) * 20.0)
+            sub_count = sub_counts.get(sid, 0)
+            effort = min(100.0, float(sub_count) * 20.0) if sub_count > 0 else 50.0
         efficiency = float(metrics.get('efficiency', {}).get('value') or metrics.get('grade_avg', {}).get('value') or 50.0)
         consistency = float(metrics.get('consistency', {}).get('value') or 50.0)
 
@@ -107,6 +123,11 @@ def compute_rank_for_scope(
 
         candidates.append({
             'student_id': sid,
+            'name': display_name,
+            'student_name': display_name,
+            'full_name': display_name,
+            'roll_number': u.roll_number if u else None,
+            'avatar_url': getattr(u, 'profile_pic_url', None) if u else None,
             'mastery_score': round(mastery, 1),
             'engagement_score': round(engagement, 1),
             'effort_score': round(effort, 1),
@@ -130,18 +151,26 @@ def compute_rank_for_scope(
         c['percentile'] = pct
         results.append(c)
 
-        # Upsert RankSnapshot
-        try:
-            snap = RankSnapshot.query.filter_by(
-                student_id=c['student_id'],
-                scope_level=scope_level,
-                scope_id=scope_id,
-                period=period,
-            ).first()
+    # Bulk upsert snapshots in 1 query
+    try:
+        existing_snaps = {
+            s.student_id: s
+            for s in RankSnapshot.query.filter(
+                RankSnapshot.student_id.in_(student_ids),
+                RankSnapshot.scope_level == scope_level,
+                RankSnapshot.scope_id == scope_id,
+                RankSnapshot.period == period,
+            ).all()
+        } if student_ids else {}
+
+        for c in results:
+            sid = c['student_id']
+            pct = c['percentile']
+            snap = existing_snaps.get(sid)
             if not snap:
                 snap = RankSnapshot(
                     institution_id=institution_id,
-                    student_id=c['student_id'],
+                    student_id=sid,
                     scope_level=scope_level,
                     scope_id=scope_id,
                     period=period,
@@ -167,10 +196,6 @@ def compute_rank_for_scope(
                 snap.cohort_size = cohort_size
                 snap.percentile = pct
                 snap.computed_at = datetime.utcnow()
-        except Exception:
-            pass
-
-    try:
         db.session.commit()
     except Exception:
         db.session.rollback()

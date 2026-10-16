@@ -12,45 +12,69 @@ def compute_student_risk(
     previous_risk: Optional[float] = None
 ) -> Dict[str, Any]:
     """
-    Compute Unified Risk Score (0–100, higher = more at risk) for one student.
-    
-    risk = 100 - healthy
-    healthy = sum(w_i * v_i)
+    Compute Unified Risk Score (0–100, higher = more at risk) for student s in Cohort:
+    R(s) = 0.30 * (100 - G_s) + 0.25 * (100 - A_s) + 0.20 * (100 - M_s) + 0.15 * (100 - F_s) + 0.10 * D_recency
+
+    G_s: Average Grade from Grade.final_grade across required experiments
+    A_s: Attendance Rate (sum(attended) / total scheduled) * 100 from SessionAttendance
+    M_s: Concept Mastery Average (mean of mastery_score across concepts) from ConceptMastery
+    F_s: Session Focus Score from FocusScore.focus_score
+    D_recency: Penalty based on days since last code attempt min(100, days_idle * 10)
     """
     cfg = config or {}
     weights = dict(cfg.get('risk_weights') or DEFAULT_RISK_WEIGHTS)
     bands = dict(cfg.get('risk_bands') or DEFAULT_RISK_BANDS)
 
-    # Normalize weights
+    # Component weights (defaults: 0.30 grade, 0.25 attendance, 0.20 mastery, 0.15 focus, 0.10 recency)
     w_sum = sum(weights.values()) or 1.0
     w_norm = {k: v / w_sum for k, v in weights.items()}
+    w_grade = w_norm.get('grade', 0.30)
+    w_att = w_norm.get('attendance', 0.25)
+    w_mastery = w_norm.get('mastery', 0.20)
+    w_focus = w_norm.get('focus', 0.15)
+    w_recency = w_norm.get('recency', 0.10)
 
-    # Extract component values (0–100)
-    mastery_v = float(student_metrics.get('mastery_avg', {}).get('value') or 0.0)
+    # Extract component values (bounded to 0–100)
     grade_v = float(student_metrics.get('grade_avg', {}).get('value') or 0.0)
     att_v = float(student_metrics.get('attendance_rate', {}).get('value') or 0.0)
+    mastery_v = float(student_metrics.get('mastery_avg', {}).get('value') or 0.0)
     focus_v = float(student_metrics.get('focus_avg', {}).get('value') or 0.0)
-    consistency_v = float(student_metrics.get('consistency', {}).get('value') or 0.0)
 
-    # Freshness from submission recency days: 0 days -> 100, 14+ days -> 0
-    recency_days = float(student_metrics.get('submission_recency_days', {}).get('value') or 99.0)
-    freshness_v = max(0.0, min(100.0, 100.0 - (recency_days * 7.0)))
+    # D_recency: min(100, days_idle * 10)
+    days_idle = float(
+        student_metrics.get('days_idle', {}).get('value') or
+        student_metrics.get('submission_recency_days', {}).get('value') or
+        student_metrics.get('recency_days', {}).get('value') or 0.0
+    )
+    d_recency = min(100.0, max(0.0, days_idle * 10.0))
+
+    g_s = max(0.0, min(100.0, grade_v))
+    a_s = max(0.0, min(100.0, att_v))
+    m_s = max(0.0, min(100.0, mastery_v))
+    f_s = max(0.0, min(100.0, focus_v))
 
     components = {
-        'mastery': max(0.0, min(100.0, mastery_v)),
-        'grade': max(0.0, min(100.0, grade_v)),
-        'attendance': max(0.0, min(100.0, att_v)),
-        'focus': max(0.0, min(100.0, focus_v)),
-        'consistency': max(0.0, min(100.0, consistency_v)),
-        'freshness': round(freshness_v, 2),
+        'grade': round(g_s, 2),
+        'attendance': round(a_s, 2),
+        'mastery': round(m_s, 2),
+        'focus': round(f_s, 2),
+        'recency': round(d_recency, 2),
+        'days_idle': round(days_idle, 1),
     }
 
-    # Healthy weighted sum
-    healthy = sum(w_norm.get(k, 0.0) * components[k] for k in components)
-    healthy = max(0.0, min(100.0, healthy))
-    risk_score = round(100.0 - healthy, 1)
+    # Mathematical formulation:
+    # R(s) = 0.30 * (100 - G_s) + 0.25 * (100 - A_s) + 0.20 * (100 - M_s) + 0.15 * (100 - F_s) + 0.10 * D_recency
+    risk_score_raw = (
+        w_grade * (100.0 - g_s) +
+        w_att * (100.0 - a_s) +
+        w_mastery * (100.0 - m_s) +
+        w_focus * (100.0 - f_s) +
+        w_recency * d_recency
+    )
+    risk_score = round(max(0.0, min(100.0, risk_score_raw)), 1)
 
-    # Risk band categorization
+    # Risk band categorization:
+    # Critical: R(s) >= 70, High: 50 <= R(s) < 70, Watch: 35 <= R(s) < 50, On Track: R(s) < 35
     crit_threshold = float(bands.get('critical', DEFAULT_RISK_BANDS['critical']))
     high_threshold = float(bands.get('high', DEFAULT_RISK_BANDS['high']))
     watch_threshold = float(bands.get('watch', DEFAULT_RISK_BANDS['watch']))
@@ -64,21 +88,22 @@ def compute_student_risk(
     else:
         band = 'ok'
 
-    # Explainability: compute deficit (risk points caused by each factor)
-    risk_penalties = {}
-    reason_labels = {
-        'mastery': 'Low concept mastery',
-        'grade': 'Low assessment grades',
-        'attendance': 'Low session attendance',
-        'focus': 'Low lab session focus',
-        'consistency': 'High grade volatility',
-        'freshness': 'Prolonged submission inactivity',
+    # Explainability: deficit per factor
+    risk_penalties = {
+        'grade': round(w_grade * (100.0 - g_s), 2),
+        'attendance': round(w_att * (100.0 - a_s), 2),
+        'mastery': round(w_mastery * (100.0 - m_s), 2),
+        'focus': round(w_focus * (100.0 - f_s), 2),
+        'recency': round(w_recency * d_recency, 2),
     }
 
-    for k, val in components.items():
-        w = w_norm.get(k, 0.0)
-        deficit = 100.0 - val
-        risk_penalties[k] = round(w * deficit, 2)
+    reason_labels = {
+        'grade': 'Low assessment grades',
+        'attendance': 'Low session attendance',
+        'mastery': 'Low concept mastery',
+        'focus': 'Low lab session focus',
+        'recency': 'Prolonged submission inactivity',
+    }
 
     # Primary reason: largest contributor to the risk deficit
     max_k = max(risk_penalties.keys(), key=lambda k: risk_penalties[k])

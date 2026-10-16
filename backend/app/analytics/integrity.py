@@ -115,23 +115,16 @@ def compute_integrity_confidence(
         prev_passed = passed
         prev_total = total
 
-    # 4. Deduction & Confidence Calculation
-    confidence = 100.0
+    # 4. Specification E: Integrity Confidence Calculation
+    # Confidence = max(50.0, 100.0 - sum(w_i * count(event_i)))
+    # where w_plagiarism = 15, w_fullscreen = 5, w_tab_switch = 2, w_paste = 4
+    n_plag = len(plag_flags)
+    n_fullscreen = violation_counts.get('fullscreen_exit', 0) + violation_counts.get('fullscreen', 0)
+    n_tab_switch = violation_counts.get('tab_switch', 0)
+    n_paste = violation_counts.get('copy_paste', 0) + violation_counts.get('paste', 0)
 
-    # Severity deductions
-    confidence -= (severity_counts['high'] * 15.0)
-    confidence -= (severity_counts['medium'] * 6.0)
-    confidence -= (severity_counts['low'] * 2.0)
-
-    # Plagiarism deductions
-    if max_plagiarism_similarity >= 60.0:
-        plag_penalty = min(50.0, (max_plagiarism_similarity - 50.0) * 1.25)
-        confidence -= plag_penalty
-
-    # Anomaly deductions
-    confidence -= (len(anomalies) * 10.0)
-
-    confidence = round(max(0.0, min(100.0, confidence)), 1)
+    deduction = (15.0 * n_plag) + (5.0 * n_fullscreen) + (2.0 * n_tab_switch) + (4.0 * n_paste)
+    confidence = max(50.0, round(100.0 - deduction, 1))
 
     review_recommended = bool(
         confidence < 70.0
