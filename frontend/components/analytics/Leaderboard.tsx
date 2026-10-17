@@ -1,7 +1,7 @@
 'use client';
 
-import React, { useState } from 'react';
-import { Trophy, Medal, Award, Search, Download, ArrowUpRight } from 'lucide-react';
+import React, { useState, useEffect, useMemo } from 'react';
+import { Trophy, Medal, Award, Search, Download, ArrowUpRight, ChevronLeft, ChevronRight } from 'lucide-react';
 import styles from './analytics.module.css';
 import { exportCSV } from '@/lib/analytics-utils';
 import { LeaderboardRankItem } from '@/services/analytics.service';
@@ -35,6 +35,8 @@ export function Leaderboard({
 }: LeaderboardProps) {
   const [search, setSearch] = useState('');
   const [hoveredStudent, setHoveredStudent] = useState<string | null>(null);
+  const [page, setPage] = useState(1);
+  const pageSize = 10;
 
   const filteredItems = (items || []).filter((item) => {
     if (!search.trim()) return true;
@@ -44,6 +46,16 @@ export function Leaderboard({
       item.roll_number?.toLowerCase().includes(q)
     );
   });
+
+  useEffect(() => {
+    setPage(1);
+  }, [search, currentScope]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredItems.length / pageSize));
+  const pagedItems = useMemo(() => {
+    const start = (page - 1) * pageSize;
+    return filteredItems.slice(start, start + pageSize);
+  }, [filteredItems, page, pageSize]);
 
   const handleExport = () => {
     const rows = filteredItems.map((item) => ({
@@ -296,14 +308,14 @@ export function Leaderboard({
                   Loading rankings...
                 </td>
               </tr>
-            ) : filteredItems.length === 0 ? (
+            ) : pagedItems.length === 0 ? (
               <tr>
                 <td colSpan={6} style={{ textAlign: 'center', padding: '32px', color: '#9ca3af' }}>
                   No students found matching your criteria.
                 </td>
               </tr>
             ) : (
-              filteredItems.map((item) => {
+              pagedItems.map((item) => {
                 const isHovered = hoveredStudent === item.student_id;
                 const comp = item.components || {
                   mastery: 0,
@@ -425,6 +437,71 @@ export function Leaderboard({
           </tbody>
         </table>
       </div>
+
+      {/* Pagination Footer */}
+      {!loading && filteredItems.length > 0 && (
+        <div
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'space-between',
+            paddingTop: 16,
+            marginTop: 8,
+            borderTop: '1px solid #f1f5f9',
+            fontSize: '0.8rem',
+            color: '#64748b',
+          }}
+        >
+          <div>
+            Showing <strong style={{ color: '#0f172a' }}>{(page - 1) * pageSize + 1}</strong> to{' '}
+            <strong style={{ color: '#0f172a' }}>{Math.min(page * pageSize, filteredItems.length)}</strong> of{' '}
+            <strong style={{ color: '#0f172a' }}>{filteredItems.length}</strong> ranked students
+          </div>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              disabled={page <= 1}
+              onClick={() => setPage(p => Math.max(1, p - 1))}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '6px 12px',
+                borderRadius: 8,
+                border: '1px solid #e2e8f0',
+                background: page <= 1 ? '#f8fafc' : '#ffffff',
+                color: page <= 1 ? '#cbd5e1' : '#334155',
+                cursor: page <= 1 ? 'not-allowed' : 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              <ChevronLeft size={14} /> Previous
+            </button>
+            <span style={{ fontWeight: 600, color: '#334155' }}>
+              Page {page} of {totalPages}
+            </span>
+            <button
+              type="button"
+              disabled={page >= totalPages}
+              onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: 4,
+                padding: '6px 12px',
+                borderRadius: 8,
+                border: '1px solid #e2e8f0',
+                background: page >= totalPages ? '#f8fafc' : '#ffffff',
+                color: page >= totalPages ? '#cbd5e1' : '#334155',
+                cursor: page >= totalPages ? 'not-allowed' : 'pointer',
+                fontWeight: 600,
+              }}
+            >
+              Next <ChevronRight size={14} />
+            </button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
