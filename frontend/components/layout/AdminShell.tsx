@@ -150,10 +150,10 @@ export default function AdminShell({ activePage, children, title, subtitle }: Ad
               />
               <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
               <div className={styles.profileChip} onClick={() => router.push('/admin/settings')}>
-                <div className={styles.avatarLg} style={{ background: '#7c3aed' }}>
+                <div className={styles.avatarLg} style={{ background: '#7c3aed' }} suppressHydrationWarning>
                   {user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? 'AD'}
                 </div>
-                <span>{user?.full_name?.split(' ')[0] ?? 'Admin'}</span>
+                <span suppressHydrationWarning>{user?.full_name?.split(' ')[0] ?? 'Admin'}</span>
               </div>
             </div>
           </div>

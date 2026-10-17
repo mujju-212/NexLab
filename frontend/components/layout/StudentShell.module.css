@@ -7,7 +7,7 @@
               radial-gradient(at 90% 15%, #eff6ff 0%, transparent 45%),
               radial-gradient(at 50% 95%, #f5f3ff 0%, transparent 50%),
               #f1f3f9;
-  overflow: hidden;
+  overflow: clip; /* clip visual overflow of blobs without creating a scroll trap */
   padding: 24px;
   font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
   color: #0f172a;

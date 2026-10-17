@@ -35,15 +35,15 @@ const SESSIONS_SUBNAV = [
 ];
 
 const ANALYTICS_SUBNAV = [
-  { id: 'risk',        label: 'Risk Early Warning',   route: '/institution/analytics?tab=risk' },
   { id: 'overview',    label: 'Overview',             route: '/institution/analytics?tab=overview' },
+  { id: 'outcomes',    label: 'Learning Outcomes',    route: '/institution/analytics?tab=outcomes' },
   { id: 'funnel',      label: 'Student Funnel',       route: '/institution/analytics?tab=funnel' },
   { id: 'benchmark',   label: 'Cohort Benchmark',     route: '/institution/analytics?tab=benchmark' },
-  { id: 'outcomes',    label: 'Learning Outcomes',    route: '/institution/analytics?tab=outcomes' },
-  { id: 'integrity',   label: 'Integrity Violations', route: '/institution/analytics?tab=integrity' },
-  { id: 'grades',      label: 'Grades & Marks',       route: '/institution/analytics?tab=grades' },
   { id: 'attendance',  label: 'Attendance Matrix',    route: '/institution/analytics?tab=attendance' },
+  { id: 'grades',      label: 'Grades & Marks',       route: '/institution/analytics?tab=grades' },
+  { id: 'integrity',   label: 'Integrity Violations', route: '/institution/analytics?tab=integrity' },
   { id: 'engagement',  label: 'Engagement Signals',   route: '/institution/analytics?tab=engagement' },
+  { id: 'risk',        label: 'Risk Early Warning',   route: '/institution/analytics?tab=risk' },
   { id: 'ai-usage',    label: 'AI & Telemetry',       route: '/institution/analytics?tab=ai-usage' },
   { id: 'instructors', label: 'Instructors',          route: '/institution/analytics?tab=instructors' },
 ];
@@ -53,7 +53,7 @@ const NAV_MAIN = [
   { id: 'Users',          Icon: Users,           route: '/institution/users',         hasChevron: false },
   { id: 'Academic',       Icon: GraduationCap,   route: '/institution/academic',      hasChevron: true },
   { id: 'Sessions',       Icon: Calendar,        route: '/institution/sessions?tab=live', hasChevron: true },
-  { id: 'Analytics',      Icon: BarChart3,       route: '/institution/analytics?tab=risk', hasChevron: true },
+  { id: 'Analytics',      Icon: BarChart3,       route: '/institution/analytics?tab=overview', hasChevron: true },
   { id: 'Announcements',  Icon: Megaphone,       route: '/institution/announcements', hasChevron: false },
 ];
 
@@ -358,7 +358,7 @@ export default function InstitutionShell({
                       {!collapsed && analyticsOpen && (
                         <ul className={styles.subnavGroup}>
                           {ANALYTICS_SUBNAV.map(sub => {
-                            const isSubActive = isAnalyticsActive && (activeSubPage === sub.id || (!activeSubPage && sub.id === 'risk'));
+                            const isSubActive = isAnalyticsActive && (activeSubPage === sub.id || (!activeSubPage && sub.id === 'overview'));
                             return (
                               <li
                                 key={sub.id}
@@ -462,6 +462,16 @@ export default function InstitutionShell({
                     <span style={{ cursor: 'pointer' }} onClick={() => router.push('/institution/sessions?tab=live')}>Sessions</span>
                     <ChevronRight size={14} className={styles.breadSep} />
                     <strong>{activeSubPageLabel}</strong>
+                  </>
+                ) : activePage === 'Analytics' ? (
+                  <>
+                    <span style={{ cursor: 'pointer' }} onClick={() => router.push('/institution/analytics?tab=overview')}>Analytics</span>
+                    {activeSubPageLabel && (
+                      <>
+                        <ChevronRight size={14} className={styles.breadSep} />
+                        <strong>{activeSubPageLabel}</strong>
+                      </>
+                    )}
                   </>
                 ) : (
                   <strong>{activePage}</strong>

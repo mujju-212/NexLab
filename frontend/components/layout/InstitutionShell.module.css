@@ -1,7 +1,7 @@
 
 /* ── Stage ───────────────────────────────────────────────────────────────── */
 .stage {
-  position: relative; min-height: 100vh; overflow: hidden;
+  position: relative; min-height: 100vh; overflow: clip;
   background: linear-gradient(150deg, #faf5ff 0%, #faf5ff 45%, #f3e8ff 75%, #ffffff 100%);
   padding: 24px; font-family: 'Manrope', sans-serif;
 }

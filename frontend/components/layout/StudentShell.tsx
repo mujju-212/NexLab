@@ -34,11 +34,9 @@ const NAV_PRACTICE = [
 ];
 
 const NAV_MORE = [
-  { id: 'Submissions',                  label: 'Submissions',                  Icon: Upload,      route: '/student/submissions' },
-  { id: 'Performance Analytics',        label: 'Performance Analytics',        Icon: TrendingUp,  route: '/student/analytics' },
-  { id: 'Leaderboard',                  label: 'Leaderboard',                  Icon: Trophy,      route: '/student/rankings' },
-  { id: 'Experiment History',           label: 'Experiment History',           Icon: Clock,       route: '/student/submissions' },
-  { id: 'Certificates & Notifications', label: 'Certificates & Notifications', Icon: ShieldCheck, route: '/student/certificates' },
+  { id: 'Performance Analytics', label: 'Performance Analytics', Icon: TrendingUp,  route: '/student/analytics' },
+  { id: 'Leaderboard',           label: 'Leaderboard',           Icon: Trophy,      route: '/student/rankings' },
+  { id: 'Certificates & Records', label: 'Certificates & Records', Icon: ShieldCheck, route: '/student/certificates' },
 ];
 
 interface StudentShellProps {
@@ -87,6 +85,7 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
     if (id === 'Exams' && (activePage === 'Exams' || activePage === 'My Exams')) return true;
     if (id === 'Submissions' && (activePage === 'Submission' || activePage === 'Submissions')) return true;
     if (id === 'Leaderboard' && (activePage === 'Ranking' || activePage === 'Leaderboard')) return true;
+    if (id === 'Certificates & Records' && (activePage === 'Certificates' || activePage === 'Certificates & Records' || activePage === 'Certificates & Notifications')) return true;
     if (id === 'Quests' && activePage === 'Quest') return true;
     return false;
   };
@@ -255,10 +254,10 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
             <div className={styles.headerRight}>
               <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
               <div className={styles.profileChip} onClick={() => router.push('/student/profile')} title="My Profile">
-                <div className={styles.avatarLg}>
+                <div className={styles.avatarLg} suppressHydrationWarning>
                   {initials}
                 </div>
-                <span className={styles.profileName}>{user?.full_name ?? 'Test Student'}</span>
+                <span className={styles.profileName} suppressHydrationWarning>{user?.full_name ?? 'Test Student'}</span>
                 <ChevronDown size={14} className={styles.profileChevron} />
               </div>
             </div>

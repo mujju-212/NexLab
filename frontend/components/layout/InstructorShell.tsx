@@ -22,7 +22,7 @@ const NAV_MAIN = [
   { id: 'Experiments',     label: 'Experiments',     Icon: FlaskConical,    route: '/instructor/experiments' },
   { id: 'Sessions',        label: 'Sessions',        Icon: PlayCircle,      route: '/instructor/sessions' },
   { id: 'Live Conductor',  label: 'Live Conductor',  Icon: Radio,           route: '/instructor/live-lab' },
-  { id: 'Students',        label: 'Students',        Icon: Users,          route: '/instructor/students' },
+  { id: 'Students',        label: 'Students',        Icon: Users,          route: '/instructor/analytics?tab=students' },
   { id: 'Grading',         label: 'Grading',         Icon: ClipboardCheck,  route: '/instructor/grading' },
   { id: 'Analytics',       label: 'Analytics',       Icon: BarChart3,       route: '/instructor/analytics' },
 ];
@@ -205,7 +205,7 @@ export default function InstructorShell({ activePage, children, title, subtitle,
                 className={styles.searchBar}
                 placeholder="Search students, experiments, sessions, or reports..."
                 fetcher={(q) => experienceService.instructorSearch(q)}
-                onSelect={(hit: SearchHit) => router.push(hit.link ?? '/instructor/students')}
+                onSelect={(hit: SearchHit) => router.push(hit.link ?? '/instructor/analytics?tab=students')}
               />
             </div>
 
@@ -214,11 +214,11 @@ export default function InstructorShell({ activePage, children, title, subtitle,
               <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
               
               <div className={styles.profileChip} onClick={() => router.push('/instructor/profile')}>
-                <div className={styles.avatarLg}>
+                <div className={styles.avatarLg} suppressHydrationWarning>
                   {initials}
                 </div>
                 <div className={styles.profileText}>
-                  <span className={styles.userName}>{fullName}</span>
+                  <span className={styles.userName} suppressHydrationWarning>{fullName}</span>
                   <span className={styles.userRole}>Instructor</span>
                 </div>
               </div>

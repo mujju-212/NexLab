@@ -3,7 +3,7 @@
 .stage {
   position: relative; min-height: 100vh;
   background: linear-gradient(150deg,#ffffff 0%,#f4f5f7 45%,#eef0f3 75%,#ffffff 100%);
-  overflow: hidden; padding: 32px; font-family: 'Manrope', sans-serif;
+  overflow: clip; padding: 32px; font-family: 'Manrope', sans-serif;
 }
 .blob { position: absolute; border-radius: 50%; filter: blur(80px); pointer-events: none; }
 .blob1 { width: 560px; height: 560px; top: -240px; left: 260px; background: radial-gradient(circle at 30% 30%,#ffffff,#ebe0f4 70%); opacity: .9; }

@@ -1,6 +1,4 @@
-'use client';
-
-import { useState } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard, GraduationCap, Terminal, TrendingUp,
@@ -33,13 +31,27 @@ interface IndividualShellProps {
   children: React.ReactNode;
   title?: string;
   subtitle?: string;
+  breadcrumbs?: Array<{ label: string; href?: string }>;
 }
 
-export default function IndividualShell({ activePage, children, title, subtitle }: IndividualShellProps) {
+export default function IndividualShell({ activePage, children, title, subtitle, breadcrumbs }: IndividualShellProps) {
   const router = useRouter();
   const { user, clearAuth } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
+  const mainRef = useRef<HTMLElement>(null);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
+  const initials = (mounted && user?.full_name)
+    ? user.full_name.split(' ').map((w) => w[0]).join('').slice(0, 2).toUpperCase()
+    : 'ME';
+  const firstName = (mounted && user?.full_name)
+    ? user.full_name.split(' ')[0]
+    : 'Learner';
 
   const go = async (id: string, route: string) => {
     setDrawerOpen(false); // close mobile drawer on navigation
@@ -53,8 +65,9 @@ export default function IndividualShell({ activePage, children, title, subtitle 
   };
 
   const navCls = (id: string, isLogout = false) =>
-    [styles.navItem, id === activePage ? styles.navItemActive : '', isLogout ? styles.navItemLogout : '']
+    [styles.navItem, id.toLowerCase() === activePage.toLowerCase() ? styles.navItemActive : '', isLogout ? styles.navItemLogout : '']
       .filter(Boolean).join(' ');
+
 
   return (
     <div className={styles.stage}>
@@ -111,12 +124,13 @@ export default function IndividualShell({ activePage, children, title, subtitle 
                 <span className={styles.label}>Sign Out</span>
               </li>
             </ul>
-            <div className={styles.promoBanner}>
+            <div className={styles.promoBanner} onClick={() => router.push('/practice')}>
               <div className={styles.promoIcon}><Sparkles size={16} strokeWidth={1.9} /></div>
               <div className={styles.promoText}>
                 <p className={styles.promoTitle}>Free &amp; Open</p>
-                <a className={styles.promoLink} onClick={() => router.push('/practice')}>Browse courses</a>
+                <span className={styles.promoLink}>Explore 589+ problems, courses and more</span>
               </div>
+              <ChevronRight size={14} className={styles.promoArrow} />
             </div>
           </div>
         </aside>
@@ -125,13 +139,35 @@ export default function IndividualShell({ activePage, children, title, subtitle 
         {drawerOpen && <div className={styles.drawerBackdrop} onClick={() => setDrawerOpen(false)} />}
 
         {/* ══ MAIN ══ */}
-        <main className={styles.content}>
+        <main
+          ref={mainRef}
+          className={styles.content}
+        >
           <div className={styles.contentHeader}>
             <button className={styles.mobileMenuBtn} onClick={() => setDrawerOpen(true)} aria-label="Open menu">
               <Menu size={17} strokeWidth={2} />
             </button>
             <div className={styles.breadcrumb}>
-              Practice <ChevronRight size={14} className={styles.breadSep} /> <strong>{activePage}</strong>
+              {breadcrumbs && breadcrumbs.length > 0 ? (
+                breadcrumbs.map((b, idx) => (
+                  <span key={b.label} style={{ display: 'inline-flex', alignItems: 'center' }}>
+                    {idx > 0 && <ChevronRight size={14} className={styles.breadSep} />}
+                    {b.href ? (
+                      <span
+                        onClick={() => router.push(b.href!)}
+                        style={{ cursor: 'pointer', transition: 'color 0.15s ease' }}
+                        className={styles.breadLink}
+                      >
+                        {b.label}
+                      </span>
+                    ) : (
+                      <strong>{b.label}</strong>
+                    )}
+                  </span>
+                ))
+              ) : (
+                <>Practice <ChevronRight size={14} className={styles.breadSep} /> <strong>{activePage}</strong></>
+              )}
             </div>
             <div className={styles.headerRight}>
               <ShellSearchBox
@@ -142,10 +178,10 @@ export default function IndividualShell({ activePage, children, title, subtitle 
               />
               <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
               <div className={styles.profileChip} onClick={() => router.push('/practice/profile')}>
-                <div className={styles.avatarLg} style={{ background: '#9333ea' }}>
-                  {user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? 'ME'}
+                <div className={styles.avatarLg} style={{ background: '#9333ea' }} suppressHydrationWarning>
+                  {initials}
                 </div>
-                <span>{user?.full_name?.split(' ')[0] ?? 'Learner'}</span>
+                <span suppressHydrationWarning>{firstName}</span>
               </div>
             </div>
           </div>
