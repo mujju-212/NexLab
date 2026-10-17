@@ -240,6 +240,28 @@ export interface PracticeMasteryItem {
   };
 }
 
+export interface AcademicLeaderboardItem {
+  position: number;
+  student_id: string;
+  name: string;
+  rank_score: number;
+  mastery: number;
+  engagement: number;
+  effort: number;
+  efficiency: number;
+  consistency: number;
+  percentile: number;
+  is_current_user?: boolean;
+}
+
+export interface AcademicLeaderboardResponse {
+  scope_level: string;
+  scope_id: string | null;
+  cohort_size: number;
+  leaderboard: AcademicLeaderboardItem[];
+  current_user?: AcademicLeaderboardItem | null;
+}
+
 export interface PlatformLeaderboardResponse {
   scope: 'global' | 'topic' | 'institution';
   scope_id: string | null;
@@ -393,9 +415,21 @@ export const studentAnalyticsService = {
   },
 
   /**
+   * Fetches academic holistic leaderboard across institution, department, section, or subject.
+   */
+  async getAcademicLeaderboard(params?: {
+    scope_level?: 'institution' | 'department' | 'section' | 'subject';
+    scope_id?: string;
+    limit?: number;
+  }): Promise<AcademicLeaderboardResponse> {
+    const { data } = await apiClient.get<AcademicLeaderboardResponse>('/analytics/leaderboard', { params });
+    return data;
+  },
+
+  /**
    * Fetches competitive platform leaderboard with scope & period filters.
    */
-  async getPlatformLeaderboard(params: {
+  async getPlatformLeaderboard(params?: {
     scope?: 'global' | 'topic' | 'institution';
     scope_id?: string;
     period?: 'all_time' | 'monthly' | 'weekly';

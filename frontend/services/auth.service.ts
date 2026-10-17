@@ -32,10 +32,31 @@ export interface AuthUser {
   id: string;
   email: string;
   full_name: string;
+  first_name?: string | null;
+  last_name?: string | null;
   role: BackendRole;
   institution_id: string | null;
+  institution_name?: string | null;
+  institution_code?: string | null;
+  department_id?: string | null;
+  department_name?: string | null;
+  department_code?: string | null;
+  section_name?: string | null;
+  section_code?: string | null;
+  batch_name?: string | null;
+  program?: string | null;
   roll_number?: string | null;
+  staff_id?: string | null;
+  year_of_study?: number | null;
+  semester?: number | null;
+  phone?: string | null;
+  location?: string | null;
+  bio?: string | null;
   profile_pic_url?: string | null;
+  timezone?: string | null;
+  language?: string | null;
+  two_factor_enabled?: boolean;
+  created_at?: string | null;
   must_change_password?: boolean;
 }
 
@@ -89,6 +110,21 @@ export const authService = {
   async getMe(): Promise<AuthUser> {
     const { data } = await apiClient.get<{ user: AuthUser }>('/auth/me');
     return data.user;
+  },
+
+  async updateProfile(updates: { full_name?: string; email?: string; first_name?: string; last_name?: string; phone?: string; bio?: string; location?: string; timezone?: string; language?: string }): Promise<AuthUser> {
+    const { data } = await apiClient.patch<{ user: AuthUser; message?: string }>('/auth/profile', updates);
+    return data.user;
+  },
+
+  async toggle2FA(): Promise<{ message: string; two_factor_enabled: boolean }> {
+    const { data } = await apiClient.post<{ message: string; two_factor_enabled: boolean }>('/auth/2fa/toggle');
+    return data;
+  },
+
+  async exportData(): Promise<any> {
+    const { data } = await apiClient.get('/auth/export-data');
+    return data;
   },
 
   async changePassword(currentPassword: string, newPassword: string): Promise<{ token?: string; user?: AuthUser }> {

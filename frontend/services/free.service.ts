@@ -10,6 +10,7 @@ export interface FreeCourse {
   tags: string[];
   language: string;
   exercise_count: number;
+  total_xp?: number;
   is_published: boolean;
   order_index: number;
 }
@@ -27,9 +28,39 @@ export interface FreeExercise {
   starter_code: Record<string, string>;
   test_cases: Array<{ input: string; expected: string; hidden: boolean }>;
   mcq_options?: string[];
-  /** Static HTML lab path for simulation exercises (e.g. '/simulations/...') */
   simulation_path?: string;
   xp_reward: number;
+  tags?: string[];
+  acceptance_rate?: number;
+  solves_count?: number;
+  solves_display?: string;
+  is_solved?: boolean;
+  is_attempted?: boolean;
+  is_locked?: boolean;
+  action_label?: string;
+}
+
+export interface CourseUserProgress {
+  user_id: string | null;
+  solved_count: number;
+  attempted_count: number;
+  unsolved_count: number;
+  earned_xp: number;
+  total_xp: number;
+  pct_solved: number;
+  pct_xp: number;
+  solved_ids: string[];
+  attempted_ids: string[];
+  rank_in_course: number;
+  global_rank: number;
+  top_percentile: number;
+}
+
+export interface TopicSummaryItem {
+  name: string;
+  solved: number;
+  total: number;
+  pct: number;
 }
 
 export interface RunResult {
@@ -67,7 +98,12 @@ export const freeService = {
     return data.courses;
   },
 
-  async getCourse(courseId: string): Promise<{ course: FreeCourse; exercises: FreeExercise[] }> {
+  async getCourse(courseId: string): Promise<{
+    course: FreeCourse & { estimated_hours?: string; topic_count?: number };
+    exercises: FreeExercise[];
+    user_progress?: CourseUserProgress;
+    topics_summary?: TopicSummaryItem[];
+  }> {
     const { data } = await apiClient.get(`/free/courses/${courseId}`);
     return data;
   },
@@ -173,6 +209,30 @@ export const freeService = {
     const { data } = await apiClient.patch<{ profile_public: boolean; profile_slug: string | null; share_url: string | null }>('/free/analytics/showcase', { profile_public });
     return data;
   },
+
+  async getSubmissions(limit: number = 20): Promise<{
+    submissions: Array<{
+      id: string;
+      problem_id: string;
+      title: string;
+      slug: string;
+      difficulty: string;
+      nexlab_topic: string;
+      status: string;
+      is_solved: boolean;
+      language: string;
+      passed: number;
+      total: number;
+      time_ms: number;
+      memory_kb: number;
+      xp_earned: number;
+      submitted_at: string;
+    }>;
+    total: number;
+  }> {
+    const { data } = await apiClient.get('/free/analytics/submissions', { params: { limit } });
+    return data;
+  },
 };
 
 // ── Types for Free User Analytics ──────────────────────────────────────────
@@ -187,6 +247,8 @@ export interface FreeBadgeItem {
 
 export interface FreePlatformStanding {
   student_id: string;
+  student_name?: string;
+  accuracy?: number;
   rating: number;
   level: number;
   level_name: string;
@@ -319,7 +381,10 @@ export interface FreeCourseItem {
 export interface FreeCoursesAnalytics {
   total_courses: number;
   enrolled_courses: number;
+  enrolled_this_month?: number;
   completed_courses: number;
+  completed_pct?: number;
+  active_courses?: number;
   total_exercises_catalog: number;
   total_exercises_solved: number;
   total_course_xp: number;

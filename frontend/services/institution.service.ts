@@ -206,10 +206,53 @@ export interface AnalyticsOverview {
   period_days: number;
   date_from: string;
   date_to: string;
+  campus_avg_grade?: number;
   sessions: { total: number; completed: number; completion_rate_pct: number };
-  students: { total: number; at_risk: number; at_risk_pct: number };
-  instructors: { active_this_period: number };   // backend key (was wrongly read as active_this_month)
+  students: {
+    total: number;
+    at_risk: number;
+    at_risk_pct: number;
+    bands?: { critical: number; high: number; watch: number; ok: number };
+    avg_risk_score?: number;
+  };
+  top_risk_drivers?: Record<string, number>;
+  wow_deltas?: {
+    at_risk_delta?: number;
+    avg_risk_delta?: number;
+    sessions_delta?: number;
+    students_delta?: number;
+    instructors_delta?: number;
+    completion_delta?: number;
+    grade_delta?: number;
+  };
+  previous_period?: {
+    students?: number;
+    instructors?: number;
+    at_risk?: number;
+    campus_avg_grade?: number;
+    completion_rate_pct?: number;
+    sessions?: number;
+  };
+  sparklines?: {
+    students?: number[];
+    instructors?: number[];
+    at_risk?: number[];
+    grades?: number[];
+    completion?: number[];
+  };
+  instructors: { active_this_period: number };
   peak_hours: Array<{ hour: number; session_count: number }>;
+  day_hour_matrix?: Array<{ day: string; day_index: number; buckets: Array<{ hour: number; count: number }> }>;
+  generated_at?: string;
+}
+
+export interface SubjectOutcomes {
+  subject_id?: string;
+  subject_name: string;
+  pass_rate_pct?: number;
+  avg_grade?: number;
+  total_students?: number;
+  [key: string]: any;
 }
 
 export interface AtRiskStudent {
@@ -217,41 +260,190 @@ export interface AtRiskStudent {
   full_name: string;
   email: string;
   roll_number?: string;
-  avg_mastery: number;
-  concepts_tracked: number;
+  section_name?: string;
+  department_name?: string;
+  avg_mastery?: number;
+  concepts_tracked?: number;
+  risk_score?: number;
+  risk_band?: string;
+  is_at_risk?: boolean;
+  primary_reason?: string;
+  primary_component?: string;
+  trend_arrow?: string;
+  risk_delta?: number;
+  components?: {
+    mastery?: number;
+    grade?: number;
+    attendance?: number;
+    focus?: number;
+    consistency?: number;
+    freshness?: number;
+  };
+  risk_contributions?: Record<string, number>;
+  sample_size?: number;
+  is_sufficient?: boolean;
+  last_active?: string;
 }
 
 export interface SectionComparison {
   section_id: string;
   section_name: string;
   enrolled: number;
-  avg_grade: number | null;    // real Grade.final_grade average (was wrongly read as avg_score)
-  graded_count: number;
+  avg_grade: number | null;
+  attendance_rate?: number | null;
+  focus_avg?: number | null;
+  risk_score?: number | null;
+  at_risk_count?: number;
+  graded_count?: number;
+  sample_size?: number;
+  is_sufficient?: boolean;
+  metrics?: Record<string, { value: number; mean: number; z_score?: number; percentile?: number }>;
 }
 
 // ── New analytics types (B1–B9 + Instructors + Proctoring) ─────────────────
 
-export interface AttendanceSummary {
+export interface AttendanceTrendPoint {
+  date: string;
+  overall: number;
+  present: number;
+  absent: number;
+  sessions_count: number;
+}
+
+export interface AttendanceDeptBar {
+  name: string;
+  rate: number;
+  code: string;
+}
+
+export interface AttendanceHeatmapCell {
+  day: string;
+  day_index: number;
+  hour: number;
+  hour_label: string;
+  attendance_rate: number;
+  tier: string;
+  session_count: number;
+}
+
+export interface LowAttendanceStudent {
+  student_id: string;
+  full_name: string;
+  roll_number: string;
+  department_name: string;
+  attendance_rate: number;
+  missed_sessions: number;
   total_sessions: number;
-  total_attendance_records: number;
-  present_count: number;
-  absent_count: number;
+  sparkline: number[];
+  risk_level: string;
+}
+
+export interface AttendanceReport {
   avg_attendance_rate: number;
-  by_status: Record<string, number>;
-  by_session: Array<{
-    session_id: string; session_title: string;
-    scheduled_at: string; total: number; present: number; rate: number;
+  total_present_records: number;
+  total_absent_records: number;
+  total_scheduled_sessions: number;
+  deltas: {
+    attendance: number;
+    present: number;
+    absent: number;
+    sessions: number;
+  };
+  sparklines: {
+    attendance: number[];
+    present: number[];
+    absent: number[];
+    sessions: number[];
+  };
+  attendance_trend: AttendanceTrendPoint[];
+  by_department: AttendanceDeptBar[];
+  heatmap: AttendanceHeatmapCell[];
+  low_attendance_students: LowAttendanceStudent[];
+  // Backward compatibility
+  total_sessions?: number;
+  total_attendance_records?: number;
+  present_count?: number;
+  absent_count?: number;
+  by_status?: Record<string, number>;
+  by_session?: Array<{
+    session_id: string;
+    session_title: string;
+    scheduled_at: string;
+    total: number;
+    present: number;
+    rate: number;
   }>;
-  period: { from: string; to: string };
+  period: { from: string; to: string; days?: number };
+  generated_at?: string;
+}
+
+export type AttendanceSummary = AttendanceReport;
+
+export interface SubjectPerformanceItem {
+  rank: number;
+  subject_id: string;
+  subject_name: string;
+  subject_code: string;
+  students_count: number;
+  submissions_count?: number;
+  avg_grade_gpa: number;
+  avg_grade_pct: number;
+  pass_rate: number;
+  sparkline: number[];
+}
+
+export interface GradeHistogramBracket {
+  bracket: string;
+  count: number;
+  pct: number;
+  label: string;
+}
+
+export interface GradeTrendPoint {
+  period: string;
+  institution_avg: number;
+  department_avg: number;
+  top_performers: number;
+}
+
+export interface GradeKpis {
+  avg_grade_score: number;
+  avg_gpa: string;
+  gpa_numeric: number;
+  gpa_scale: number;
+  gpa_delta_pct: number;
+  gpa_delta_value: number;
+  avg_grade_sparkline: number[];
+  pass_rate: number;
+  pass_rate_delta_pct: number;
+  pass_rate_delta_value: number;
+  pass_rate_sparkline: number[];
+  total_submissions: number;
+  submissions_delta_pct: number;
+  submissions_delta_value: number;
+  submissions_sparkline: number[];
+  at_risk_count: number;
+  at_risk_delta_pct: number;
+  at_risk_subtext: string;
+  at_risk_sparkline: number[];
 }
 
 export interface GradeDistribution {
-  total_grades: number;
-  avg_score: number;
-  median_score: number | null;
-  pass_rate: number;
-  distribution: { range: string; count: number; pct: number }[];
-  by_section: Array<{ section_id: string; section_name: string; avg_score: number; total: number }>;
+  count?: number;
+  total_grades?: number;
+  avg_score?: number;
+  median_score?: number | null;
+  pass_rate?: number;
+  kpis?: GradeKpis;
+  histogram?: GradeHistogramBracket[];
+  histogram_by_subject?: Record<string, GradeHistogramBracket[]>;
+  trends?: GradeTrendPoint[];
+  top_performing_subjects?: SubjectPerformanceItem[];
+  needs_attention_subjects?: SubjectPerformanceItem[];
+  subjects_list?: Array<{ id: string; name: string; code: string }>;
+  distribution?: { range: string; count: number; pct: number }[] | Record<string, number>;
+  by_section?: Array<{ section_id: string; section_name: string; avg_score: number; total: number }>;
+  rows?: any[];
   period: { from: string; to: string };
 }
 
@@ -265,22 +457,92 @@ export interface ExperimentUsage {
 }
 
 export interface AnalyticsTrend {
-  grain: string;
-  series: Array<{ period: string; sessions: number; submissions: number; avg_score: number | null }>;
+  grain?: string;
+  weeks_requested?: number;
+  series: Array<{
+    week?: string;
+    period?: string;
+    sessions?: number;
+    sessions_held?: number;
+    submissions?: number;
+    avg_score?: number | null;
+    avg_final_grade?: number | null;
+    avg_attendance?: number | null;
+    avg_focus_score?: number | null;
+    grade_trend_slope?: number;
+    risk_bands?: {
+      critical?: number;
+      high?: number;
+      watch?: number;
+      ok?: number;
+    };
+  }>;
   period: { from: string; to: string };
+}
+
+export interface InstructorKPIs {
+  total_instructors: number;
+  total_instructors_delta_pct: number;
+  total_instructors_sparkline: number[];
+  avg_student_performance: number;
+  avg_student_performance_delta_pct: number;
+  avg_student_performance_sparkline: number[];
+  avg_attendance_rate: number;
+  avg_attendance_rate_delta_pct: number;
+  avg_attendance_rate_sparkline: number[];
+  teaching_workload: number;
+  teaching_workload_delta_pct: number;
+  teaching_workload_sparkline: number[];
+  student_feedback: number;
+  student_feedback_delta_pct: number;
+  student_feedback_responses: number;
+  student_feedback_sparkline: number[];
+}
+
+export interface InstructorBenchmarkItem {
+  name: string;
+  full_name: string;
+  avg_grade: number;
+  department_name: string;
+  sessions_run: number;
+}
+
+export interface InstructorDepartmentSlice {
+  name: string;
+  count: number;
+  percentage: number;
+  color: string;
 }
 
 export interface InstructorPerf {
   instructor_id: string;
   full_name: string;
   email: string;
-  sessions_run: number;
-  subjects_count: number;
-  sections_count: number;
-  avg_attendance: number | null;
-  avg_final_grade: number | null;
-  avg_focus_score: number | null;
-  avg_feedback: number | null;
+  department_name?: string;
+  sections_count?: number;
+  students_count?: number;
+  sessions_run?: number;
+  subjects_count?: number;
+  avg_attendance?: number | null;
+  avg_final_grade?: number | null;
+  avg_focus_score?: number | null;
+  engagement_score?: number | null;
+  avg_feedback?: number | null;
+  trend_sparkline?: number[];
+  status?: string;
+}
+
+export interface InstructorsReport {
+  kpis: InstructorKPIs;
+  grade_benchmark: {
+    institution_avg: number;
+    instructors: InstructorBenchmarkItem[];
+  };
+  department_distribution: InstructorDepartmentSlice[];
+  instructors: InstructorPerf[];
+  total_instructors: number;
+  period: { from: string; to: string };
+  generated_at?: string;
 }
 
 export interface ProctoringReport {
@@ -296,7 +558,65 @@ export interface ProctoringReport {
   period: { from: string; to: string };
 }
 
+export interface EngagementKPIs {
+  engagement_rate: number;
+  engagement_rate_delta_pct: number;
+  engagement_rate_sparkline: number[];
+  active_students: number;
+  active_students_delta_pct: number;
+  active_students_sparkline: number[];
+  dormant_students: number;
+  dormant_students_delta_pct: number;
+  dormant_students_sparkline: number[];
+  avg_focus_score: number;
+  avg_focus_score_delta_pct: number;
+  avg_focus_score_sparkline: number[];
+}
+
+export interface EngagementTrendPoint {
+  date: string;
+  active_learners: number;
+  dormant_learners: number;
+  total_students: number;
+}
+
+export interface DepartmentEngagement {
+  department_id: string;
+  department_name: string;
+  code: string;
+  engagement_rate: number;
+  active_count: number;
+  total_count: number;
+}
+
+export interface ActivityHeatmapCell {
+  day: string;
+  hour: string;
+  intensity: number;
+  sessions: number;
+  minutes: number;
+}
+
+export interface LowEngagementStudent {
+  student_id: string;
+  full_name: string;
+  roll_number: string;
+  email: string;
+  department_name: string;
+  section_name: string;
+  engagement_rate: number;
+  last_activity: string;
+  status: 'Dormant' | 'At Risk' | 'Watch' | 'Active' | string;
+  focus_score: number;
+  sparkline: number[];
+}
+
 export interface EngagementReport {
+  kpis?: EngagementKPIs;
+  engagement_trend?: EngagementTrendPoint[];
+  engagement_by_department?: DepartmentEngagement[];
+  activity_distribution?: ActivityHeatmapCell[];
+  low_engagement_students?: LowEngagementStudent[];
   total_students: number;
   active_students: number;
   dormant_students: number;
@@ -308,17 +628,84 @@ export interface EngagementReport {
     concept_mastery: number | null; focus_score: number | null;
   }>;
   period: { from: string; to: string };
+  generated_at?: string;
+}
+
+export interface AIFeatureBreakdown {
+  feature_key: string;
+  name: string;
+  calls: number;
+  pct: number;
+  color: string;
+}
+
+export interface AIUsageTrendPoint {
+  date: string;
+  queries: number;
+  active_users: number;
+}
+
+export interface AISubjectUsage {
+  subject_id?: string;
+  subject_name: string;
+  code?: string;
+  queries: number;
+  reliance_pct: number;
+  tier: 'high' | 'medium' | 'low';
+}
+
+export interface AIRelianceBracket {
+  bracket: string;
+  count: number;
+}
+
+export interface HighAIRelianceStudent {
+  student_id: string;
+  full_name: string;
+  roll_number: string;
+  department_name: string;
+  reliance_rate: number;
+  total_queries: number;
+  sparkline: number[];
+  risk_band: 'critical' | 'warning' | 'ok';
 }
 
 export interface AIUsageReport {
   total_calls: number;
+  total_queries?: number;
   total_tokens: number;
+  active_consumers?: number;
+  high_reliance_students_count?: number;
+  deltas?: {
+    queries: number;
+    tokens: number;
+    consumers: number;
+    high_reliance: number;
+  };
+  sparklines?: {
+    queries: number[];
+    tokens: number[];
+    consumers: number[];
+    high_reliance: number[];
+  };
   by_feature: Record<string, { calls: number; tokens: number }>;
+  by_feature_breakdown?: AIFeatureBreakdown[];
+  usage_trend?: AIUsageTrendPoint[];
+  by_subject?: AISubjectUsage[];
+  reliance_distribution?: AIRelianceBracket[];
+  high_reliance_students?: HighAIRelianceStudent[];
   top_consumers: Array<{
     user_id: string; full_name: string | null; role: string;
     calls: number; tokens: number;
   }>;
-  period: { from: string; to: string };
+  cost_projection?: {
+    cost_usd: number;
+    monthly_projection_usd: number;
+    budget_cap_usd: number;
+    budget_utilization_pct: number;
+  };
+  period: { from: string; to: string; days?: number };
+  generated_at?: string;
 }
 
 export interface RiskOverviewReport {
@@ -327,27 +714,77 @@ export interface RiskOverviewReport {
     at_risk_count: number;
     at_risk_pct: number;
     avg_risk_score: number;
+    risk_delta?: number;
     bands: {
       critical: number;
       high: number;
       watch: number;
       ok: number;
     };
+    band_percentages?: {
+      critical: number;
+      high: number;
+      watch: number;
+      ok: number;
+    };
+    band_deltas?: {
+      critical: number;
+      high: number;
+      watch: number;
+      ok: number;
+    };
+    top_risk_drivers?: Record<string, number>;
   };
-  top_risk_drivers: Array<{ reason: string; count: number; pct: number }>;
+  top_risk_drivers?: Array<{ reason: string; count: number; pct: number }> | Record<string, number>;
+  top_critical_students?: any[];
   students: Array<{
     student_id: string;
     full_name: string;
     email: string;
     roll_number?: string;
     section_name?: string;
+    department_name?: string;
     risk_score: number;
     risk_band: 'critical' | 'high' | 'watch' | 'ok';
-    is_at_risk: boolean;
+    is_at_risk?: boolean;
     primary_reason: string;
-    risk_contributions: Record<string, { weight: number; value: number; penalty: number; contribution_pct: number }>;
+    mastery?: number;
+    grade_avg?: number;
+    attendance?: number;
+    engagement?: number;
+    consistency?: number;
+    last_active?: string;
+    risk_contributions?: Record<string, any>;
     trend_arrow?: string;
-    metrics: Record<string, { value: number | null; sample_size: number; is_sufficient: boolean }>;
+    components?: Record<string, number>;
+    metrics?: Record<string, any>;
+  }>;
+  by_department?: Array<{
+    department_id: string;
+    name: string;
+    code: string;
+    avg_risk: number;
+    total_students: number;
+    bands: {
+      critical: number;
+      high: number;
+      watch: number;
+      ok: number;
+    };
+    band_percentages: {
+      critical: number;
+      high: number;
+      watch: number;
+      ok: number;
+    };
+  }>;
+  trend_daily?: Array<{
+    date: string;
+    avg_risk: number;
+    critical: number;
+    high: number;
+    watch: number;
+    ok: number;
   }>;
   period: { days: number; from: string; to: string };
 }
@@ -371,60 +808,249 @@ export interface RiskTrendsReport {
 }
 
 export interface FunnelReport {
-  period: { days: number; from: string; to: string };
+  period: { days?: number; from: string; to: string };
   total_enrolled: number;
   stages: Array<{
     name: string;
+    stage?: string;
     key: string;
     count: number;
     pct: number;
+    pct_of_enrolled?: number;
     drop_off_pct: number;
     drop_off_count: number;
+    drop_label?: string;
     description?: string;
+    color?: string;
   }>;
+  kpis?: {
+    total_enrolled: { count: number; delta: number; is_positive?: boolean; note: string; sparkline: number[] };
+    started: { count: number; pct: number; delta: number; is_positive?: boolean; note: string; sparkline: number[] };
+    attempted: { count: number; pct: number; delta: number; is_positive?: boolean; note: string; sparkline: number[] };
+    completed: { count: number; pct: number; delta: number; is_positive?: boolean; note: string; sparkline: number[] };
+    mastered: { count: number; pct: number; delta: number; is_positive?: boolean; note: string; sparkline: number[] };
+  };
+  conversion_rates?: Array<{
+    name: string;
+    rate: number;
+    count: number;
+    color: string;
+  }>;
+  drop_off_analysis?: {
+    total_drop_offs: number;
+    breakdown: Array<{
+      name: string;
+      reason: string;
+      count: number;
+      pct: number;
+      color: string;
+    }>;
+  };
+  progress_trend?: Array<{
+    date: string;
+    enrolled: number;
+    started: number;
+    completed: number;
+    mastered: number;
+  }>;
+  stuck_students?: Array<{
+    student_id: string;
+    full_name: string;
+    roll_number: string;
+    section_name?: string;
+    department_name?: string;
+    display_section?: string;
+    current_stage: 'Enrolled' | 'Started' | 'Attempted' | 'Completed' | string;
+    days_in_stage: number;
+    last_activity: string;
+    risk_reason: string;
+    risk_score: number;
+    risk_band?: string;
+  }>;
+  summary?: {
+    overall_completion_rate: number;
+    biggest_drop_off_stage: string | null;
+    total_drop_offs?: number;
+    thresholds?: {
+      pass_grade: number;
+      mastery: number;
+    };
+  };
 }
 
 export interface BenchmarkReport {
-  entity_type: string;
-  baselines: Record<string, { mean: number; median: number; std_dev: number; count: number }>;
+  entity_type?: string;
+  benchmark_type?: string;
+  entity_count?: number;
+  baselines?: Record<string, { mean: number; median: number; std_dev?: number; stdev?: number; count: number; min?: number; max?: number }>;
   entities: Array<{
     id: string;
     name: string;
+    section_name?: string;
+    department_name?: string;
     student_count: number;
-    benchmarks: Record<string, { value: number | null; z_score: number; percentile: number; delta_vs_mean: number }>;
+    avg_grade?: number;
+    attendance_rate?: number;
+    focus_avg?: number;
+    risk_score?: number;
+    z_score?: number;
+    percentile?: number;
+    percentile_rank?: string;
+    vs_campus?: number;
+    trend?: number[];
+    benchmarks?: Record<string, { value: number | null; z_score: number; percentile: number; delta_vs_mean?: number; relative_status?: string; baseline_mean?: number }>;
     is_outlier_high?: boolean;
     is_outlier_low?: boolean;
   }>;
-  period: { days: number; from: string; to: string };
+  kpis?: {
+    total_sections: number;
+    sections_delta: number;
+    sections_sparkline?: number[];
+    total_students: number;
+    students_delta: number;
+    students_sparkline?: number[];
+    avg_z_score: number;
+    z_score_delta: number;
+    z_score_sparkline?: number[];
+    top_section: {
+      name: string;
+      z_score: number;
+      percentile: string;
+    };
+    top_section_sparkline?: number[];
+  };
+  distribution?: {
+    total: number;
+    above_average: { count: number; pct: number };
+    on_par: { count: number; pct: number };
+    below_average: { count: number; pct: number };
+    significantly_below: { count: number; pct: number };
+  };
+  top_performing?: Array<{
+    rank: number;
+    section: string;
+    avg_grade: number;
+    z_score: number;
+    percentile: string;
+  }>;
+  needs_attention?: Array<{
+    rank: number;
+    section: string;
+    avg_grade: number;
+    z_score: number;
+    percentile: string;
+  }>;
+  departments?: Array<{
+    department: string;
+    students: number;
+    avg_grade: number;
+    z_score: number;
+  }>;
+  dual_axis_chart?: Array<{
+    name: string;
+    fullName?: string;
+    sectionAverage: number;
+    campusMean: number;
+    zScore: number;
+  }>;
+  period?: { days: number; from: string; to: string };
+  generated_at?: string;
 }
 
 export interface IntegrityReport {
   campus_integrity_score: number;
   total_violations: number;
+  high_risk_students_count?: number;
+  repeat_offenders_count?: number;
+  students_affected_count?: number;
+  sessions_affected_count?: number;
   by_type: Record<string, number>;
+  by_event_type?: Record<string, number>;
   by_severity: Record<string, number>;
-  high_risk_students: Array<{
+  trend_over_time?: Array<{ date: string; count: number }>;
+  session_hotspots?: Array<{
+    session_id: string;
+    session_title: string;
+    session_name?: string;
+    event_count: number;
+  }>;
+  sparklines?: {
+    integrity?: number[];
+    violations?: number[];
+    high_risk?: number[];
+    repeat_offenders?: number[];
+  };
+  deltas?: {
+    integrity?: number;
+    violations?: number;
+    high_risk?: number;
+    repeat_offenders?: number;
+  };
+  watchlist_students?: Array<{
     student_id: string;
     full_name: string;
+    email: string;
     roll_number: string;
+    department_name: string;
     section_name: string;
-    violation_count: number;
-    weighted_severity: number;
+    total_violations: number;
+    high_severity_count: number;
     primary_violation: string;
+    frequent_violation: string;
+    severity_weight: number;
+    most_recent?: string;
+    last_occurrence?: string;
+    risk_level: 'Critical' | 'High' | 'Watch' | 'Low';
   }>;
-  recent_events: Array<{
-    id: string;
-    session_id: string;
-    student_name: string;
-    event_type: string;
-    severity: string;
-    recorded_at: string;
-  }>;
+  high_risk_students: Array<any>;
+  repeat_offenders?: Array<any>;
   period: { days: number; from: string; to: string };
 }
 
 export interface OutcomesReport {
-  total_subjects: number;
+  total_subjects?: number;
+  kpis?: {
+    campus_avg_grade?: {
+      value: number;
+      unit: string;
+      delta: number;
+      is_positive_good: boolean;
+      subtitle: string;
+      sparkline: number[];
+    };
+    concept_mastery_rate?: {
+      value: number;
+      unit: string;
+      delta: number;
+      is_positive_good: boolean;
+      subtitle: string;
+      sparkline: number[];
+    };
+    curriculum_completion?: {
+      value: number;
+      unit: string;
+      delta: number;
+      is_positive_good: boolean;
+      subtitle: string;
+      sparkline: number[];
+    };
+  };
+  trend?: Array<{
+    date: string;
+    avg_grade: number;
+    mastery_rate: number;
+    completion_rate: number;
+  }>;
+  distribution?: {
+    total_students: number;
+    tiers: Array<{
+      name: string;
+      range: string;
+      count: number;
+      percentage: number;
+      color: string;
+    }>;
+  };
   subjects: Array<{
     subject_id: string;
     subject_name: string;
@@ -435,6 +1061,7 @@ export interface OutcomesReport {
     avg_grade: number;
     mastery_rate: number;
     difficulty_index: number;
+    trend?: number[];
     grade_distribution?: Record<string, number>;
   }>;
   summary: {
@@ -442,7 +1069,7 @@ export interface OutcomesReport {
     campus_mastery_rate: number;
     campus_completion_rate: number;
   };
-  period: { days: number; from: string; to: string };
+  period?: { days: number; from: string; to: string };
 }
 
 export interface Student360Data {
@@ -1752,32 +2379,54 @@ export const institutionService = {
 
   // ── Analytics ─────────────────────────────────────────────────────────────────
 
-  async getAnalyticsOverview(days = 30): Promise<AnalyticsOverview> {
-    const resp = await apiClient.get('/institution/analytics/overview', { params: { days } });
+  async getAnalyticsOverview(params?: { days?: number; department_id?: string; section_id?: string; from?: string; to?: string } | number): Promise<AnalyticsOverview> {
+    const queryParams = typeof params === 'number' ? { days: params } : (params || { days: 30 });
+    const resp = await apiClient.get('/institution/analytics/overview', { params: queryParams });
     return resp.data as AnalyticsOverview;
   },
 
-  async getAtRiskStudents(threshold = 40): Promise<AtRiskStudent[]> {
+  async getAtRiskStudents(params?: { threshold?: number; days?: number; band?: string; department_id?: string; section_id?: string } | number): Promise<AtRiskStudent[]> {
+    const queryParams = typeof params === 'number' ? { threshold: params } : (params || {});
     const { data } = await apiClient.get<{ at_risk_students: AtRiskStudent[] }>(
       '/institution/analytics/students-at-risk',
-      { params: { threshold } },
+      { params: queryParams },
     );
     return data.at_risk_students;
   },
 
-  async getSectionComparison(): Promise<SectionComparison[]> {
+  async getSectionComparison(params?: { days?: number; from?: string; to?: string; department_id?: string }): Promise<SectionComparison[]> {
     const { data } = await apiClient.get<{ sections: SectionComparison[] }>(
       '/institution/analytics/section-comparison',
+      { params },
     );
     return data.sections;
   },
 
-  async getAnalyticsAttendance(params?: { days?: number; from?: string; to?: string }): Promise<AttendanceSummary> {
-    const { data } = await apiClient.get<AttendanceSummary>('/institution/analytics/attendance', { params });
+  async getAnalyticsAttendance(params?: {
+    days?: number;
+    from?: string;
+    to?: string;
+    department_id?: string;
+    section_id?: string;
+    batch_id?: string;
+    subject_id?: string;
+    compare?: boolean;
+  }): Promise<AttendanceReport> {
+    const { data } = await apiClient.get<AttendanceReport>('/institution/analytics/attendance', { params });
     return data;
   },
 
-  async getAnalyticsGrades(params?: { days?: number; from?: string; to?: string }): Promise<GradeDistribution> {
+  async getAnalyticsGrades(params?: {
+    days?: number;
+    from?: string;
+    to?: string;
+    department_id?: string;
+    section_id?: string;
+    batch_id?: string;
+    subject_id?: string;
+    granularity?: string;
+    compare?: boolean;
+  }): Promise<GradeDistribution> {
     const { data } = await apiClient.get<GradeDistribution>('/institution/analytics/grades', { params });
     return data;
   },
@@ -1787,13 +2436,22 @@ export const institutionService = {
     return data;
   },
 
-  async getAnalyticsTrends(params?: { grain?: string; days?: number; from?: string; to?: string }): Promise<AnalyticsTrend> {
+  async getAnalyticsTrends(params?: { grain?: string; days?: number; weeks?: number; from?: string; to?: string }): Promise<AnalyticsTrend> {
     const { data } = await apiClient.get<AnalyticsTrend>('/institution/analytics/trends', { params });
     return data;
   },
 
-  async getAnalyticsInstructors(params?: { days?: number; from?: string; to?: string }): Promise<{ instructors: InstructorPerf[]; period: { from: string; to: string } }> {
-    const { data } = await apiClient.get('/institution/analytics/instructors', { params });
+  async getAnalyticsInstructors(params?: {
+    days?: number;
+    department_id?: string;
+    section_id?: string;
+    batch_id?: string;
+    subject_id?: string;
+    compare?: boolean;
+    from?: string;
+    to?: string;
+  }): Promise<InstructorsReport> {
+    const { data } = await apiClient.get<InstructorsReport>('/institution/analytics/instructors', { params });
     return data;
   },
 
@@ -1802,12 +2460,28 @@ export const institutionService = {
     return data;
   },
 
-  async getAnalyticsEngagement(params?: { days?: number; from?: string; to?: string }): Promise<EngagementReport> {
+  async getAnalyticsEngagement(params?: {
+    days?: number;
+    from?: string;
+    to?: string;
+    department_id?: string;
+    section_id?: string;
+    batch_id?: string;
+    subject_id?: string;
+    compare?: boolean;
+  }): Promise<EngagementReport> {
     const { data } = await apiClient.get<EngagementReport>('/institution/analytics/engagement', { params });
     return data;
   },
 
-  async getAnalyticsAIUsage(params?: { days?: number }): Promise<AIUsageReport> {
+  async getAnalyticsAIUsage(params?: {
+    days?: number;
+    department_id?: string;
+    section_id?: string;
+    batch_id?: string;
+    subject_id?: string;
+    compare?: boolean;
+  }): Promise<AIUsageReport> {
     const { data } = await apiClient.get<AIUsageReport>('/institution/analytics/ai-usage', { params }).catch(() => ({
       data: { total_calls: 0, total_tokens: 0, by_feature: {}, top_consumers: [], period: { from: '', to: '' } },
     }));
@@ -1824,7 +2498,7 @@ export const institutionService = {
     return data;
   },
 
-  async getFunnel(params?: { days?: number; department_id?: string; section_id?: string }): Promise<FunnelReport> {
+  async getFunnel(params?: { days?: number; department_id?: string; section_id?: string; batch_id?: string }): Promise<FunnelReport> {
     const { data } = await apiClient.get<FunnelReport>('/institution/analytics/funnel', { params });
     return data;
   },
@@ -1839,7 +2513,13 @@ export const institutionService = {
     return data;
   },
 
-  async getOutcomes(params?: { department_id?: string }): Promise<OutcomesReport> {
+  async getOutcomes(params?: {
+    department_id?: string;
+    dept?: string;
+    section?: string;
+    batch?: string;
+    range?: number;
+  }): Promise<OutcomesReport> {
     const { data } = await apiClient.get<OutcomesReport>('/institution/analytics/outcomes', { params });
     return data;
   },

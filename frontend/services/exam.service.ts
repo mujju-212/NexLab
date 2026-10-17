@@ -78,6 +78,9 @@ export interface StudentExamItem {
   description?: string | null;
   exam_type: ExamType;
   subject_id: string;
+  subject_name?: string;
+  subject_code?: string;
+  subject_color?: string;
   available_from: string | null;
   due_at: string | null;
   duration_minutes: number;
@@ -89,6 +92,8 @@ export interface StudentExamItem {
   attempts_remaining: number;
   latest_status: AttemptStatus | null;
   best_score: number | null;
+  passed?: boolean;
+  submitted_at?: string | null;
   has_in_progress: boolean;
 }
 

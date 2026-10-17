@@ -8,6 +8,7 @@ import { apiClient } from './api-client';
 export interface RecommendedProblem {
   id: string; slug: string; title: string; difficulty: string;
   nexlab_topic: string; acceptance: number; reason: string;
+  topics?: string[]; description?: string; acceptance_pct?: number; solves_display?: string;
 }
 
 export interface BookmarkRow {
@@ -186,4 +187,45 @@ export const practiceExtraService = {
     a.click();
     URL.revokeObjectURL(url);
   },
+
+  // ── Submissions & Profile Overview ─────────────────────────────────────────
+  async getRecentSubmissions(limit: number = 15): Promise<{
+    submissions: Array<{
+      id: string;
+      problem_id: string;
+      title: string;
+      slug: string;
+      difficulty: string;
+      status: string;
+      is_solved: boolean;
+      language: string;
+      passed: number;
+      total: number;
+      time_ms: number;
+      memory_kb: number;
+      xp_earned: number;
+      submitted_at: string;
+    }>;
+    total: number;
+  }> {
+    const { data } = await apiClient.get('/practice/submissions/recent', { params: { limit } });
+    return data;
+  },
+
+  async getProfileOverview(): Promise<{
+    total_xp: number;
+    streak_days: number;
+    longest_streak: number;
+    total_solved: number;
+    total_attempted: number;
+    total_submissions: number;
+    acceptance_rate: number;
+    easy: { solved: number; total: number; percentage: number };
+    medium: { solved: number; total: number; percentage: number };
+    hard: { solved: number; total: number; percentage: number };
+  }> {
+    const { data } = await apiClient.get('/practice/profile-overview');
+    return data;
+  },
 };
+
