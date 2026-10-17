@@ -90,225 +90,15 @@ export default function AIUsagePage() {
 
   // Hover state for Trend Chart
   const [hoveredTrendIdx, setHoveredTrendIdx] = useState<number | null>(null);
+  const [overviewTopUsersPage, setOverviewTopUsersPage] = useState<number>(1);
 
-  // Safe default fallback logs
-  const getLogDateStr = (minutesAgo: number) => {
-    const d = new Date(Date.now() - minutesAgo * 60000);
-    const day = d.getDate();
-    const mo = d.toLocaleDateString('en-US', { month: 'short' });
-    const yr = d.getFullYear();
-    const time = d.toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' });
-    return `${day} ${mo} ${yr}, ${time}`;
-  };
-
-  const DEFAULT_LOGS: AILogItem[] = [
-    {
-      id: '1',
-      request_id: 'req_8f3a2d9e5c1b4f23',
-      timestamp: getLogDateStr(5),
-      user_name: 'Aryan Mehta',
-      user_email: 'aryan.mehta@greenwood.edu',
-      role: 'Student',
-      event_type: 'AI Request',
-      feature: 'Chat Assistant',
-      model: 'GPT-4o',
-      tokens: 1250,
-      input_tokens: 1000,
-      output_tokens: 250,
-      status: 'Success',
-      response_time: '2.3s',
-      ip_address: '203.122.67.91',
-      location: 'Bengaluru, India',
-      prompt: 'Explain the concept of normal distribution with an example.',
-      response: 'The normal distribution, also known as the Gaussian distribution, is a probability distribution that is symmetric about the mean, showing that data near the mean are more frequent in occurrence than data far from the mean.'
-    },
-    {
-      id: '2',
-      request_id: 'req_91b7e40a1d8c23e4',
-      timestamp: getLogDateStr(12),
-      user_name: 'Sneha Patil',
-      user_email: 'sneha.p@greenwood.edu',
-      role: 'TA',
-      event_type: 'Quota Limit',
-      feature: 'Answer Evaluation',
-      model: '-',
-      tokens: 0,
-      input_tokens: 0,
-      output_tokens: 0,
-      status: 'Blocked',
-      response_time: '0.5s',
-      ip_address: '117.203.45.23',
-      location: 'Pune, India',
-      prompt: 'Batch evaluation of 45 lab submissions.',
-      response: 'Request blocked: Monthly quota limit reached for current billing window.'
-    },
-    {
-      id: '3',
-      request_id: 'req_3a8c1f90e52b71d9',
-      timestamp: getLogDateStr(18),
-      user_name: 'Rohan Kulkarni',
-      user_email: 'rohan.k@greenwood.edu',
-      role: 'Student',
-      event_type: 'Feature Access',
-      feature: 'Code Help',
-      model: 'Claude 3.5',
-      tokens: 982,
-      input_tokens: 780,
-      output_tokens: 202,
-      status: 'Success',
-      response_time: '3.1s',
-      ip_address: '103.21.54.88',
-      location: 'Mumbai, India',
-      prompt: 'How do I implement binary search in Python with edge case handling?',
-      response: 'Here is an efficient O(log n) implementation of binary search in Python: def binary_search(arr, target): left, right = 0, len(arr) - 1...'
-    },
-    {
-      id: '4',
-      request_id: 'req_4d2e71c9a08f53b1',
-      timestamp: getLogDateStr(26),
-      user_name: 'Dr. Neha Iyer',
-      user_email: 'neha.iyer@greenwood.edu',
-      role: 'Instructor',
-      event_type: 'AI Request',
-      feature: 'Content Generation',
-      model: 'GPT-4o',
-      tokens: 2430,
-      input_tokens: 1800,
-      output_tokens: 630,
-      status: 'Success',
-      response_time: '4.2s',
-      ip_address: '49.205.11.76',
-      location: 'Chennai, India',
-      prompt: 'Generate a 5-question quiz for Organic Chemistry lab on esterification.',
-      response: 'Quiz: 1. Which catalyst is primarily used in Fischer esterification? 2. What is the role of anhydrous sodium sulfate?...'
-    },
-    {
-      id: '5',
-      request_id: 'req_5e1f82b0c97a44d2',
-      timestamp: getLogDateStr(35),
-      user_name: 'Pooja Krishna',
-      user_email: 'pooja.k@greenwood.edu',
-      role: 'Student',
-      event_type: 'Auth Event',
-      feature: 'Login',
-      model: '-',
-      tokens: 0,
-      input_tokens: 0,
-      output_tokens: 0,
-      status: 'Success',
-      response_time: '0.8s',
-      ip_address: '157.48.19.102',
-      location: 'Hyderabad, India',
-      prompt: 'User authentication session token refreshed.',
-      response: 'JWT token validated and extended for active session.'
-    },
-    {
-      id: '6',
-      request_id: 'req_6f0a93c1d86b55e3',
-      timestamp: getLogDateStr(45),
-      user_name: 'Amit Sharma',
-      user_email: 'amit.s@greenwood.edu',
-      role: 'Instructor',
-      event_type: 'AI Request',
-      feature: 'Data Analysis',
-      model: 'GPT-4o',
-      tokens: 3120,
-      input_tokens: 2500,
-      output_tokens: 620,
-      status: 'Success',
-      response_time: '5.8s',
-      ip_address: '115.99.142.18',
-      location: 'New Delhi, India',
-      prompt: 'Compute regression line and correlation coefficient for titration data.',
-      response: 'Regression Analysis: R² = 0.9942, Slope = 0.0482, Intercept = 0.12. Strong positive linear correlation confirmed.'
-    },
-    {
-      id: '7',
-      request_id: 'req_7a1b04d2e95c66f4',
-      timestamp: getLogDateStr(60),
-      user_name: 'Vikram Rao',
-      user_email: 'vikram.r@greenwood.edu',
-      role: 'Instructor',
-      event_type: 'Error',
-      feature: 'Image Analysis',
-      model: 'DALL-E 3',
-      tokens: 0,
-      input_tokens: 0,
-      output_tokens: 0,
-      status: 'Failed',
-      response_time: '1.2s',
-      ip_address: '185.220.101.5',
-      location: 'Frankfurt, DE',
-      prompt: 'Verify logic gate diagram in submitted laboratory experiment.',
-      response: 'Error 503: Upstream model service timeout. Retry initiated.'
-    },
-    {
-      id: '8',
-      request_id: 'req_8b2c15e3f04d77a5',
-      timestamp: getLogDateStr(75),
-      user_name: 'Nidhi Desai',
-      user_email: 'nidhi.d@greenwood.edu',
-      role: 'Student',
-      event_type: 'AI Request',
-      feature: 'Hint System',
-      model: 'GPT-4o',
-      tokens: 410,
-      input_tokens: 320,
-      output_tokens: 90,
-      status: 'Success',
-      response_time: '1.9s',
-      ip_address: '223.176.12.34',
-      location: 'Bengaluru, India',
-      prompt: 'Student is stuck on step 4 of the RC circuit oscilloscope setup.',
-      response: 'Hint: Make sure the probe ground clip is connected to circuit common ground, and set the timebase to 1ms/div.'
-    },
-    {
-      id: '9',
-      request_id: 'req_9c3d26f4a13e88b6',
-      timestamp: getLogDateStr(90),
-      user_name: 'TAs Group',
-      user_email: 'tas@greenwood.edu',
-      role: 'TA',
-      event_type: 'System Event',
-      feature: 'Model Updated',
-      model: '-',
-      tokens: 0,
-      input_tokens: 0,
-      output_tokens: 0,
-      status: 'Success',
-      response_time: '0.3s',
-      ip_address: '127.0.0.1',
-      location: 'Internal System',
-      prompt: 'Feature configuration: Default model updated to GPT-4o.',
-      response: 'Model configuration propagated across 12 AI services.'
-    },
-    {
-      id: '10',
-      request_id: 'req_0d4e37a5b24f99c7',
-      timestamp: getLogDateStr(110),
-      user_name: 'Aryan Mehta',
-      user_email: 'aryan.mehta@greenwood.edu',
-      role: 'Student',
-      event_type: 'AI Request',
-      feature: 'Viva Question',
-      model: 'GPT-4o',
-      tokens: 1875,
-      input_tokens: 1400,
-      output_tokens: 475,
-      status: 'Success',
-      response_time: '3.8s',
-      ip_address: '203.122.67.91',
-      location: 'Bengaluru, India',
-      prompt: 'Generate viva questions for digital signal processing Butterworth filter.',
-      response: '1. Why is the Butterworth filter known as a maximally flat filter? 2. How does the order of the filter affect the roll-off rate?'
-    }
-  ];
+  const DEFAULT_LOGS: AILogItem[] = [];
 
   const logKpis = {
-    total_logs: logsData?.kpis?.total_logs || { value: '124,832', change: '+18% vs. last 30 days' },
-    unique_users: logsData?.kpis?.unique_users || { value: '428', change: '+12%' },
-    total_tokens: logsData?.kpis?.total_tokens || { value: '5.4M', change: '+25%' },
-    failed_requests: logsData?.kpis?.failed_requests || { value: '342', change: '+6%' },
+    total_logs: logsData?.kpis?.total_logs || { value: '0', change: '' },
+    unique_users: logsData?.kpis?.unique_users || { value: '0', change: '' },
+    total_tokens: logsData?.kpis?.total_tokens || { value: '0', change: '' },
+    failed_requests: logsData?.kpis?.failed_requests || { value: '0', change: '' },
   };
 
   const logActivityTrend = logsData?.activity_trend && logsData.activity_trend.length > 0 ? logsData.activity_trend : [
@@ -320,26 +110,19 @@ export default function AIUsagePage() {
       return {
         date: iso,
         label,
-        total_requests: 4000 + (6 - daysAgo) * 750,
-        successful: 3800 + (6 - daysAgo) * 710,
-        failed: 200 + (6 - daysAgo) * 40,
-        avg_response_time: 2.2
+        total_requests: 0,
+        successful: 0,
+        failed: 0,
+        avg_response_time: 0
       };
     })
   ];
 
-  const logEventBreakdown = logsData?.event_type_breakdown && logsData.event_type_breakdown.length > 0 ? logsData.event_type_breakdown : [
-    { name: 'AI Request', percent: 68, color: '#7c3aed' },
-    { name: 'Quota Limit', percent: 12, color: '#3b82f6' },
-    { name: 'Feature Access', percent: 8, color: '#10b981' },
-    { name: 'Auth Events', percent: 6, color: '#f59e0b' },
-    { name: 'Errors', percent: 4, color: '#ef4444' },
-    { name: 'System Events', percent: 2, color: '#64748b' }
-  ];
+  const logEventBreakdown = logsData?.event_type_breakdown && logsData.event_type_breakdown.length > 0 ? logsData.event_type_breakdown : [];
 
-  const logList = logsData?.logs && logsData.logs.length > 0 ? logsData.logs : DEFAULT_LOGS;
+  const logList = logsData?.logs || [];
   const currentActiveLog = selectedLog || logList[0];
-  const totalLogsCount = logsData?.total || 124832;
+  const totalLogsCount = logsData?.total || 0;
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -992,12 +775,26 @@ export default function AIUsagePage() {
                       </tr>
                     </thead>
                     <tbody>
-                      {overview.top_users
-                        .filter(u => userRoleFilter === 'all' || u.role?.toLowerCase() === userRoleFilter)
-                        .slice(0, 5)
-                        .map((u, i) => (
-                          <tr key={i}>
-                            <td>{u.rank || i + 1}</td>
+                      {(() => {
+                        const filtered = (overview.top_users || []).filter(u => userRoleFilter === 'all' || u.role?.toLowerCase() === userRoleFilter);
+                        const pageSize = 10;
+                        const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+                        const start = (overviewTopUsersPage - 1) * pageSize;
+                        const paged = filtered.slice(start, start + pageSize);
+
+                        if (paged.length === 0) {
+                          return (
+                            <tr>
+                              <td colSpan={8} style={{ textAlign: 'center', padding: '32px 16px', color: '#94a3b8' }}>
+                                No user activity recorded yet.
+                              </td>
+                            </tr>
+                          );
+                        }
+
+                        return paged.map((u, i) => (
+                          <tr key={u.id || i}>
+                            <td>{start + i + 1}</td>
                             <td>
                               <div className={styles.userCell}>
                                 <div className={styles.avatar}>
@@ -1027,10 +824,81 @@ export default function AIUsagePage() {
                               </button>
                             </td>
                           </tr>
-                        ))}
+                        ));
+                      })()}
                     </tbody>
                   </table>
                 </div>
+
+                {/* Pagination Controls */}
+                {(() => {
+                  const filtered = (overview.top_users || []).filter(u => userRoleFilter === 'all' || u.role?.toLowerCase() === userRoleFilter);
+                  const pageSize = 10;
+                  const totalPages = Math.max(1, Math.ceil(filtered.length / pageSize));
+                  const start = (overviewTopUsersPage - 1) * pageSize;
+
+                  return (
+                    <div
+                      style={{
+                        display: 'flex',
+                        alignItems: 'center',
+                        justifyContent: 'space-between',
+                        padding: '12px 16px',
+                        borderTop: '1px solid #f1f5f9',
+                        fontSize: '0.8125rem',
+                        color: '#64748b',
+                        background: '#fafafa',
+                        borderBottomLeftRadius: 14,
+                        borderBottomRightRadius: 14,
+                      }}
+                    >
+                      <span>
+                        Showing {filtered.length > 0 ? start + 1 : 0} to {Math.min(start + pageSize, filtered.length)} of {filtered.length} users
+                      </span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                        <button
+                          type="button"
+                          onClick={() => setOverviewTopUsersPage(p => Math.max(1, p - 1))}
+                          disabled={overviewTopUsersPage === 1}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: 6,
+                            border: '1px solid #e2e8f0',
+                            background: '#ffffff',
+                            color: '#334155',
+                            cursor: overviewTopUsersPage === 1 ? 'not-allowed' : 'pointer',
+                            opacity: overviewTopUsersPage === 1 ? 0.5 : 1,
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                          }}
+                        >
+                          Previous
+                        </button>
+                        <span style={{ fontSize: '0.75rem', fontWeight: 600, color: '#1e293b' }}>
+                          Page {overviewTopUsersPage} of {totalPages}
+                        </span>
+                        <button
+                          type="button"
+                          onClick={() => setOverviewTopUsersPage(p => Math.min(totalPages, p + 1))}
+                          disabled={overviewTopUsersPage >= totalPages}
+                          style={{
+                            padding: '4px 10px',
+                            borderRadius: 6,
+                            border: '1px solid #e2e8f0',
+                            background: '#ffffff',
+                            color: '#334155',
+                            cursor: overviewTopUsersPage >= totalPages ? 'not-allowed' : 'pointer',
+                            opacity: overviewTopUsersPage >= totalPages ? 0.5 : 1,
+                            fontSize: '0.75rem',
+                            fontWeight: 600,
+                          }}
+                        >
+                          Next
+                        </button>
+                      </div>
+                    </div>
+                  );
+                })()}
               </div>
 
               {/* Quick Actions Sidebar Card */}
