@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { X, Copy, Check, Globe, Lock, Share2, Sparkles, ExternalLink } from 'lucide-react';
 import { freeService } from '@/services/free.service';
 import styles from './free-analytics.module.css';
@@ -34,6 +34,24 @@ export const ShowcaseModal: React.FC<ShowcaseModalProps> = ({
   const [slug, setSlug] = useState(initialSlug);
   const [copied, setCopied] = useState(false);
   const [loading, setLoading] = useState(false);
+
+  useEffect(() => {
+    if (isOpen) {
+      setIsPublic(initialPublic);
+      setSlug(initialSlug);
+    }
+  }, [isOpen, initialPublic, initialSlug]);
+
+  useEffect(() => {
+    if (!isOpen) return;
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        onClose();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [isOpen, onClose]);
 
   if (!isOpen) return null;
 
