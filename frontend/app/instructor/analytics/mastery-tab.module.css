@@ -1,0 +1,632 @@
+/* ==========================================================================
+   MasteryTab CSS Module — Concept Mastery, Heatmap, DAG & Student Matrix
+   Matching Target UI 1:1 with Premium Modern Aesthetics
+   ========================================================================== */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 22px;
+  width: 100%;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   1. TOP 4 KPI SUMMARY CARDS
+   ────────────────────────────────────────────────────────────────────────── */
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+  width: 100%;
+}
+
+@media (max-width: 1200px) {
+  .kpiGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .kpiGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.kpiCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 18px 22px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  position: relative;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 1px 2px rgba(0, 0, 0, 0.02);
+  transition: transform 0.18s ease, box-shadow 0.18s ease, border-color 0.18s ease;
+}
+
+.kpiCard:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 6px 16px rgba(0, 0, 0, 0.06);
+  border-color: #cbd5e1;
+}
+
+.kpiHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+}
+
+.kpiIconWrapper {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.kpiTitle {
+  font-size: 0.825rem;
+  font-weight: 600;
+  color: #475569;
+  margin-left: 10px;
+  flex: 1;
+}
+
+.kpiBadge {
+  font-size: 0.725rem;
+  font-weight: 700;
+  padding: 3px 8px;
+  border-radius: 999px;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.kpiBadgeGreen {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.kpiBadgeRed {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.kpiBody {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+}
+
+.kpiValue {
+  font-size: 1.95rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.1;
+  letter-spacing: -0.02em;
+}
+
+.kpiLabel {
+  font-size: 0.775rem;
+  color: #64748b;
+  font-weight: 500;
+  margin-top: 4px;
+}
+
+.kpiSparkline {
+  height: 32px;
+  width: 90px;
+  display: flex;
+  align-items: flex-end;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   COMMON CARD STYLES
+   ────────────────────────────────────────────────────────────────────────── */
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03), 0 1px 2px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+.cardHeader {
+  padding: 18px 22px;
+  border-bottom: 1px solid #f1f5f9;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.cardHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.cardIconBox {
+  width: 36px;
+  height: 36px;
+  border-radius: 9px;
+  background: #f5f3ff;
+  color: #7c3aed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cardTitle {
+  font-size: 0.975rem;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0;
+}
+
+.cardSubtitle {
+  font-size: 0.775rem;
+  color: #64748b;
+  margin-top: 2px;
+}
+
+.cardControls {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.controlItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.775rem;
+  color: #475569;
+  font-weight: 600;
+}
+
+.selectInput {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 0.775rem;
+  font-weight: 600;
+  color: #1e293b;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.15s ease, background 0.15s ease;
+}
+
+.selectInput:hover,
+.selectInput:focus {
+  border-color: #7c3aed;
+  background: #ffffff;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   2. MIDDLE ROW: HEATMAP + PREREQUISITE GRAPH
+   ────────────────────────────────────────────────────────────────────────── */
+.middleGrid {
+  display: grid;
+  grid-template-columns: 1.85fr 1.15fr;
+  gap: 20px;
+  width: 100%;
+}
+
+@media (max-width: 1300px) {
+  .middleGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Heatmap Table */
+.heatmapContainer {
+  padding: 20px 22px;
+  overflow-x: auto;
+}
+
+.heatmapTable {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 4px;
+}
+
+.thAngled {
+  height: 90px;
+  vertical-align: bottom;
+  text-align: left;
+  padding: 0 4px;
+  min-width: 48px;
+}
+
+.rotatedText {
+  display: block;
+  transform: rotate(-45deg);
+  transform-origin: bottom left;
+  font-size: 0.75rem;
+  font-weight: 600;
+  color: #475569;
+  white-space: nowrap;
+  width: 24px;
+}
+
+.categoryRowHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: #1e293b;
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  background: #f8fafc;
+  white-space: nowrap;
+  transition: background 0.15s ease;
+}
+
+.categoryRowHeader:hover {
+  background: #f1f5f9;
+}
+
+.chevronIcon {
+  color: #64748b;
+  transition: transform 0.2s ease;
+}
+
+.chevronOpen {
+  transform: rotate(90deg);
+}
+
+.heatmapCell {
+  padding: 8px 4px;
+  text-align: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 6px;
+  transition: transform 0.15s ease, filter 0.15s ease, box-shadow 0.15s ease;
+  cursor: pointer;
+  user-select: none;
+}
+
+.heatmapCell:hover {
+  transform: scale(1.08);
+  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.12);
+  z-index: 10;
+  position: relative;
+}
+
+/* Color tiers matching reference mockup */
+.cellGreen {
+  background: #d1fae5;
+  color: #065f46;
+}
+
+.cellAmber {
+  background: #fef3c7;
+  color: #92400e;
+}
+
+.cellRed {
+  background: #fee2e2;
+  color: #991b1b;
+}
+
+/* Child concept row inside expanded category */
+.childRow {
+  background: #fafafa;
+}
+
+.childConceptName {
+  font-size: 0.75rem;
+  color: #475569;
+  padding-left: 28px;
+  font-weight: 500;
+}
+
+.legendContainer {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  padding: 14px 22px;
+  border-top: 1px solid #f1f5f9;
+  background: #ffffff;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.775rem;
+  font-weight: 600;
+  color: #475569;
+}
+
+.legendDot {
+  width: 9px;
+  height: 9px;
+  border-radius: 50%;
+}
+
+/* Prerequisite Dependency Graph */
+.dagContainer {
+  padding: 16px 20px;
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+  justify-content: space-between;
+}
+
+.dagSvgWrapper {
+  width: 100%;
+  min-height: 270px;
+  position: relative;
+}
+
+.dagNodePill {
+  cursor: pointer;
+  transition: filter 0.18s ease, transform 0.18s ease;
+}
+
+.dagNodePill:hover {
+  filter: drop-shadow(0 4px 8px rgba(0, 0, 0, 0.15));
+}
+
+.keyInsightBox {
+  background: #f0f9ff;
+  border: 1px solid #bae6fd;
+  border-radius: 10px;
+  padding: 12px 14px;
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.keyInsightIcon {
+  color: #0284c7;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.keyInsightTitle {
+  font-size: 0.785rem;
+  font-weight: 700;
+  color: #0369a1;
+  margin-bottom: 2px;
+}
+
+.keyInsightText {
+  font-size: 0.75rem;
+  color: #0c4a6e;
+  line-height: 1.4;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   3. BOTTOM ROW: STRENGTHS/WEAKNESSES + STUDENT MATRIX
+   ────────────────────────────────────────────────────────────────────────── */
+.bottomGrid {
+  display: grid;
+  grid-template-columns: 1fr 1.5fr;
+  gap: 20px;
+  width: 100%;
+}
+
+@media (max-width: 1200px) {
+  .bottomGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+/* Top Strengths & Weaknesses */
+.twoColWrapper {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 18px;
+  padding: 18px 22px;
+}
+
+@media (max-width: 600px) {
+  .twoColWrapper {
+    grid-template-columns: 1fr;
+  }
+}
+
+.strengthColHeader {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: #16a34a;
+  margin-bottom: 10px;
+}
+
+.weaknessColHeader {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: #dc2626;
+  margin-bottom: 10px;
+}
+
+.miniTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.miniTable th {
+  font-size: 0.725rem;
+  font-weight: 600;
+  color: #64748b;
+  text-align: left;
+  padding: 6px 4px;
+  border-bottom: 1px solid #f1f5f9;
+}
+
+.miniTable td {
+  font-size: 0.775rem;
+  padding: 8px 4px;
+  color: #334155;
+  border-bottom: 1px solid #f8fafc;
+}
+
+.rankNum {
+  color: #64748b;
+  font-weight: 600;
+  width: 22px;
+}
+
+.conceptName {
+  font-weight: 600;
+  color: #1e293b;
+}
+
+.strengthPct {
+  color: #16a34a;
+  font-weight: 700;
+  text-align: right;
+}
+
+.weaknessPct {
+  color: #dc2626;
+  font-weight: 700;
+  text-align: right;
+}
+
+/* Student Matrix */
+.searchBox {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchInput {
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 12px 6px 32px;
+  font-size: 0.775rem;
+  color: #1e293b;
+  outline: none;
+  width: 170px;
+  transition: all 0.15s ease;
+}
+
+.searchInput:focus {
+  border-color: #7c3aed;
+  background: #ffffff;
+  width: 200px;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.csvBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  padding: 6px 12px;
+  font-size: 0.775rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.csvBtn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+.matrixTableContainer {
+  overflow-x: auto;
+  max-height: 380px;
+}
+
+.matrixTable {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.matrixTable th {
+  background: #f8fafc;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #475569;
+  padding: 10px 14px;
+  text-align: center;
+  border-bottom: 1px solid #e2e8f0;
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  white-space: nowrap;
+}
+
+.matrixTable th:first-child {
+  text-align: left;
+}
+
+.matrixTable td {
+  padding: 10px 14px;
+  border-bottom: 1px solid #f1f5f9;
+  text-align: center;
+  font-size: 0.775rem;
+}
+
+.matrixTable td:first-child {
+  text-align: left;
+}
+
+.matrixTable tbody tr {
+  transition: background 0.12s ease;
+}
+
+.matrixTable tbody tr:hover {
+  background: #f8fafc;
+}
+
+.studentNameCell {
+  display: flex;
+  flex-direction: column;
+}
+
+.studentNameText {
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.studentRollText {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+.scorePill {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  padding: 3px 10px;
+  border-radius: 6px;
+  font-weight: 700;
+  font-size: 0.75rem;
+  min-width: 44px;
+}

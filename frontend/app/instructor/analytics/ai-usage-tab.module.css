@@ -1,0 +1,471 @@
+/* ══════════════════════════════════════════════════════════════════════════════
+   AI USAGE TAB CSS MODULE — Matching Reference UI Pixel-for-Pixel
+   ══════════════════════════════════════════════════════════════════════════════ */
+
+.container {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+  width: 100%;
+}
+
+/* ── Top 4 KPI Cards ── */
+.kpiGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 16px;
+}
+
+@media (max-width: 1024px) {
+  .kpiGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 640px) {
+  .kpiGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.kpiCard {
+  position: relative;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 18px 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+  transition: all 0.2s ease;
+}
+
+.kpiCard:hover {
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.06);
+  border-color: #cbd5e1;
+}
+
+.kpiContent {
+  display: flex;
+  flex-direction: column;
+  z-index: 2;
+}
+
+.kpiHeader {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 8px;
+}
+
+.kpiIconWrapper {
+  width: 28px;
+  height: 28px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.kpiIconPurple {
+  background: #f5f3ff;
+  color: #8b5cf6;
+}
+
+.kpiIconGreen {
+  background: #ecfdf5;
+  color: #10b981;
+}
+
+.kpiIconLightPurple {
+  background: #faf5ff;
+  color: #7c3aed;
+}
+
+.kpiIconBlue {
+  background: #eff6ff;
+  color: #3b82f6;
+}
+
+.kpiTitle {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: #374151;
+  letter-spacing: -0.01em;
+}
+
+.kpiValue {
+  font-size: 1.85rem;
+  font-weight: 800;
+  color: #111827;
+  line-height: 1.1;
+  margin-bottom: 6px;
+  letter-spacing: -0.02em;
+}
+
+.kpiSubtext {
+  font-size: 0.725rem;
+  font-weight: 500;
+  color: #94a3b8;
+}
+
+.kpiIllustration {
+  width: 80px;
+  height: 60px;
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  opacity: 0.85;
+  z-index: 1;
+}
+
+/* ── Informational Alert Banner ── */
+.alertBanner {
+  display: flex;
+  align-items: flex-start;
+  gap: 12px;
+  background: #eff6ff;
+  border: 1px solid #bfdbfe;
+  border-radius: 10px;
+  padding: 12px 18px;
+}
+
+.alertIcon {
+  color: #2563eb;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+
+.alertText {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.alertTitle {
+  font-size: 0.825rem;
+  font-weight: 700;
+  color: #1e40af;
+  line-height: 1.4;
+}
+
+.alertSubtext {
+  font-size: 0.75rem;
+  font-weight: 400;
+  color: #4b5563;
+  line-height: 1.4;
+}
+
+/* ── Middle Two-Column Grid ── */
+.middleGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 16px;
+  align-items: stretch;
+}
+
+@media (max-width: 1024px) {
+  .middleGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
+.card {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 20px 22px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  display: flex;
+  flex-direction: column;
+}
+
+.cardHeader {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  margin-bottom: 16px;
+}
+
+.cardHeaderLeft {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+}
+
+.cardHeaderIcon {
+  width: 32px;
+  height: 32px;
+  border-radius: 8px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.cardHeaderTitles {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.cardTitle {
+  font-size: 0.925rem;
+  font-weight: 700;
+  color: #111827;
+  letter-spacing: -0.01em;
+}
+
+.cardSubtitle {
+  font-size: 0.75rem;
+  font-weight: 500;
+  color: #64748b;
+}
+
+.badgePill {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 3px 10px;
+  border-radius: 9999px;
+  font-size: 0.725rem;
+  font-weight: 600;
+  background: #f1f5f9;
+  border: 1px solid #cbd5e1;
+  color: #64748b;
+}
+
+/* ── Empty States within Middle Cards ── */
+.emptyStateCentered {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  padding: 24px 16px;
+  flex: 1;
+  min-height: 180px;
+}
+
+.emptyIllustrationContainer {
+  margin-bottom: 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.emptyHeadline {
+  font-size: 0.875rem;
+  font-weight: 700;
+  color: #111827;
+  margin-bottom: 6px;
+}
+
+.emptySubtext {
+  font-size: 0.775rem;
+  color: #64748b;
+  max-width: 440px;
+  line-height: 1.45;
+  margin-bottom: 16px;
+}
+
+.actionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.775rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.05);
+  transition: all 0.15s ease;
+}
+
+.actionBtn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+  transform: translateY(-1px);
+}
+
+/* Stacked cards column on right */
+.rightStack {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+/* ── Student AI Consumption Ledger ── */
+.ledgerCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
+  overflow: hidden;
+}
+
+.ledgerHeader {
+  padding: 18px 22px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border-bottom: 1px solid #f1f5f9;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.ledgerHeaderLeft {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.ledgerHeaderControls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.searchBox {
+  position: relative;
+  display: flex;
+  align-items: center;
+}
+
+.searchIcon {
+  position: absolute;
+  left: 10px;
+  color: #94a3b8;
+  pointer-events: none;
+}
+
+.searchInput {
+  padding: 6px 12px 6px 32px;
+  font-size: 0.775rem;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  outline: none;
+  background: #ffffff;
+  color: #1e293b;
+  width: 190px;
+  transition: all 0.15s ease;
+}
+
+.searchInput:focus {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.12);
+}
+
+.exportBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  background: #ffffff;
+  border: 1px solid #cbd5e1;
+  border-radius: 8px;
+  font-size: 0.775rem;
+  font-weight: 600;
+  color: #334155;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.exportBtn:hover {
+  background: #f8fafc;
+  border-color: #94a3b8;
+}
+
+/* ── Table Styling ── */
+.tableWrapper {
+  width: 100%;
+  overflow-x: auto;
+}
+
+.table {
+  width: 100%;
+  border-collapse: collapse;
+  text-align: left;
+}
+
+.th {
+  padding: 10px 18px;
+  background: #f8fafc;
+  font-size: 0.725rem;
+  font-weight: 700;
+  color: #64748b;
+  border-bottom: 1px solid #e2e8f0;
+  white-space: nowrap;
+  user-select: none;
+}
+
+.td {
+  padding: 12px 18px;
+  font-size: 0.8rem;
+  color: #1e293b;
+  border-bottom: 1px solid #f1f5f9;
+  vertical-align: middle;
+}
+
+.tr:hover td {
+  background: #faf5ff;
+}
+
+.tableEmptyRow {
+  padding: 36px 16px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 16px;
+  width: 100%;
+}
+
+.studentCell {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.avatar {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  color: #ffffff;
+  flex-shrink: 0;
+}
+
+.studentMeta {
+  display: flex;
+  flex-direction: column;
+}
+
+.studentName {
+  font-weight: 600;
+  color: #111827;
+}
+
+.studentRoll {
+  font-size: 0.7rem;
+  color: #64748b;
+}
+
+.tokenHighlight {
+  font-weight: 700;
+  color: #7c3aed;
+}
+
+.trendSparkline {
+  display: inline-block;
+  vertical-align: middle;
+}
