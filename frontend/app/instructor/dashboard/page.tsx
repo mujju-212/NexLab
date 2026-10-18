@@ -255,7 +255,7 @@ export default function InstructorDashboard() {
           <div className={styles.statCardsGrid}>
             
             {/* My Students */}
-            <div className={styles.statCard} onClick={() => router.push('/instructor/students')}>
+            <div className={styles.statCard} onClick={() => router.push('/instructor/analytics?tab=students')}>
               <div className={`${styles.statIcon} ${styles.statIconPurple}`}>
                 <Users size={20} color="#fff" />
               </div>
