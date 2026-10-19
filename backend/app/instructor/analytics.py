@@ -1539,6 +1539,7 @@ def analytics_overview():
     my_exp_ids = _my_exp_ids()
     active_ss_ids, active_exp_ids = _resolve_active_scope(my_ss_ids, my_exp_ids)
     days = int(request.args.get('days', 30))
+    exp_filter = request.args.get('experiment_id')
 
     # 1. Enrolled / Active Students
     sec_subjs = SectionSubject.query.filter(SectionSubject.id.in_(active_ss_ids)).all()
@@ -1894,6 +1895,7 @@ def analytics_cohort_matrix():
     my_exp_ids = _my_exp_ids()
     active_ss_ids, active_exp_ids = _resolve_active_scope(my_ss_ids, my_exp_ids)
     days = int(request.args.get('days', 30))
+    exp_filter = request.args.get('experiment_id')
 
     # 1. Resolve active SectionSubject
     ss_filter = request.args.get('section_subject_id')
