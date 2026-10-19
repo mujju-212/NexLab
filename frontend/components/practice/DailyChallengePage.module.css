@@ -1,0 +1,1046 @@
+/* DailyChallengePage.module.css — High fidelity pixel-perfect recreation of Daily Challenge UI */
+
+.container {
+  max-width: 1380px;
+  margin: 0 auto;
+  padding: 1.5rem 2rem 3.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1.5rem;
+  color: #0f172a;
+  font-family: var(--font-inter, -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif);
+}
+
+/* Loading & Error States */
+.loadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 480px;
+  gap: 1rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+.spinner {
+  width: 44px;
+  height: 44px;
+  border: 3.5px solid rgba(124, 58, 237, 0.15);
+  border-top-color: #7c3aed;
+  border-radius: 50%;
+  animation: spin 0.8s linear infinite;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   1. HERO HEADER
+   ────────────────────────────────────────────────────────────────────────── */
+.heroHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1.5rem;
+  padding-bottom: 0.5rem;
+}
+
+.heroLeft {
+  display: flex;
+  align-items: center;
+  gap: 1.1rem;
+}
+
+.flameIconBox {
+  width: 54px;
+  height: 54px;
+  border-radius: 16px;
+  background: linear-gradient(135deg, rgba(239, 68, 68, 0.12), rgba(249, 115, 22, 0.16));
+  border: 1px solid rgba(239, 68, 68, 0.18);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  box-shadow: 0 4px 12px rgba(239, 68, 68, 0.08);
+  flex-shrink: 0;
+}
+
+.heroTitle {
+  font-size: 1.65rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.025em;
+  margin: 0 0 0.2rem;
+  font-family: inherit;
+}
+
+.heroSubtitle {
+  font-size: 0.92rem;
+  color: #64748b;
+  margin: 0;
+  font-weight: 500;
+}
+
+.heroRight {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  flex-shrink: 0;
+}
+
+/* Day Streak Badge */
+.streakPill {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  background: #f5f3ff;
+  border: 1px solid rgba(124, 58, 237, 0.18);
+  border-radius: 16px;
+  padding: 0.55rem 1.1rem;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.06);
+}
+
+.streakPillIcon {
+  font-size: 22px;
+  line-height: 1;
+}
+
+.streakPillText {
+  display: flex;
+  flex-direction: column;
+}
+
+.streakPillCount {
+  font-size: 1.15rem;
+  font-weight: 800;
+  color: #1e1b4b;
+  line-height: 1.1;
+}
+
+.streakPillLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #7c3aed;
+  text-transform: capitalize;
+}
+
+/* Weekly Progress Dots (Mon-Sun) */
+.weekProgressTracker {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 0.55rem 0.95rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+
+.weekDayItem {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.weekDayLabel {
+  font-size: 0.68rem;
+  font-weight: 700;
+  color: #6366f1;
+}
+
+.weekDayDot {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  transition: all 0.2s ease;
+}
+
+.weekDayDotSolved {
+  background: #7c3aed;
+  color: #ffffff;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.35);
+}
+
+.weekDayDotEmpty {
+  border: 1.5px solid #cbd5e1;
+  background: #f8fafc;
+  color: transparent;
+}
+
+.weekDayDotToday {
+  border: 2px solid #7c3aed;
+  background: #f5f3ff;
+  color: #7c3aed;
+}
+
+/* Best Streak Pill */
+.bestStreakPill {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 16px;
+  padding: 0.55rem 1.1rem;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+}
+
+.bestStreakIcon {
+  font-size: 22px;
+}
+
+.bestStreakText {
+  display: flex;
+  flex-direction: column;
+}
+
+.bestStreakLabel {
+  font-size: 0.72rem;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.bestStreakValue {
+  font-size: 0.96rem;
+  font-weight: 800;
+  color: #0f172a;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   2. TOP ROW GRID (Today's Challenge + Calendar)
+   ────────────────────────────────────────────────────────────────────────── */
+.topGrid {
+  display: grid;
+  grid-template-columns: 1fr 390px;
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+/* Today's Challenge Main Card */
+.challengeCard {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  border-radius: 24px;
+  padding: 2rem 2.2rem;
+  box-shadow: 0 4px 20px -2px rgba(124, 58, 237, 0.05), 0 2px 8px -2px rgba(0, 0, 0, 0.03);
+  position: relative;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.challengeCardContent {
+  position: relative;
+  z-index: 2;
+  max-width: 62%;
+  display: flex;
+  flex-direction: column;
+  gap: 1.1rem;
+}
+
+.eyebrowRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.eyebrowBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  background: rgba(249, 115, 22, 0.1);
+  color: #ea580c;
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  padding: 0.35rem 0.75rem;
+  border-radius: 9999px;
+}
+
+.countdownBadge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: #334155;
+}
+
+.problemTitle {
+  font-size: 1.55rem;
+  font-weight: 800;
+  color: #0f172a;
+  letter-spacing: -0.025em;
+  margin: 0;
+  line-height: 1.25;
+}
+
+.problemHook {
+  font-size: 0.92rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.55;
+  font-weight: 500;
+}
+
+/* Tags */
+.tagsRow {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  flex-wrap: wrap;
+}
+
+.diffPill {
+  font-size: 0.76rem;
+  font-weight: 800;
+  padding: 0.28rem 0.75rem;
+  border-radius: 8px;
+  letter-spacing: 0.02em;
+}
+
+.diffEasy {
+  background: rgba(34, 197, 94, 0.12);
+  color: #15803d;
+}
+
+.diffMedium {
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+}
+
+.diffHard {
+  background: rgba(239, 68, 68, 0.12);
+  color: #dc2626;
+}
+
+.topicPill {
+  background: #f1f5f9;
+  color: #475569;
+  font-size: 0.76rem;
+  font-weight: 600;
+  padding: 0.28rem 0.7rem;
+  border-radius: 8px;
+}
+
+/* 3 Stat Metrics */
+.metricsGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 0.85rem;
+}
+
+.metricBox {
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 14px;
+  padding: 0.8rem 0.9rem;
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  transition: transform 0.15s ease, background 0.15s ease;
+}
+
+.metricBox:hover {
+  background: #f1f5f9;
+  transform: translateY(-1px);
+}
+
+.metricIconCircle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.metricInfo {
+  display: flex;
+  flex-direction: column;
+}
+
+.metricValue {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+  line-height: 1.15;
+}
+
+.metricLabel {
+  font-size: 0.72rem;
+  font-weight: 500;
+  color: #64748b;
+  margin-top: 1px;
+}
+
+/* Action Buttons */
+.actionsRow {
+  display: flex;
+  align-items: center;
+  gap: 0.9rem;
+  flex-wrap: wrap;
+  margin-top: 0.4rem;
+}
+
+.solveBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  background: #7c3aed;
+  color: #ffffff;
+  font-weight: 700;
+  font-size: 0.92rem;
+  padding: 0.8rem 1.6rem;
+  border-radius: 12px;
+  border: none;
+  cursor: pointer;
+  transition: all 0.2s ease;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.3);
+  text-decoration: none;
+}
+
+.solveBtn:hover {
+  background: #6d28d9;
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(124, 58, 237, 0.38);
+}
+
+.solveBtnSolved {
+  background: #16a34a;
+  box-shadow: 0 4px 14px rgba(22, 163, 74, 0.25);
+}
+
+.solveBtnSolved:hover {
+  background: #15803d;
+  box-shadow: 0 6px 18px rgba(22, 163, 74, 0.35);
+}
+
+.editorialBtn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.45rem;
+  background: #ffffff;
+  color: #334155;
+  font-weight: 600;
+  font-size: 0.9rem;
+  padding: 0.8rem 1.3rem;
+  border-radius: 12px;
+  border: 1px solid #e2e8f0;
+  cursor: pointer;
+  transition: all 0.15s ease;
+  text-decoration: none;
+}
+
+.editorialBtn:hover {
+  border-color: #cbd5e1;
+  background: #f8fafc;
+  color: #0f172a;
+}
+
+/* 3D Illustration positioned at right */
+.heroIllustrationWrapper {
+  position: absolute;
+  right: -10px;
+  top: 50%;
+  transform: translateY(-50%);
+  width: 42%;
+  height: 90%;
+  pointer-events: none;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.heroIllustrationImg {
+  width: 100%;
+  height: 100%;
+  object-fit: contain;
+  filter: drop-shadow(0 12px 24px rgba(124, 58, 237, 0.12));
+  transition: transform 0.3s ease;
+}
+
+/* Challenge Calendar Card */
+.calendarCard {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  border-radius: 24px;
+  padding: 1.75rem 1.6rem;
+  box-shadow: 0 4px 20px -2px rgba(124, 58, 237, 0.05), 0 2px 8px -2px rgba(0, 0, 0, 0.03);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+}
+
+.calendarHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.2rem;
+}
+
+.calendarTitleWrap {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+}
+
+.calendarIconBadge {
+  width: 32px;
+  height: 32px;
+  border-radius: 9px;
+  background: #f5f3ff;
+  color: #7c3aed;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 16px;
+}
+
+.calendarTitle {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.calendarNav {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+}
+
+.calendarNavBtn {
+  background: none;
+  border: none;
+  cursor: pointer;
+  color: #64748b;
+  font-size: 14px;
+  padding: 4px 6px;
+  border-radius: 6px;
+  transition: background 0.15s, color 0.15s;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.calendarNavBtn:hover {
+  background: #f1f5f9;
+  color: #0f172a;
+}
+
+.calendarNavMonth {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1e293b;
+  min-width: 105px;
+  text-align: center;
+}
+
+/* Calendar Days Grid */
+.calendarDaysHeader {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  text-align: center;
+  margin-bottom: 0.6rem;
+}
+
+.calendarDayCol {
+  font-size: 0.72rem;
+  font-weight: 700;
+  color: #94a3b8;
+  padding: 0.2rem 0;
+}
+
+.calendarGrid {
+  display: grid;
+  grid-template-columns: repeat(7, 1fr);
+  gap: 0.35rem;
+  text-align: center;
+}
+
+.calendarDayCell {
+  width: 34px;
+  height: 34px;
+  margin: 0 auto;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 50%;
+  font-size: 0.84rem;
+  font-weight: 600;
+  cursor: default;
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.calendarDayOtherMonth {
+  color: #cbd5e1;
+}
+
+.calendarDayCurrentMonth {
+  color: #334155;
+}
+
+.calendarDaySolved {
+  background: #22c55e;
+  color: #ffffff !important;
+  font-weight: 800;
+  box-shadow: 0 2px 6px rgba(34, 197, 94, 0.3);
+}
+
+.calendarDayToday {
+  background: #7c3aed;
+  color: #ffffff !important;
+  font-weight: 800;
+  box-shadow: 0 2px 8px rgba(124, 58, 237, 0.4);
+}
+
+.calendarDayTodaySolved {
+  background: #22c55e;
+  color: #ffffff !important;
+  font-weight: 800;
+  box-shadow: 0 0 0 2.5px #7c3aed, 0 2px 6px rgba(34, 197, 94, 0.3);
+}
+
+.calendarDayMissed {
+  color: #ef4444;
+  background: rgba(239, 68, 68, 0.08);
+}
+
+.calendarDayUpcoming {
+  color: #475569;
+}
+
+/* Calendar Legend */
+.calendarLegend {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.4rem;
+  margin-top: 1.1rem;
+  padding-top: 0.9rem;
+  border-top: 1px solid #f1f5f9;
+  font-size: 0.74rem;
+  color: #64748b;
+  font-weight: 600;
+  flex-wrap: wrap;
+}
+
+.legendItem {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.legendDot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+}
+
+.legendSolved { background: #22c55e; }
+.legendToday { background: #7c3aed; }
+.legendUpcoming { background: #cbd5e1; }
+.legendMissed { background: #ef4444; }
+
+/* ──────────────────────────────────────────────────────────────────────────
+   3. MIDDLE ROW GRID (Streak Progress + Rewards + Recent Challenges)
+   ────────────────────────────────────────────────────────────────────────── */
+.middleGrid {
+  display: grid;
+  grid-template-columns: 1.25fr 0.9fr 1.15fr;
+  gap: 1.5rem;
+  align-items: stretch;
+}
+
+.sectionCard {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  border-radius: 20px;
+  padding: 1.6rem 1.65rem;
+  box-shadow: 0 3px 16px -2px rgba(124, 58, 237, 0.04), 0 2px 6px -2px rgba(0, 0, 0, 0.02);
+  display: flex;
+  flex-direction: column;
+}
+
+.sectionHeader {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1.2rem;
+}
+
+.sectionHeaderLeft {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.75rem;
+}
+
+.sectionIconBadge {
+  width: 38px;
+  height: 38px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 19px;
+  flex-shrink: 0;
+}
+
+.sectionTitleWrap {
+  display: flex;
+  flex-direction: column;
+}
+
+.sectionTitle {
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0 0 2px;
+}
+
+.sectionDesc {
+  font-size: 0.78rem;
+  color: #64748b;
+  margin: 0;
+  font-weight: 500;
+}
+
+.viewAllLink {
+  font-size: 0.82rem;
+  font-weight: 700;
+  color: #7c3aed;
+  text-decoration: none;
+  transition: color 0.15s;
+  display: inline-flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.viewAllLink:hover {
+  color: #6d28d9;
+  text-decoration: underline;
+}
+
+/* Stepper Progress Bar (Streak Progress) */
+.stepperWrapper {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  position: relative;
+  margin-top: 1.8rem;
+  width: 100%;
+}
+
+.stepperLineTrack {
+  position: absolute;
+  top: 18px;
+  left: calc(100% / 14);
+  right: calc(100% / 14);
+  height: 3px;
+  background: #e2e8f0;
+  z-index: 1;
+}
+
+.stepperLineFill {
+  position: absolute;
+  top: 18px;
+  left: calc(100% / 14);
+  height: 3px;
+  background: #7c3aed;
+  z-index: 1;
+  transition: width 0.3s ease;
+}
+
+.stepperNode {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  position: relative;
+  z-index: 2;
+  gap: 0.35rem;
+}
+
+.stepperCircle {
+  width: 36px;
+  height: 36px;
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 14px;
+  font-weight: 800;
+  transition: all 0.2s;
+}
+
+.stepperCircleCompleted {
+  background: #7c3aed;
+  color: #ffffff;
+  box-shadow: 0 3px 8px rgba(124, 58, 237, 0.35);
+}
+
+.stepperCircleActive {
+  background: #f5f3ff;
+  border: 2px solid #7c3aed;
+  color: #7c3aed;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
+}
+
+.stepperCircleLocked {
+  background: #f8fafc;
+  border: 1.5px solid #cbd5e1;
+  color: #94a3b8;
+  font-size: 13px;
+}
+
+.stepperNodeLabel {
+  font-size: 0.74rem;
+  font-weight: 700;
+  color: #334155;
+  white-space: nowrap;
+}
+
+.stepperRewardBadge {
+  font-size: 0.68rem;
+  font-weight: 800;
+  color: #7c3aed;
+  margin-top: -2px;
+}
+
+/* Rewards This Week List */
+.rewardsList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-top: auto;
+}
+
+.rewardRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: #f8fafc;
+  border: 1px solid #f1f5f9;
+  border-radius: 12px;
+  padding: 0.8rem 1rem;
+  transition: all 0.15s ease;
+}
+
+.rewardRow:hover {
+  background: #f1f5f9;
+}
+
+.rewardRowLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.65rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #1e293b;
+}
+
+.rewardIcon {
+  font-size: 18px;
+}
+
+.rewardPill {
+  font-size: 0.76rem;
+  font-weight: 800;
+  background: rgba(245, 158, 11, 0.12);
+  color: #b45309;
+  padding: 0.25rem 0.65rem;
+  border-radius: 8px;
+}
+
+/* Recent Daily Challenges List */
+.recentList {
+  display: flex;
+  flex-direction: column;
+  gap: 0.65rem;
+}
+
+.recentRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 0.65rem 0.6rem;
+  border-radius: 10px;
+  transition: background 0.15s ease;
+  cursor: pointer;
+  text-decoration: none;
+}
+
+.recentRow:hover {
+  background: #f8fafc;
+}
+
+.recentRowLeft {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  min-width: 0;
+}
+
+.statusIconSolved {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #22c55e;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.statusIconMissed {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  background: #ef4444;
+  color: #ffffff;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 800;
+  flex-shrink: 0;
+}
+
+.recentProblemInfo {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.recentProblemTitle {
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: #0f172a;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 210px;
+}
+
+.recentProblemDate {
+  font-size: 0.72rem;
+  color: #64748b;
+  font-weight: 500;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   4. BOTTOM FULL WIDTH CARD (How Daily Challenge Works)
+   ────────────────────────────────────────────────────────────────────────── */
+.howCard {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  border-radius: 20px;
+  padding: 1.75rem 2rem;
+  box-shadow: 0 3px 16px -2px rgba(124, 58, 237, 0.04), 0 2px 6px -2px rgba(0, 0, 0, 0.02);
+}
+
+.howStepsGrid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 1.5rem;
+  margin-top: 1.4rem;
+}
+
+.howStepBox {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.9rem;
+}
+
+.howStepNumber {
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  background: #7c3aed;
+  color: #ffffff;
+  font-weight: 800;
+  font-size: 0.85rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
+}
+
+.howStepContent {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.howStepTitle {
+  font-size: 0.94rem;
+  font-weight: 800;
+  color: #0f172a;
+  margin: 0;
+}
+
+.howStepDesc {
+  font-size: 0.82rem;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+  font-weight: 500;
+}
+
+/* ──────────────────────────────────────────────────────────────────────────
+   RESPONSIVE DESIGN
+   ────────────────────────────────────────────────────────────────────────── */
+@media (max-width: 1200px) {
+  .topGrid {
+    grid-template-columns: 1fr;
+  }
+  .challengeCardContent {
+    max-width: 65%;
+  }
+  .middleGrid {
+    grid-template-columns: 1fr 1fr;
+  }
+  .howStepsGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (max-width: 860px) {
+  .middleGrid {
+    grid-template-columns: 1fr;
+  }
+  .challengeCardContent {
+    max-width: 100%;
+  }
+  .heroIllustrationWrapper {
+    display: none;
+  }
+  .metricsGrid {
+    grid-template-columns: 1fr;
+  }
+  .howStepsGrid {
+    grid-template-columns: 1fr;
+  }
+}
