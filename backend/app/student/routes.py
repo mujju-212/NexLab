@@ -125,6 +125,40 @@ def my_subjects():
             'status': sub_status,
             'concept_tags': all_tags[:8],
         })
+
+    if not result:
+        fallback_subs = []
+        if g.institution_id:
+            fallback_subs = Subject.query.filter_by(institution_id=g.institution_id, is_active=True).all()
+            if not fallback_subs:
+                fallback_subs = Subject.query.filter_by(institution_id=g.institution_id).all()
+        if not fallback_subs:
+            fallback_subs = Subject.query.filter_by(is_active=True).limit(10).all()
+            if not fallback_subs:
+                fallback_subs = Subject.query.limit(10).all()
+
+        for subject in fallback_subs:
+            exps = Experiment.query.filter_by(
+                subject_id=subject.id,
+                is_published=True
+            ).order_by(Experiment.exp_number).all()
+            total_exps = len(exps)
+            result.append({
+                'section_subject_id': subject.id,
+                'subject_id': subject.id,
+                'subject_name': subject.name,
+                'subject_code': subject.code or '',
+                'icon': getattr(subject, 'icon', None) or 'datastruct',
+                'subject_icon': getattr(subject, 'icon', None) or 'datastruct',
+                'description': subject.description or '',
+                'instructor_id': None,
+                'total_experiments': total_exps,
+                'completed_experiments': 0,
+                'progress_percentage': 0,
+                'status': 'not_started',
+                'concept_tags': [],
+            })
+
     return jsonify({'subjects': result}), 200
 
 
@@ -581,14 +615,70 @@ def submit_quiz(module_id):
 
     db.session.commit()
 
-    # P0: Update concept mastery after quiz submission
+    # ── Real Data Collection: Persist Grade ──
+    try:
+        from app.models.grading import Grade
+        from app.models.academic import SectionStudent, SectionSubject
+        exp_id = module.experiment_id
+        quiz_session = None
+        my_secs = [e.section_id for e in SectionStudent.query.filter_by(student_id=g.user_id).all()]
+        if my_secs:
+            quiz_session = LabSession.query.join(
+                SectionSubject, SectionSubject.id == LabSession.section_subject_id
+            ).filter(
+                SectionSubject.section_id.in_(my_secs),
+                LabSession.experiment_id == exp_id,
+                LabSession.status == 'active',
+            ).order_by(LabSession.started_at.desc()).first()
+
+        gr = Grade.query.filter_by(
+            student_id=g.user_id,
+            experiment_id=exp_id,
+        ).first()
+        if not gr:
+            gr = Grade(
+                student_id=g.user_id,
+                experiment_id=exp_id,
+                session_id=quiz_session.id if quiz_session else None,
+                quiz_grade=round(score, 1),
+                final_grade=round(score, 1),
+                status='graded',
+                graded_at=datetime.utcnow(),
+            )
+            db.session.add(gr)
+        else:
+            gr.quiz_grade = max(gr.quiz_grade or 0.0, round(score, 1))
+            if gr.manual_grade is None:
+                components = [gr.quiz_grade]
+                if gr.auto_grade is not None:
+                    components.append(gr.auto_grade)
+                if gr.viva_grade is not None:
+                    components.append(gr.viva_grade)
+                gr.final_grade = round(sum(components) / len(components), 1)
+            gr.status = 'graded'
+            gr.graded_at = datetime.utcnow()
+            if not gr.session_id and quiz_session:
+                gr.session_id = quiz_session.id
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    # P0: Update concept mastery after quiz submission (with fallback tags)
     try:
         _exp = module.experiment
-        if _exp and _exp.concept_tags:
+        if _exp:
+            tags = list(_exp.concept_tags or [])
+            if not tags:
+                if _exp.title:
+                    tags.append(_exp.title)
+                if _exp.subject and _exp.subject.name:
+                    tags.append(_exp.subject.name)
+            if not tags:
+                tags = ['Knowledge & Concepts']
             update_concept_mastery(
                 student_id=g.user_id,
                 institution_id=g.institution_id,
-                concept_tags=_exp.concept_tags or [],
+                concept_tags=tags,
                 result={
                     'passed': score >= threshold,
                     'score_pct': score / 100.0,
@@ -598,7 +688,7 @@ def submit_quiz(module_id):
                 },
             )
     except Exception:
-        pass  # mastery update is non-critical â€” never block the submission response
+        pass  # mastery update is non-critical — never block the submission response
 
     return jsonify({
         'score': round(score, 1),
@@ -1306,16 +1396,61 @@ def submit_assignment(module_id):
 
     db.session.commit()
 
-    # P0: Update concept mastery after coding assignment submission
+    # ── Real Data Collection: Persist Grade ──
+    try:
+        from app.models.grading import Grade
+        exp_id = module.experiment_id
+        gr = Grade.query.filter_by(
+            student_id=g.user_id,
+            experiment_id=exp_id,
+        ).first()
+        if not gr:
+            gr = Grade(
+                student_id=g.user_id,
+                experiment_id=exp_id,
+                session_id=active_session.id if active_session else None,
+                auto_grade=round(best, 1),
+                final_grade=round(best, 1),
+                status='graded',
+                graded_at=datetime.utcnow(),
+            )
+            db.session.add(gr)
+        else:
+            gr.auto_grade = max(gr.auto_grade or 0.0, round(best, 1))
+            if gr.manual_grade is None:
+                components = [gr.auto_grade]
+                if gr.quiz_grade is not None:
+                    components.append(gr.quiz_grade)
+                if gr.viva_grade is not None:
+                    components.append(gr.viva_grade)
+                gr.final_grade = round(sum(components) / len(components), 1)
+            gr.status = 'graded'
+            gr.graded_at = datetime.utcnow()
+            if not gr.session_id and active_session:
+                gr.session_id = active_session.id
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    # P0: Update concept mastery after coding assignment submission (with fallback tags)
     try:
         _exp = module.experiment
-        if _exp and _exp.concept_tags:
+        if _exp:
+            tags = list(_exp.concept_tags or [])
+            if not tags:
+                if _exp.title:
+                    tags.append(_exp.title)
+                if _exp.subject and _exp.subject.name:
+                    tags.append(_exp.subject.name)
+            if not tags:
+                tags = ['Programming Fundamentals']
+
             _hints = HintLog.query.filter_by(
                 student_id=g.user_id, experiment_id=_exp.id).count()
             update_concept_mastery(
                 student_id=g.user_id,
                 institution_id=g.institution_id,
-                concept_tags=_exp.concept_tags or [],
+                concept_tags=tags,
                 result={
                     'passed': best >= threshold,
                     'score_pct': best / 100.0,
@@ -1325,7 +1460,7 @@ def submit_assignment(module_id):
                 },
             )
     except Exception:
-        pass  # mastery update is non-critical â€” never block the submission response
+        pass  # mastery update is non-critical — never block the submission response
 
     return jsonify({
         'score': round(score, 1),
@@ -1401,19 +1536,36 @@ def submit_viva(module_id):
             {'role': 'user', 'content': user_msg},
         ]
         try:
-            response, _, _, _ = groq_chat(messages, pool='fast', max_tokens=80, temperature=0.1)
+            from app.ai.gate import guarded_ai_call
+            response, _, _, _ = guarded_ai_call(
+                feature='viva',
+                institution_id=g.institution_id,
+                user_id=g.user_id,
+                role='student',
+                messages=messages,
+                pool='fast',
+                max_tokens=80,
+                temperature=0.1,
+            )
             match = _re.search(r'\{.*\}', response or '', _re.DOTALL)
             parsed = _json.loads(match.group()) if match else {}
             q_score = int(parsed.get('score', 5))
             feedback = str(parsed.get('feedback', ''))[:300]
         except Exception:
-            q_score = 5
-            feedback = 'Could not evaluate automatically.'
+            try:
+                response, _, _, _ = groq_chat(messages, pool='fast', max_tokens=80, temperature=0.1)
+                match = _re.search(r'\{.*\}', response or '', _re.DOTALL)
+                parsed = _json.loads(match.group()) if match else {}
+                q_score = int(parsed.get('score', 5))
+                feedback = str(parsed.get('feedback', ''))[:300]
+            except Exception:
+                q_score = 5
+                feedback = 'Could not evaluate automatically.'
         q_score = max(0, min(10, q_score))
         total_score += q_score
         per_question.append({'index': i, 'score': q_score, 'feedback': feedback})
 
-    # Mean of 0â€“10 scores â†’ 0â€“100
+    # Mean of 0–10 scores → 0–100
     score = (total_score / len(questions) * 10) if questions else 0.0
 
     # Upsert progress, keeping the best score across attempts
@@ -1433,14 +1585,55 @@ def submit_viva(module_id):
         progress.completed_at = datetime.utcnow()
     db.session.commit()
 
-    # P0: Update concept mastery after viva submission
+    # ── Real Data Collection: Persist Grade ──
+    try:
+        from app.models.grading import Grade
+        exp_id = module.experiment_id
+        gr = Grade.query.filter_by(
+            student_id=g.user_id,
+            experiment_id=exp_id,
+        ).first()
+        if not gr:
+            gr = Grade(
+                student_id=g.user_id,
+                experiment_id=exp_id,
+                viva_grade=round(best, 1),
+                final_grade=round(best, 1),
+                status='graded',
+                graded_at=datetime.utcnow(),
+            )
+            db.session.add(gr)
+        else:
+            gr.viva_grade = max(gr.viva_grade or 0.0, round(best, 1))
+            if gr.manual_grade is None:
+                components = [gr.viva_grade]
+                if gr.auto_grade is not None:
+                    components.append(gr.auto_grade)
+                if gr.quiz_grade is not None:
+                    components.append(gr.quiz_grade)
+                gr.final_grade = round(sum(components) / len(components), 1)
+            gr.status = 'graded'
+            gr.graded_at = datetime.utcnow()
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+    # P0: Update concept mastery after viva submission (with fallback tags)
     try:
         _exp = module.experiment
-        if _exp and _exp.concept_tags:
+        if _exp:
+            tags = list(_exp.concept_tags or [])
+            if not tags:
+                if _exp.title:
+                    tags.append(_exp.title)
+                if _exp.subject and _exp.subject.name:
+                    tags.append(_exp.subject.name)
+            if not tags:
+                tags = ['Oral Examination & Viva']
             update_concept_mastery(
                 student_id=g.user_id,
                 institution_id=g.institution_id,
-                concept_tags=_exp.concept_tags or [],
+                concept_tags=tags,
                 result={
                     'passed': best >= threshold,
                     'score_pct': best / 100.0,
@@ -1450,7 +1643,7 @@ def submit_viva(module_id):
                 },
             )
     except Exception:
-        pass  # mastery update is non-critical â€” never block the submission response
+        pass  # mastery update is non-critical — never block the submission response
 
     return jsonify({
         'score': round(score, 1),
@@ -1702,4 +1895,79 @@ def toggle_announcement_like(announcement_id):
         'liked': interaction.liked,
         'likes_count': ann.likes_count,
     }), 200
+
+
+@student_bp.route('/sessions/<session_id>/proctor-event', methods=['POST'])
+@student_bp.route('/proctor-event', methods=['POST'])
+@require_role('student', 'free_user')
+def record_proctor_event(session_id=None):
+    """
+    REST telemetry ingest for proctoring events (beacon / fallback when websocket disconnected).
+    Body: { "session_id"?: string, "event_type": string, "payload"?: dict, "severity"?: string }
+    """
+    data = request.get_json(silent=True) or {}
+    sid = session_id or data.get('session_id')
+    event_type = data.get('event_type') or data.get('type') or 'violation'
+    payload = data.get('payload') or {}
+    severity = data.get('severity') or 'medium'
+
+    # Auto-resolve session_id if omitted
+    if not sid:
+        from app.models.conductor import SessionAttendance
+        att = SessionAttendance.query.filter_by(student_id=g.user_id, left_at=None).order_by(SessionAttendance.joined_at.desc()).first()
+        if not att:
+            att = SessionAttendance.query.filter_by(student_id=g.user_id).order_by(SessionAttendance.joined_at.desc()).first()
+        if att:
+            sid = att.session_id
+
+    if not sid:
+        # Fallback to active section session
+        from app.models.academic import SectionStudent, SectionSubject
+        my_secs = [s.section_id for s in SectionStudent.query.filter_by(student_id=g.user_id).all()]
+        if my_secs:
+            active_s = LabSession.query.join(
+                SectionSubject, SectionSubject.id == LabSession.section_subject_id
+            ).filter(
+                SectionSubject.section_id.in_(my_secs),
+                LabSession.status == 'active'
+            ).order_by(LabSession.started_at.desc()).first()
+            if active_s:
+                sid = active_s.id
+
+    if not sid:
+        return jsonify({'error': 'No active or recent session found for telemetry'}), 400
+
+    from app.models.proctor_event import ProctorEvent
+    from app.extensions import socketio
+
+    try:
+        pe = ProctorEvent(
+            institution_id=g.institution_id,
+            session_id=sid,
+            student_id=g.user_id,
+            event_type=event_type,
+            payload=payload,
+            severity=severity,
+        )
+        db.session.add(pe)
+        db.session.commit()
+
+        # Relay to instructor socket room if active
+        try:
+            socketio.emit('proctor_alert', {
+                'type': event_type,
+                'student_id': g.user_id,
+                'full_name': getattr(g, 'user_name', ''),
+                'detail': payload.get('detail') or f"Telemetry: {event_type}",
+                'severity': severity,
+                'timestamp': datetime.utcnow().isoformat(),
+            }, room=f"session_{sid}_instructor")
+        except Exception:
+            pass
+
+        return jsonify({'message': 'Proctor event recorded', 'id': pe.id}), 201
+    except Exception as exc:
+        db.session.rollback()
+        return jsonify({'error': 'Failed to persist proctor event'}), 500
+
 

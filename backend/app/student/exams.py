@@ -318,6 +318,12 @@ def list_exams():
         if key:
             by_exam.setdefault(key, []).append(a)
 
+    from app.models.subject import Subject
+
+    subject_map = {
+        s.id: s for s in Subject.query.filter(Subject.id.in_(subject_ids)).all()
+    }
+
     result = []
     for e in all_assessment_items:
         atts = by_exam.get(e.id, [])
@@ -337,12 +343,31 @@ def list_exams():
             time_sec = getattr(e, 'time_limit_sec', None)
             dur = (time_sec // 60) if time_sec else 30
 
+        sub = subject_map.get(e.subject_id)
+        sub_name = sub.name if sub else 'General'
+        sub_code = sub.code if sub else ''
+        sub_color = sub.color if sub else '#7c3aed'
+
+        submitted_at = None
+        passed_any = False
+        if atts:
+            passed_any = any(bool(a.passed) for a in atts)
+            completed_atts = [a for a in atts if a.submitted_at]
+            if completed_atts:
+                latest_sub = max(completed_atts, key=lambda a: a.submitted_at)
+                submitted_at = _iso_z(latest_sub.submitted_at)
+            elif latest and latest.created_at:
+                submitted_at = _iso_z(latest.created_at)
+
         result.append({
             'id': e.id,
             'title': e.title,
             'description': getattr(e, 'description', None) or getattr(e, 'aim', None),
             'exam_type': getattr(e, 'exam_type', None) or getattr(e, 'experiment_type', 'mcq'),
             'subject_id': e.subject_id,
+            'subject_name': sub_name,
+            'subject_code': sub_code,
+            'subject_color': sub_color,
             'available_from': _iso_z(e.available_from),
             'due_at': _iso_z(e.due_at),
             'duration_minutes': dur,
@@ -354,6 +379,8 @@ def list_exams():
             'attempts_remaining': max(0, (e.max_attempts or 1) - len(atts)),
             'latest_status': latest.status if latest else None,
             'best_score': best_score,
+            'passed': passed_any or (best_score is not None and best_score >= (e.pass_threshold or 40)),
+            'submitted_at': submitted_at,
             'has_in_progress': any(a.status == 'in_progress' for a in atts),
         })
     return jsonify({'exams': result, 'count': len(result),
@@ -378,8 +405,16 @@ def exam_detail(exam_id):
         exam.window_state(now) == 'open'
         and (in_progress is not None or attempts_remaining > 0)
     )
+    exam_dict = exam.to_dict()
+    from app.models.subject import Subject
+    sub = Subject.query.get(exam.subject_id)
+    if sub:
+        exam_dict['subject_name'] = sub.name
+        exam_dict['subject_code'] = sub.code or ''
+        exam_dict['subject_color'] = sub.color or '#7c3aed'
+
     return jsonify({
-        'exam': exam.to_dict(),
+        'exam': exam_dict,
         'server_now': _iso_z(now),
         'attempts_used': attempts_used,
         'attempts_remaining': attempts_remaining,

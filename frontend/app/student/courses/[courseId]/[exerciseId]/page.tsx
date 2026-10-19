@@ -1,15 +1,19 @@
 'use client';
 
+import { useParams } from 'next/navigation';
 import StudentShell from '@/components/layout/StudentShell';
-import ExerciseView from '@/app/practice/[courseId]/[exerciseId]/exercise-view';
-import styles from './exercise-embed.module.css';
+import ExerciseWorkspace from '@/components/exercise/ExerciseWorkspace';
 
 export default function StudentExercisePage() {
+  const { courseId, exerciseId } = useParams<{ courseId: string; exerciseId: string }>();
+
   return (
-    <StudentShell activePage="Courses" title="Experiment" subtitle="Run, test and complete">
-      <div className={styles.embedWrap}>
-        <ExerciseView basePath="/student/courses" embedded />
-      </div>
+    <StudentShell activePage="Courses">
+      <ExerciseWorkspace
+        courseId={courseId}
+        exerciseId={exerciseId}
+        basePath="/student/courses"
+      />
     </StudentShell>
   );
 }

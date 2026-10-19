@@ -31,32 +31,87 @@
 .emptyState { grid-column: 1/-1; text-align: center; padding: 60px; color: #9891a6; }
 .emptyState h3 { margin: 12px 0 8px; font-size: 20px; font-weight: 700; color: #201b2e; font-family: 'Space Grotesk', sans-serif; }
 
-/* Notifications */
-.notifList { display: flex; flex-direction: column; gap: 12px; }
-.notifCard { display: flex; align-items: center; gap: 16px; background: rgba(255,255,255,.55); border: 1.5px solid rgba(255,255,255,.7); border-radius: 16px; padding: 18px 20px; transition: all .18s; position: relative; }
-.notifCard:hover { background: rgba(255,255,255,.8); }
-.notifUnread { border-color: rgba(147,51,234,.3); background: rgba(147,51,234,.04); }
-.notifIcon { font-size: 28px; flex-shrink: 0; }
-.notifContent { flex: 1; }
-.notifMsg { margin: 0 0 4px; font-size: 14px; font-weight: 600; color: #201b2e; line-height: 1.4; font-family: 'Space Grotesk', sans-serif; }
-.notifTime { margin: 0; font-size: 12px; color: #9891a6; font-weight: 500; }
-.unreadDot { width: 9px; height: 9px; border-radius: 50%; background: #9333ea; flex-shrink: 0; }
+/* Accreditation banner */
+.accreditationBanner {
+  background: linear-gradient(135deg, rgba(245,243,255,.9), rgba(238,242,255,.8));
+  border: 1.5px solid rgba(147,51,234,.2); border-radius: 16px;
+  padding: 18px 22px; margin-bottom: 22px; display: flex; align-items: center; justify-content: space-between; gap: 16px;
+}
+.accreditationLeft { display: flex; align-items: center; gap: 14px; }
+.accreditationIcon {
+  width: 44px; height: 44px; border-radius: 12px; background: #fff;
+  display: flex; align-items: center; justify-content: center; color: #7c3aed;
+  box-shadow: 0 2px 10px rgba(124,58,237,.15); flex-shrink: 0;
+}
+.accreditationTitle { margin: 0 0 3px; font-size: 15px; font-weight: 700; color: #1e1b4b; }
+.accreditationSub { margin: 0; font-size: 12.5px; color: #64748b; line-height: 1.4; }
+
+/* Receipts Ledger */
+.ledgerCard {
+  background: rgba(255,255,255,.65); border: 1.5px solid rgba(255,255,255,.8);
+  border-radius: 18px; padding: 20px 22px; margin-top: 24px;
+  box-shadow: 0 4px 16px rgba(20,20,30,.04);
+}
+.ledgerHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
+.ledgerTitle { margin: 0; font-size: 15px; font-weight: 700; color: #1e293b; }
+.ledgerTable { width: 100%; border-collapse: collapse; }
+.ledgerTable th {
+  text-align: left; font-size: 11px; font-weight: 700; color: #94a3b8;
+  text-transform: uppercase; letter-spacing: .05em; padding: 0 12px 10px;
+  border-bottom: 1px solid #e2e8f0;
+}
+.ledgerTable td {
+  padding: 12px; font-size: 13px; color: #334155; font-weight: 500;
+  border-bottom: 1px solid #f1f5f9;
+}
+.ledgerTable tr:last-child td { border-bottom: none; }
+.statusBadge {
+  display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px;
+  border-radius: 999px; font-size: 11px; font-weight: 700;
+}
+
+/* Credential & Progress utilities */
+.credId {
+  font-family: monospace; font-size: 11px; font-weight: 700;
+  background: rgba(124,58,237,.08); color: #7c3aed;
+  padding: 3px 8px; border-radius: 6px; letter-spacing: .03em;
+  display: inline-block; margin-bottom: 8px;
+}
+.progressBar {
+  width: 100%; height: 6px; background: #e2e8f0; border-radius: 999px; overflow: hidden; margin: 8px 0;
+}
+.progressFill {
+  height: 100%; background: linear-gradient(90deg, #7c3aed, #9333ea); border-radius: 999px;
+  transition: width .3s ease;
+}
+.summaryBanner {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 14px;
+  margin-bottom: 24px;
+}
+.summaryCard {
+  background: rgba(255,255,255,.7); border: 1px solid rgba(255,255,255,.9);
+  border-radius: 14px; padding: 14px 18px; display: flex; align-items: center; gap: 14px;
+}
+.summaryIcon { font-size: 28px; }
+.summaryNum { font-size: 20px; font-weight: 800; color: #1e1b4b; margin: 0; font-family: 'Space Grotesk', sans-serif; }
+.summaryLabel { font-size: 12px; color: #64748b; font-weight: 600; margin: 0; }
+
 
 /* Lab record PDF download */
 .recordCard {
-  background: rgba(255,255,255,.55); border: 1.5px solid rgba(255,255,255,.7);
-  border-radius: 20px; padding: 22px 24px; margin-top: 22px; box-shadow: 0 6px 20px rgba(20,20,30,.05);
+  background: rgba(255,255,255,.85); border: 1.5px solid rgba(255,255,255,.9);
+  border-radius: 20px; padding: 24px 26px; margin-bottom: 24px; box-shadow: 0 4px 20px rgba(124,58,237,.06);
 }
-.recordTitle { margin: 0 0 6px; font-size: 16px; font-weight: 700; color: #201b2e; font-family: 'Space Grotesk', sans-serif; }
-.recordSub { margin: 0 0 14px; font-size: 13px; color: #9891a6; font-weight: 500; }
+.recordTitle { margin: 0 0 6px; font-size: 17px; font-weight: 700; color: #201b2e; font-family: 'Space Grotesk', sans-serif; }
+.recordSub { margin: 0 0 16px; font-size: 13px; color: #64748b; font-weight: 500; }
 .recordRow { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; }
 .recordSelect {
-  flex: 1; min-width: min(260px, 100%); padding: 10px 14px; border-radius: 10px;
-  border: 1px solid rgba(147,51,234,.25); background: rgba(255,255,255,.7);
+  flex: 1; min-width: min(280px, 100%); padding: 11px 16px; border-radius: 11px;
+  border: 1.5px solid rgba(147,51,234,.25); background: #fff;
   font-size: 13.5px; font-weight: 600; color: #201b2e; outline: none; cursor: pointer;
   font-family: 'Space Grotesk', sans-serif;
 }
-.recordSelect:focus { border-color: rgba(147,51,234,.55); }
+.recordSelect:focus { border-color: rgba(147,51,234,.55); box-shadow: 0 0 0 3px rgba(124,58,237,.1); }
 .recordMsg { margin: 12px 0 0; font-size: 13px; font-weight: 600; color: #463f57; }
 
 /* Loading / error states */
