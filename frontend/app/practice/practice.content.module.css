@@ -1,72 +1,615 @@
-/* Shared content styles for /practice catalog when wrapped in IndividualShell */
+/* ═══════════════════════════════════════════════════════════════════════════════
+   COURSES CATALOG (Practice Platform) — Modern High-Fidelity UI Redesign
+   Faithfully matching reference mockup: Hero art, pill stats, 2-tier filtering,
+   and 3-column interactive course card grid.
+   ═══════════════════════════════════════════════════════════════════════════════ */
 
-/* Stats row */
-.statsRow { display: flex; gap: 12px; margin-bottom: 22px; flex-wrap: wrap; }
-.statChip {
-  display: flex; align-items: center; gap: 8px;
-  background: rgba(255,255,255,.55); border: 1.5px solid rgba(255,255,255,.7);
-  border-radius: 14px; padding: 10px 16px;
-  font-size: 13px; font-weight: 600; color: #615a72;
-  box-shadow: 0 4px 14px rgba(20,20,30,.04);
+.pageWrapper {
+  max-width: 1280px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
 }
-.statChip svg { color: #9333ea; flex-shrink: 0; }
-.statChip strong { color: #201b2e; font-family: 'Space Grotesk', sans-serif; }
 
-/* Toolbar */
-.toolbar { display: flex; align-items: center; gap: 12px; margin-bottom: 22px; flex-wrap: wrap; }
-.searchWrap {
-  position: relative; display: flex; align-items: center; flex: 1; min-width: 220px;
-  background: rgba(255,255,255,.6); border: 1.5px solid rgba(255,255,255,.7);
-  border-radius: 13px; padding: 0 14px;
+/* ── 1. Hero Banner ─────────────────────────────────────────────────────────── */
+.heroCard {
+  background: linear-gradient(135deg, rgba(255, 255, 255, 0.85) 0%, rgba(246, 244, 254, 0.9) 100%);
+  border: 1px solid rgba(226, 232, 240, 0.9);
+  border-radius: 24px;
+  padding: 30px 36px 32px;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 32px;
+  position: relative;
+  overflow: hidden;
+  box-shadow: 0 4px 20px rgba(124, 58, 237, 0.04);
 }
-.searchIcon { color: #9891a6; flex-shrink: 0; }
+
+.heroContent {
+  flex: 1;
+  max-width: 720px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  z-index: 2;
+}
+
+.heroTitle {
+  margin: 0;
+  font-size: 32px;
+  font-weight: 800;
+  color: #1e1b4b;
+  letter-spacing: -0.025em;
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  line-height: 1.2;
+}
+
+.heroSubtitle {
+  margin: 0 0 10px;
+  font-size: 14.5px;
+  color: #64748b;
+  font-weight: 500;
+  line-height: 1.5;
+}
+
+.pillRow {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.pillChip {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 999px;
+  padding: 7px 16px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  transition: all 0.15s ease;
+}
+
+.pillChip:hover {
+  border-color: #cbd5e1;
+  background: #fafafa;
+}
+
+.pillChip strong {
+  color: #1e1b4b;
+  font-weight: 700;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.pillIconPurple {
+  color: #7c3aed;
+  flex-shrink: 0;
+}
+
+.heroIllustrationWrapper {
+  flex-shrink: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2;
+}
+
+/* ── 2. Filter & Search Controls ────────────────────────────────────────────── */
+.filterSection {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.filterRowTop {
+  display: flex;
+  align-items: center;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.searchBox {
+  flex: 1;
+  min-width: 280px;
+  display: flex;
+  align-items: center;
+  gap: 11px;
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 0 16px;
+  height: 48px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
+  transition: all 0.2s ease;
+}
+
+.searchBox:focus-within {
+  border-color: #7c3aed;
+  box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
+}
+
+.searchIcon {
+  color: #94a3b8;
+  flex-shrink: 0;
+}
+
 .searchInput {
-  flex: 1; border: none; background: transparent; outline: none;
-  padding: 11px 10px; font-size: 13.5px; color: #201b2e; font-family: 'Manrope', sans-serif;
+  flex: 1;
+  border: none;
+  background: transparent;
+  outline: none;
+  font-size: 13.5px;
+  color: #1e1b4b;
+  font-family: 'Manrope', sans-serif;
 }
-.searchInput::placeholder { color: #9891a6; }
-.filters { display: flex; gap: 8px; flex-wrap: wrap; }
-.filterBtn {
-  border: 1.5px solid rgba(255,255,255,.7); background: rgba(255,255,255,.55);
-  border-radius: 11px; padding: 9px 16px; font-size: 13px; font-weight: 700;
-  color: #615a72; cursor: pointer; transition: all .15s; font-family: 'Space Grotesk', sans-serif;
-}
-.filterBtn:hover { background: rgba(255,255,255,.85); }
-.filterActive { background: linear-gradient(95deg,#7c3aed,#9333ea); color: #fff; border-color: transparent; box-shadow: 0 6px 16px rgba(124,58,237,.22); }
 
-/* Course grid */
-.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 18px; }
-.card {
-  background: rgba(255,255,255,.55); border: 1.5px solid rgba(255,255,255,.7);
-  border-radius: 20px; padding: 22px; display: flex; flex-direction: column; gap: 12px;
-  cursor: pointer; transition: all .2s; box-shadow: 0 6px 20px rgba(20,20,30,.05);
+.searchInput::placeholder {
+  color: #94a3b8;
 }
-.card:hover { border-color: rgba(147,51,234,.35); box-shadow: 0 10px 30px rgba(147,51,234,.12); transform: translateY(-2px); }
-.cardHeader { display: flex; align-items: center; justify-content: space-between; }
-.langIcon { font-size: 26px; line-height: 1; }
-.diffBadge { font-size: 11.5px; font-weight: 700; padding: 3px 11px; border-radius: 999px; font-family: 'Space Grotesk', sans-serif; text-transform: capitalize; }
-.diffBeginner     { background: rgba(209,250,223,.85); color: #0f8a3f; }
-.diffIntermediate { background: rgba(254,243,199,.85); color: #b45309; }
-.diffAdvanced     { background: rgba(254,226,226,.85); color: #b91c1c; }
-.cardTitle { margin: 0; font-size: 17px; font-weight: 700; color: #201b2e; font-family: 'Space Grotesk', sans-serif; line-height: 1.35; }
-.cardDesc { margin: 0; font-size: 13px; color: #615a72; line-height: 1.6; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
-.cardTags { display: flex; gap: 6px; flex-wrap: wrap; }
-.tag { font-size: 11.5px; font-weight: 700; color: #9333ea; background: rgba(147,51,234,.1); border-radius: 999px; padding: 3px 10px; font-family: 'Space Grotesk', sans-serif; }
-.cardFooter { display: flex; align-items: center; justify-content: space-between; margin-top: auto; font-size: 12.5px; font-weight: 700; }
-.exerciseCount { display: flex; align-items: center; gap: 5px; color: #9891a6; }
-.exerciseCount svg { color: #9333ea; }
-.startArrow { color: #7c3aed; }
 
-/* Loading / empty / CTA */
-.loading { display: flex; align-items: center; justify-content: center; gap: 10px; padding: 60px 20px; font-size: 14.5px; font-weight: 600; color: #615a72; }
-.spinIcon { animation: spin .8s linear infinite; color: #9333ea; }
-@keyframes spin { to { transform: rotate(360deg); } }
-.empty { padding: 40px 20px; text-align: center; font-size: 14px; font-weight: 600; color: #9891a6; }
-
-@media (max-width: 1024px) {
-  .grid { grid-template-columns: repeat(auto-fill, minmax(260px, 1fr)); }
+.levelFilterGroup {
+  display: flex;
+  align-items: center;
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 4px;
+  gap: 4px;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.02);
 }
-@media (max-width: 560px) {
-  .grid { grid-template-columns: 1fr; }
-  .card { padding: 18px; }
+
+.levelBtn {
+  border: none;
+  background: transparent;
+  padding: 8px 18px;
+  border-radius: 10px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.18s ease;
+  font-family: 'Space Grotesk', sans-serif;
+  white-space: nowrap;
+}
+
+.levelBtn:hover {
+  background: #f1f5f9;
+  color: #1e1b4b;
+}
+
+.levelBtnActive {
+  background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%) !important;
+  color: #ffffff !important;
+  font-weight: 700;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
+}
+
+/* Row 2: Secondary Dropdown Filters */
+.filterRowBottom {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+.dropdownWrapper {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+}
+
+.selectBox {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #ffffff;
+  border: 1.5px solid #e2e8f0;
+  border-radius: 12px;
+  padding: 8px 14px 8px 12px;
+  font-size: 13px;
+  font-weight: 600;
+  color: #334155;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
+  transition: all 0.15s ease;
+  position: relative;
+}
+
+.selectBox:hover {
+  border-color: #cbd5e1;
+  background: #fafafa;
+}
+
+.selectBoxActive {
+  border-color: rgba(124, 58, 237, 0.4);
+  background: rgba(245, 243, 255, 0.8);
+}
+
+.selectIcon {
+  color: #7c3aed;
+  flex-shrink: 0;
+}
+
+.nativeSelect {
+  position: absolute;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  opacity: 0;
+  cursor: pointer;
+  z-index: 2;
+}
+
+.selectLabel {
+  font-family: 'Space Grotesk', sans-serif;
+  white-space: nowrap;
+}
+
+.selectChevron {
+  color: #64748b;
+  margin-left: 2px;
+  flex-shrink: 0;
+}
+
+.filterStatus {
+  margin-left: auto;
+  font-size: 13px;
+  color: #94a3b8;
+  font-weight: 600;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.resetBtn {
+  border: none;
+  background: transparent;
+  color: #7c3aed;
+  font-size: 12.5px;
+  font-weight: 700;
+  cursor: pointer;
+  padding: 4px 8px;
+  border-radius: 6px;
+  text-decoration: underline;
+  margin-left: 6px;
+}
+
+.resetBtn:hover {
+  color: #5b21b6;
+}
+
+/* ── 3. Course Cards Grid ───────────────────────────────────────────────────── */
+.coursesGrid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 22px;
+}
+
+.courseCard {
+  background: #ffffff;
+  border: 1px solid rgba(226, 232, 240, 0.85);
+  border-radius: 20px;
+  padding: 22px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  cursor: pointer;
+  transition: transform 0.22s cubic-bezier(0.16, 1, 0.3, 1), box-shadow 0.22s ease, border-color 0.22s ease;
+  box-shadow: 0 4px 16px rgba(15, 23, 42, 0.03);
+  position: relative;
+}
+
+.courseCard:hover {
+  transform: translateY(-3px);
+  border-color: rgba(124, 58, 237, 0.35);
+  box-shadow: 0 12px 30px rgba(124, 58, 237, 0.09);
+}
+
+.cardTopRow {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.cardLeftHeader {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+}
+
+.badgeAndIcon {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.courseLogoBox {
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+}
+
+.diffBadge {
+  font-size: 11px;
+  font-weight: 700;
+  padding: 3px 10px;
+  border-radius: 999px;
+  font-family: 'Space Grotesk', sans-serif;
+  letter-spacing: 0.02em;
+  text-transform: capitalize;
+}
+
+.diffBeginner {
+  background: #dcfce7;
+  color: #15803d;
+}
+
+.diffIntermediate {
+  background: #fef3c7;
+  color: #b45309;
+}
+
+.diffAdvanced {
+  background: #fee2e2;
+  color: #b91c1c;
+}
+
+.cardTitle {
+  margin: 0;
+  font-size: 17.5px;
+  font-weight: 700;
+  color: #1e1b4b;
+  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  line-height: 1.3;
+}
+
+.miniArtBox {
+  width: 78px;
+  height: 58px;
+  border-radius: 14px;
+  background: linear-gradient(135deg, rgba(238, 242, 255, 0.8) 0%, rgba(243, 232, 255, 0.8) 100%);
+  border: 1px solid rgba(226, 232, 240, 0.7);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  overflow: hidden;
+}
+
+.cardDesc {
+  margin: 0;
+  font-size: 13px;
+  color: #64748b;
+  line-height: 1.55;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
+  min-height: 40px;
+}
+
+.tagsRow {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+
+.tagPill {
+  font-size: 11px;
+  font-weight: 600;
+  color: #7c3aed;
+  background: #ede9fe;
+  border-radius: 999px;
+  padding: 2.5px 9px;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.cardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-top: auto;
+  padding-top: 12px;
+  border-top: 1px solid #f1f5f9;
+}
+
+.footerStats {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 12.5px;
+  font-weight: 600;
+  color: #64748b;
+}
+
+.statItem {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.statIconDoc {
+  color: #94a3b8;
+}
+
+.statIconTrophy {
+  color: #eab308;
+}
+
+.viewCourseLink {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  font-size: 12.5px;
+  font-weight: 700;
+  color: #7c3aed;
+  transition: all 0.15s ease;
+  font-family: 'Space Grotesk', sans-serif;
+  background: transparent;
+  border: none;
+  cursor: pointer;
+  padding: 0;
+}
+
+.courseCard:hover .viewCourseLink {
+  color: #5b21b6;
+  gap: 6px;
+}
+
+.progressRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+  padding-top: 2px;
+}
+
+.progressTrack {
+  flex: 1;
+  height: 4.5px;
+  background: #e2e8f0;
+  border-radius: 999px;
+  overflow: hidden;
+}
+
+.progressFill {
+  height: 100%;
+  background: linear-gradient(90deg, #7c3aed, #a855f7);
+  border-radius: 999px;
+  transition: width 0.4s ease;
+}
+
+.progressText {
+  font-size: 11px;
+  font-weight: 700;
+  color: #7c3aed;
+  font-family: 'Space Grotesk', sans-serif;
+  white-space: nowrap;
+}
+
+.notStartedText {
+  font-size: 11.5px;
+  font-weight: 500;
+  color: #94a3b8;
+  margin-left: auto;
+}
+
+/* ── 4. Loading & Empty States ──────────────────────────────────────────────── */
+.loadingContainer {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  padding: 80px 20px;
+  color: #64748b;
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.spinAnimation {
+  animation: spin 0.85s linear infinite;
+  color: #7c3aed;
+}
+
+@keyframes spin {
+  to { transform: rotate(360deg); }
+}
+
+.emptyContainer {
+  background: #ffffff;
+  border: 1.5px dashed #cbd5e1;
+  border-radius: 20px;
+  padding: 60px 24px;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.emptyTitle {
+  font-size: 17px;
+  font-weight: 700;
+  color: #1e1b4b;
+  margin: 0;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.emptySubtitle {
+  font-size: 13.5px;
+  color: #64748b;
+  margin: 0;
+  max-width: 440px;
+}
+
+.clearFilterBtn {
+  margin-top: 8px;
+  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  color: #ffffff;
+  border: none;
+  border-radius: 10px;
+  padding: 9px 20px;
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
+  transition: all 0.18s ease;
+  font-family: 'Space Grotesk', sans-serif;
+}
+
+.clearFilterBtn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 16px rgba(124, 58, 237, 0.35);
+}
+
+/* ── 5. Responsive Breakpoints ──────────────────────────────────────────────── */
+@media (max-width: 1140px) {
+  .coursesGrid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+  .heroCard {
+    padding: 24px 28px;
+  }
+}
+
+@media (max-width: 768px) {
+  .coursesGrid {
+    grid-template-columns: 1fr;
+  }
+  .heroCard {
+    flex-direction: column;
+    align-items: flex-start;
+    padding: 22px 20px;
+  }
+  .heroIllustrationWrapper {
+    width: 100%;
+    justify-content: center;
+  }
+  .filterRowTop {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .searchBox {
+    width: 100%;
+  }
+  .levelFilterGroup {
+    width: 100%;
+    justify-content: space-between;
+  }
+  .levelBtn {
+    flex: 1;
+    text-align: center;
+    padding: 8px 10px;
+  }
 }

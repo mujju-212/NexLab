@@ -1,29 +1,34 @@
 'use client';
 
-import React, { Suspense, useEffect } from 'react';
+import React, { Suspense, useEffect, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
   Sparkles,
   Trophy,
-  Compass,
+  Target,
   Calendar,
   BookOpen,
   RefreshCw,
   AlertCircle,
+  BarChart3,
+  ExternalLink,
 } from 'lucide-react';
 import IndividualShell from '@/components/layout/IndividualShell';
 import {
-  RankHero,
   FreeOverviewTab,
   FreeLadderTab,
   FreeSkillsTab,
   FreeActivityTab,
   FreeCoursesTab,
+  ShowcaseModal,
 } from '@/components/free-analytics';
 import { freeService } from '@/services/free.service';
 import { useAuthStore } from '@/store/auth-store';
 import styles from '@/components/free-analytics/free-analytics.module.css';
+
+import Cookies from 'js-cookie';
+import { authService } from '@/services/auth.service';
 
 const VALID_TABS = ['overview', 'ladder', 'skills', 'activity', 'courses'] as const;
 type TabKey = (typeof VALID_TABS)[number];
@@ -31,22 +36,54 @@ type TabKey = (typeof VALID_TABS)[number];
 function ProgressPageContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
-  const { user, isAuthenticated } = useAuthStore();
+  const { user, isAuthenticated, hasHydrated, setUser } = useAuthStore();
+  const [showcaseOpen, setShowcaseOpen] = useState(false);
+  const [mounted, setMounted] = useState(false);
 
   useEffect(() => {
-    if (!isAuthenticated || !user) {
-      router.replace('/login');
-    }
-  }, [isAuthenticated, user, router]);
+    setMounted(true);
+  }, []);
 
-  // Tab State synced with URL query param
+  const isReady = mounted && (hasHydrated || typeof window !== 'undefined');
+
+  useEffect(() => {
+    if (!isReady) return;
+
+    const token = Cookies.get('access_token') || (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null);
+
+    if (!token && !isAuthenticated) {
+      router.replace('/login');
+      return;
+    }
+
+    if (token && !user) {
+      authService.getMe()
+        .then((u) => setUser(u))
+        .catch(() => router.replace('/login'));
+    }
+  }, [isReady, isAuthenticated, user, router, setUser]);
+
+  // Tab State synced with URL query param and fast local state
   const currentTab = (searchParams?.get('tab') as TabKey) || 'overview';
-  const activeTab: TabKey = VALID_TABS.includes(currentTab) ? currentTab : 'overview';
+  const [activeTab, setActiveTab] = useState<TabKey>(
+    VALID_TABS.includes(currentTab) ? currentTab : 'overview'
+  );
+
+  useEffect(() => {
+    const urlTab = searchParams?.get('tab') as TabKey;
+    if (urlTab && VALID_TABS.includes(urlTab) && urlTab !== activeTab) {
+      setActiveTab(urlTab);
+    }
+  }, [searchParams, activeTab]);
 
   const handleTabChange = (tab: string) => {
-    const params = new URLSearchParams(searchParams?.toString() || '');
-    params.set('tab', tab);
-    router.push(`/practice/progress?${params.toString()}`);
+    const validTab = (VALID_TABS.includes(tab as TabKey) ? tab : 'overview') as TabKey;
+    setActiveTab(validTab);
+    if (typeof window !== 'undefined') {
+      const url = new URL(window.location.href);
+      url.searchParams.set('tab', validTab);
+      window.history.replaceState(null, '', url.toString());
+    }
   };
 
   // 1. Unified Profile Query (Overview)
@@ -75,15 +112,88 @@ function ProgressPageContent() {
     enabled: !!user,
   });
 
-  if (!isAuthenticated || !user) return null;
+  if (!mounted || !isAuthenticated || !user) {
+    return (
+      <IndividualShell activePage="progress">
+        <div
+          style={{
+            minHeight: '360px',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            color: '#64748b',
+          }}
+        >
+          Loading Growth Profile…
+        </div>
+      </IndividualShell>
+    );
+  }
 
   return (
-    <IndividualShell
-      activePage="progress"
-      title="My Growth"
-      subtitle="Track your competitive platform rating, ladder standings, topic mastery, and course progress."
-    >
+    <IndividualShell activePage="My Growth">
       <div className={styles.container}>
+        
+        {/* ══ TOP HERO HEADER (Only on non-courses tabs) ══ */}
+        {activeTab !== 'courses' && (
+          <div className={styles.topHeaderBar}>
+            <div className={styles.topHeaderLeft}>
+              <div className={styles.topHeaderIconBadge}>
+                <BarChart3 size={24} />
+              </div>
+              <div>
+                <h1 className={styles.pageTitle}>My Growth</h1>
+                <p className={styles.pageSubtitle}>
+                  Track your progress, improve your skills, and climb the global leaderboard.
+                </p>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ══ NAVIGATION TABS PILLS + USER PROFILE BADGE ══ */}
+        <div className={styles.tabsNavRow}>
+          <div className={styles.tabsNavPills}>
+            {[
+              { id: 'overview', label: 'Overview', icon: Sparkles },
+              { id: 'ladder', label: 'Ladder & Ranks', icon: Trophy },
+              { id: 'skills', label: 'Skills & Topics', icon: Target },
+              { id: 'activity', label: 'Activity & Trends', icon: Calendar },
+              { id: 'courses', label: 'Courses & Certs', icon: BookOpen },
+            ].map((tab) => {
+              const Icon = tab.icon;
+              const isActive = activeTab === tab.id;
+              return (
+                <button
+                  key={tab.id}
+                  onClick={() => handleTabChange(tab.id)}
+                  className={`${styles.tabPillBtn} ${isActive ? styles.tabPillBtnActive : ''}`}
+                >
+                  <Icon size={15} />
+                  <span>{tab.label}</span>
+                </button>
+              );
+            })}
+          </div>
+
+          <div className={styles.userProfilePillHeader}>
+            <div className={styles.userAvatarSm}>FL</div>
+            <div className={styles.userNameBlock}>
+              <span className={styles.userFullNameText}>{user?.full_name || 'Free Learner'}</span>
+              <span className={styles.userHandleText}>@free</span>
+            </div>
+            <button
+              onClick={() => setShowcaseOpen(true)}
+              className={styles.shareProfileBtnHeader}
+              title="Share Public Profile"
+            >
+              <span>Share Profile</span>
+              <ExternalLink size={12} />
+            </button>
+          </div>
+        </div>
+
+        {/* ══ CONTENT STATES ══ */}
         {overviewLoading ? (
           <div
             style={{
@@ -133,57 +243,27 @@ function ProgressPageContent() {
           </div>
         ) : (
           <>
-            {/* ── 1. The Rank Hero ───────────────────────────────────────── */}
-            <RankHero
-              standing={overview.standing}
-              difficultyMix={overview.difficulty_mix}
-              unlocks={overview.unlocks}
-              userName={user?.full_name || 'Coder'}
-              initialPublic={showcaseMe?.profile_public ?? false}
-              profileSlug={showcaseMe?.profile_slug}
-            />
-
-            {/* ── 2. Growth Profile Navigation Tabs ───────────────────────── */}
-            <div className={styles.tabsNav}>
-              {[
-                { id: 'overview', label: 'Overview', icon: Sparkles },
-                { id: 'ladder', label: 'Ladder & Ranks', icon: Trophy },
-                { id: 'skills', label: 'Skills & Topics', icon: Compass },
-                { id: 'activity', label: 'Activity & Trends', icon: Calendar },
-                { id: 'courses', label: 'Courses & Certs', icon: BookOpen },
-              ].map((tab) => {
-                const Icon = tab.icon;
-                const isActive = activeTab === tab.id;
-                return (
-                  <button
-                    key={tab.id}
-                    onClick={() => handleTabChange(tab.id)}
-                    className={`${styles.tabBtn} ${isActive ? styles.tabBtnActive : ''}`}
-                  >
-                    <Icon size={16} />
-                    <span>{tab.label}</span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* ── 3. Tab Panels ───────────────────────────────────────────── */}
+            {/* ══ 1. Overview Tab (Redesigned matching mockup) ══ */}
             {activeTab === 'overview' && (
               <FreeOverviewTab
                 overview={overview}
                 recommendations={recsData?.recommendations}
                 onNavigateTab={handleTabChange}
+                onOpenShare={() => setShowcaseOpen(true)}
               />
             )}
 
+            {/* ══ 2. Ladder & Ranks Tab ══ */}
             {activeTab === 'ladder' && (
               <FreeLadderTab
                 standing={overview.standing}
                 difficultyMix={overview.difficulty_mix}
                 unlocks={overview.unlocks}
+                onOpenShare={() => setShowcaseOpen(true)}
               />
             )}
 
+            {/* ══ 3. Skills & Topics Tab ══ */}
             {activeTab === 'skills' && (
               <FreeSkillsTab
                 topicStrength={overview.topic_strength}
@@ -191,15 +271,37 @@ function ProgressPageContent() {
               />
             )}
 
+            {/* ══ 4. Activity & Trends Tab ══ */}
             {activeTab === 'activity' && (
               <FreeActivityTab activity={overview.activity} />
             )}
 
+            {/* ══ 5. Courses & Certs Tab ══ */}
             {activeTab === 'courses' && (
-              <FreeCoursesTab initialCourses={overview.courses} />
+              <FreeCoursesTab
+                initialCourses={overview.courses}
+                onOpenShare={() => setShowcaseOpen(true)}
+              />
             )}
           </>
         )}
+
+        {/* ══ Showcase Share Modal ══ */}
+        {overview && (
+          <ShowcaseModal
+            isOpen={showcaseOpen}
+            onClose={() => setShowcaseOpen(false)}
+            initialPublic={showcaseMe?.profile_public ?? false}
+            initialSlug={showcaseMe?.profile_slug ?? null}
+            userName={user?.full_name || 'Free Learner'}
+            rating={Math.round(overview.standing.rating ?? 0)}
+            level={overview.standing.level ?? 1}
+            levelName={overview.standing.level_name ?? 'Newcomer'}
+            streakDays={overview.standing.streak_days ?? 0}
+            badgesCount={(overview.standing.badges || []).length}
+          />
+        )}
+
       </div>
     </IndividualShell>
   );
@@ -209,7 +311,7 @@ export default function ProgressPage() {
   return (
     <Suspense
       fallback={
-        <IndividualShell activePage="progress" title="My Growth">
+        <IndividualShell activePage="progress">
           <div
             style={{
               minHeight: '360px',
