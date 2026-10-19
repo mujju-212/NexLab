@@ -11,7 +11,13 @@ export default function IndividualStudyPlanPage({
 }) {
   const { slug } = use(params);
   return (
-    <IndividualShell activePage="library">
+    <IndividualShell
+      activePage="plans"
+      breadcrumbs={[
+        { label: 'Practice', href: '/practice/dashboard' },
+        { label: 'Study Plans', href: '/practice/library?tab=plans' },
+      ]}
+    >
       <StudyPlanDetailPage planSlug={slug} baseRoute="/practice/library" />
     </IndividualShell>
   );

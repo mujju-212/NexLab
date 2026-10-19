@@ -1,0 +1,787 @@
+'use client';
+
+import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useRouter } from 'next/navigation';
+import {
+  freeService,
+  type FreeCourse,
+  type FreeExercise,
+  type RunResult,
+  type SubmitResult,
+} from '@/services/free.service';
+import { useAuthStore } from '@/store/auth-store';
+import styles from './ExerciseWorkspace.module.css';
+import {
+  Code2, Zap, Play, Send, ChevronLeft, ChevronRight,
+  RotateCcw, Wand2, Copy, Check, Settings, Terminal,
+  Maximize2, Trash2, CheckCircle2, XCircle, Lightbulb,
+  FlaskConical, RefreshCw, AlertCircle, FileCode
+} from 'lucide-react';
+
+interface ExerciseWorkspaceProps {
+  courseId: string;
+  exerciseId: string;
+  basePath?: string; // '/practice' or '/student/courses'
+}
+
+export default function ExerciseWorkspace({
+  courseId,
+  exerciseId,
+  basePath = '/practice',
+}: ExerciseWorkspaceProps) {
+  const router = useRouter();
+  const { user } = useAuthStore();
+
+  const [course, setCourse] = useState<FreeCourse | null>(null);
+  const [exercise, setExercise] = useState<FreeExercise | null>(null);
+  const [exercises, setExercises] = useState<FreeExercise[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  // Editor state
+  const [lang, setLang] = useState('python');
+  const [code, setCode] = useState('');
+  const [running, setRunning] = useState(false);
+  const [submitting, setSubmitting] = useState(false);
+
+  // Execution outputs
+  const [runResult, setRunResult] = useState<RunResult | null>(null);
+  const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
+  const [consoleTab, setConsoleTab] = useState<'output' | 'tests' | 'console'>('output');
+
+  // View tabs (Problem / Test Cases / Hints / Simulation)
+  const [activeTab, setActiveTab] = useState<'problem' | 'testcases' | 'hints' | 'simulation'>('problem');
+
+  // Copy feedback state
+  const [copiedId, setCopiedId] = useState<string | null>(null);
+
+  // Load course and exercises
+  const loadData = useCallback(async () => {
+    try {
+      const data = await freeService.getCourse(courseId);
+      setCourse(data.course);
+      setExercises(data.exercises || []);
+
+      const current = (data.exercises || []).find(e => e.id === exerciseId)
+        || await freeService.getExercise(exerciseId);
+      setExercise(current);
+
+      if (current.exercise_type === 'simulation' || current.simulation_path) {
+        setActiveTab('simulation');
+      } else {
+        setActiveTab('problem');
+      }
+
+      // Default language and starter code
+      const defaultLang = (current.allowed_languages && current.allowed_languages[0]) || 'python';
+      setLang(defaultLang);
+      setCode(current.starter_code?.[defaultLang] || current.starter_code?.['python'] || '');
+    } catch (err) {
+      console.error('Failed to load exercise:', err);
+    } finally {
+      setLoading(false);
+    }
+  }, [courseId, exerciseId]);
+
+  useEffect(() => {
+    loadData();
+  }, [loadData]);
+
+  // Index and neighbors
+  const currentIndex = useMemo(() => {
+    if (!exercises.length || !exercise) return 0;
+    const idx = exercises.findIndex(e => e.id === exercise.id);
+    return idx >= 0 ? idx : 0;
+  }, [exercises, exercise]);
+
+  const prevEx = exercises[currentIndex - 1];
+  const nextEx = exercises[currentIndex + 1];
+
+  const totalLessons = exercises.length || 18;
+  const currentLessonNum = currentIndex + 1;
+  const lessonPct = totalLessons ? Math.round((currentLessonNum / totalLessons) * 100) : 0;
+
+  // Examples computed dynamically from database test cases with fallback
+  const example1 = useMemo(() => {
+    if (exercise?.test_cases && exercise.test_cases.length > 0) {
+      return {
+        input: exercise.test_cases[0].input,
+        expected: exercise.test_cases[0].expected,
+      };
+    }
+    return {
+      input: 'arr = [1, 2, 3, 4, 5]',
+      expected: '15',
+    };
+  }, [exercise]);
+
+  const example2 = useMemo(() => {
+    if (exercise?.test_cases && exercise.test_cases.length > 1) {
+      return {
+        input: exercise.test_cases[1].input,
+        expected: exercise.test_cases[1].expected,
+      };
+    }
+    if (!exercise?.test_cases || exercise.test_cases.length === 0) {
+      return {
+        input: 'arr = [-1, 0, 1]',
+        expected: '0',
+      };
+    }
+    return null;
+  }, [exercise]);
+
+  const constraintsList = useMemo(() => {
+    return [
+      '1 ≤ arr.length ≤ 10⁵',
+      '-10⁹ ≤ arr[i] ≤ 10⁹',
+    ];
+  }, []);
+
+  // Language change
+  const handleLangChange = (newLang: string) => {
+    setLang(newLang);
+    if (exercise?.starter_code?.[newLang]) {
+      setCode(exercise.starter_code[newLang]);
+    }
+  };
+
+  // Reset starter code
+  const handleReset = () => {
+    if (!exercise) return;
+    const initial = exercise.starter_code?.[lang] || exercise.starter_code?.['python'] || '';
+    setCode(initial);
+  };
+
+  // Simple auto-format
+  const handleFormat = () => {
+    const trimmed = code
+      .split('\n')
+      .map(line => line.trimEnd())
+      .join('\n');
+    setCode(trimmed);
+  };
+
+  // Copy to clipboard helper
+  const handleCopy = (text: string, id: string) => {
+    navigator.clipboard.writeText(text);
+    setCopiedId(id);
+    setTimeout(() => setCopiedId(null), 1500);
+  };
+
+  // Run Code action
+  const handleRun = async () => {
+    if (!exercise || !code.trim()) return;
+    setRunning(true);
+    setConsoleTab('output');
+    try {
+      const res = await freeService.runCode(exercise.id, code, lang);
+      setRunResult(res);
+    } catch (err) {
+      console.error('Run code error:', err);
+    } finally {
+      setRunning(false);
+    }
+  };
+
+  // Submit Solution action
+  const handleSubmit = async () => {
+    if (!exercise) return;
+    const submissionCode = code.trim() || (exercise.exercise_type === 'simulation' || exercise.simulation_path ? '# Simulation completed' : '');
+    if (!submissionCode) return;
+    setSubmitting(true);
+    setConsoleTab('output');
+    try {
+      const res = await freeService.submitCode(exercise.id, submissionCode, lang || 'python');
+      setSubmitResult(res);
+      setRunResult({
+        results: [],
+        passed: res.passed,
+        total: res.total,
+        score: res.score,
+        all_passed: res.solved,
+      });
+    } catch (err) {
+      console.error('Submit code error:', err);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Navigate to another exercise
+  const navigateTo = (targetEx?: FreeExercise) => {
+    if (!targetEx) return;
+    router.push(`${basePath}/${courseId}/${targetEx.id}`);
+  };
+
+  // Keyboard shortcuts listener
+  useEffect(() => {
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if ((e.ctrlKey || e.metaKey) && e.key === 'Enter') {
+        e.preventDefault();
+        handleRun();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
+        e.preventDefault();
+        handleSubmit();
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [code, exercise, lang]);
+
+  // Line numbers generation
+  const lineNumbers = useMemo(() => {
+    const lines = code.split('\n').length;
+    return Array.from({ length: Math.max(lines, 17) }, (_, i) => i + 1);
+  }, [code]);
+
+  // Check if simulation exists
+  const hasSimulation = Boolean(exercise?.simulation_path);
+
+  if (loading) {
+    return (
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: 400, gap: 12, color: '#64748b' }}>
+        <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite' }} />
+        <span style={{ fontSize: 15, fontWeight: 600 }}>Loading lesson…</span>
+      </div>
+    );
+  }
+
+  if (!exercise) {
+    return (
+      <div style={{ padding: 40, textAlign: 'center', color: '#64748b' }}>
+        <p>Exercise not found.</p>
+        <button
+          onClick={() => router.push(`${basePath}/${courseId}`)}
+          style={{ marginTop: 12, padding: '8px 16px', background: '#7c3aed', color: '#fff', border: 'none', borderRadius: 8, cursor: 'pointer' }}
+        >
+          Return to Course
+        </button>
+      </div>
+    );
+  }
+
+  return (
+    <div className={styles.container}>
+      {/* ══════════════════════════════════════════════════════════════════════
+          TOP COURSE HEADER CARD
+          ══════════════════════════════════════════════════════════════════════ */}
+      <div className={styles.headerCard}>
+        <div className={styles.headerLeft}>
+          <div className={styles.courseIconBox}>
+            <FileCode size={22} strokeWidth={2.2} />
+          </div>
+          <div className={styles.courseInfo}>
+            <div className={styles.courseTitleRow}>
+              <h1 className={styles.courseTitle}>{course?.title || 'Algorithm Basics'}</h1>
+              <span className={styles.badgeDifficulty}>{course?.difficulty || exercise.difficulty || 'Beginner'}</span>
+              <span className={styles.badgeXp}>
+                <Zap size={12} fill="#f59e0b" color="#d97706" /> +{exercise.xp_reward || 17} XP
+              </span>
+            </div>
+            <p className={styles.courseSubtitle}>
+              {course?.description || 'Learn core concepts — arrays, sorting, searching, stacks, queues and more.'}
+            </p>
+          </div>
+        </div>
+
+        <div className={styles.headerRight}>
+          {/* Lesson progress */}
+          <div className={styles.progressWrap}>
+            <div className={styles.progressLabelRow}>
+              <span className={styles.progressLabel}>
+                Lesson {currentLessonNum} of {totalLessons}
+              </span>
+              <span className={styles.progressPercent}>{lessonPct}%</span>
+            </div>
+            <div className={styles.progressBarTrack}>
+              <div className={styles.progressBarFill} style={{ width: `${lessonPct}%` }} />
+            </div>
+          </div>
+
+          {/* Navigation buttons */}
+          <div className={styles.headerNavBtns}>
+            <button
+              className={styles.navBtnPrev}
+              disabled={!prevEx}
+              onClick={() => navigateTo(prevEx)}
+            >
+              <ChevronLeft size={15} /> Previous
+            </button>
+            <button
+              className={styles.navBtnNext}
+              disabled={!nextEx}
+              onClick={() => navigateTo(nextEx)}
+            >
+              Next <ChevronRight size={15} />
+            </button>
+          </div>
+        </div>
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          WORKSPACE TABS BAR
+          ══════════════════════════════════════════════════════════════════════ */}
+      <div className={styles.workspaceTabs}>
+        <button
+          className={`${styles.tabItem} ${activeTab === 'problem' ? styles.tabItemActive : ''}`}
+          onClick={() => setActiveTab('problem')}
+        >
+          <Code2 size={16} /> Problem
+        </button>
+        <button
+          className={`${styles.tabItem} ${activeTab === 'testcases' ? styles.tabItemActive : ''}`}
+          onClick={() => setActiveTab('testcases')}
+        >
+          <Settings size={16} /> Test Cases
+        </button>
+        <button
+          className={`${styles.tabItem} ${activeTab === 'hints' ? styles.tabItemActive : ''}`}
+          onClick={() => setActiveTab('hints')}
+        >
+          <Lightbulb size={16} /> Hints
+        </button>
+        {hasSimulation && (
+          <button
+            className={`${styles.tabItem} ${activeTab === 'simulation' ? styles.tabItemActive : ''}`}
+            onClick={() => setActiveTab('simulation')}
+          >
+            <FlaskConical size={16} /> Simulation Lab
+          </button>
+        )}
+      </div>
+
+      {/* ══════════════════════════════════════════════════════════════════════
+          TWO-COLUMN WORKSPACE
+          ══════════════════════════════════════════════════════════════════════ */}
+      {/* ══════════════════════════════════════════════════════════════════════
+          SIMULATION STUDIO (FULL-WIDTH) OR TWO-COLUMN CODING WORKSPACE
+          ══════════════════════════════════════════════════════════════════════ */}
+      {activeTab === 'simulation' && hasSimulation ? (
+        <div className={styles.simulationStudio}>
+          <div className={styles.simulationHeader}>
+            <div className={styles.simulationTitleWrap}>
+              <span className={styles.simulationBadge}>
+                <span className={styles.pulseDot} /> Virtual Lab Active
+              </span>
+              <h2 className={styles.simulationTitle}>{exercise.title}</h2>
+              <span className={styles.badgeXp}>
+                <Zap size={12} fill="#f59e0b" color="#d97706" /> +{exercise.xp_reward || 20} XP
+              </span>
+            </div>
+            <div className={styles.simulationActions}>
+              <a
+                href={exercise.simulation_path}
+                target="_blank"
+                rel="noopener noreferrer"
+                className={styles.openExternalBtn}
+              >
+                <Maximize2 size={14} /> Open Fullscreen
+              </a>
+              <button
+                className={styles.markCompleteBtn}
+                onClick={handleSubmit}
+                disabled={submitting}
+              >
+                <CheckCircle2 size={15} /> {submitting ? 'Recording...' : 'Mark Completed (+XP)'}
+              </button>
+            </div>
+          </div>
+
+          <div className={styles.simulationFrameWrap}>
+            <iframe
+              src={exercise.simulation_path}
+              title={exercise.title}
+              className={styles.simulationIframe}
+            />
+          </div>
+
+          <div className={styles.problemBottomNav} style={{ background: '#ffffff', borderRadius: 12, padding: '12px 20px', border: '1px solid #f1f5f9' }}>
+            <button
+              className={styles.navBtnPrev}
+              disabled={!prevEx}
+              onClick={() => navigateTo(prevEx)}
+            >
+              <ChevronLeft size={15} /> Previous
+            </button>
+            <span className={styles.lessonCountCenter}>
+              {currentLessonNum} of {totalLessons}
+            </span>
+            <button
+              className={styles.navBtnNext}
+              disabled={!nextEx}
+              onClick={() => navigateTo(nextEx)}
+            >
+              Next <ChevronRight size={15} />
+            </button>
+          </div>
+        </div>
+      ) : (
+        <div className={styles.workspaceGrid}>
+          {/* ── Left Column: Problem Statement ── */}
+          <div className={styles.problemPanel}>
+            {activeTab === 'problem' && (
+              <>
+                <div className={styles.problemHeader}>
+                  <div className={styles.problemTopRow}>
+                    <span className={styles.problemLessonBreadcrumb}>
+                      {course?.title || 'Algorithm Basics'} — Lesson {currentLessonNum}
+                    </span>
+                    <span className={styles.badgeXp}>
+                      <Zap size={12} fill="#f59e0b" color="#d97706" /> +{exercise.xp_reward || 17} XP
+                    </span>
+                  </div>
+                  <h2 className={styles.problemMainTitle}>{exercise.title}</h2>
+                </div>
+
+                {/* Problem Description */}
+                <div className={styles.problemDescArea}>
+                  {exercise.description ? (
+                    exercise.description.split('\n').filter(Boolean).map((p, i) => (
+                      <p key={i} style={{ margin: 0, color: i === 0 ? '#1e293b' : '#475569' }}>
+                        {p}
+                      </p>
+                    ))
+                  ) : (
+                    <>
+                      <p style={{ margin: 0 }}>
+                        Given an array of integers, return the sum of all the elements in the array.
+                      </p>
+                      <p style={{ margin: 0, color: '#475569' }}>
+                        Write a function that takes an array of integers and returns the sum of the elements.
+                      </p>
+                    </>
+                  )}
+                </div>
+
+                {/* Example 1 Card */}
+                {example1 && (
+                  <div className={styles.exampleCard}>
+                    <span className={styles.exampleTitle}>Example 1</span>
+                    <div className={styles.exampleField}>
+                      <span className={styles.exampleLabel}>Input</span>
+                      <div className={styles.exampleBox}>
+                        <span>{example1.input}</span>
+                        <button
+                          className={styles.copyBtn}
+                          onClick={() => handleCopy(example1.input, 'ex1-in')}
+                          title="Copy"
+                        >
+                          {copiedId === 'ex1-in' ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className={styles.exampleField}>
+                      <span className={styles.exampleLabel}>Expected Output</span>
+                      <div className={styles.exampleBox}>
+                        <span>{example1.expected}</span>
+                        <button
+                          className={styles.copyBtn}
+                          onClick={() => handleCopy(example1.expected, 'ex1-out')}
+                          title="Copy"
+                        >
+                          {copiedId === 'ex1-out' ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Example 2 Card */}
+                {example2 && (
+                  <div className={styles.exampleCard}>
+                    <span className={styles.exampleTitle}>Example 2</span>
+                    <div className={styles.exampleField}>
+                      <span className={styles.exampleLabel}>Input</span>
+                      <div className={styles.exampleBox}>
+                        <span>{example2.input}</span>
+                        <button
+                          className={styles.copyBtn}
+                          onClick={() => handleCopy(example2.input, 'ex2-in')}
+                          title="Copy"
+                        >
+                          {copiedId === 'ex2-in' ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                        </button>
+                      </div>
+                    </div>
+                    <div className={styles.exampleField}>
+                      <span className={styles.exampleLabel}>Expected Output</span>
+                      <div className={styles.exampleBox}>
+                        <span>{example2.expected}</span>
+                        <button
+                          className={styles.copyBtn}
+                          onClick={() => handleCopy(example2.expected, 'ex2-out')}
+                          title="Copy"
+                        >
+                          {copiedId === 'ex2-out' ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                        </button>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Constraints */}
+                <div className={styles.constraintsCard}>
+                  <div className={styles.constraintsHead}>
+                    <Settings size={16} color="#7c3aed" /> Constraints
+                  </div>
+                  <ul className={styles.constraintsList}>
+                    {constraintsList.map((c, i) => (
+                      <li key={i}>{c}</li>
+                    ))}
+                  </ul>
+                </div>
+              </>
+            )}
+
+            {activeTab === 'testcases' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Public Test Cases</h3>
+                {(exercise.test_cases || []).map((tc, idx) => (
+                  <div key={idx} className={styles.exampleCard}>
+                    <span className={styles.exampleTitle}>Case {idx + 1}</span>
+                    <div className={styles.exampleField}>
+                      <span className={styles.exampleLabel}>Input</span>
+                      <div className={styles.exampleBox}>
+                        <span>{tc.input}</span>
+                      </div>
+                    </div>
+                    <div className={styles.exampleField}>
+                      <span className={styles.exampleLabel}>Expected Output</span>
+                      <div className={styles.exampleBox}>
+                        <span>{tc.expected}</span>
+                      </div>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+
+            {activeTab === 'hints' && (
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+                <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Problem Hints</h3>
+                <div className={styles.exampleCard}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#b45309', fontWeight: 700, fontSize: 13 }}>
+                    <Lightbulb size={16} /> Hint 1
+                  </div>
+                  <p style={{ margin: 0, fontSize: 13.5, color: '#334155' }}>
+                    {exercise.hint_text || 'Break down the problem into smaller steps. Initialize an accumulator variable and iterate through elements.'}
+                  </p>
+                </div>
+              </div>
+            )}
+
+            {/* Bottom Pagination Inside Left Panel */}
+            <div className={styles.problemBottomNav}>
+              <button
+                className={styles.navBtnPrev}
+                disabled={!prevEx}
+                onClick={() => navigateTo(prevEx)}
+              >
+                <ChevronLeft size={15} /> Previous
+              </button>
+              <span className={styles.lessonCountCenter}>
+                {currentLessonNum} of {totalLessons}
+              </span>
+              <button
+                className={styles.navBtnNext}
+                disabled={!nextEx}
+                onClick={() => navigateTo(nextEx)}
+              >
+                Next <ChevronRight size={15} />
+              </button>
+            </div>
+          </div>
+
+        {/* ── Right Column: Code Editor & Console ── */}
+        <div className={styles.editorPanel}>
+          {/* Top Code Editor */}
+          <div className={styles.editorContainer}>
+            <div className={styles.editorToolbar}>
+              {/* Language Selector */}
+              <select
+                value={lang}
+                onChange={(e) => handleLangChange(e.target.value)}
+                className={styles.langSelector}
+              >
+                <option value="python">Python 3</option>
+                <option value="javascript">JavaScript</option>
+                <option value="cpp">C++</option>
+                <option value="java">Java</option>
+              </select>
+
+              {/* Action buttons */}
+              <div className={styles.toolbarRight}>
+                <button className={styles.toolBtn} onClick={handleFormat} title="Format Code">
+                  <Wand2 size={13} /> Format
+                </button>
+                <button className={styles.toolBtn} onClick={handleReset} title="Reset to Starter Code">
+                  <RotateCcw size={13} /> Reset
+                </button>
+                <button
+                  className={styles.btnRunCode}
+                  onClick={handleRun}
+                  disabled={running || submitting}
+                >
+                  {running ? <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Play size={14} />}
+                  Run Code
+                </button>
+                <button
+                  className={styles.btnSubmit}
+                  onClick={handleSubmit}
+                  disabled={running || submitting}
+                >
+                  {submitting ? <RefreshCw size={14} style={{ animation: 'spin 1s linear infinite' }} /> : <Send size={14} />}
+                  Submit Solution
+                </button>
+              </div>
+            </div>
+
+            {/* Code Textarea with Line Numbers */}
+            <div className={styles.codeAreaWrapper}>
+              <div className={styles.lineNumbers}>
+                {lineNumbers.map(n => (
+                  <div key={n}>{n}</div>
+                ))}
+              </div>
+              <textarea
+                value={code}
+                onChange={(e) => setCode(e.target.value)}
+                className={styles.codeTextarea}
+                spellCheck={false}
+                rows={17}
+              />
+              <button className={styles.editorCornerBtn} title="Fullscreen">
+                <Maximize2 size={13} />
+              </button>
+            </div>
+          </div>
+
+          {/* Bottom Console / Output Terminal */}
+          <div className={styles.consoleCard}>
+            <div className={styles.consoleHead}>
+              <div className={styles.consoleTabs}>
+                <button
+                  className={`${styles.consoleTabBtn} ${consoleTab === 'output' ? styles.consoleTabBtnActive : ''}`}
+                  onClick={() => setConsoleTab('output')}
+                >
+                  <Code2 size={14} /> Output
+                </button>
+                <button
+                  className={`${styles.consoleTabBtn} ${consoleTab === 'tests' ? styles.consoleTabBtnActive : ''}`}
+                  onClick={() => setConsoleTab('tests')}
+                >
+                  <Settings size={14} /> Test Cases
+                </button>
+                <button
+                  className={`${styles.consoleTabBtn} ${consoleTab === 'console' ? styles.consoleTabBtnActive : ''}`}
+                  onClick={() => setConsoleTab('console')}
+                >
+                  <Terminal size={14} /> Console
+                </button>
+              </div>
+
+              <div className={styles.consoleRightBtns}>
+                <button
+                  className={styles.consoleClearBtn}
+                  onClick={() => {
+                    setRunResult(null);
+                    setSubmitResult(null);
+                  }}
+                >
+                  <Trash2 size={12} /> Clear
+                </button>
+                <button className={styles.consoleClearBtn} title="Expand Output">
+                  <Maximize2 size={12} />
+                </button>
+              </div>
+            </div>
+
+            {/* Console Output Body */}
+            <div className={styles.consoleBody}>
+              {running || submitting ? (
+                <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, color: '#7c3aed' }}>
+                  <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite' }} />
+                  <span style={{ fontSize: 13.5, fontWeight: 600 }}>Executing code in Docker sandbox…</span>
+                </div>
+              ) : submitResult ? (
+                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: 12, background: submitResult.solved ? '#ecfdf5' : '#fef2f2', border: `1px solid ${submitResult.solved ? '#a7f3d0' : '#fecaca'}`, borderRadius: 10 }}>
+                    {submitResult.solved ? (
+                      <CheckCircle2 size={20} color="#059669" />
+                    ) : (
+                      <XCircle size={20} color="#dc2626" />
+                    )}
+                    <div>
+                      <div style={{ fontWeight: 800, fontSize: 14, color: submitResult.solved ? '#065f46' : '#991b1b' }}>
+                        {submitResult.solved ? '🎉 Solution Accepted!' : 'Submission Failed'}
+                      </div>
+                      <div style={{ fontSize: 12, color: '#475569' }}>
+                        Passed {submitResult.passed} of {submitResult.total} test cases • +{submitResult.xp_earned} XP earned
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              ) : runResult ? (
+                <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: runResult.all_passed ? '#ecfdf5' : '#fffbeb', borderRadius: 8, fontSize: 13, fontWeight: 700 }}>
+                    <span style={{ color: runResult.all_passed ? '#059669' : '#b45309' }}>
+                      {runResult.all_passed ? 'All Test Cases Passed' : 'Some Test Cases Failed'}
+                    </span>
+                    <span style={{ color: '#64748b' }}>
+                      {runResult.passed} / {runResult.total} Passed
+                    </span>
+                  </div>
+                  {runResult.results.map((r, i) => (
+                    <div key={i} style={{ padding: 10, background: '#f8fafc', borderRadius: 8, fontSize: 12.5, fontFamily: 'monospace' }}>
+                      <div>Input: {r.input}</div>
+                      <div>Output: {r.output || '(empty)'}</div>
+                      <div>Expected: {r.expected}</div>
+                      <div style={{ color: r.passed ? '#059669' : '#dc2626', fontWeight: 700, marginTop: 4 }}>
+                        {r.passed ? '✓ Passed' : '✗ Failed'}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                /* Empty state matching mockup */
+                <div className={styles.emptyTerminalState}>
+                  <div className={styles.terminalIconSquare}>
+                    &gt;_
+                  </div>
+                  <h4 className={styles.terminalEmptyTitle}>Run your code to see the output</h4>
+                  <p className={styles.terminalEmptySub}>
+                    Click the &quot;Run Code&quot; button or press Ctrl + Enter
+                  </p>
+                </div>
+              )}
+            </div>
+
+            {/* Bottom Status & Shortcuts Footer */}
+            <div className={styles.consoleStatusFooter}>
+              <div className={styles.statusReady}>
+                <span className={styles.statusDot} />
+                <span>{running ? 'Executing...' : 'Ready to run'}</span>
+              </div>
+
+              <div className={styles.shortcutHints}>
+                <div className={styles.shortcutItem}>
+                  <kbd className={styles.shortcutKbd}>Ctrl + Enter</kbd>
+                  <span>Run Code</span>
+                </div>
+                <div className={styles.shortcutItem}>
+                  <kbd className={styles.shortcutKbd}>Ctrl + S</kbd>
+                  <span>Submit</span>
+                </div>
+                <div className={styles.shortcutItem}>
+                  <kbd className={styles.shortcutKbd}>Ctrl + /</kbd>
+                  <span>Toggle Comment</span>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    )}
+  </div>
+);
+}
