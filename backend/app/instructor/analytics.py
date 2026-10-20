@@ -37,13 +37,21 @@ analytics_bp = Blueprint('instructor_analytics', __name__)
 
 
 
+def _instructor_ss_query():
+    """Query SectionSubjects for current instructor or co-instructor (or all for institution_admin)."""
+    q = SectionSubject.query.filter_by(institution_id=g.institution_id)
+    if g.role != 'institution_admin':
+        from sqlalchemy import or_
+        q = q.filter(or_(
+            SectionSubject.instructor_id == g.user_id,
+            SectionSubject.co_instructor_id == g.user_id,
+        ))
+    return q
+
+
 def _my_ss_ids():
     """Return list of SectionSubject IDs this instructor teaches."""
-    ss_ids = [
-        ss.id for ss in SectionSubject.query.filter_by(
-            institution_id=g.institution_id, instructor_id=g.user_id
-        ).all()
-    ]
+    ss_ids = [ss.id for ss in _instructor_ss_query().all()]
     if not ss_ids:
         ss_ids = [
             ss.id for ss in SectionSubject.query.filter_by(
@@ -1330,13 +1338,17 @@ def integrity():
     enrolled_ids = {es.student_id for es in enrolled_students}
     all_student_ids = list(set(all_student_ids) | enrolled_ids)
 
-    # Find plagiarism flags for these students
-    plagiarism = PlagiarismFlag.query.filter(
+    # Find plagiarism flags for these students scoped to my experiments
+    plagiarism_q = PlagiarismFlag.query.filter(
         db.or_(
             PlagiarismFlag.student_a_id.in_(all_student_ids),
             PlagiarismFlag.student_b_id.in_(all_student_ids),
         )
-    ).all()
+    )
+    my_exp_ids = _my_exp_ids()
+    if my_exp_ids:
+        plagiarism_q = plagiarism_q.filter(PlagiarismFlag.experiment_id.in_(my_exp_ids))
+    plagiarism = plagiarism_q.all()
 
     # Build pairwise cluster view
     clusters = []
@@ -1410,12 +1422,23 @@ def ai_usage_analytics():
     start, end = _date_window(30)
     ss_filter = _get_ss_filter()
 
+    # Scope to enrolled students in instructor's sections
+    sec_subjs = SectionSubject.query.filter(SectionSubject.id.in_(my_ss_ids)).all()
+    section_ids = [ss.section_id for ss in sec_subjs if ss.section_id]
+    my_student_ids = [
+        r[0] for r in SectionStudent.query.filter(
+            SectionStudent.section_id.in_(section_ids)
+        ).with_entities(SectionStudent.student_id).all()
+    ] if section_ids else []
+
     # AIUsageLog — aggregate in SQL (was loading all rows into RAM)
     logs = AIUsageLog.query.filter(
         AIUsageLog.institution_id == g.institution_id,
         AIUsageLog.created_at >= start,
         AIUsageLog.created_at <= end,
     )
+    if my_student_ids:
+        logs = logs.filter(AIUsageLog.user_id.in_(my_student_ids))
 
     if ss_filter:
         logs = logs.filter(AIUsageLog.section_subject_id == ss_filter)
@@ -1434,7 +1457,7 @@ def ai_usage_analytics():
     by_feature = defaultdict(int)
 
     # Student-level aggregates from SQL
-    student_query_rows = db.session.query(
+    sq = db.session.query(
         AIUsageLog.user_id,
         db.func.coalesce(db.func.sum(AIUsageLog.total_tokens), 0),
         db.func.coalesce(db.func.sum(AIUsageLog.estimated_cost_usd), 0.0),
@@ -1443,7 +1466,10 @@ def ai_usage_analytics():
         AIUsageLog.institution_id == g.institution_id,
         AIUsageLog.created_at >= start,
         AIUsageLog.created_at <= end,
-    ).group_by(AIUsageLog.user_id).all() if logs else []
+    )
+    if my_student_ids:
+        sq = sq.filter(AIUsageLog.user_id.in_(my_student_ids))
+    student_query_rows = sq.group_by(AIUsageLog.user_id).all() if logs else []
     student_agg = {r[0]: (r[1], r[2], r[3]) for r in student_query_rows}
 
     # Feature breakdown per student
@@ -1510,10 +1536,51 @@ def roster():
     users = User.query.filter(
         User.id.in_(student_ids), User.role == 'student',
     ).with_entities(User.id, User.full_name, User.roll_number).all()
-    roster = [
-        {'student_id': uid, 'full_name': name, 'roll_number': roll}
-        for uid, name, roll in users
-    ]
+    grade_rows = db.session.query(
+        Grade.student_id, func.avg(Grade.final_grade)
+    ).filter(
+        Grade.student_id.in_(student_ids),
+        Grade.final_grade.isnot(None),
+    ).group_by(Grade.student_id).all()
+    grade_map = {r[0]: round(float(r[1] or 0), 1) for r in grade_rows}
+
+    mastery_rows = db.session.query(
+        ConceptMastery.student_id, func.avg(ConceptMastery.mastery_score)
+    ).filter(
+        ConceptMastery.student_id.in_(student_ids),
+        ConceptMastery.mastery_score.isnot(None),
+    ).group_by(ConceptMastery.student_id).all()
+    mastery_map = {r[0]: round(float(r[1] or 0), 1) for r in mastery_rows}
+
+    att_rows = SessionAttendance.query.filter(SessionAttendance.student_id.in_(student_ids)).all()
+    from collections import defaultdict
+    att_by_sid = defaultdict(list)
+    for a in att_rows:
+        att_by_sid[a.student_id].append(a.status in ('present', 'late', 'partial'))
+    att_map = {
+        sid: round((sum(1 for p in flags if p) / len(flags)) * 100.0, 1) if flags else 0.0
+        for sid, flags in att_by_sid.items()
+    }
+
+    roster = []
+    for uid, name, roll in users:
+        g_avg = grade_map.get(uid, 0.0)
+        m_pct = mastery_map.get(uid, 0.0)
+        a_rate = att_map.get(uid, 0.0)
+        academic_score = (0.4 * g_avg) + (0.3 * m_pct) + (0.3 * a_rate)
+        risk_score = round(max(0.0, min(100.0, 100.0 - academic_score)), 1)
+        risk_band = 'critical' if risk_score >= 70 else 'high' if risk_score >= 45 else 'watch' if risk_score >= 25 else 'low'
+
+        roster.append({
+            'student_id': uid,
+            'full_name': name,
+            'roll_number': roll,
+            'grade_avg': g_avg,
+            'mastery_pct': m_pct,
+            'attendance_rate': a_rate,
+            'risk_score': risk_score,
+            'risk_band': risk_band,
+        })
     roster.sort(key=lambda r: (r['full_name'] or '').lower())
     return jsonify({'roster': roster}), 200
 
@@ -2483,7 +2550,7 @@ def analytics_mastery_overview():
 
     # Construct graph G = (V, E)
     # Directed Edges E = {(u, v) | u is prerequisite of v in ConceptPrereq}
-    graph_concepts = set(active_concepts) if active_concepts else set()
+    graph_concepts = set()
     graph_adj = defaultdict(set)      # parent -> set of children
     reverse_adj = defaultdict(set)    # child -> set of parents
 
@@ -2522,6 +2589,7 @@ def analytics_mastery_overview():
 
     svg_width = 460
     prereq_nodes = []
+    seen_node_ids = set()
     for t in sorted(tier_groups.keys()):
         c_list = tier_groups[t]
         y_pos = 28 + (t - 1) * 58
@@ -2538,6 +2606,9 @@ def analytics_mastery_overview():
             c_score = round(c_score)
             status = "mastered" if c_score >= 70 else ("developing" if c_score >= 50 else "weak")
             node_id = cname.lower().replace('&', 'and').replace(' ', '_').replace('-', '_')
+            if node_id in seen_node_ids:
+                continue
+            seen_node_ids.add(node_id)
 
             prereq_nodes.append({
                 "id": node_id,
@@ -2549,17 +2620,21 @@ def analytics_mastery_overview():
                 "y": y_pos,
             })
 
-    # Directed edges
+    # Directed edges (deduplicated)
     prereq_edges = []
+    seen_edges = set()
     for p in db_prereqs:
         s_id = p.requires_concept.lower().replace('&', 'and').replace(' ', '_').replace('-', '_')
         t_id = p.concept.lower().replace('&', 'and').replace(' ', '_').replace('-', '_')
-        prereq_edges.append({
-            "from": s_id,
-            "to": t_id,
-            "from_label": p.requires_concept,
-            "to_label": p.concept,
-        })
+        edge_key = (s_id, t_id)
+        if edge_key not in seen_edges and s_id != t_id:
+            seen_edges.add(edge_key)
+            prereq_edges.append({
+                "from": s_id,
+                "to": t_id,
+                "from_label": p.requires_concept,
+                "to_label": p.concept,
+            })
 
     # Dynamic Key Insight: identify the primary bottleneck prerequisite
     blocker_candidate = None
@@ -2728,6 +2803,7 @@ def analytics_engagement_overview():
     my_exp_ids = _my_exp_ids()
     active_ss_ids, active_exp_ids = _resolve_active_scope(my_ss_ids, my_exp_ids)
     days = int(request.args.get('days', 30))
+    exp_filter = request.args.get('experiment_id')
 
     from collections import defaultdict
     from app.models.subject import Subject

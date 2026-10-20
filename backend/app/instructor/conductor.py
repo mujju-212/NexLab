@@ -28,6 +28,7 @@ from app.models.knowledge import FocusScore
 from app.models.grading import Grade
 from app.models.proctor_event import ProctorEvent
 from collections import defaultdict
+from sqlalchemy import or_
 from datetime import datetime, timedelta
 import uuid
 import threading
@@ -47,13 +48,20 @@ MODE_RULES = {
 
 
 def _require_my_session(session_id):
-    """Fetch a session the current instructor teaches, or None."""
-    sess = LabSession.query.get(session_id)
+    """Fetch a session the current instructor teaches (or institution admin), or None."""
+    sess = LabSession.query.filter_by(
+        id=session_id, institution_id=g.institution_id
+    ).first()
     if not sess:
         return None
-    ss = SectionSubject.query.filter_by(
-        id=sess.section_subject_id,
-        instructor_id=g.user_id,
+    if g.role == 'institution_admin':
+        return sess
+    ss = SectionSubject.query.filter(
+        SectionSubject.id == sess.section_subject_id,
+        or_(
+            SectionSubject.instructor_id == g.user_id,
+            SectionSubject.co_instructor_id == g.user_id,
+        )
     ).first()
     if not ss:
         return None
@@ -153,7 +161,7 @@ def live_state(session_id):
                 for p in progress_rows
             }
 
-            # Latest focus per student — ONE batched query instead of N
+            # Latest focus per student — ONE batched query (SQLite & PostgreSQL compatible)
             from app.models.knowledge import FocusScore
             focus_map = {}
             if students:
@@ -164,14 +172,14 @@ def live_state(session_id):
                         FocusScore.session_id == session_id,
                         FocusScore.student_id.in_(sids),
                     )
-                    # newest row per student: window over recorded_at desc
-                    .order_by(FocusScore.student_id, FocusScore.recorded_at.desc())
-                    .distinct(FocusScore.student_id)
+                    # newest row per student: order by recorded_at desc, dedupe in Python
+                    .order_by(FocusScore.recorded_at.desc())
                     .with_entities(FocusScore.student_id, FocusScore.focus_score)
                     .all()
                 )
                 for sid, score in focus_rows:
-                    focus_map[sid] = score
+                    if sid not in focus_map:
+                        focus_map[sid] = score
 
             # Proctor event counts per student
             from app.models.proctor_event import ProctorEvent
@@ -957,51 +965,19 @@ def _finalize_grades_core(sess):
                 continue
             quiz_scores_by_student.setdefault(c_sid, []).append(c_score)
 
+    from app.services.grading_service import sync_student_experiment_grade
     updated = []
     for sid in student_ids:
-        # Best auto grade from final submissions
-        finals = [a for a in attempts if a.student_id == sid and a.is_final_submission]
-        best_auto = None
-        if finals:
-            best_auto = max(
-                (a.test_cases_passed / a.test_cases_total * 100 if a.test_cases_total else 0)
-                for a in finals
-            )
+        grade = sync_student_experiment_grade(sid, exp.id, session_id=session_id)
+        if grade:
+            updated.append({
+                'student_id': sid,
+                'auto_grade': grade.auto_grade,
+                'quiz_grade': grade.quiz_grade,
+                'quality_grade': grade.code_quality_grade,
+                'final_grade': grade.final_grade,
+            })
 
-        # Best quality score across finals
-        quality_scores = [a.quality_grade for a in finals]
-        quality_score = None
-        if quality_scores:
-            grade_map = {'A': 10, 'B': 8, 'C': 6, 'D': 4, 'E': 2, 'F': 0}
-            quality_score = max(grade_map.get(q, 0) for q in quality_scores)
-
-        # Quiz grade from pre-batched ContentProgress scores (no per-student queries)
-        quiz_scores = quiz_scores_by_student.get(sid, [])
-        quiz_grade = round(sum(quiz_scores) / len(quiz_scores), 2) if quiz_scores else None
-
-        # Upsert Grade
-        grade = Grade.query.filter_by(
-            student_id=sid, experiment_id=exp.id, session_id=session_id).first()
-        if not grade:
-            grade = Grade(student_id=sid, experiment_id=exp.id, session_id=session_id)
-            db.session.add(grade)
-        if best_auto is not None:
-            grade.auto_grade = round(best_auto, 2)
-        if quality_score is not None:
-            grade.code_quality_grade = quality_score
-        grade.quiz_grade = quiz_grade
-        if not grade.graded_at:
-            grade.graded_at = datetime.utcnow()
-        grade.calculate_final(rubric)
-        updated.append({
-            'student_id': sid,
-            'auto_grade': grade.auto_grade,
-            'quiz_grade': grade.quiz_grade,
-            'quality_grade': grade.code_quality_grade,
-            'final_grade': grade.final_grade,
-        })
-
-    db.session.commit()
     return updated, len(updated)
 
 

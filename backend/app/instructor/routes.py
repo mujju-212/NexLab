@@ -46,20 +46,26 @@ def _parse_iso(raw):
 
 
 
+def _instructor_ss_query():
+    """Query SectionSubjects for current instructor or co-instructor (or all for institution_admin)."""
+    q = SectionSubject.query.filter_by(institution_id=g.institution_id)
+    if g.role != 'institution_admin':
+        q = q.filter(or_(
+            SectionSubject.instructor_id == g.user_id,
+            SectionSubject.co_instructor_id == g.user_id,
+        ))
+    return q
+
+
 # ── Instructor Dashboard + Teaching Assignments ────────────────────────────────
 
 @instructor_bp.route('/section-subjects', methods=['GET'])
 @require_role('instructor', 'institution_admin')
 def my_section_subjects():
     """All section-subjects assigned to this instructor (with names + headcount)."""
-    if g.role == 'institution_admin':
+    assignments = _instructor_ss_query().all()
+    if not assignments and g.role == 'instructor':
         assignments = SectionSubject.query.filter_by(institution_id=g.institution_id).all()
-    else:
-        assignments = SectionSubject.query.filter_by(
-            institution_id=g.institution_id, instructor_id=g.user_id
-        ).all()
-        if not assignments:
-            assignments = SectionSubject.query.filter_by(institution_id=g.institution_id).all()
 
     if not assignments:
         return jsonify({'section_subjects': []}), 200
@@ -69,6 +75,12 @@ def my_section_subjects():
 
     subjects = {s.id: s for s in Subject.query.filter(Subject.id.in_(subject_ids)).all()} if subject_ids else {}
     sections = {s.id: s for s in Section.query.filter(Section.id.in_(section_ids)).all()} if section_ids else {}
+
+    batch_ids = {s.batch_id for s in sections.values() if s.batch_id}
+    from app.models.academic import Batch, AcademicYear
+    batches = {b.id: b for b in Batch.query.filter(Batch.id.in_(batch_ids)).all()} if batch_ids else {}
+    year_ids = {b.year_id for b in batches.values() if b.year_id}
+    years = {y.id: y for y in AcademicYear.query.filter(AcademicYear.id.in_(year_ids)).all()} if year_ids else {}
 
     student_counts = {}
     if section_ids:
@@ -91,6 +103,8 @@ def my_section_subjects():
     for ss in assignments:
         subject = subjects.get(ss.subject_id)
         section = sections.get(ss.section_id)
+        batch = batches.get(section.batch_id) if section else None
+        year = years.get(batch.year_id) if batch else None
         result.append({
             'section_subject_id': ss.id,
             'subject_id': ss.subject_id,
@@ -101,6 +115,9 @@ def my_section_subjects():
             'description': subject.description if subject else '',
             'section_id': ss.section_id,
             'section_name': section.name if section else '',
+            'batch_id': batch.id if batch else None,
+            'batch_name': batch.name if batch else 'General Batch',
+            'academic_year': year.year_label if year else 'Current Year',
             'student_count': student_counts.get(ss.section_id, 0),
             'experiment_count': exp_counts.get(ss.subject_id, 0),
         })
@@ -158,6 +175,7 @@ def instructor_dashboard():
             institution_id=g.institution_id).all()
     my_ss_ids = [ss.id for ss in my_ss_rows]
     my_section_ids = list({ss.section_id for ss in my_ss_rows if ss.section_id})
+    my_subject_ids = list({ss.subject_id for ss in my_ss_rows if ss.subject_id})
 
     active_sessions = LabSession.query.filter(
         LabSession.section_subject_id.in_(my_ss_ids),
@@ -172,15 +190,23 @@ def instructor_dashboard():
         )
     ).order_by(LabSession.scheduled_at.asc()).limit(15).all() if my_ss_ids else []
 
+    # Collect all experiments relevant to this instructor:
+    # 1. Authored by this instructor
+    # 2. Associated with subjects this instructor teaches
+    exp_filter = [Experiment.instructor_id == g.user_id]
+    if my_subject_ids:
+        exp_filter.append(Experiment.subject_id.in_(my_subject_ids))
+    if g.role == 'institution_admin' and not my_subject_ids:
+        exp_filter = [Experiment.institution_id == g.institution_id]
+
     my_exp_ids = [
-        row[0] for row in db.session.query(Experiment.id).filter_by(
-            institution_id=g.institution_id, instructor_id=g.user_id
+        row[0] for row in db.session.query(Experiment.id).filter(
+            Experiment.institution_id == g.institution_id,
+            or_(*exp_filter)
         ).all()
     ]
 
-    # Students across the instructor's assigned sections (column-only count —
-    # the old code loaded every SectionStudent row to Python, and the local
-    # result was never even returned; stats recomputes it as SQL COUNT)
+    # Students across the instructor's assigned sections
     enrolled_sids = [
         r[0] for r in db.session.query(SectionStudent.student_id).filter(
             SectionStudent.section_id.in_(my_section_ids)).distinct().all()
@@ -196,16 +222,20 @@ def instructor_dashboard():
             graded_pairs.add((gr.student_id, gr.experiment_id))
             grades_map[(gr.student_id, gr.experiment_id)] = gr.final_grade
 
-    # Pending grading: final submissions with no Grade row yet. Capped at 200
-    # recent finals (newest first) — the card shows 10 and 200 already covers
-    # a week of submissions at any plausible class scale.
+    # Pending grading: final submissions with no Grade row yet.
     pending = []
+    sub_conditions = []
     if my_exp_ids:
+        sub_conditions.append(CodeAttempt.experiment_id.in_(my_exp_ids))
+    if enrolled_sids:
+        sub_conditions.append(CodeAttempt.student_id.in_(enrolled_sids))
+
+    if sub_conditions:
         finals = CodeAttempt.query.filter(
-            CodeAttempt.experiment_id.in_(my_exp_ids),
+            or_(*sub_conditions),
             CodeAttempt.is_final_submission == True,  # noqa: E712
         ).order_by(CodeAttempt.submitted_at.desc()).limit(200).all()
-        # Batch user + experiment lookups (was N+1 per submission)
+        # Batch user + experiment lookups
         pending_student_ids = {a.student_id for a in finals}
         pending_exp_ids = {a.experiment_id for a in finals}
         pending_users = {u.id: u for u in User.query.filter(User.id.in_(pending_student_ids)).all()} if pending_student_ids else {}
@@ -230,58 +260,94 @@ def instructor_dashboard():
                 'test_cases_total': att.test_cases_total,
             })
 
-    # Recent Submissions for the dashboard card — reuses graded_pairs/
-    # grades_map above instead of re-querying the Grade table.
+    # Recent Submissions for the dashboard card
     recent_submissions = []
-    if my_exp_ids:
+    if sub_conditions:
         all_finals = CodeAttempt.query.filter(
-            CodeAttempt.experiment_id.in_(my_exp_ids),
+            or_(*sub_conditions),
             CodeAttempt.is_final_submission == True,  # noqa: E712
         ).order_by(CodeAttempt.submitted_at.desc()).limit(10).all()
 
         sub_student_ids = {a.student_id for a in all_finals}
+        sub_exp_ids = {a.experiment_id for a in all_finals}
         sub_users = {u.id: u for u in User.query.filter(User.id.in_(sub_student_ids)).all()} if sub_student_ids else {}
-        sub_exps = {e.id: e for e in Experiment.query.filter(Experiment.id.in_(my_exp_ids)).all()}
+        sub_exps = {e.id: e for e in Experiment.query.filter(Experiment.id.in_(sub_exp_ids)).all()} if sub_exp_ids else {}
 
         for att in all_finals[:6]:
             u = sub_users.get(att.student_id)
             e = sub_exps.get(att.experiment_id)
             final_grade = grades_map.get((att.student_id, att.experiment_id))
             is_graded = (att.student_id, att.experiment_id) in graded_pairs
+
+            total_tc = att.test_cases_total if att.test_cases_total is not None else (TestCase.query.filter_by(experiment_id=att.experiment_id).count() or 0)
+            passed_tc = att.test_cases_passed if att.test_cases_passed is not None else (total_tc if is_graded else 0)
+
             recent_submissions.append({
                 'id': att.id,
                 'student_id': att.student_id,
                 'student_name': u.full_name if u else 'Student',
                 'experiment_id': att.experiment_id,
                 'experiment_title': e.title if e else 'Lab Assignment',
-                'test_cases_passed': att.test_cases_passed or (2 if (final_grade and final_grade > 50) else 1),
-                'test_cases_total': att.test_cases_total or 2,
+                'test_cases_passed': passed_tc,
+                'test_cases_total': total_tc,
                 'submitted_at': att.submitted_at.isoformat() if att.submitted_at else None,
                 'is_graded': is_graded,
-                'grade': final_grade,
+                'grade': round(final_grade, 1) if final_grade is not None else None,
             })
 
-    # Concept Mastery Snapshot
+    # Dynamic Concept Mastery Snapshot from real ConceptMastery rows
     cm_q = db.session.query(
         ConceptMastery.concept,
-        func.avg(ConceptMastery.mastery_score).label('avg_score')
+        func.avg(ConceptMastery.mastery_score).label('avg_score'),
+        func.count(ConceptMastery.student_id).label('student_count')
     )
     if enrolled_sids:
         cm_q = cm_q.filter(ConceptMastery.student_id.in_(enrolled_sids))
-    cm_rows = cm_q.group_by(ConceptMastery.concept).all()
-    score_by_concept = {r[0].lower().strip(): round(float(r[1] or 0), 1) for r in cm_rows}
+    else:
+        cm_q = cm_q.filter(ConceptMastery.institution_id == g.institution_id)
 
-    concept_mastery = [
-        {'concept': 'Stacks', 'score': score_by_concept.get('stacks', 65.0), 'color': 'linear-gradient(90deg, #8b5cf6, #7c3aed)'},
-        {'concept': 'Arrays', 'score': score_by_concept.get('arrays', 42.0), 'color': 'linear-gradient(90deg, #ec4899, #f43f5e)'},
-        {'concept': 'Data Structures', 'score': score_by_concept.get('data structures', score_by_concept.get('data-structures', 7.0)), 'color': 'linear-gradient(90deg, #3b82f6, #06b6d4)'},
-        {'concept': 'Python', 'score': score_by_concept.get('python', 0.0), 'color': 'linear-gradient(90deg, #6366f1, #8b5cf6)'},
-        {'concept': 'Functions', 'score': score_by_concept.get('functions', 0.0), 'color': 'linear-gradient(90deg, #a855f7, #c084fc)'},
+    top_cm_rows = cm_q.group_by(ConceptMastery.concept).order_by(
+        func.count(ConceptMastery.student_id).desc(),
+        func.avg(ConceptMastery.mastery_score).desc()
+    ).limit(5).all()
+
+    color_gradients = [
+        'linear-gradient(90deg, #8b5cf6, #7c3aed)',
+        'linear-gradient(90deg, #3b82f6, #06b6d4)',
+        'linear-gradient(90deg, #10b981, #059669)',
+        'linear-gradient(90deg, #ec4899, #f43f5e)',
+        'linear-gradient(90deg, #f59e0b, #d97706)',
     ]
 
-    # Student Performance Distribution (Donut metrics) — one aggregate row;
-    # score bucketing happens in SQL. rank_score is nullable; the Python
-    # `or 0` semantics are kept via coalesce.
+    concept_mastery = []
+    if top_cm_rows:
+        for idx, row in enumerate(top_cm_rows):
+            concept_mastery.append({
+                'concept': row[0].strip(),
+                'score': round(float(row[1] or 0), 1),
+                'student_count': int(row[2] or 0),
+                'color': color_gradients[idx % len(color_gradients)],
+            })
+    else:
+        inst_cm_rows = db.session.query(
+            ConceptMastery.concept,
+            func.avg(ConceptMastery.mastery_score).label('avg_score'),
+            func.count(ConceptMastery.student_id).label('student_count')
+        ).filter(
+            ConceptMastery.institution_id == g.institution_id
+        ).group_by(ConceptMastery.concept).order_by(
+            func.count(ConceptMastery.student_id).desc()
+        ).limit(5).all()
+
+        for idx, row in enumerate(inst_cm_rows):
+            concept_mastery.append({
+                'concept': row[0].strip(),
+                'score': round(float(row[1] or 0), 1),
+                'student_count': int(row[2] or 0),
+                'color': color_gradients[idx % len(color_gradients)],
+            })
+
+    # Student Performance Distribution (Donut metrics) from actual cohort data
     rank_score = func.coalesce(StudentRanking.rank_score, 0)
     agg = db.session.query(
         func.sum(case((rank_score >= 75, 1), else_=0)),
@@ -291,17 +357,37 @@ def instructor_dashboard():
     )
     if enrolled_sids:
         agg = agg.filter(StudentRanking.student_id.in_(enrolled_sids))
-    exc, good, needs, risk = [(int(v or 0)) for v in agg.first()]
+    first_res = agg.first()
+    exc, good, needs, risk = [(int(v or 0)) for v in first_res] if first_res else (0, 0, 0, 0)
     total_ranks = exc + good + needs + risk
 
-    if total_ranks == 0:
-        total_ranks = 71
-        exc = 20
-        good = 35
-        needs = 12
-        risk = 4
+    # If no StudentRanking entries exist, calculate distribution from student Grade averages
+    if total_ranks == 0 and enrolled_sids:
+        student_grades = db.session.query(
+            Grade.student_id,
+            func.avg(Grade.final_grade).label('avg_grade')
+        ).filter(Grade.student_id.in_(enrolled_sids)).group_by(Grade.student_id).all()
 
-    well_pct = round(((exc + good) / max(total_ranks, 1)) * 100)
+        for sg in student_grades:
+            avg_val = float(sg[1] or 0)
+            if avg_val >= 75:
+                exc += 1
+            elif avg_val >= 60:
+                good += 1
+            elif avg_val >= 40:
+                needs += 1
+            else:
+                risk += 1
+        total_ranks = exc + good + needs + risk
+
+    if total_ranks == 0:
+        total_ranks = len(enrolled_sids)
+        exc = 0
+        good = 0
+        needs = 0
+        risk = 0
+
+    well_pct = round(((exc + good) / max(total_ranks, 1)) * 100) if total_ranks > 0 else 0
     student_performance = {
         'total': total_ranks,
         'excellent': exc,
@@ -319,8 +405,8 @@ def instructor_dashboard():
         'concept_mastery': concept_mastery,
         'student_performance': student_performance,
         'stats': _dashboard_stats(my_exp_ids, pending, my_section_ids, active_sessions,
-                                  graded_pairs=graded_pairs),
-        'recent_activity': _dashboard_activity(my_ss_ids, my_exp_ids),
+                                  graded_pairs=graded_pairs, enrolled_sids=enrolled_sids),
+        'recent_activity': _dashboard_activity(my_ss_ids, my_exp_ids, enrolled_sids=enrolled_sids),
         'session_health': _session_health(active_sessions, my_ss_rows),
     }), 200
 
@@ -840,6 +926,11 @@ def create_experiment():
             return jsonify({'error': f'{req} is required.'}), 400
     if not Subject.query.filter_by(id=data['subject_id'], institution_id=g.institution_id).first():
         return jsonify({'error': 'subject_id not found in your institution'}), 404
+
+    if g.role != 'institution_admin':
+        is_assigned = _instructor_ss_query().filter_by(subject_id=data['subject_id']).first()
+        if not is_assigned:
+            return jsonify({'error': 'You are not assigned to teach this subject.'}), 403
 
     experiment_type = data.get('experiment_type', 'coding')
     if experiment_type not in ('coding', 'quiz_only', 'mixed', 'reading'):
@@ -1553,43 +1644,9 @@ def _finalize_session_grades(session_id, experiment_id):
     att_rows = SessionAttendance.query.filter_by(session_id=session_id).all()
     student_ids |= {a.student_id for a in att_rows if a.status != 'absent'}
 
-    quiz_modules = ContentModule.query.filter_by(
-        experiment_id=experiment_id, module_type='quiz').all()
-
+    from app.services.grading_service import sync_student_experiment_grade
     for sid in student_ids:
-        finals = [a for a in attempts if a.student_id == sid and a.is_final_submission]
-        best_auto = None
-        if finals:
-            best_auto = max(
-                (a.test_cases_passed / a.test_cases_total * 100 if a.test_cases_total else 0)
-                for a in finals
-            )
-        quality_scores = [a.quality_grade for a in finals if a.quality_grade]
-        quality_score = None
-        if quality_scores:
-            grade_map = {'A': 10, 'B': 8, 'C': 6, 'D': 4, 'E': 2, 'F': 0}
-            quality_score = max(grade_map.get(q, 0) for q in quality_scores)
-
-        quiz_scores = []
-        for qm in quiz_modules:
-            cp = ContentProgress.query.filter_by(student_id=sid, module_id=qm.id).first()
-            if cp and cp.score is not None:
-                quiz_scores.append(cp.score)
-        quiz_grade = round(sum(quiz_scores) / len(quiz_scores), 2) if quiz_scores else None
-
-        grade = Grade.query.filter_by(
-            student_id=sid, experiment_id=experiment_id, session_id=session_id).first()
-        if not grade:
-            grade = Grade(student_id=sid, experiment_id=experiment_id, session_id=session_id)
-            db.session.add(grade)
-        if best_auto is not None:
-            grade.auto_grade = round(best_auto, 2)
-        if quality_score is not None:
-            grade.code_quality_grade = quality_score
-        grade.quiz_grade = quiz_grade
-        if not grade.graded_at:
-            grade.graded_at = datetime.utcnow()
-        grade.calculate_final(rubric)
+        sync_student_experiment_grade(sid, experiment_id, session_id=session_id)
 
 
 def _finalize_attendance(session_id):
@@ -1633,8 +1690,7 @@ def live_dashboard(session_id):
     if session and session.institution_id != g.institution_id:
         return jsonify({'error': 'Forbidden'}), 403
     if session and g.role == 'instructor':
-        my_ss = {ss.id for ss in SectionSubject.query.filter_by(
-            institution_id=g.institution_id, instructor_id=g.user_id).all()}
+        my_ss = {ss.id for ss in _instructor_ss_query().all()}
         # admin-scoped demo fallback mirrors my_section_subjects: allow all
         # institution sessions when the instructor teaches none
         if not my_ss:
@@ -1732,8 +1788,12 @@ def subject_grade_summary(subject_id):
 
     exp_ids = [e.id for e in exps]
 
-    # Find students enrolled in sections of this subject
-    sec_ids = [ss.section_id for ss in SectionSubject.query.filter_by(subject_id=subject_id).all()]
+    # Find students enrolled in sections of this subject (optionally filtered by section_id)
+    section_id_param = request.args.get('section_id')
+    if section_id_param:
+        sec_ids = [section_id_param]
+    else:
+        sec_ids = [ss.section_id for ss in SectionSubject.query.filter_by(subject_id=subject_id).all()]
     enrolled_student_ids = {
         r[0] for r in db.session.query(SectionStudent.student_id).filter(
             SectionStudent.section_id.in_(sec_ids)
@@ -1758,18 +1818,45 @@ def subject_grade_summary(subject_id):
         grade_map.setdefault(row.student_id, {})[row.experiment_id] = float(row.best_grade or 0)
         student_ids.add(row.student_id)
 
+    # Also query standalone published Exams for this subject
+    from app.models.exam import Exam, ExamAttempt
+    exams = Exam.query.filter_by(subject_id=subject_id, institution_id=g.institution_id, is_published=True).all()
+    standalone_exams = [x for x in exams if x.id not in exp_ids]
+    exam_grade_map = {}
+    if standalone_exams:
+        exam_ids = [x.id for x in standalone_exams]
+        exam_atts = ExamAttempt.query.filter(
+            ExamAttempt.exam_id.in_(exam_ids),
+            ExamAttempt.status.in_(['submitted', 'expired'])
+        ).all()
+        for ea in exam_atts:
+            exam_grade_map.setdefault(ea.student_id, {})[ea.exam_id] = max(
+                exam_grade_map.get(ea.student_id, {}).get(ea.exam_id, 0.0),
+                float(ea.score or 0.0)
+            )
+            student_ids.add(ea.student_id)
+
     users = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
 
-    total_weightage = sum(e.weightage or 0 for e in exps)
+    exam_weightage_sum = sum((x.grade_weight or 0.0) * (subject.total_marks or 100) for x in standalone_exams)
+    total_weightage = sum(e.weightage or 0 for e in exps) + exam_weightage_sum
     total_marks = subject.total_marks or 100
 
     students_out = []
     for sid in student_ids:
-        exp_scores = grade_map.get(sid, {})
+        exp_scores = dict(grade_map.get(sid, {}))
+        for x in standalone_exams:
+            exp_scores[x.id] = exam_grade_map.get(sid, {}).get(x.id, 0.0)
+
         rollup = sum(
             (exp_scores.get(e.id, 0) / (e.grade_scale or 100)) * (e.weightage or 0)
             for e in exps
         )
+        # Add contribution from standalone exams
+        for x in standalone_exams:
+            exam_weight = (x.grade_weight or 0.0) * total_marks
+            rollup += (exp_scores.get(x.id, 0) / 100.0) * exam_weight
+
         u = users.get(sid)
         students_out.append({
             'student_id': sid,
@@ -1781,6 +1868,27 @@ def subject_grade_summary(subject_id):
 
     students_out.sort(key=lambda x: (x['full_name'] or '').lower())
 
+    out_items = [
+        {
+            'id': e.id,
+            'exp_number': e.exp_number,
+            'title': e.title,
+            'delivery_mode': getattr(e, 'delivery_mode', 'lab') or 'lab',
+            'weightage': e.weightage,
+            'grade_scale': e.grade_scale,
+        }
+        for e in exps
+    ]
+    for idx, x in enumerate(standalone_exams, 1):
+        out_items.append({
+            'id': x.id,
+            'exp_number': len(exps) + idx,
+            'title': x.title,
+            'delivery_mode': 'exam',
+            'weightage': round((x.grade_weight or 0.0) * total_marks, 2),
+            'grade_scale': 100,
+        })
+
     return jsonify({
         'subject': {
             'id': subject.id,
@@ -1790,17 +1898,7 @@ def subject_grade_summary(subject_id):
             'total_weightage': round(total_weightage, 2),
             'over_allocation': total_weightage > total_marks,
         },
-        'experiments': [
-            {
-                'id': e.id,
-                'exp_number': e.exp_number,
-                'title': e.title,
-                'delivery_mode': getattr(e, 'delivery_mode', 'lab') or 'lab',
-                'weightage': e.weightage,
-                'grade_scale': e.grade_scale,
-            }
-            for e in exps
-        ],
+        'experiments': out_items,
         'students': students_out,
     }), 200
 
@@ -1841,9 +1939,39 @@ def list_submissions(experiment_id):
         d['full_name'] = u.full_name if u else 'Unknown'
         d['roll_number'] = u.roll_number if u else ''
         result.append(d)
+
+    # Merge students with Grade or ContentProgress rows so quiz/viva/reading submissions appear
+    existing_sids = set(student_ids)
+    extra_grades = Grade.query.filter_by(experiment_id=experiment_id).all()
+    extra_cp = ContentProgress.query.join(
+        ContentModule, ContentModule.id == ContentProgress.module_id
+    ).filter(
+        ContentModule.experiment_id == experiment_id,
+        ContentProgress.completed == True,  # noqa: E712
+    ).all()
+    missing_sids = ({g.student_id for g in extra_grades} | {cp.student_id for cp in extra_cp}) - existing_sids
+
+    if missing_sids:
+        missing_users = {u.id: u for u in User.query.filter(User.id.in_(list(missing_sids))).all()}
+        for msid in missing_sids:
+            u = missing_users.get(msid)
+            g_row = next((g for g in extra_grades if g.student_id == msid), None)
+            result.append({
+                'id': f"grade-{g_row.id}" if g_row else f"cp-{msid}",
+                'student_id': msid,
+                'session_id': g_row.session_id if g_row else None,
+                'full_name': u.full_name if u else 'Unknown',
+                'roll_number': u.roll_number if u else '',
+                'compile_status': 'graded',
+                'auto_grade': g_row.auto_grade if g_row else None,
+                'final_grade': g_row.final_grade if g_row else None,
+                'submitted_at': g_row.graded_at.isoformat() if g_row and g_row.graded_at else None,
+                'is_final_submission': True,
+            })
+
     if total is not None:
         pages = max(1, (total + per_page - 1) // per_page)
-        return jsonify({'submissions': result, 'total': total,
+        return jsonify({'submissions': result, 'total': total + len(missing_sids),
                         'page': page, 'pages': pages, 'per_page': per_page}), 200
     return jsonify({'submissions': result}), 200
 
@@ -1851,60 +1979,30 @@ def list_submissions(experiment_id):
 @instructor_bp.route('/grades', methods=['POST'])
 @require_role('instructor', 'institution_admin')
 def save_grade():
-    data = request.get_json()
-    student_id    = data['student_id']
-    experiment_id = data['experiment_id']
+    data = request.get_json() or {}
+    student_id    = data.get('student_id')
+    experiment_id = data.get('experiment_id')
+    if not student_id or not experiment_id:
+        return jsonify({'error': 'student_id and experiment_id are required.'}), 400
 
     grade = Grade.query.filter_by(
         student_id=student_id, experiment_id=experiment_id
     ).first()
 
-    if not grade:
-        grade = Grade(student_id=student_id, experiment_id=experiment_id,
-                      session_id=data.get('session_id'))
-        db.session.add(grade)
-
-    if grade.is_locked:
+    if grade and grade.is_locked:
         return jsonify({'error': 'Grade is locked (student has viewed it)'}), 409
 
-    grade.manual_grade    = data.get('manual_grade')
-    grade.manual_feedback = data.get('manual_feedback')
-    grade.graded_by       = g.user_id
-    grade.graded_at       = datetime.utcnow()
-
-    # ── Auto-populate auto_grade from the best code submission ────────────────
-    # Pick the final submission with the most test cases passed
-    best_submission = CodeAttempt.query.filter_by(
+    from app.services.grading_service import sync_student_experiment_grade
+    grade = sync_student_experiment_grade(
         student_id=student_id,
         experiment_id=experiment_id,
-        is_final_submission=True,
-    ).order_by(
-        CodeAttempt.test_cases_passed.desc()
-    ).first()
-
-    if best_submission and best_submission.test_cases_total and best_submission.test_cases_total > 0:
-        # auto_grade = % of test cases passed (0–100)
-        grade.auto_grade = round(
-            (best_submission.test_cases_passed / best_submission.test_cases_total) * 100, 1
-        )
-        # code_quality_grade: radon quality_grade mapped to 0–10 scale
-        quality_map = {'A': 10, 'B': 8, 'C': 6, 'D': 4, 'E': 2, 'F': 0}
-        if best_submission.quality_grade:
-            grade.code_quality_grade = quality_map.get(best_submission.quality_grade, 5)
-    elif best_submission:
-        # submitted but no test cases configured — treat as full marks
-        grade.auto_grade = 100.0
-
-    # ── Recalculate final from all 4 components ───────────────────────────────
-    exp = Experiment.query.get(experiment_id)
-    rubric = {
-        'test_cases':   exp.rubric_test_cases,
-        'lab_report':   exp.rubric_lab_report,
-        'code_quality': exp.rubric_code_quality,
-        'viva':         exp.rubric_viva,
-    }
-    grade.calculate_final(rubric)
-    db.session.commit()
+        session_id=data.get('session_id'),
+        manual_grade=data.get('manual_grade'),
+        manual_feedback=data.get('manual_feedback'),
+        graded_by=g.user_id,
+    )
+    if not grade:
+        return jsonify({'error': 'Experiment not found.'}), 404
 
     return jsonify({'grade': grade.to_dict()}), 200
 
@@ -2098,6 +2196,7 @@ def session_feedback(session_id):
 def list_vivas():
     """All viva sessions for this instructor's experiments, with student names."""
     status = request.args.get('status')
+    exp_id = request.args.get('experiment_id')
 
     my_exp_ids = [e.id for e in Experiment.query.filter_by(
         institution_id=g.institution_id, instructor_id=g.user_id
@@ -2108,6 +2207,8 @@ def list_vivas():
         return jsonify({'vivas': []}), 200
 
     query = VivaSession.query.filter(VivaSession.experiment_id.in_(my_exp_ids))
+    if exp_id and exp_id in my_exp_ids:
+        query = query.filter_by(experiment_id=exp_id)
     if status:
         query = query.filter_by(status=status)
     vivas = query.order_by(VivaSession.created_at.desc()).limit(200).all()

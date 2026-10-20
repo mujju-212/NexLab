@@ -352,22 +352,14 @@ def bulk_grading():
             by_student.setdefault(a.student_id, []).append(a)
 
         updated = []
-        for sid, rows in by_student.items():
+        from app.services.grading_service import sync_student_experiment_grade
+        for sid in by_student.keys():
             gr = _get_grade(sid)
             if gr.is_locked:
                 continue
-            best_auto = max(
-                (a.test_cases_passed / a.test_cases_total * 100 if a.test_cases_total else 0)
-                for a in rows)
-            quality = max((grade_map.get(a.quality_grade, 0) for a in rows), default=None)
-            gr.auto_grade = round(best_auto, 2)
-            if quality is not None:
-                gr.code_quality_grade = quality
-            if not gr.graded_at:
-                gr.graded_at = datetime.utcnow()
-            gr.calculate_final(rubric)
-            updated.append({'student_id': sid, 'final_grade': gr.final_grade})
-        db.session.commit()
+            synced_gr = sync_student_experiment_grade(sid, experiment_id, session_id=session_id)
+            if synced_gr:
+                updated.append({'student_id': sid, 'final_grade': synced_gr.final_grade})
         return jsonify({'updated': updated, 'count': len(updated)}), 200
 
     # batch manual
@@ -497,35 +489,15 @@ def grades_recompute():
             for p_sid, p_mid, p_score in cp_rows if p_score is not None
         }
 
-    grade_map = {'A': 10, 'B': 8, 'C': 6, 'D': 4, 'E': 2, 'F': 0}
-
+    from app.services.grading_service import sync_student_experiment_grade
     updated = []
     for gr in grade_rows:
         if gr.is_locked:
             continue
-        rows = attempts_by_student.get(gr.student_id, [])
-        if rows:
-            best_auto = max(
-                (a.test_cases_passed / a.test_cases_total * 100 if a.test_cases_total else 0)
-                for a in rows)
-            gr.auto_grade = round(best_auto, 2)
-            quality = max((grade_map.get(a.quality_grade, 0) for a in rows), default=None)
-            if quality is not None:
-                gr.code_quality_grade = quality
-        # quiz grade (best-attempt) — from pre-batched map
-        quiz_scores = [
-            progress_by_pair[(gr.student_id, qm.id)]
-            for qm in quiz_modules
-            if (gr.student_id, qm.id) in progress_by_pair
-        ]
-        if quiz_scores:
-            gr.quiz_grade = round(sum(quiz_scores) / len(quiz_scores), 2)
-        if not gr.graded_at:
-            gr.graded_at = datetime.utcnow()
-        gr.calculate_final(rubric)
-        updated.append({'student_id': gr.student_id, 'final_grade': gr.final_grade})
+        synced_gr = sync_student_experiment_grade(gr.student_id, experiment_id, session_id=gr.session_id)
+        if synced_gr:
+            updated.append({'student_id': gr.student_id, 'final_grade': synced_gr.final_grade})
 
-    db.session.commit()
     return jsonify({'updated': updated, 'count': len(updated)}), 200
 
 

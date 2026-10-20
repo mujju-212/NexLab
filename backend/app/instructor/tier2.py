@@ -25,19 +25,28 @@ from app.models.knowledge import ConceptMastery, FocusScore
 from app.models.academic import SectionSubject, SectionStudent
 from app.models.enhancements import BankQuestion, TeacherNote, SessionPoll
 from app.models.session import LabSession, SessionAttendance
+from sqlalchemy import or_
 from datetime import datetime, timedelta
 
 tier2_bp = Blueprint('instructor_tier2', __name__)
 
 
+def _instructor_ss_query():
+    q = SectionSubject.query.filter_by(institution_id=g.institution_id)
+    if g.role != 'institution_admin':
+        q = q.filter(or_(
+            SectionSubject.instructor_id == g.user_id,
+            SectionSubject.co_instructor_id == g.user_id,
+        ))
+    return q
+
+
 def _my_ss_ids():
-    return [ss.id for ss in SectionSubject.query.filter_by(
-        institution_id=g.institution_id, instructor_id=g.user_id).all()]
+    return [ss.id for ss in _instructor_ss_query().all()]
 
 
 def _my_students():
-    my_ss = SectionSubject.query.filter_by(
-        institution_id=g.institution_id, instructor_id=g.user_id).all()
+    my_ss = _instructor_ss_query().all()
     if not my_ss:
         return {}, []
     enrollments = SectionStudent.query.filter(
@@ -52,6 +61,7 @@ def _my_students():
 # ══════════════════════════════════════════════════════════════════════════════
 
 @tier2_bp.route('/early-warning/<ss_id>', methods=['GET'])
+@tier2_bp.route('/tier2/early-warning/<ss_id>', methods=['GET'])
 @require_role('instructor', 'institution_admin')
 def early_warning(ss_id):
     """
@@ -66,7 +76,7 @@ def early_warning(ss_id):
         id=ss_id, institution_id=g.institution_id).first()
     if not ss:
         return jsonify({'error': 'Section not found.'}), 404
-    if g.role == 'instructor' and ss.instructor_id != g.user_id:
+    if g.role != 'institution_admin' and ss.instructor_id != g.user_id and ss.co_instructor_id != g.user_id:
         return jsonify({'error': 'Not your section-subject.'}), 403
 
     enrolled = [e.student_id for e in

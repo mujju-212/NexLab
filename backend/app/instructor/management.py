@@ -16,7 +16,7 @@ from app.models.feedback import Notification
 from app.models.academic import SectionSubject, Section, SectionStudent
 from app.models.experiment import Experiment, ContentModule, ContentProgress
 from app.models.intervention import Intervention, Extension
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from datetime import datetime
 
 mgmt_bp = Blueprint('instructor_mgmt', __name__)
@@ -26,15 +26,23 @@ VALID_ACTIONS = ('talked_to_student', 'extended_deadline', 're_graded',
 VALID_OUTCOMES = ('open', 'improved', 'no_change', 'worsened')
 
 
+def _instructor_ss_query():
+    q = SectionSubject.query.filter_by(institution_id=g.institution_id)
+    if g.role != 'institution_admin':
+        q = q.filter(or_(
+            SectionSubject.instructor_id == g.user_id,
+            SectionSubject.co_instructor_id == g.user_id,
+        ))
+    return q
+
+
 def _my_ss_ids():
-    return [ss.id for ss in SectionSubject.query.filter_by(
-        institution_id=g.institution_id, instructor_id=g.user_id).all()]
+    return [ss.id for ss in _instructor_ss_query().all()]
 
 
 def _my_students():
     """All students in the instructor's sections (id → User)."""
-    my_ss = SectionSubject.query.filter_by(
-        institution_id=g.institution_id, instructor_id=g.user_id).all()
+    my_ss = _instructor_ss_query().all()
     section_ids = [ss.section_id for ss in my_ss]
     if not section_ids:
         return {}, []
