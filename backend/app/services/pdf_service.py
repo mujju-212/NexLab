@@ -158,15 +158,31 @@ def _upload_cloudinary(pdf_bytes: bytes, institution_id, student_id, subject_id)
 
 
 def _save_local(pdf_bytes: bytes, institution_id, student_id, subject_id) -> str:
-    """Dev fallback: save PDF to local backend/lab_records/ folder, return relative path"""
+    """Dev fallback: save PDF or printable HTML to local backend/lab_records/ folder, return relative path"""
     import pathlib
     out_dir = pathlib.Path(__file__).parent.parent.parent / 'lab_records'
-    out_dir.mkdir(exist_ok=True)
-    filename = f"{institution_id}_{student_id}_{subject_id}.pdf"
+    if isinstance(pdf_bytes, str):
+        pdf_bytes = pdf_bytes.encode('utf-8')
+    is_pdf = pdf_bytes.startswith(b'%PDF')
+    ext = 'pdf' if is_pdf else 'html'
+    filename = f"{institution_id}_{student_id}_{subject_id}.{ext}"
     path = out_dir / filename
-    path.write_bytes(pdf_bytes)
+
+    if not is_pdf:
+        content_str = pdf_bytes.decode('utf-8', errors='replace')
+        print_script = '<script>window.onload = function() { setTimeout(function() { window.print(); }, 400); };</script>'
+        if '</head>' in content_str:
+            content_str = content_str.replace('</head>', f'{print_script}</head>')
+        elif '</body>' in content_str:
+            content_str = content_str.replace('</body>', f'{print_script}</body>')
+        else:
+            content_str = f"{content_str}{print_script}"
+        path.write_text(content_str, encoding='utf-8')
+    else:
+        path.write_bytes(pdf_bytes)
+
     base_url = current_app.config.get('BASE_URL', 'http://localhost:5000')
-    current_app.logger.info(f"PDF saved locally (no Cloudinary): {path}")
+    current_app.logger.info(f"File saved locally (no Cloudinary): {path}")
     return f"{base_url}/lab_records/{filename}"
 
 

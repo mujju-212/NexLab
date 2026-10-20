@@ -136,6 +136,47 @@ def run_code():
     if error:
         return error
 
+    # ── Test Cases Evaluation (Live Lab & Grading) ────────────────────────
+    tc_results = []
+    tc_passed = 0
+    tc_total = 0
+    if experiment_id:
+        from app.models.experiment import TestCase
+        cases = TestCase.query.filter_by(experiment_id=experiment_id).all()
+        if cases:
+            tc_total = len(cases)
+            for tc in cases:
+                tc_in = tc.input_data or ''
+                c_res, _ = _run_docker(primary_code, spec['id'], tc_in, g.user_id, packages=packages)
+                actual_stdout = c_res.get('stdout') or '' if c_res else ''
+                ok = bool(c_res and c_res.get('status_id') == 3 and _norm_stdout(actual_stdout) == _norm_stdout(tc.expected_output))
+                if ok:
+                    tc_passed += 1
+                tc_results.append({
+                    'test_case_id': tc.id,
+                    'passed': ok,
+                    'execution_time_ms': int(c_res.get('time_ms') or 0) if c_res else 0,
+                    'is_hidden': bool(tc.is_hidden),
+                    'input': tc_in if not tc.is_hidden else None,
+                    'expected': tc.expected_output if not tc.is_hidden else None,
+                    'actual': actual_stdout if not tc.is_hidden else None,
+                    'status': c_res.get('status') if c_res else 'error'
+                })
+            result['test_cases_passed'] = tc_passed
+            result['test_cases_total'] = tc_total
+            result['test_results'] = [
+                {
+                    'test_case_id': r['test_case_id'],
+                    'passed': r['passed'],
+                    'is_hidden': r['is_hidden'],
+                    'input': r['input'],
+                    'expected': r['expected'],
+                    'actual': r['actual'],
+                    'status': r['status'],
+                }
+                for r in tc_results
+            ]
+
     # ── Store attempt (EVERY run, not just final) ─────────────────────────
     if experiment_id:
         attempt_count = CodeAttempt.query.filter_by(
@@ -161,8 +202,8 @@ def run_code():
             compile_output=result.get('compile_output'),
             stdout=result.get('stdout'),
             stderr=result.get('stderr'),
-            test_cases_passed=result.get('test_cases_passed', 0),
-            test_cases_total=result.get('test_cases_total', 0),
+            test_cases_passed=tc_passed if tc_total > 0 else result.get('test_cases_passed', 0),
+            test_cases_total=tc_total if tc_total > 0 else result.get('test_cases_total', 0),
             # runner.run() reports wall time already in ms and memory in KB —
             # no Judge0-style seconds→ms conversion needed.
             execution_time_ms=int(result.get('time_ms') or 0),
@@ -173,6 +214,48 @@ def run_code():
             is_final_submission=is_submit,
         )
         db.session.add(attempt)
+        db.session.flush()
+
+        # Save TestCaseResult rows
+        if tc_results:
+            from app.models.conductor import TestCaseResult, CheckpointProgress, Checkpoint
+            for row in tc_results:
+                db.session.add(TestCaseResult(
+                    attempt_id=attempt.id,
+                    test_case_id=row['test_case_id'],
+                    passed=row['passed'],
+                    execution_time_ms=row['execution_time_ms'],
+                ))
+
+            # Auto-verify checkpoints if mapped test cases all passed
+            if session_id:
+                passed_ids = {r['test_case_id'] for r in tc_results if r['passed']}
+                checkpoints = Checkpoint.query.filter_by(experiment_id=experiment_id).all()
+                newly_verified = []
+                for cp in checkpoints:
+                    mapped = set(cp.test_case_ids or [])
+                    if mapped and mapped.issubset(passed_ids):
+                        prog = CheckpointProgress.query.filter_by(
+                            session_id=session_id, student_id=g.user_id, checkpoint_id=cp.id).first()
+                        if not prog:
+                            prog = CheckpointProgress(
+                                session_id=session_id, student_id=g.user_id, checkpoint_id=cp.id)
+                            db.session.add(prog)
+                        if prog.status in ('pending', 'claimed', 'failed'):
+                            prog.status = 'verified'
+                            prog.passed_at = datetime.utcnow()
+                            prog.last_signal_at = datetime.utcnow()
+                            newly_verified.append(cp.id)
+
+                if newly_verified:
+                    try:
+                        from app.extensions import socketio as _sio
+                        for cp_id in newly_verified:
+                            payload = {'checkpoint_id': cp_id, 'student_id': g.user_id, 'status': 'verified'}
+                            _sio.emit('checkpoint_update', payload, room=f"session_{session_id}_instructor")
+                            _sio.emit('my_checkpoint_update', payload, room=f"student_{g.user_id}")
+                    except Exception:
+                        pass
 
         # Save code version on every run
         _save_code_version(g.user_id, experiment_id, session_id, code_files, 'on_run')
