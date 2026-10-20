@@ -140,11 +140,13 @@ class FreeProgress(db.Model):
 
     def to_dict(self):
         return {
-            'exercise_id': self.exercise_id,
-            'course_id':   self.course_id,
-            'status':      self.status,
-            'attempts':    self.attempts,
-            'best_score':  self.best_score,
-            'xp_earned':   self.xp_earned,
-            'solved_at':   self.solved_at.isoformat() if self.solved_at else None,
+            'exercise_id':   self.exercise_id,
+            'course_id':     self.course_id,
+            'status':        self.status,
+            'attempts':      self.attempts,
+            'best_score':    self.best_score,
+            'last_code':     self.last_code,
+            'language_used': self.language_used,
+            'xp_earned':     self.xp_earned,
+            'solved_at':     self.solved_at.isoformat() if self.solved_at else None,
         }

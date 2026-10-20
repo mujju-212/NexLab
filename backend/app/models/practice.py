@@ -168,7 +168,7 @@ class PracticeSubmission(db.Model):
     submitted_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     def to_dict(self, include_code=False):
-        return {
+        d = {
             'id':           self.id,
             'student_id':   self.student_id,
             'problem_id':   self.problem_id,
@@ -176,14 +176,17 @@ class PracticeSubmission(db.Model):
             'status':       self.status,
             'passed':       self.passed,
             'total':        self.total,
+            'score':        round((self.passed / self.total) * 100, 1) if self.total else 0.0,
             'time_ms':      self.time_ms,
+            'runtime_ms':   self.time_ms,
             'memory_kb':    self.memory_kb,
             'xp_earned':    self.xp_earned,
             'is_run':       self.is_run,
             'submitted_at': self.submitted_at.isoformat() if self.submitted_at else None,
         }
-        # note: code intentionally excluded by default; pass include_code=True
-        # in owner-scoped endpoints (diff view) — never in public payloads
+        if include_code:
+            d['code'] = self.code
+        return d
 
 
 # ─── Study Plans ──────────────────────────────────────────────────────────────
@@ -375,6 +378,9 @@ BADGE_CATALOG = {
     'first_solve':      {'icon': '🌱', 'title': 'First Steps',    'desc': 'Solve your first problem'},
     'streak_7':         {'icon': '🔥', 'title': 'Week Warrior',   'desc': '7-day streak'},
     'streak_30':        {'icon': '🔥', 'title': 'Month Master',   'desc': '30-day streak'},
+    'easy_10':          {'icon': '✅', 'title': 'Easy Mode',      'desc': 'Solve 10 Easy problems'},
+    'medium_10':        {'icon': '⚡', 'title': 'Rising Star',    'desc': 'Solve 10 Medium problems'},
+    'hard_5':           {'icon': '💎', 'title': 'Diamond Coder',  'desc': 'Solve 5 Hard problems'},
     'nexlab75':         {'icon': '🎯', 'title': 'NexLab 75',      'desc': 'Complete NexLab 75'},
     'beginner_path':    {'icon': '🌱', 'title': 'Beginner Badge', 'desc': 'Complete Beginner Path'},
     'dp_mastery':       {'icon': '🧠', 'title': 'DP Expert',      'desc': 'Complete DP Mastery'},

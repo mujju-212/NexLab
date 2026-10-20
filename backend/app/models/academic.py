@@ -24,12 +24,21 @@ class Batch(db.Model):
     year_id        = db.Column(db.String(36), db.ForeignKey('academic_years.id'), nullable=False)
     name           = db.Column(db.Text, nullable=False)       # e.g. "CSE 2nd Year"
     program        = db.Column(db.String(20))                 # e.g. "B.E. CSE"
+    department_id  = db.Column(db.String(36), db.ForeignKey('departments.id'), nullable=True)
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
 
     sections       = db.relationship('Section', backref='batch', lazy='dynamic')
+    department     = db.relationship('Department', foreign_keys=[department_id], lazy='joined')
 
     def to_dict(self):
-        return {'id': self.id, 'name': self.name, 'program': self.program, 'year_id': self.year_id}
+        return {
+            'id': self.id,
+            'name': self.name,
+            'program': self.program,
+            'year_id': self.year_id,
+            'department_id': self.department_id,
+            'department_name': self.department.name if self.department else None,
+        }
 
 
 class Department(db.Model):

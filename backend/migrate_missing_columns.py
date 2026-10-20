@@ -68,6 +68,17 @@ def migrate():
                             conn.execute(text(f"ALTER TABLE interventions ADD COLUMN {col_name} {col_type};"))
                         conn.commit()
 
+            # 4. Check and add department_id to batches
+            if inspector.has_table('batches'):
+                batch_cols = {c['name']: c for c in inspector.get_columns('batches')}
+                if 'department_id' not in batch_cols:
+                    print("Adding missing column to batches: department_id")
+                    if dialect == 'postgresql':
+                        conn.execute(text("ALTER TABLE batches ADD COLUMN IF NOT EXISTS department_id VARCHAR(36) REFERENCES departments(id);"))
+                    else:
+                        conn.execute(text("ALTER TABLE batches ADD COLUMN department_id VARCHAR(36) REFERENCES departments(id);"))
+                    conn.commit()
+
         print("Migration completed successfully.")
 
 if __name__ == '__main__':

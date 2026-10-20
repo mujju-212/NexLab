@@ -27,7 +27,8 @@ scripts_to_run = [
     "database/seed_simulation_courses.py",
     "scripts/seed_problems.py",
     "seed_test_cases.py",
-    "seed_lab_content.py"
+    "seed_lab_content.py",
+    "seed_help_demo.py"
 ]
 
 print("=" * 70)

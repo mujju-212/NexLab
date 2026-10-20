@@ -41,7 +41,8 @@ class Grade(db.Model):
         """
         tc_score    = (self.auto_grade or 0)
         lab_score   = (self.manual_grade or 0)
-        code_score  = (self.code_quality_grade or 0)
+        code_raw    = (self.code_quality_grade or 0)
+        code_score  = code_raw * 10.0 if 0 < code_raw <= 10 else code_raw
         viva_score  = (self.viva_grade or 0)
         quiz_score  = (self.quiz_grade or 0)
 
@@ -52,7 +53,7 @@ class Grade(db.Model):
             viva_score * (rubric.get('viva', 0) / 100) +
             quiz_score * (rubric.get('quiz', 0) / 100)
         )
-        self.final_grade = max(0, final - (self.hint_deduction or 0))
+        self.final_grade = max(0, round(final - (self.hint_deduction or 0), 2))
         return self.final_grade
 
     def to_dict(self):

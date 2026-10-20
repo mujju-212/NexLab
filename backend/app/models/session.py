@@ -116,6 +116,7 @@ class SessionAttendance(db.Model):
     # present | late | partial | absent | inactive_present
 
     is_active_participant = db.Column(db.Boolean, default=False)  # ran at least 1 line of code
+    feedback_submitted    = db.Column(db.Boolean, default=False)
     override_reason     = db.Column(db.Text)
     override_by         = db.Column(db.String(36), db.ForeignKey('users.id'))
 
