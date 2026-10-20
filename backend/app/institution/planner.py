@@ -87,14 +87,14 @@ def get_recurring_plans():
         for s in p.get_sections():
             if isinstance(s, dict):
                 covered_sections.add(s.get('name') or s.get('id'))
-            else:
+            elif s:
                 covered_sections.add(str(s))
-    sections_covered_count = 6
+    sections_covered_count = len(covered_sections)
 
     stats = {
         'total_plans': len(total_inst_plans),
-        'active_plans': len(total_inst_plans),
-        'sessions_generated': total_sessions_generated or 84,
+        'active_plans': active_plans_count,
+        'sessions_generated': total_sessions_generated,
         'sections_covered': sections_covered_count,
         'conflict_rate': 0,
         'on_track_pct': 100,
@@ -341,14 +341,144 @@ def get_plan_templates():
 @require_role('institution_admin', 'instructor')
 def check_plan_conflicts():
     """Analyze timetable clashing between sections and instructors"""
-    # For Greenwood Institute demo data, schedule has been curated to be 100% on track
+    iid = g.institution_id
+    sessions = (
+        db.session.query(LabSession, SectionSubject)
+        .join(SectionSubject, SectionSubject.id == LabSession.section_subject_id)
+        .filter(
+            LabSession.institution_id == iid,
+            LabSession.status.in_(['scheduled', 'active']),
+            LabSession.scheduled_at.isnot(None),
+        )
+        .all()
+    )
+
+    conflicts = []
+    n = len(sessions)
+    for i in range(n):
+        sess_a, ss_a = sessions[i]
+        start_a = sess_a.scheduled_at
+        end_a = start_a + timedelta(minutes=sess_a.duration_minutes or 60)
+
+        for j in range(i + 1, n):
+            sess_b, ss_b = sessions[j]
+            start_b = sess_b.scheduled_at
+            end_b = start_b + timedelta(minutes=sess_b.duration_minutes or 60)
+
+            # Check overlap: (start_a < end_b) and (start_b < end_a)
+            if start_a < end_b and start_b < end_a:
+                conflict_type = None
+                reason = None
+                if ss_a.instructor_id and ss_a.instructor_id == ss_b.instructor_id:
+                    conflict_type = 'instructor_clash'
+                    inst = User.query.get(ss_a.instructor_id)
+                    reason = f"Instructor {inst.full_name if inst else 'Unknown'} double-booked"
+                elif ss_a.section_id and ss_a.section_id == ss_b.section_id:
+                    conflict_type = 'section_clash'
+                    sec = Section.query.get(ss_a.section_id)
+                    reason = f"Section {sec.name if sec else 'Unknown'} scheduled in overlapping slots"
+
+                if conflict_type:
+                    conflicts.append({
+                        'type': conflict_type,
+                        'reason': reason,
+                        'session_1': {
+                            'id': sess_a.id,
+                            'title': sess_a.title,
+                            'scheduled_at': sess_a.scheduled_at.isoformat() if sess_a.scheduled_at else None,
+                        },
+                        'session_2': {
+                            'id': sess_b.id,
+                            'title': sess_b.title,
+                            'scheduled_at': sess_b.scheduled_at.isoformat() if sess_b.scheduled_at else None,
+                        },
+                    })
+
+    has_conflicts = len(conflicts) > 0
+    total_sess_count = len(sessions)
+    conflict_count = len(conflicts)
+    on_track_pct = 100 if not has_conflicts else max(0, round(((total_sess_count - conflict_count) / max(total_sess_count, 1)) * 100, 1))
+
+    if not has_conflicts:
+        msg = f"No timetable conflicts detected! All {total_sess_count} active sessions are running cleanly."
+    else:
+        msg = f"Detected {conflict_count} schedule conflict(s) across {total_sess_count} scheduled sessions."
+
     return jsonify({
-        'has_conflicts': False,
-        'conflict_count': 0,
-        'conflicts': [],
-        'on_track_pct': 100,
-        'message': 'No timetable conflicts detected! All 84 generated sessions are running cleanly across 6 sections and 5 instructors.'
+        'has_conflicts': has_conflicts,
+        'conflict_count': conflict_count,
+        'conflicts': conflicts,
+        'on_track_pct': on_track_pct,
+        'message': msg,
     }), 200
+
+
+def _resolve_plan_section_subjects(plan):
+    """
+    Resolves the plan's sections and subjects against the database, returning matching
+    SectionSubject rows. If none exist but sections and subjects are matched, creates them.
+    """
+    raw_sections = plan.get_sections()
+    raw_subjects = plan.get_subjects()
+
+    sec_q = Section.query.filter_by(institution_id=plan.institution_id)
+    if plan.batch_id:
+        sec_q = sec_q.filter_by(batch_id=plan.batch_id)
+    all_secs = sec_q.all()
+
+    sec_tokens = {
+        (s.get('id') or s.get('name') if isinstance(s, dict) else str(s)).strip()
+        for s in raw_sections if s
+    }
+    matched_secs = [
+        s for s in all_secs
+        if not sec_tokens or s.id in sec_tokens or s.name in sec_tokens
+    ] or all_secs
+
+    all_subjs = Subject.query.filter_by(institution_id=plan.institution_id).all()
+    subj_tokens = set()
+    for sub in raw_subjects:
+        if isinstance(sub, dict):
+            for k in ('id', 'name', 'code'):
+                if sub.get(k):
+                    subj_tokens.add(str(sub[k]).strip())
+        elif sub:
+            subj_tokens.add(str(sub).strip())
+
+    matched_subjs = [
+        sub for sub in all_subjs
+        if not subj_tokens or sub.id in subj_tokens or sub.name in subj_tokens or (sub.code and sub.code in subj_tokens)
+    ] or all_subjs
+
+    ss_rows = []
+    if matched_secs and matched_subjs:
+        sec_ids = [s.id for s in matched_secs]
+        sub_ids = [s.id for s in matched_subjs]
+        ss_rows = SectionSubject.query.filter(
+            SectionSubject.institution_id == plan.institution_id,
+            SectionSubject.section_id.in_(sec_ids),
+            SectionSubject.subject_id.in_(sub_ids),
+        ).all()
+
+        if not ss_rows and plan.instructor_id:
+            for sec in matched_secs:
+                for sub in matched_subjs:
+                    ss = SectionSubject(
+                        institution_id=plan.institution_id,
+                        section_id=sec.id,
+                        subject_id=sub.id,
+                        instructor_id=plan.instructor_id,
+                    )
+                    db.session.add(ss)
+                    ss_rows.append(ss)
+            db.session.flush()
+
+    if not ss_rows:
+        fallback_ss = SectionSubject.query.filter_by(institution_id=plan.institution_id).first()
+        if fallback_ss:
+            ss_rows = [fallback_ss]
+
+    return ss_rows
 
 
 def _generate_sessions_for_plan(plan):
@@ -359,37 +489,39 @@ def _generate_sessions_for_plan(plan):
     schedule_days = plan.get_schedule_days()
     target_weekdays = [DAY_MAP[d] for d in schedule_days if d in DAY_MAP]
     if not target_weekdays:
-        target_weekdays = [0] # Monday default
+        target_weekdays = [0]  # Monday default
 
-    # Find a valid section_subject for linking
-    ss = SectionSubject.query.filter_by(institution_id=plan.institution_id).first()
-    if not ss:
+    ss_rows = _resolve_plan_section_subjects(plan)
+    if not ss_rows:
         return 0
 
     cur = plan.start_date
     created_count = 0
+    session_num = 1
     while cur <= plan.end_date:
         if cur.weekday() in target_weekdays:
             slot_time = datetime(cur.year, cur.month, cur.day, hour, minute)
-            # Create session if not already existing
-            existing = LabSession.query.filter_by(
-                institution_id=plan.institution_id,
-                scheduled_at=slot_time,
-                title=f"{plan.name} — Session {created_count + 1}"
-            ).first()
-
-            if not existing:
-                sess = LabSession(
+            for ss in ss_rows:
+                title = f"{plan.name} — Session {session_num}"
+                existing = LabSession.query.filter_by(
                     institution_id=plan.institution_id,
                     section_subject_id=ss.id,
-                    title=f"{plan.name} — Session {created_count + 1}",
                     scheduled_at=slot_time,
-                    duration_minutes=plan.duration_minutes or 60,
-                    status='scheduled',
-                    jitsi_room_name=plan.room or 'Lab 1 (Main Block)'
-                )
-                db.session.add(sess)
-            created_count += 1
+                ).first()
+
+                if not existing:
+                    sess = LabSession(
+                        institution_id=plan.institution_id,
+                        section_subject_id=ss.id,
+                        title=title,
+                        scheduled_at=slot_time,
+                        duration_minutes=plan.duration_minutes or 60,
+                        status='scheduled',
+                        jitsi_room_name=plan.room or 'Lab 1 (Main Block)',
+                    )
+                    db.session.add(sess)
+                    created_count += 1
+            session_num += 1
         cur += timedelta(days=1)
 
     return created_count

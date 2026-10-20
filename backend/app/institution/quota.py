@@ -12,6 +12,7 @@ from app.models.institution import Institution, PlatformConfig
 # plan -> PlatformConfig key holding its student cap
 _PLAN_LIMIT_KEYS = {
     'free':       'max_students_free',
+    'starter':    'max_students_free',
     'pro':        'max_students_pro',
     'enterprise': 'max_students_enterprise',
 }

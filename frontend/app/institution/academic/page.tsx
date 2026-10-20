@@ -18,7 +18,8 @@ import {
   Calendar, Layers, Users, BookOpen, GraduationCap, Building2,
   Plus, Search, ChevronRight, ChevronDown, Edit3, Trash2, X,
   Check, Download, ArrowRight, ArrowLeft, Send, Sparkles,
-  Award, Shield, FileText, CheckCircle2, AlertCircle, RefreshCw
+  Award, Shield, FileText, CheckCircle2, AlertCircle, RefreshCw,
+  Copy
 } from 'lucide-react';
 import styles from './academic.module.css';
 
@@ -636,6 +637,29 @@ function AcademicPageContent() {
   const [assigningLoading, setAssigningLoading] = useState(false);
   const [assignmentSearch, setAssignmentSearch] = useState('');
 
+  // Multi-section assignment & copy state for Tab 5
+  const [assignScope, setAssignScope] = useState<'single' | 'batch'>('single');
+  const [targetBatchSectionIds, setTargetBatchSectionIds] = useState<string[]>([]);
+  const [showCopyModal, setShowCopyModal] = useState(false);
+  const [copySourceSectionId, setCopySourceSectionId] = useState('');
+  const [copyTargetSectionIds, setCopyTargetSectionIds] = useState<string[]>([]);
+  const [copyLoading, setCopyLoading] = useState(false);
+
+  // Tab 4: Assign Subject to Multiple Sections modal state
+  const [showAssignSubjectModal, setShowAssignSubjectModal] = useState(false);
+  const [assignModalSubject, setAssignModalSubject] = useState<Subject | null>(null);
+  const [assignModalInstructorId, setAssignModalInstructorId] = useState('');
+  const [assignModalYearId, setAssignModalYearId] = useState('');
+  const [assignModalBatchId, setAssignModalBatchId] = useState('');
+  const [assignModalSectionIds, setAssignModalSectionIds] = useState<string[]>([]);
+  const [assignModalLoading, setAssignModalLoading] = useState(false);
+
+  useEffect(() => {
+    if (enrollSectionId && targetBatchSectionIds.length === 0) {
+      setTargetBatchSectionIds([enrollSectionId]);
+    }
+  }, [enrollSectionId, targetBatchSectionIds.length]);
+
   const loadSectionEnrollments = useCallback(async (secId: string) => {
     if (!secId) return;
     try {
@@ -676,24 +700,39 @@ function AcademicPageContent() {
     }
   };
 
-  // Perform subject & instructor assignment
+  // Perform subject & instructor assignment (single section or multi-section batch)
   const handleAssignSubjectAndInstructor = async () => {
-    if (!enrollSectionId) {
-      showToast('Please pick a section.', 'error');
-      return;
-    }
     if (!assignSubjectId || !assignInstructorId) {
       showToast('Please select both a Subject and an Instructor.', 'error');
       return;
     }
     setAssigningLoading(true);
     try {
-      await institutionService.assignSubjectToSection({
-        section_id: enrollSectionId,
-        subject_id: assignSubjectId,
-        instructor_id: assignInstructorId,
-      });
-      showToast('Assigned subject and instructor successfully!');
+      if (assignScope === 'single') {
+        if (!enrollSectionId) {
+          showToast('Please pick a section.', 'error');
+          setAssigningLoading(false);
+          return;
+        }
+        await institutionService.assignSubjectToSection({
+          section_id: enrollSectionId,
+          subject_id: assignSubjectId,
+          instructor_id: assignInstructorId,
+        });
+        showToast('Assigned subject and instructor successfully!');
+      } else {
+        if (targetBatchSectionIds.length === 0) {
+          showToast('Please select at least one target section.', 'error');
+          setAssigningLoading(false);
+          return;
+        }
+        const res = await institutionService.bulkAssignSubjects({
+          section_ids: targetBatchSectionIds,
+          subject_ids: [assignSubjectId],
+          instructor_id: assignInstructorId,
+        });
+        showToast(`Assigned subject to ${res.created} section(s)! (${res.skipped} already assigned)`);
+      }
       setAssignSubjectId('');
       setAssignInstructorId('');
       loadAll();
@@ -701,6 +740,97 @@ function AcademicPageContent() {
       showToast(e?.response?.data?.error ?? 'Assignment failed or already exists.', 'error');
     } finally {
       setAssigningLoading(false);
+    }
+  };
+
+  // Perform copying all subject assignments from one section to another
+  const handleCopyAssignments = async () => {
+    if (!copySourceSectionId) {
+      showToast('Please select a source section.', 'error');
+      return;
+    }
+    const targets = copyTargetSectionIds.length > 0 ? copyTargetSectionIds : (enrollSectionId ? [enrollSectionId] : []);
+    if (targets.length === 0) {
+      showToast('Please select at least one target section.', 'error');
+      return;
+    }
+    if (targets.includes(copySourceSectionId)) {
+      showToast('Target section cannot include the source section.', 'error');
+      return;
+    }
+    setCopyLoading(true);
+    try {
+      const res = await institutionService.copySectionAssignments({
+        source_section_id: copySourceSectionId,
+        target_section_ids: targets,
+      });
+      showToast(`Copied ${res.created} assignment(s) successfully! (${res.skipped} already existed)`);
+      setShowCopyModal(false);
+      loadAll();
+    } catch (e: any) {
+      showToast(e?.response?.data?.error ?? 'Failed to copy section assignments.', 'error');
+    } finally {
+      setCopyLoading(false);
+    }
+  };
+
+  // Filter batches and sections for Tab 4 assign modal
+  const assignModalBatches = useMemo(() => {
+    if (!assignModalYearId) return batches;
+    const filtered = batches.filter(b => b.year_id === assignModalYearId);
+    return filtered.length > 0 ? filtered : batches;
+  }, [batches, assignModalYearId]);
+
+  const assignModalSections = useMemo(() => {
+    if (!assignModalBatchId) return sections;
+    const filtered = sections.filter(s => s.batch_id === assignModalBatchId);
+    return filtered.length > 0 ? filtered : sections;
+  }, [sections, assignModalBatchId]);
+
+  const openAssignSubjectToSectionsModal = (sub: Subject) => {
+    setAssignModalSubject(sub);
+    setAssignModalInstructorId('');
+    const activeYear = years.find(y => y.is_active) || years[0];
+    const yearId = activeYear ? activeYear.id : '';
+    setAssignModalYearId(yearId);
+    const yearBatches = batches.filter(b => !yearId || b.year_id === yearId);
+    const batchId = yearBatches[0]?.id || batches[0]?.id || '';
+    setAssignModalBatchId(batchId);
+    
+    // Pre-select unassigned sections for this batch
+    const batchSecs = sections.filter(s => s.batch_id === batchId);
+    const alreadyAssignedSecIds = new Set(
+      allAssignments.filter(a => a.subject_id === sub.id).map(a => a.section_id)
+    );
+    setAssignModalSectionIds(batchSecs.filter(s => !alreadyAssignedSecIds.has(s.id)).map(s => s.id));
+    setShowAssignSubjectModal(true);
+  };
+
+  const handleAssignSubjectModalSubmit = async () => {
+    if (!assignModalSubject) return;
+    if (!assignModalInstructorId) {
+      showToast('Please select an instructor.', 'error');
+      return;
+    }
+    if (assignModalSectionIds.length === 0) {
+      showToast('Please select at least one section.', 'error');
+      return;
+    }
+    setAssignModalLoading(true);
+    try {
+      const res = await institutionService.bulkAssignSubjects({
+        section_ids: assignModalSectionIds,
+        subject_ids: [assignModalSubject.id],
+        instructor_id: assignModalInstructorId,
+      });
+      showToast(`Assigned ${assignModalSubject.name} to ${res.created} section(s)! (${res.skipped} already assigned)`);
+      setShowAssignSubjectModal(false);
+      setAssignModalSubject(null);
+      loadAll();
+    } catch (e: any) {
+      showToast(e?.response?.data?.error ?? 'Failed to assign subject.', 'error');
+    } finally {
+      setAssignModalLoading(false);
     }
   };
 
@@ -1681,6 +1811,7 @@ function AcademicPageContent() {
                     <th>Subject</th>
                     <th>Code</th>
                     <th>Department</th>
+                    <th>Assigned Sections</th>
                     <th>Total Marks</th>
                     <th>Status</th>
                     <th>Actions</th>
@@ -1726,6 +1857,37 @@ function AcademicPageContent() {
                           <span className={styles.codeBadge}>{sub.code || '—'}</span>
                         </td>
                         <td>{sub.department_name || 'Computer Science'}</td>
+                        <td>
+                          {(() => {
+                            const assigned = allAssignments.filter(a => a.subject_id === sub.id);
+                            if (assigned.length === 0) {
+                              return <span style={{ fontSize: 11.5, color: '#94a3b8', fontStyle: 'italic' }}>Unassigned</span>;
+                            }
+                            return (
+                              <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxWidth: 220 }}>
+                                {assigned.slice(0, 3).map(a => (
+                                  <span
+                                    key={a.id}
+                                    className={styles.codeBadge}
+                                    style={{ fontSize: 10.5, padding: '2px 6px', background: '#f5f3ff', color: '#6d28d9' }}
+                                    title={`Sec ${a.section_name} • Instructor: ${a.instructor_name || 'Assigned'}`}
+                                  >
+                                    Sec {a.section_name}
+                                  </span>
+                                ))}
+                                {assigned.length > 3 && (
+                                  <span
+                                    className={styles.codeBadge}
+                                    style={{ fontSize: 10.5, padding: '2px 6px', background: '#f1f5f9', color: '#64748b' }}
+                                    title={assigned.slice(3).map(a => `Sec ${a.section_name}`).join(', ')}
+                                  >
+                                    +{assigned.length - 3} more
+                                  </span>
+                                )}
+                              </div>
+                            );
+                          })()}
+                        </td>
                         <td>{sub.total_marks ?? 100}</td>
                         <td>
                           <span className={sub.is_active !== false ? styles.statusActive : styles.statusInactive}>
@@ -1734,7 +1896,15 @@ function AcademicPageContent() {
                           </span>
                         </td>
                         <td>
-                          <div style={{ display: 'flex', gap: 6 }}>
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                            <button
+                              className={styles.btnSecondary}
+                              style={{ padding: '4px 8px', fontSize: 11, display: 'inline-flex', alignItems: 'center', gap: 4 }}
+                              title="Assign this subject to sections"
+                              onClick={() => openAssignSubjectToSectionsModal(sub)}
+                            >
+                              <Layers size={12} /> Assign
+                            </button>
                             <button className={styles.btnIcon} title="Edit Subject" onClick={() => openEditSubject(sub)}>
                               <Edit3 size={13} style={{ color: '#7c3aed' }} />
                             </button>
@@ -2210,9 +2380,100 @@ function AcademicPageContent() {
                   </div>
                   <div>
                     <h3 className={styles.cardTitle}>2. Assign Subject & Instructor</h3>
-                    <p className={styles.cardSubtitle}>Choose the subject and instructor for the selected section.</p>
+                    <p className={styles.cardSubtitle}>Assign a subject to one section or broadcast across multiple sections.</p>
                   </div>
                 </div>
+
+                {/* Target Scope Toggle */}
+                <div style={{ display: 'flex', gap: 6, marginBottom: 14, padding: 3, background: '#f1f5f9', borderRadius: 8 }}>
+                  <button
+                    type="button"
+                    style={{
+                      flex: 1, padding: '7px 10px', fontSize: 11.5, fontWeight: 700, borderRadius: 6, border: 'none', cursor: 'pointer',
+                      background: assignScope === 'single' ? '#ffffff' : 'transparent',
+                      color: assignScope === 'single' ? '#1e1b4b' : '#64748b',
+                      boxShadow: assignScope === 'single' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    }}
+                    onClick={() => setAssignScope('single')}
+                  >
+                    Current Section ({sections.find(s => s.id === enrollSectionId)?.name ? `Sec ${sections.find(s => s.id === enrollSectionId)?.name}` : 'Active'})
+                  </button>
+                  <button
+                    type="button"
+                    style={{
+                      flex: 1, padding: '7px 10px', fontSize: 11.5, fontWeight: 700, borderRadius: 6, border: 'none', cursor: 'pointer',
+                      background: assignScope === 'batch' ? '#ffffff' : 'transparent',
+                      color: assignScope === 'batch' ? '#6d28d9' : '#64748b',
+                      boxShadow: assignScope === 'batch' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
+                    }}
+                    onClick={() => {
+                      setAssignScope('batch');
+                      if (targetBatchSectionIds.length === 0) {
+                        setTargetBatchSectionIds(availableSections.map(s => s.id));
+                      }
+                    }}
+                  >
+                    Multiple Sections ({availableSections.length})
+                  </button>
+                </div>
+
+                {/* If assignScope === 'batch', show section check list */}
+                {assignScope === 'batch' && (
+                  <div style={{ border: '1px solid #e2e8f0', borderRadius: 8, padding: 10, background: '#f8fafc', marginBottom: 12 }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 }}>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#334155' }}>
+                        Apply to Sections ({targetBatchSectionIds.length} of {availableSections.length} selected):
+                      </span>
+                      <button
+                        type="button"
+                        style={{ fontSize: 11, color: '#7c3aed', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                        onClick={() => {
+                          if (targetBatchSectionIds.length === availableSections.length) {
+                            setTargetBatchSectionIds([]);
+                          } else {
+                            setTargetBatchSectionIds(availableSections.map(s => s.id));
+                          }
+                        }}
+                      >
+                        {targetBatchSectionIds.length === availableSections.length ? 'Deselect All' : 'Select All'}
+                      </button>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 110, overflowY: 'auto' }}>
+                      {availableSections.map(s => {
+                        const isChecked = targetBatchSectionIds.includes(s.id);
+                        return (
+                          <label
+                            key={s.id}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              padding: '4px 10px',
+                              borderRadius: 6,
+                              fontSize: 11.5,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              background: isChecked ? '#ede9fe' : '#ffffff',
+                              color: isChecked ? '#6d28d9' : '#475569',
+                              border: `1px solid ${isChecked ? '#c4b5fd' : '#cbd5e1'}`,
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                setTargetBatchSectionIds(prev =>
+                                  prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id]
+                                );
+                              }}
+                            />
+                            Section {s.name}
+                          </label>
+                        );
+                      })}
+                    </div>
+                  </div>
+                )}
 
                 {/* Subject Selector */}
                 <div className={styles.fieldGroup}>
@@ -2314,11 +2575,15 @@ function AcademicPageContent() {
                 <button
                   className={styles.btnPrimary}
                   style={{ width: '100%', justifyContent: 'center', padding: '11px', marginTop: 8 }}
-                  disabled={assigningLoading || !assignSubjectId || !assignInstructorId}
+                  disabled={assigningLoading || !assignSubjectId || !assignInstructorId || (assignScope === 'batch' && targetBatchSectionIds.length === 0)}
                   onClick={handleAssignSubjectAndInstructor}
                 >
                   <Send size={15} />
-                  {assigningLoading ? 'Assigning…' : 'Assign to Selected Section'}
+                  {assigningLoading
+                    ? 'Assigning…'
+                    : assignScope === 'batch'
+                    ? `Assign to ${targetBatchSectionIds.length} Section(s)`
+                    : 'Assign to Selected Section'}
                 </button>
               </div>
             </div>
@@ -2334,7 +2599,19 @@ function AcademicPageContent() {
                 </div>
 
                 <div className={styles.filterRow}>
-                  <div className={styles.searchBox} style={{ minWidth: 220 }}>
+                  <button
+                    className={styles.btnSecondary}
+                    style={{ display: 'inline-flex', alignItems: 'center', gap: 5, fontSize: 12 }}
+                    onClick={() => {
+                      setCopySourceSectionId('');
+                      setCopyTargetSectionIds(enrollSectionId ? [enrollSectionId] : []);
+                      setShowCopyModal(true);
+                    }}
+                  >
+                    <Copy size={13} /> Copy from another section
+                  </button>
+
+                  <div className={styles.searchBox} style={{ minWidth: 200 }}>
                     <Search size={14} className={styles.searchIcon} />
                     <input
                       type="text"
@@ -3475,6 +3752,358 @@ function AcademicPageContent() {
               <div className={styles.drawerFooter}>
                 <button className={styles.btnSecondary} onClick={() => setShowEditBatchModal(false)}>Cancel</button>
                 <button className={styles.btnPrimary} onClick={handleUpdateBatch}>Save Changes</button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════════
+            ASSIGN SUBJECT TO MULTIPLE SECTIONS MODAL (TAB 4)
+        ═══════════════════════════════════════════════════════════════════════ */}
+        {showAssignSubjectModal && assignModalSubject && (
+          <div className={styles.drawerOverlay} onClick={() => setShowAssignSubjectModal(false)}>
+            <div className={styles.drawer} style={{ width: 520 }} onClick={e => e.stopPropagation()}>
+              <div className={styles.drawerHeader}>
+                <div>
+                  <h3 className={styles.drawerTitle}>Assign Subject to Sections</h3>
+                  <p className={styles.drawerSubtitle}>
+                    Map <strong>{assignModalSubject.name}</strong> across multiple class sections.
+                  </p>
+                </div>
+                <button className={styles.btnIcon} onClick={() => setShowAssignSubjectModal(false)}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className={styles.drawerBody}>
+                {/* Subject Summary Card */}
+                <div className={styles.previewInfoCard}>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                    <div
+                      style={{
+                        width: 36, height: 36, borderRadius: 8,
+                        background: assignModalSubject.color || '#ede9fe',
+                        color: '#fff',
+                        display: 'flex', alignItems: 'center', justifyContent: 'center'
+                      }}
+                    >
+                      <BookOpen size={18} />
+                    </div>
+                    <div>
+                      <div style={{ fontSize: 13.5, fontWeight: 700, color: '#1e1b4b' }}>{assignModalSubject.name}</div>
+                      <div style={{ fontSize: 11, color: '#64748b' }}>
+                        Code: {assignModalSubject.code || '—'} &bull; Dept: {departments.find(d => d.id === assignModalSubject.department_id)?.name || 'General'}
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Instructor Field */}
+                <div className={styles.fieldGroup}>
+                  <label className={styles.fieldLabel}>Lead Instructor *</label>
+                  <select
+                    className={styles.fieldInput}
+                    value={assignModalInstructorId}
+                    onChange={e => setAssignModalInstructorId(e.target.value)}
+                  >
+                    <option value="">Select instructor to assign...</option>
+                    {instructors.map(inst => (
+                      <option key={inst.id} value={inst.id}>
+                        {inst.full_name} ({inst.email})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+
+                {/* Academic Year & Batch Filter */}
+                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10 }}>
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>Academic Year</label>
+                    <select
+                      className={styles.fieldInput}
+                      value={assignModalYearId}
+                      onChange={e => {
+                        const yId = e.target.value;
+                        setAssignModalYearId(yId);
+                        const bList = batches.filter(b => !yId || b.year_id === yId);
+                        const firstBId = bList[0]?.id || '';
+                        setAssignModalBatchId(firstBId);
+                        const bSecs = sections.filter(s => s.batch_id === firstBId);
+                        const assignedIds = new Set(
+                          allAssignments.filter(a => a.subject_id === assignModalSubject.id).map(a => a.section_id)
+                        );
+                        setAssignModalSectionIds(bSecs.filter(s => !assignedIds.has(s.id)).map(s => s.id));
+                      }}
+                    >
+                      <option value="">All Years</option>
+                      {years.map(y => (
+                        <option key={y.id} value={y.id}>{y.year_label}</option>
+                      ))}
+                    </select>
+                  </div>
+
+                  <div className={styles.fieldGroup}>
+                    <label className={styles.fieldLabel}>Batch / Class</label>
+                    <select
+                      className={styles.fieldInput}
+                      value={assignModalBatchId}
+                      onChange={e => {
+                        const bId = e.target.value;
+                        setAssignModalBatchId(bId);
+                        const bSecs = sections.filter(s => s.batch_id === bId);
+                        const assignedIds = new Set(
+                          allAssignments.filter(a => a.subject_id === assignModalSubject.id).map(a => a.section_id)
+                        );
+                        setAssignModalSectionIds(bSecs.filter(s => !assignedIds.has(s.id)).map(s => s.id));
+                      }}
+                    >
+                      <option value="">All Batches</option>
+                      {assignModalBatches.map(b => (
+                        <option key={b.id} value={b.id}>{b.name}</option>
+                      ))}
+                    </select>
+                  </div>
+                </div>
+
+                {/* Target Sections Selection */}
+                <div className={styles.fieldGroup}>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                    <label className={styles.fieldLabel} style={{ margin: 0 }}>
+                      Target Sections ({assignModalSectionIds.length} selected)
+                    </label>
+                    <button
+                      type="button"
+                      style={{ fontSize: 11, color: '#7c3aed', background: 'none', border: 'none', cursor: 'pointer', fontWeight: 600 }}
+                      onClick={() => {
+                        const assignedIds = new Set(
+                          allAssignments.filter(a => a.subject_id === assignModalSubject.id).map(a => a.section_id)
+                        );
+                        const unassignedSecs = assignModalSections.filter(s => !assignedIds.has(s.id));
+                        if (assignModalSectionIds.length === unassignedSecs.length) {
+                          setAssignModalSectionIds([]);
+                        } else {
+                          setAssignModalSectionIds(unassignedSecs.map(s => s.id));
+                        }
+                      }}
+                    >
+                      Toggle All Available
+                    </button>
+                  </div>
+
+                  {assignModalSections.length === 0 ? (
+                    <div style={{ padding: 16, background: '#f8fafc', borderRadius: 8, textAlign: 'center', fontSize: 12, color: '#94a3b8' }}>
+                      No sections found for the selected batch.
+                    </div>
+                  ) : (
+                    <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 220, overflowY: 'auto', padding: 2 }}>
+                      {assignModalSections.map(sec => {
+                        const existingAssign = allAssignments.find(
+                          a => a.subject_id === assignModalSubject.id && a.section_id === sec.id
+                        );
+                        const isChecked = assignModalSectionIds.includes(sec.id);
+
+                        return (
+                          <div
+                            key={sec.id}
+                            style={{
+                              display: 'flex',
+                              alignItems: 'center',
+                              justifyContent: 'space-between',
+                              padding: '8px 12px',
+                              borderRadius: 8,
+                              border: `1px solid ${isChecked ? '#c4b5fd' : '#e2e8f0'}`,
+                              background: existingAssign ? '#f8fafc' : isChecked ? '#f5f3ff' : '#ffffff',
+                              opacity: existingAssign ? 0.75 : 1,
+                            }}
+                          >
+                            <label style={{ display: 'flex', alignItems: 'center', gap: 8, cursor: existingAssign ? 'default' : 'pointer', flex: 1 }}>
+                              <input
+                                type="checkbox"
+                                disabled={!!existingAssign}
+                                checked={!!existingAssign || isChecked}
+                                onChange={() => {
+                                  if (existingAssign) return;
+                                  setAssignModalSectionIds(prev =>
+                                    prev.includes(sec.id) ? prev.filter(x => x !== sec.id) : [...prev, sec.id]
+                                  );
+                                }}
+                              />
+                              <span style={{ fontWeight: 600, fontSize: 12.5, color: '#1e1b4b' }}>
+                                Section {sec.name}
+                              </span>
+                              <span style={{ fontSize: 11, color: '#64748b' }}>
+                                &bull; {sec.students_count || 0} students
+                              </span>
+                            </label>
+
+                            {existingAssign ? (
+                              <span style={{ fontSize: 10.5, fontWeight: 600, color: '#059669', background: '#ecfdf5', padding: '2px 8px', borderRadius: 4 }}>
+                                ✓ Already Assigned ({existingAssign.instructor_name || 'Assigned'})
+                              </span>
+                            ) : isChecked ? (
+                              <span style={{ fontSize: 10.5, fontWeight: 600, color: '#7c3aed', background: '#ede9fe', padding: '2px 8px', borderRadius: 4 }}>
+                                Selected
+                              </span>
+                            ) : null}
+                          </div>
+                        );
+                      })}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              <div className={styles.drawerFooter}>
+                <button
+                  type="button"
+                  className={styles.btnSecondary}
+                  onClick={() => setShowAssignSubjectModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={styles.btnPrimary}
+                  disabled={assignModalLoading || !assignModalInstructorId || assignModalSectionIds.length === 0}
+                  onClick={handleAssignSubjectModalSubmit}
+                >
+                  {assignModalLoading ? 'Assigning…' : `Assign to ${assignModalSectionIds.length} Section(s)`}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ═══════════════════════════════════════════════════════════════════════
+            COPY SECTION ASSIGNMENTS MODAL (TAB 5)
+        ═══════════════════════════════════════════════════════════════════════ */}
+        {showCopyModal && (
+          <div className={styles.drawerOverlay} onClick={() => setShowCopyModal(false)}>
+            <div className={styles.drawer} style={{ width: 480 }} onClick={e => e.stopPropagation()}>
+              <div className={styles.drawerHeader}>
+                <div>
+                  <h3 className={styles.drawerTitle}>Copy Subject Assignments</h3>
+                  <p className={styles.drawerSubtitle}>
+                    Clone curriculum and instructor mappings from another section.
+                  </p>
+                </div>
+                <button className={styles.btnIcon} onClick={() => setShowCopyModal(false)}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className={styles.drawerBody}>
+                {/* Source Section */}
+                <div className={styles.fieldGroup}>
+                  <label className={styles.fieldLabel}>Source Section (Copy from) *</label>
+                  <select
+                    className={styles.fieldInput}
+                    value={copySourceSectionId}
+                    onChange={e => {
+                      const srcId = e.target.value;
+                      setCopySourceSectionId(srcId);
+                      if (enrollSectionId && enrollSectionId !== srcId) {
+                        setCopyTargetSectionIds([enrollSectionId]);
+                      }
+                    }}
+                  >
+                    <option value="">Select section to copy subjects from...</option>
+                    {sections
+                      .filter(s => allAssignments.some(a => a.section_id === s.id))
+                      .map(s => {
+                        const count = allAssignments.filter(a => a.section_id === s.id).length;
+                        return (
+                          <option key={s.id} value={s.id}>
+                            Section {s.name} ({s.batch_name || 'Batch'}) &bull; {count} subject{count === 1 ? '' : 's'} assigned
+                          </option>
+                        );
+                      })}
+                  </select>
+                </div>
+
+                {/* Source Section Preview */}
+                {copySourceSectionId && (() => {
+                  const srcSubjects = allAssignments.filter(a => a.section_id === copySourceSectionId);
+                  return (
+                    <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 8, padding: 12 }}>
+                      <div style={{ fontSize: 11.5, fontWeight: 700, color: '#334155', marginBottom: 6 }}>
+                        Subjects to be copied ({srcSubjects.length}):
+                      </div>
+                      <div style={{ display: 'flex', flexWrap: 'wrap', gap: 4, maxHeight: 100, overflowY: 'auto' }}>
+                        {srcSubjects.map(a => (
+                          <span
+                            key={a.id}
+                            className={styles.codeBadge}
+                            style={{ fontSize: 11, padding: '3px 8px', background: '#ede9fe', color: '#6d28d9' }}
+                          >
+                            {a.subject_name} ({a.instructor_name || 'Instructor'})
+                          </span>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })()}
+
+                {/* Target Section(s) */}
+                <div className={styles.fieldGroup}>
+                  <label className={styles.fieldLabel}>
+                    Target Section(s) to apply curriculum ({copyTargetSectionIds.length} selected) *
+                  </label>
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, maxHeight: 150, overflowY: 'auto', padding: 2 }}>
+                    {sections
+                      .filter(s => s.id !== copySourceSectionId)
+                      .map(s => {
+                        const isChecked = copyTargetSectionIds.includes(s.id);
+                        return (
+                          <label
+                            key={s.id}
+                            style={{
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: 6,
+                              padding: '6px 12px',
+                              borderRadius: 6,
+                              fontSize: 12,
+                              fontWeight: 600,
+                              cursor: 'pointer',
+                              background: isChecked ? '#ede9fe' : '#ffffff',
+                              color: isChecked ? '#6d28d9' : '#475569',
+                              border: `1px solid ${isChecked ? '#c4b5fd' : '#cbd5e1'}`,
+                            }}
+                          >
+                            <input
+                              type="checkbox"
+                              checked={isChecked}
+                              onChange={() => {
+                                setCopyTargetSectionIds(prev =>
+                                  prev.includes(s.id) ? prev.filter(x => x !== s.id) : [...prev, s.id]
+                                );
+                              }}
+                            />
+                            Section {s.name} ({s.batch_name || 'Batch'})
+                          </label>
+                        );
+                      })}
+                  </div>
+                </div>
+              </div>
+
+              <div className={styles.drawerFooter}>
+                <button
+                  type="button"
+                  className={styles.btnSecondary}
+                  onClick={() => setShowCopyModal(false)}
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  className={styles.btnPrimary}
+                  disabled={copyLoading || !copySourceSectionId || copyTargetSectionIds.length === 0}
+                  onClick={handleCopyAssignments}
+                >
+                  {copyLoading ? 'Copying…' : `Copy to ${copyTargetSectionIds.length} Section(s)`}
+                </button>
               </div>
             </div>
           </div>

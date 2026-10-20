@@ -234,27 +234,46 @@ def get_user(user_id):
 
     # Performance metrics for inspection drawer
     metrics = {
-        'sessions_attended': 12,
-        'experiments_count': 4,
-        'current_grade': 'A',
-        'attendance_rate': 98,
+        'sessions_attended': 0,
+        'experiments_count': 0,
+        'current_grade': '—',
+        'attendance_rate': 0,
     }
     if user.role == 'student':
         try:
             from app.models.session import SessionAttendance
-            att_cnt = SessionAttendance.query.filter_by(student_id=user_id, status='present').count()
+            att_cnt = SessionAttendance.query.filter(
+                SessionAttendance.student_id == user_id,
+                SessionAttendance.status.in_(('present', 'late')),
+            ).count()
             total_att = SessionAttendance.query.filter_by(student_id=user_id).count()
-            if att_cnt > 0:
-                metrics['sessions_attended'] = att_cnt
-            if total_att > 0:
-                metrics['attendance_rate'] = min(100, int((att_cnt / total_att) * 100))
+            metrics['sessions_attended'] = att_cnt
+            metrics['attendance_rate'] = min(100, int((att_cnt / total_att) * 100)) if total_att > 0 else 0
         except Exception:
             pass
         try:
             from app.models.submission import CodeAttempt
-            exp_cnt = CodeAttempt.query.filter_by(student_id=user_id).count()
-            if exp_cnt > 0:
-                metrics['experiments_count'] = exp_cnt
+            exp_cnt = db.session.query(func.count(func.distinct(CodeAttempt.experiment_id))).filter_by(
+                student_id=user_id
+            ).scalar() or 0
+            metrics['experiments_count'] = int(exp_cnt)
+        except Exception:
+            pass
+        try:
+            from app.models.grading import Grade
+            avg_g = db.session.query(func.avg(Grade.final_grade)).filter(
+                Grade.student_id == user_id,
+                Grade.final_grade.isnot(None),
+            ).scalar()
+            if avg_g is not None:
+                g_val = float(avg_g)
+                metrics['current_grade'] = (
+                    'A+' if g_val >= 90 else
+                    'A' if g_val >= 80 else
+                    'B' if g_val >= 70 else
+                    'C' if g_val >= 60 else
+                    'D' if g_val >= 50 else 'F'
+                )
         except Exception:
             pass
 
@@ -945,6 +964,7 @@ def batches():
         year_id=data['year_id'],
         name=data['name'],
         program=data.get('program'),
+        department_id=data.get('department_id'),
     )
     db.session.add(batch)
     db.session.flush()
@@ -976,7 +996,7 @@ def update_batch(batch_id):
     batch = Batch.query.filter_by(id=batch_id, institution_id=g.institution_id).first_or_404()
     data = request.get_json() or {}
     changed = []
-    for field in ('name', 'program', 'year_id'):
+    for field in ('name', 'program', 'year_id', 'department_id'):
         if field in data:
             setattr(batch, field, data[field])
             changed.append(field)
@@ -1693,27 +1713,63 @@ def institution_dashboard():
         LabSession.status.in_(['active', 'scheduled'])
     ).count()
 
-    # Growth Chart Data (Last 6 Months progression)
-    s_curr = total_students or 245
-    i_curr = total_instructors or 18
-    growth_chart = [
-        {"month": "Apr", "students": max(20, int(s_curr * 0.45)), "instructors": max(3, int(i_curr * 0.55))},
-        {"month": "May", "students": max(30, int(s_curr * 0.53)), "instructors": max(4, int(i_curr * 0.66))},
-        {"month": "Jun", "students": max(45, int(s_curr * 0.59)), "instructors": max(5, int(i_curr * 0.77))},
-        {"month": "Jul", "students": max(60, int(s_curr * 0.65)), "instructors": max(6, int(i_curr * 0.83))},
-        {"month": "Aug", "students": max(80, int(s_curr * 0.73)), "instructors": max(8, int(i_curr * 0.88))},
-        {"month": "Sep", "students": s_curr, "instructors": i_curr},
-    ]
+    # Growth Chart Data (Last 6 Months progression computed genuinely from User records)
+    now = datetime.utcnow()
+    month_dates = []
+    for offset in range(5, -1, -1):
+        m_year = now.year
+        m_month = now.month - offset
+        while m_month <= 0:
+            m_month += 12
+            m_year -= 1
+        month_dates.append((m_year, m_month))
+
+    growth_chart = []
+    for y, m in month_dates:
+        m_lbl = datetime(y, m, 1).strftime('%b')
+        next_m = datetime(y + 1, 1, 1) if m == 12 else datetime(y, m + 1, 1)
+        m_studs = User.query.filter(
+            User.institution_id == iid,
+            User.role == 'student',
+            User.is_active == True,
+            User.created_at < next_m,
+        ).count()
+        m_insts = User.query.filter(
+            User.institution_id == iid,
+            User.role == 'instructor',
+            User.is_active == True,
+            User.created_at < next_m,
+        ).count()
+        growth_chart.append({
+            "month": m_lbl,
+            "students": m_studs,
+            "instructors": m_insts,
+        })
 
     # Session Activity (This Week: Mon-Sun)
+    start_of_week = (now - timedelta(days=now.weekday())).replace(hour=0, minute=0, second=0, microsecond=0)
+    end_of_week = start_of_week + timedelta(days=7)
+
+    week_sessions = LabSession.query.filter(
+        LabSession.institution_id == iid,
+        LabSession.scheduled_at >= start_of_week,
+        LabSession.scheduled_at < end_of_week,
+    ).all()
+
+    day_names = ["Mon", "Tue", "Wed", "Thu", "Fri", "Sat", "Sun"]
+    day_counts = {i: {"scheduled": 0, "completed": 0, "live": 0} for i in range(7)}
+    for s in week_sessions:
+        if s.scheduled_at:
+            w_idx = s.scheduled_at.weekday()
+            day_counts[w_idx]["scheduled"] += 1
+            if s.status in ('ended', 'completed'):
+                day_counts[w_idx]["completed"] += 1
+            elif s.status == 'active':
+                day_counts[w_idx]["live"] += 1
+
     session_activity = [
-        {"day": "Mon", "scheduled": 12, "completed": 5, "live": 2},
-        {"day": "Tue", "scheduled": 9,  "completed": 4, "live": 2},
-        {"day": "Wed", "scheduled": 13, "completed": 6, "live": 3},
-        {"day": "Thu", "scheduled": 16, "completed": 7, "live": 5},
-        {"day": "Fri", "scheduled": 10, "completed": 4, "live": 2},
-        {"day": "Sat", "scheduled": 11, "completed": 4, "live": 4},
-        {"day": "Sun", "scheduled": 11, "completed": 4, "live": 2},
+        {"day": day_names[i], "scheduled": day_counts[i]["scheduled"], "completed": day_counts[i]["completed"], "live": day_counts[i]["live"]}
+        for i in range(7)
     ]
 
     # System Status checklist
@@ -1778,13 +1834,7 @@ def institution_dashboard():
         })
 
     if not recent_activity:
-        recent_activity = [
-            {"id": "1", "title": "New student registered", "description": "Aarav Sharma joined CS-2026 batch", "time_ago": "2 hours ago", "type": "student"},
-            {"id": "2", "title": "New instructor added", "description": "Dr. Priya Sharma joined the institution", "time_ago": "4 hours ago", "type": "instructor"},
-            {"id": "3", "title": "Batch created", "description": "AI & ML – 2026", "time_ago": "6 hours ago", "type": "batch"},
-            {"id": "4", "title": "Subject created", "description": "Object Oriented Programming", "time_ago": "1 day ago", "type": "subject"},
-            {"id": "5", "title": "Session scheduled", "description": "Python Lab – List Comprehensions", "time_ago": "1 day ago", "type": "session"},
-        ]
+        recent_activity = []
 
     now_utc = datetime.utcnow()
     joined_sessions = (
@@ -2086,7 +2136,7 @@ def get_audit_log_stats():
     if prev_events > 0:
         growth_pct = round(((total_events - prev_events) / prev_events) * 100, 1)
     else:
-        growth_pct = 12.0
+        growth_pct = 0.0
 
     # Distinct active actors
     active_users = db.session.query(AuditLog.actor_id).filter(
@@ -5825,24 +5875,43 @@ def get_billing_overview():
     instructors_count = User.query.filter_by(institution_id=g.institution_id, role='instructor').count()
     subjects_count = Subject.query.filter_by(institution_id=g.institution_id).count()
 
-    plan_key = (inst.plan or 'pro').lower()
-    if plan_key == 'starter':
-        student_cap, instructor_cap, subject_cap = 100, 10, 25
-        plan_name = 'Starter'
-        plan_price = 1999
+    from app.models.institution import PlatformConfig
+
+    plan_key = (inst.plan or 'free').lower()
+    if plan_key in ('free', 'starter'):
+        try:
+            student_cap = int(PlatformConfig.get('max_students_free', '100') or 100)
+        except Exception:
+            student_cap = 100
+        instructor_cap, subject_cap = 10, 25
+        plan_name = 'Free Tier' if plan_key == 'free' else 'Starter'
+        plan_price = 0 if plan_key == 'free' else 1999
     elif plan_key == 'enterprise':
-        student_cap, instructor_cap, subject_cap = 99999, 9999, 9999
+        try:
+            student_cap = int(PlatformConfig.get('max_students_enterprise', '99999') or 99999)
+        except Exception:
+            student_cap = 99999
+        instructor_cap, subject_cap = 9999, 9999
         plan_name = 'Enterprise'
         plan_price = 0
     else:  # default 'pro'
-        student_cap, instructor_cap, subject_cap = 500, 50, 100
+        try:
+            student_cap = int(PlatformConfig.get('max_students_pro', '500') or 500)
+        except Exception:
+            student_cap = 500
+        instructor_cap, subject_cap = 50, 100
         plan_name = 'NexLab Pro'
         plan_price = 4999
 
     plan_info = {
         'id': plan_key,
         'name': plan_name,
-        'description': 'For growing institutions that need more capacity and priority support.' if plan_key == 'pro' else ('For small institutions getting started.' if plan_key == 'starter' else 'For large institutions with custom requirements.'),
+        'description': (
+            'Free tier for testing and small classroom evaluation.' if plan_key == 'free'
+            else 'For small institutions getting started.' if plan_key == 'starter'
+            else 'For large institutions with custom requirements.' if plan_key == 'enterprise'
+            else 'For growing institutions that need more capacity and priority support.'
+        ),
         'status': 'active' if inst.is_active else 'inactive',
         'price': plan_price,
         'currency': '₹',
@@ -5871,11 +5940,11 @@ def get_billing_overview():
     }
 
     billing_info = {
-        'institution_name': inst.name or 'Greenwood Institute',
-        'billing_email': inst.billing_email or 'billing@greenwood.edu',
+        'institution_name': inst.name or 'Institution',
+        'billing_email': inst.billing_email or inst.contact_email or '',
         'contact_person': getattr(inst, 'billing_contact_person', None) or 'Institution Admin',
-        'phone': inst.phone or '+91 98765 43210',
-        'address': inst.address or '123 Education Street, HSR Layout, Bengaluru, Karnataka 560102, India',
+        'phone': inst.phone or '',
+        'address': inst.address or '',
     }
 
     # 2. Payment methods
@@ -6195,9 +6264,9 @@ def download_invoice(invoice_id):
         'invoice_number': inv.invoice_number,
         'date': inv.billing_date.strftime('%d %b %Y') if inv.billing_date else '',
         'institution': {
-            'name': inst.name if inst else 'Greenwood Institute',
+            'name': inst.name if inst else 'Institution',
             'code': inst.code if inst else '',
-            'billing_email': inst.billing_email if inst else 'billing@greenwood.edu',
+            'billing_email': (inst.billing_email or inst.contact_email or '') if inst else '',
             'address': inst.address if inst else '',
         },
         'plan': inv.plan,

@@ -55,6 +55,7 @@ def create_institution():
         password_hash=bcrypt.hashpw(admin_password.encode(), bcrypt.gensalt()).decode(),
         full_name=data.get('admin_name', 'Institution Admin'),
         role='institution_admin',
+        must_change_password=True,
     )
     db.session.add(admin_user)
     db.session.commit()

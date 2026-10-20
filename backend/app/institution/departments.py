@@ -102,11 +102,23 @@ def update_department(dept_id):
 def delete_department(dept_id):
     dept = Department.query.filter_by(id=dept_id, institution_id=g.institution_id).first_or_404()
 
-    in_use = User.query.filter_by(department_id=dept_id).count()
-    if in_use:
+    from app.models.subject import Subject
+    from app.models.academic import Batch
+
+    users_in_use = User.query.filter_by(department_id=dept_id).count()
+    subjects_in_use = Subject.query.filter_by(department_id=dept_id).count()
+    batches_in_use = Batch.query.filter_by(department_id=dept_id).count()
+
+    if users_in_use or subjects_in_use or batches_in_use:
+        reasons = []
+        if users_in_use:
+            reasons.append(f"{users_in_use} user(s)")
+        if subjects_in_use:
+            reasons.append(f"{subjects_in_use} subject(s)")
+        if batches_in_use:
+            reasons.append(f"{batches_in_use} batch(es)")
         return jsonify({
-            'error': f'Cannot delete: {in_use} user(s) are still assigned to this department. '
-                     f'Reassign them first.'
+            'error': f'Cannot delete: {" and ".join(reasons)} are still assigned to this department. Reassign them first.'
         }), 409
 
     name = dept.name

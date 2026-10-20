@@ -23,22 +23,21 @@ UPLOAD_FOLDER = os.path.join(os.path.dirname(os.path.dirname(__file__)), 'static
 os.makedirs(UPLOAD_FOLDER, exist_ok=True)
 
 
-def _write_audit(user_id, institution_id, action, target_type, target_id, details):
-    """Safely log an audit entry if audit system exists."""
-    try:
-        from app.models.audit import AuditLog
-        row = AuditLog(
-            user_id=user_id,
-            institution_id=institution_id,
-            action=action,
-            target_type=target_type,
-            target_id=target_id,
-            details=details,
-            created_at=datetime.utcnow(),
-        )
-        db.session.add(row)
-    except Exception:
-        pass
+from app.institution.audit import write_audit as _canonical_write_audit
+
+
+def _write_audit(user_id, institution_id, action, target_type, target_id, details, severity=None):
+    """Safely log an audit entry using canonical write_audit."""
+    _canonical_write_audit(
+        actor_id=user_id,
+        institution_id=institution_id,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        detail=details,
+        module='Announcements',
+        severity=severity,
+    )
 
 
 def _resolve_target_users(institution_id, target, department_id=None, academic_year=None, batch_id=None, section_id=None):
@@ -461,6 +460,9 @@ def update_announcement(announcement_id):
     ann.updated_at = datetime.utcnow()
     db.session.commit()
 
+    _write_audit(g.user_id, iid, 'update_announcement', 'announcement', ann.id,
+                 f'Updated announcement "{ann.title}"')
+
     return jsonify({'announcement': ann.to_dict(current_user_id=g.user_id)}), 200
 
 
@@ -555,9 +557,11 @@ def cancel_scheduled_announcement(announcement_id):
     Cancel/delete a scheduled announcement.
     """
     iid = g.institution_id
-    ann = Announcement.query.filter_by(id=announcement_id, institution_id=iid, status='scheduled').first_or_404()
+    title = ann.title
     db.session.delete(ann)
     db.session.commit()
+    _write_audit(g.user_id, iid, 'cancel_announcement', 'announcement', announcement_id,
+                 f'Cancelled scheduled announcement "{title}"')
     return jsonify({'message': 'Scheduled announcement cancelled'}), 200
 
 
