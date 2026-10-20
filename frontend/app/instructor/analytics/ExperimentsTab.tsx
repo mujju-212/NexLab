@@ -171,6 +171,21 @@ export function ExperimentsTab({ data, onSelectExperiment }: ExperimentsTabProps
     );
   }, [data.item_metrics, searchQuery]);
 
+  // Client-side pagination for item discrimination table
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [searchQuery]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredMetrics.length / pageSize));
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredMetrics.length);
+  const paginatedMetrics = useMemo(() => {
+    return filteredMetrics.slice(startIndex, endIndex);
+  }, [filteredMetrics, startIndex, endIndex]);
+
   // Export CSV handler
   const handleExportCsv = () => {
     const rows = filteredMetrics.map((item) => ({
@@ -633,14 +648,14 @@ export function ExperimentsTab({ data, onSelectExperiment }: ExperimentsTabProps
               </tr>
             </thead>
             <tbody>
-              {filteredMetrics.length === 0 ? (
+              {paginatedMetrics.length === 0 ? (
                 <tr>
                   <td colSpan={9} style={{ textAlign: 'center', padding: '32px 16px', color: '#64748b' }}>
                     No experiments matching &ldquo;{searchQuery}&rdquo;
                   </td>
                 </tr>
               ) : (
-                filteredMetrics.map((item) => (
+                paginatedMetrics.map((item) => (
                   <tr key={item.id || item.num}>
                     <td style={{ fontWeight: 600, color: '#64748b' }}>{item.num}</td>
                     <td style={{ fontWeight: 700, color: '#0f172a' }}>
@@ -724,6 +739,60 @@ export function ExperimentsTab({ data, onSelectExperiment }: ExperimentsTabProps
               )}
             </tbody>
           </table>
+        </div>
+
+        {/* Pagination Controls Bar */}
+        <div className={styles.paginationRow}>
+          <div className={styles.paginationText}>
+            <span>
+              Showing {filteredMetrics.length === 0 ? 0 : startIndex + 1}–{endIndex} of {filteredMetrics.length} experiments
+            </span>
+            <span style={{ margin: '0 4px', color: '#cbd5e1' }}>|</span>
+            <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+              <span>Per page:</span>
+              <select
+                value={pageSize}
+                onChange={(e) => {
+                  setPageSize(Number(e.target.value));
+                  setCurrentPage(1);
+                }}
+                className={styles.paginationSelect}
+              >
+                <option value={10}>10</option>
+                <option value={15}>15</option>
+                <option value={25}>25</option>
+              </select>
+            </label>
+          </div>
+
+          <div className={styles.paginationButtons}>
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+              disabled={currentPage <= 1}
+              className={`${styles.pageBtn} ${currentPage <= 1 ? styles.pageBtnDisabled : ''}`}
+            >
+              Prev
+            </button>
+            {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+              <button
+                key={pageNum}
+                type="button"
+                onClick={() => setCurrentPage(pageNum)}
+                className={`${styles.pageBtn} ${currentPage === pageNum ? styles.pageBtnActive : ''}`}
+              >
+                {pageNum}
+              </button>
+            ))}
+            <button
+              type="button"
+              onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+              disabled={currentPage >= totalPages}
+              className={`${styles.pageBtn} ${currentPage >= totalPages ? styles.pageBtnDisabled : ''}`}
+            >
+              Next
+            </button>
+          </div>
         </div>
       </div>
 

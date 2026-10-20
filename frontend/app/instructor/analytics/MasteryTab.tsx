@@ -100,6 +100,21 @@ export function MasteryTab({ data, onSelectStudent }: MasteryTabProps) {
     return list;
   }, [data.student_matrix.students, studentSearch]);
 
+  // Client-side pagination for student mastery matrix
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [studentSearch, selectedGroup]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredStudents.length);
+  const paginatedStudents = useMemo(() => {
+    return filteredStudents.slice(startIndex, endIndex);
+  }, [filteredStudents, startIndex, endIndex]);
+
   // CSV export handler
   const handleExportCSV = () => {
     const csvRows = filteredStudents.map((s) => {
@@ -261,7 +276,7 @@ export function MasteryTab({ data, onSelectStudent }: MasteryTabProps) {
             <table className={styles.heatmapTable}>
               <thead>
                 <tr>
-                  <th style={{ width: '230px', minWidth: '180px' }}></th>
+                  <th style={{ width: '190px', minWidth: '150px' }}></th>
                   {data.heatmap.columns.map((col, idx) => (
                     <th key={idx} className={styles.thAngled}>
                       <span className={styles.rotatedText}>{col}</span>
@@ -378,7 +393,7 @@ export function MasteryTab({ data, onSelectStudent }: MasteryTabProps) {
                 </defs>
 
                 {/* Dynamic Connecting Edges */}
-                {(data.prerequisite_graph.edges || []).map((edge) => {
+                {(data.prerequisite_graph.edges || []).map((edge, eIdx) => {
                   const s = data.prerequisite_graph.nodes.find(
                     (n) => n.id === edge.from || n.label.toLowerCase() === edge.from.toLowerCase()
                   );
@@ -393,7 +408,7 @@ export function MasteryTab({ data, onSelectStudent }: MasteryTabProps) {
 
                   return (
                     <path
-                      key={`${edge.from}->${edge.to}`}
+                      key={`${edge.from}->${edge.to}-${eIdx}`}
                       d={`M ${sx} ${sy + 14} C ${sx} ${(sy + ty) / 2}, ${tx} ${(sy + ty) / 2}, ${tx} ${ty - 14}`}
                       fill="none"
                       stroke="#94a3b8"
@@ -405,7 +420,7 @@ export function MasteryTab({ data, onSelectStudent }: MasteryTabProps) {
                 })}
 
                 {/* Dynamic Nodes from Curriculum Database */}
-                {(data.prerequisite_graph.nodes || []).map((node) => {
+                {(data.prerequisite_graph.nodes || []).map((node, nIdx) => {
                   const isSelected = selectedDagNode === node.label;
                   const pillWidth = Math.max(88, Math.min(136, node.label.length * 6.5 + 24));
                   const halfW = pillWidth / 2;
@@ -431,7 +446,7 @@ export function MasteryTab({ data, onSelectStudent }: MasteryTabProps) {
 
                   return (
                     <g
-                      key={node.id}
+                      key={`${node.id}-${nIdx}`}
                       className={styles.dagNodePill}
                       transform={`translate(${nx}, ${ny})`}
                       onClick={() => setSelectedDagNode(isSelected ? null : node.label)}
@@ -647,13 +662,13 @@ export function MasteryTab({ data, onSelectStudent }: MasteryTabProps) {
               <thead>
                 <tr>
                   <th style={{ width: '180px' }}>Student</th>
-                  {currentColumns.map((col) => (
-                    <th key={col}>{col}</th>
+                  {currentColumns.map((col, cIdx) => (
+                    <th key={`${col}-${cIdx}`}>{col}</th>
                   ))}
                 </tr>
               </thead>
               <tbody>
-                {filteredStudents.map((stu) => {
+                {paginatedStudents.map((stu) => {
                   const gScores = stu.groups[selectedGroup] || {};
                   return (
                     <tr
@@ -669,10 +684,10 @@ export function MasteryTab({ data, onSelectStudent }: MasteryTabProps) {
                           )}
                         </div>
                       </td>
-                      {currentColumns.map((col) => {
+                      {currentColumns.map((col, cIdx) => {
                         const val = gScores[col] !== undefined ? gScores[col] : 65;
                         return (
-                          <td key={col}>
+                          <td key={`${col}-${cIdx}`}>
                             <span className={`${styles.scorePill} ${getScoreClass(val)}`}>
                               {val}%
                             </span>
@@ -684,6 +699,60 @@ export function MasteryTab({ data, onSelectStudent }: MasteryTabProps) {
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Pagination Controls Bar */}
+          <div className={styles.paginationRow}>
+            <div className={styles.paginationText}>
+              <span>
+                Showing {filteredStudents.length === 0 ? 0 : startIndex + 1}–{endIndex} of {filteredStudents.length} students
+              </span>
+              <span style={{ margin: '0 4px', color: '#cbd5e1' }}>|</span>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span>Per page:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className={styles.paginationSelect}
+                >
+                  <option value={10}>10</option>
+                  <option value={15}>15</option>
+                  <option value={25}>25</option>
+                </select>
+              </label>
+            </div>
+
+            <div className={styles.paginationButtons}>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className={`${styles.pageBtn} ${currentPage <= 1 ? styles.pageBtnDisabled : ''}`}
+              >
+                Prev
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`${styles.pageBtn} ${currentPage === pageNum ? styles.pageBtnActive : ''}`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className={`${styles.pageBtn} ${currentPage >= totalPages ? styles.pageBtnDisabled : ''}`}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
       </div>

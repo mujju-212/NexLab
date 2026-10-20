@@ -111,6 +111,33 @@ export function IntegrityTab({
     return reviewQueue.filter((item) => item.category_tags?.includes(activeQueueFilter));
   }, [reviewQueue, activeQueueFilter]);
 
+  // Review queue pagination
+  const [queuePage, setQueuePage] = useState<number>(1);
+  const [queuePageSize, setQueuePageSize] = useState<number>(10);
+
+  React.useEffect(() => {
+    setQueuePage(1);
+  }, [activeQueueFilter]);
+
+  const queueTotalPages = Math.max(1, Math.ceil(filteredQueue.length / queuePageSize));
+  const queueStartIndex = (queuePage - 1) * queuePageSize;
+  const queueEndIndex = Math.min(queueStartIndex + queuePageSize, filteredQueue.length);
+  const paginatedQueue = useMemo(() => {
+    return filteredQueue.slice(queueStartIndex, queueEndIndex);
+  }, [filteredQueue, queueStartIndex, queueEndIndex]);
+
+  // Plagiarism pairs pagination
+  const [pairsPage, setPairsPage] = useState<number>(1);
+  const [pairsPageSize, setPairsPageSize] = useState<number>(5);
+
+  const plagiarismPairs = data?.plagiarism_pairs || [];
+  const pairsTotalPages = Math.max(1, Math.ceil(plagiarismPairs.length / pairsPageSize));
+  const pairsStartIndex = (pairsPage - 1) * pairsPageSize;
+  const pairsEndIndex = Math.min(pairsStartIndex + pairsPageSize, plagiarismPairs.length);
+  const paginatedPairs = useMemo(() => {
+    return plagiarismPairs.slice(pairsStartIndex, pairsEndIndex);
+  }, [plagiarismPairs, pairsStartIndex, pairsEndIndex]);
+
   // Filter tab counts
   const filterCounts = useMemo(() => {
     return {
@@ -482,7 +509,7 @@ export function IntegrityTab({
                 </tr>
               </thead>
               <tbody>
-                {filteredQueue.map((student) => {
+                {paginatedQueue.map((student) => {
                   const isSelected = activeStudent?.student_id === student.student_id;
                   return (
                     <tr
@@ -609,6 +636,60 @@ export function IntegrityTab({
                 })}
               </tbody>
             </table>
+          </div>
+
+          {/* Review Queue Pagination Controls Bar */}
+          <div className={styles.paginationRow}>
+            <div className={styles.paginationText}>
+              <span>
+                Showing {filteredQueue.length === 0 ? 0 : queueStartIndex + 1}–{queueEndIndex} of {filteredQueue.length} review leads
+              </span>
+              <span style={{ margin: '0 4px', color: '#cbd5e1' }}>|</span>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span>Per page:</span>
+                <select
+                  value={queuePageSize}
+                  onChange={(e) => {
+                    setQueuePageSize(Number(e.target.value));
+                    setQueuePage(1);
+                  }}
+                  className={styles.paginationSelect}
+                >
+                  <option value={10}>10</option>
+                  <option value={15}>15</option>
+                  <option value={25}>25</option>
+                </select>
+              </label>
+            </div>
+
+            <div className={styles.paginationButtons}>
+              <button
+                type="button"
+                onClick={() => setQueuePage((p) => Math.max(1, p - 1))}
+                disabled={queuePage <= 1}
+                className={`${styles.pageBtn} ${queuePage <= 1 ? styles.pageBtnDisabled : ''}`}
+              >
+                Prev
+              </button>
+              {Array.from({ length: queueTotalPages }, (_, i) => i + 1).map((pageNum) => (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => setQueuePage(pageNum)}
+                  className={`${styles.pageBtn} ${queuePage === pageNum ? styles.pageBtnActive : ''}`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setQueuePage((p) => Math.min(queueTotalPages, p + 1))}
+                disabled={queuePage >= queueTotalPages}
+                className={`${styles.pageBtn} ${queuePage >= queueTotalPages ? styles.pageBtnDisabled : ''}`}
+              >
+                Next
+              </button>
+            </div>
           </div>
         </div>
 
@@ -962,7 +1043,7 @@ export function IntegrityTab({
                 </tr>
               </thead>
               <tbody>
-                {(data?.plagiarism_pairs || []).map((pair) => (
+                {paginatedPairs.map((pair) => (
                   <tr
                     key={pair.id}
                     onClick={() => setCompareModalPair(pair)}
@@ -1019,8 +1100,62 @@ export function IntegrityTab({
             </table>
           </div>
 
+          {/* Pairs Pagination Controls Bar */}
+          <div className={styles.paginationRow}>
+            <div className={styles.paginationText}>
+              <span>
+                Showing {plagiarismPairs.length === 0 ? 0 : pairsStartIndex + 1}–{pairsEndIndex} of {plagiarismPairs.length} pairs
+              </span>
+              <span style={{ margin: '0 4px', color: '#cbd5e1' }}>|</span>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span>Per page:</span>
+                <select
+                  value={pairsPageSize}
+                  onChange={(e) => {
+                    setPairsPageSize(Number(e.target.value));
+                    setPairsPage(1);
+                  }}
+                  className={styles.paginationSelect}
+                >
+                  <option value={5}>5</option>
+                  <option value={10}>10</option>
+                  <option value={15}>15</option>
+                </select>
+              </label>
+            </div>
+
+            <div className={styles.paginationButtons}>
+              <button
+                type="button"
+                onClick={() => setPairsPage((p) => Math.max(1, p - 1))}
+                disabled={pairsPage <= 1}
+                className={`${styles.pageBtn} ${pairsPage <= 1 ? styles.pageBtnDisabled : ''}`}
+              >
+                Prev
+              </button>
+              {Array.from({ length: pairsTotalPages }, (_, i) => i + 1).map((pageNum) => (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => setPairsPage(pageNum)}
+                  className={`${styles.pageBtn} ${pairsPage === pageNum ? styles.pageBtnActive : ''}`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setPairsPage((p) => Math.min(pairsTotalPages, p + 1))}
+                disabled={pairsPage >= pairsTotalPages}
+                className={`${styles.pageBtn} ${pairsPage >= pairsTotalPages ? styles.pageBtnDisabled : ''}`}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+
           {/* Info callout */}
-          <div className={styles.noticeCallout} style={{ marginTop: 'auto' }}>
+          <div className={styles.noticeCallout} style={{ marginTop: 12 }}>
             <Info size={15} style={{ flexShrink: 0, marginTop: 1 }} />
             <div>
               Similarity alone does not establish plagiarism. Review code context, allowed collaboration rules, and the full submission before taking action.

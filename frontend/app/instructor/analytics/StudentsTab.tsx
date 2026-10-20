@@ -276,6 +276,21 @@ export function StudentsTab({
     return list;
   }, [data?.students, bandFilter, searchQuery, sortField, sortAsc]);
 
+  // Client-side pagination state (10 to 15 students per page)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  useEffect(() => {
+    setCurrentPage(1);
+  }, [bandFilter, searchQuery, sortField, sortAsc]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredStudents.length);
+  const paginatedStudents = useMemo(() => {
+    return filteredStudents.slice(startIndex, endIndex);
+  }, [filteredStudents, startIndex, endIndex]);
+
   const handleSort = (field: SortField) => {
     if (sortField === field) {
       setSortAsc(!sortAsc);
@@ -936,7 +951,7 @@ export function StudentsTab({
                 </tr>
               </thead>
               <tbody>
-                {filteredStudents.map((st) => {
+                {paginatedStudents.map((st) => {
                   const isSelected = selectedStudent?.student_id === st.student_id && drawerOpen;
                   const avatarColors = getAvatarStyle(st.student_name, st.roll_number);
 
@@ -1091,7 +1106,7 @@ export function StudentsTab({
             </table>
           </div>
 
-          {/* Table Footer */}
+          {/* Table Footer with Pagination */}
           <div className={styles.tableFooter}>
             <div className={styles.legendInline}>
               <span className={styles.legendInlineTitle}>Risk Band Legend:</span>
@@ -1113,8 +1128,57 @@ export function StudentsTab({
               </div>
             </div>
 
-            <div>
-              Showing 1–{filteredStudents.length} of {data?.students?.length || 0} students
+            <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+              <div className={styles.paginationText}>
+                <span>
+                  Showing {filteredStudents.length === 0 ? 0 : startIndex + 1}–{endIndex} of {filteredStudents.length} students
+                </span>
+                <span style={{ margin: '0 4px', color: '#cbd5e1' }}>|</span>
+                <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                  <span>Per page:</span>
+                  <select
+                    value={pageSize}
+                    onChange={(e) => {
+                      setPageSize(Number(e.target.value));
+                      setCurrentPage(1);
+                    }}
+                    className={styles.paginationSelect}
+                  >
+                    <option value={10}>10</option>
+                    <option value={15}>15</option>
+                    <option value={25}>25</option>
+                  </select>
+                </label>
+              </div>
+
+              <div className={styles.paginationButtons}>
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage <= 1}
+                  className={`${styles.pageBtn} ${currentPage <= 1 ? styles.pageBtnDisabled : ''}`}
+                >
+                  Prev
+                </button>
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                  <button
+                    key={pageNum}
+                    type="button"
+                    onClick={() => setCurrentPage(pageNum)}
+                    className={`${styles.pageBtn} ${currentPage === pageNum ? styles.pageBtnActive : ''}`}
+                  >
+                    {pageNum}
+                  </button>
+                ))}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                  disabled={currentPage >= totalPages}
+                  className={`${styles.pageBtn} ${currentPage >= totalPages ? styles.pageBtnDisabled : ''}`}
+                >
+                  Next
+                </button>
+              </div>
             </div>
           </div>
         </div>

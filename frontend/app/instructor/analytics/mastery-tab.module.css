@@ -217,12 +217,12 @@
    ────────────────────────────────────────────────────────────────────────── */
 .middleGrid {
   display: grid;
-  grid-template-columns: 1.85fr 1.15fr;
+  grid-template-columns: minmax(0, 1.7fr) minmax(0, 1.3fr);
   gap: 20px;
   width: 100%;
 }
 
-@media (max-width: 1300px) {
+@media (max-width: 1400px) {
   .middleGrid {
     grid-template-columns: 1fr;
   }
@@ -230,33 +230,37 @@
 
 /* Heatmap Table */
 .heatmapContainer {
-  padding: 20px 22px;
+  padding: 16px 20px;
   overflow-x: auto;
+  max-width: 100%;
+  scrollbar-width: thin;
+  scrollbar-color: #cbd5e1 transparent;
 }
 
 .heatmapTable {
   width: 100%;
+  min-width: 520px;
   border-collapse: separate;
   border-spacing: 4px;
 }
 
 .thAngled {
-  height: 90px;
+  height: 80px;
   vertical-align: bottom;
   text-align: left;
-  padding: 0 4px;
-  min-width: 48px;
+  padding: 0 2px;
+  min-width: 36px;
 }
 
 .rotatedText {
   display: block;
   transform: rotate(-45deg);
   transform-origin: bottom left;
-  font-size: 0.75rem;
+  font-size: 0.72rem;
   font-weight: 600;
   color: #475569;
   white-space: nowrap;
-  width: 24px;
+  width: 22px;
 }
 
 .categoryRowHeader {
@@ -629,4 +633,83 @@
   font-weight: 700;
   font-size: 0.75rem;
   min-width: 44px;
+}
+
+/* ── Universal Table Pagination ── */
+.paginationRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-top: 1px solid #f1f5f9;
+  background: #ffffff;
+  border-radius: 0 0 14px 14px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.paginationText {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.paginationSelect {
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+}
+
+.paginationSelect:focus {
+  border-color: #7c3aed;
+}
+
+.paginationButtons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pageBtn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pageBtn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+
+.pageBtnActive {
+  background: #7c3aed !important;
+  color: #ffffff !important;
+  border-color: #7c3aed !important;
+}
+
+.pageBtnDisabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }

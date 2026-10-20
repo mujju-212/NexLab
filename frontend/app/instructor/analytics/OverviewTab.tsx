@@ -210,6 +210,22 @@ export function OverviewTab({
     return list;
   }, [studentsList, activeRiskFilter]);
 
+  // Client-side pagination state (10 to 15 students per page)
+  const [currentPage, setCurrentPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
+
+  // Reset page when active filter changes
+  React.useEffect(() => {
+    setCurrentPage(1);
+  }, [activeRiskFilter]);
+
+  const totalPages = Math.max(1, Math.ceil(filteredStudents.length / pageSize));
+  const startIndex = (currentPage - 1) * pageSize;
+  const endIndex = Math.min(startIndex + pageSize, filteredStudents.length);
+  const paginatedStudents = useMemo(() => {
+    return filteredStudents.slice(startIndex, endIndex);
+  }, [filteredStudents, startIndex, endIndex]);
+
   const critCount = studentsList.filter((s) => s.risk_band === 'critical').length;
   const highCount = studentsList.filter((s) => s.risk_band === 'high').length;
   const watchCount = studentsList.filter((s) => s.risk_band === 'watch').length;
@@ -220,10 +236,16 @@ export function OverviewTab({
   };
 
   const toggleSelectAll = () => {
-    const allSelected = filteredStudents.length > 0 && filteredStudents.every((s) => selectedStudentIds[s.student_id]);
-    const next: Record<string, boolean> = {};
-    if (!allSelected) {
-      filteredStudents.forEach((s) => {
+    const allSelected =
+      paginatedStudents.length > 0 &&
+      paginatedStudents.every((s) => selectedStudentIds[s.student_id]);
+    const next: Record<string, boolean> = { ...selectedStudentIds };
+    if (allSelected) {
+      paginatedStudents.forEach((s) => {
+        delete next[s.student_id];
+      });
+    } else {
+      paginatedStudents.forEach((s) => {
         next[s.student_id] = true;
       });
     }
@@ -409,287 +431,9 @@ export function OverviewTab({
           </div>
         </div>
       </div>
-
-      {/* ── MIDDLE SECTION: Needs-Attention Worklist (Left) & Risk Cards Stack (Right) ── */}
-      <div className={styles.middleGrid}>
-        {/* Left Card: Needs-Attention Students Worklist Table */}
-        <div className={styles.panelCard}>
-          {/* Header */}
-          <div className={styles.cardHeader}>
-            <div className={styles.cardHeaderLeft}>
-              <div className={styles.cardIconBox} style={{ background: '#fef2f2', color: '#ef4444' }}>
-                <AlertTriangle size={18} />
-              </div>
-              <div>
-                <h3 className={styles.cardTitle}>Needs-Attention Students</h3>
-                <div className={styles.cardSubtitle}>
-                  Prioritized by risk score, recent performance, and key warning signals
-                </div>
-              </div>
-            </div>
-
-            {/* Filter Pills */}
-            <div className={styles.filterPillsGroup}>
-              <button
-                type="button"
-                onClick={() => setActiveRiskFilter('all')}
-                className={`${styles.pillBtn} ${activeRiskFilter === 'all' ? styles.pillBtnActive : ''}`}
-              >
-                All ({studentsList.length})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveRiskFilter('critical')}
-                className={`${styles.pillBtn} ${styles.pillBtnCritical} ${
-                  activeRiskFilter === 'critical' ? styles.pillBtnActive : ''
-                }`}
-              >
-                Critical ({critCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveRiskFilter('high')}
-                className={`${styles.pillBtn} ${styles.pillBtnHigh} ${
-                  activeRiskFilter === 'high' ? styles.pillBtnActive : ''
-                }`}
-              >
-                High ({highCount})
-              </button>
-              <button
-                type="button"
-                onClick={() => setActiveRiskFilter('watch')}
-                className={`${styles.pillBtn} ${styles.pillBtnWatch} ${
-                  activeRiskFilter === 'watch' ? styles.pillBtnActive : ''
-                }`}
-              >
-                Watch ({watchCount})
-              </button>
-              {onViewAllStudents && (
-                <button
-                  type="button"
-                  onClick={onViewAllStudents}
-                  className={styles.viewAllLink}
-                  title="View full student cohort matrix"
-                >
-                  View All <ChevronRight size={14} />
-                </button>
-              )}
-            </div>
-          </div>
-
-          {/* Table Container */}
-          <div className={styles.tableContainer}>
-            <table className={styles.worklistTable}>
-              <thead>
-                <tr>
-                  <th style={{ width: 36, textAlign: 'center' }}>
-                    <input
-                      type="checkbox"
-                      checked={
-                        filteredStudents.length > 0 &&
-                        filteredStudents.every((s) => selectedStudentIds[s.student_id])
-                      }
-                      onChange={toggleSelectAll}
-                      style={{ cursor: 'pointer' }}
-                      title="Select all students in current view"
-                    />
-                  </th>
-                  <th style={{ minWidth: 160 }}>Student</th>
-                  <th style={{ minWidth: 84 }}>Risk</th>
-                  <th style={{ minWidth: 70 }}>Score</th>
-                  <th style={{ minWidth: 80 }}>Trend (30d)</th>
-                  <th style={{ minWidth: 180 }}>Primary Warning Driver</th>
-                  <th style={{ minWidth: 140 }}>Suggested Action</th>
-                  <th style={{ width: 72, minWidth: 72, textAlign: 'center', paddingRight: 14 }}>Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredStudents.length === 0 ? (
-                  <tr>
-                    <td colSpan={8} style={{ textAlign: 'center', padding: '32px 0', color: '#64748b' }}>
-                      No students in this risk band. All students are on track!
-                    </td>
-                  </tr>
-                ) : (
-                  filteredStudents.map((st) => {
-                    const avatar = getAvatarColors(st.student_name, st.roll_number);
-                    const initials = getInitials(st.student_name);
-                    const isSelected = Boolean(selectedStudentIds[st.student_id]);
-                    const isHovered = hoveredStudentId === st.student_id;
-                    const score = st.score ?? st.risk_score ?? 50;
-
-                    const scoreFillColor =
-                      st.risk_band === 'critical'
-                        ? '#ef4444'
-                        : st.risk_band === 'high'
-                        ? '#f97316'
-                        : '#f59e0b';
-
-                    return (
-                      <tr
-                        key={st.student_id}
-                        onClick={() => onSelectStudent(st.student_id)}
-                        onMouseEnter={() => setHoveredStudentId(st.student_id)}
-                        onMouseLeave={() => setHoveredStudentId(null)}
-                        className={styles.worklistRow}
-                        style={{
-                          background: isHovered
-                            ? '#f8fafc'
-                            : isSelected
-                            ? '#f5f3ff'
-                            : undefined,
-                        }}
-                        title="Click to view Student 360 diagnostic profile"
-                      >
-                        {/* Checkbox */}
-                        <td
-                          style={{ textAlign: 'center' }}
-                          onClick={(e) => toggleSelectStudent(st.student_id, e)}
-                        >
-                          <input
-                            type="checkbox"
-                            checked={isSelected}
-                            onChange={() => {}}
-                            style={{ cursor: 'pointer' }}
-                          />
-                        </td>
-
-                        {/* Student Name & Avatar */}
-                        <td>
-                          <div className={styles.studentCell}>
-                            <div
-                              className={styles.studentAvatar}
-                              style={{ background: avatar.bg, color: avatar.text }}
-                            >
-                              {initials}
-                            </div>
-                            <div>
-                              <div className={styles.studentName}>{st.student_name}</div>
-                              <div className={styles.studentRoll}>{st.roll_number}</div>
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* Risk Band Badge */}
-                        <td>
-                          {st.risk_band === 'critical' && (
-                            <span className={styles.riskBadgeCritical}>Critical</span>
-                          )}
-                          {st.risk_band === 'high' && (
-                            <span className={styles.riskBadgeHigh}>High</span>
-                          )}
-                          {st.risk_band === 'watch' && (
-                            <span className={styles.riskBadgeWatch}>Watch</span>
-                          )}
-                          {st.risk_band === 'ok' && (
-                            <span className={styles.riskBadgeOk}>On Track</span>
-                          )}
-                        </td>
-
-                        {/* Score & Progress Bar */}
-                        <td>
-                          <div style={{ width: 56 }}>
-                            <div className={styles.scoreNumber}>{score}</div>
-                            <div className={styles.scoreBarTrack}>
-                              <div
-                                className={styles.scoreBarFill}
-                                style={{
-                                  width: `${Math.min(100, Math.max(10, score))}%`,
-                                  background: scoreFillColor,
-                                }}
-                              />
-                            </div>
-                          </div>
-                        </td>
-
-                        {/* 30-Day Trend Sparkline */}
-                        <td>
-                          <TableSparkline trend={st.trend} />
-                        </td>
-
-                        {/* Primary Warning Driver */}
-                        <td>
-                          <div className={styles.warningDriverText} title={st.primary_warning_driver}>
-                            {st.primary_warning_driver}
-                          </div>
-                        </td>
-
-                        {/* Suggested Action */}
-                        <td>
-                          <button
-                            type="button"
-                            className={styles.actionBtn}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              if (onActionClick) {
-                                onActionClick(st.suggested_action, st);
-                              } else {
-                                onSelectStudent(st.student_id);
-                              }
-                            }}
-                            title={`Execute: ${st.suggested_action}`}
-                          >
-                            {st.suggested_action}
-                          </button>
-                        </td>
-
-                        {/* Actions menu */}
-                        <td style={{ textAlign: 'center' }}>
-                          <button
-                            type="button"
-                            className={styles.moreBtn}
-                            title="Open Student 360 Drawer"
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onSelectStudent(st.student_id);
-                            }}
-                          >
-                            <MoreHorizontal size={16} />
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })
-                )}
-              </tbody>
-            </table>
-          </div>
-
-          {/* Bulk Selection Floating Action Bar */}
-          {selectedCount > 0 && (
-            <div className={styles.bulkActionBar}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <CheckSquare size={16} style={{ color: '#a78bfa' }} />
-                <span>
-                  <strong>{selectedCount}</strong> student{selectedCount > 1 ? 's' : ''} selected
-                </span>
-              </div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                <button
-                  type="button"
-                  className={styles.bulkActionBtn}
-                  onClick={() => {
-                    alert(`Intervention scheduled for ${selectedCount} selected students.`);
-                  }}
-                >
-                  <Sparkles size={12} /> Schedule Group Catch-Up
-                </button>
-                <button
-                  type="button"
-                  className={styles.bulkActionBtn}
-                  style={{ background: '#334155', color: '#fff' }}
-                  onClick={() => setSelectedStudentIds({})}
-                >
-                  Clear
-                </button>
-              </div>
-            </div>
-          )}
-        </div>
-
-        {/* Right Stack: Risk Distribution & Risk Trend */}
-        <div className={styles.rightStack}>
-          {/* Card 1: Risk Distribution (Interactive Donut) */}
+      {/* ── TOP SECTION: 4 Visual Cards in a 2x2 Grid ── */}
+      <div className={styles.overviewVisualGrid}>
+{/* Card 1: Risk Distribution (Interactive Donut) */}
           <div className={styles.panelCard}>
             <div className={styles.cardHeader} style={{ marginBottom: 10 }}>
               <div className={styles.cardHeaderLeft}>
@@ -897,12 +641,8 @@ export function OverviewTab({
               </ResponsiveContainer>
             </div>
           </div>
-        </div>
-      </div>
 
-      {/* ── BOTTOM SECTION: Effort vs Outcome Quadrant (Left) & Quality Distribution (Right) ── */}
-      <div className={styles.bottomGrid}>
-        {/* Left: Struggle Quadrant (Interactive 2D Scatter) */}
+{/* Left: Struggle Quadrant (Interactive 2D Scatter) */}
         <div className={styles.panelCard}>
           <div className={styles.cardHeader}>
             <div className={styles.cardHeaderLeft}>
@@ -1187,6 +927,337 @@ export function OverviewTab({
           </div>
         </div>
       </div>
+
+      {/* ── FULL-WIDTH NEEDS-ATTENTION STUDENTS TABLE ── */}
+{/* Left Card: Needs-Attention Students Worklist Table */}
+        <div className={styles.panelCard} style={{ width: '100%' }}>
+          {/* Header */}
+          <div className={styles.cardHeader}>
+            <div className={styles.cardHeaderLeft}>
+              <div className={styles.cardIconBox} style={{ background: '#fef2f2', color: '#ef4444' }}>
+                <AlertTriangle size={18} />
+              </div>
+              <div>
+                <h3 className={styles.cardTitle}>Needs-Attention Students</h3>
+                <div className={styles.cardSubtitle}>
+                  Prioritized by risk score, recent performance, and key warning signals
+                </div>
+              </div>
+            </div>
+
+            {/* Filter Pills */}
+            <div className={styles.filterPillsGroup}>
+              <button
+                type="button"
+                onClick={() => setActiveRiskFilter('all')}
+                className={`${styles.pillBtn} ${activeRiskFilter === 'all' ? styles.pillBtnActive : ''}`}
+              >
+                All ({studentsList.length})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveRiskFilter('critical')}
+                className={`${styles.pillBtn} ${styles.pillBtnCritical} ${
+                  activeRiskFilter === 'critical' ? styles.pillBtnActive : ''
+                }`}
+              >
+                Critical ({critCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveRiskFilter('high')}
+                className={`${styles.pillBtn} ${styles.pillBtnHigh} ${
+                  activeRiskFilter === 'high' ? styles.pillBtnActive : ''
+                }`}
+              >
+                High ({highCount})
+              </button>
+              <button
+                type="button"
+                onClick={() => setActiveRiskFilter('watch')}
+                className={`${styles.pillBtn} ${styles.pillBtnWatch} ${
+                  activeRiskFilter === 'watch' ? styles.pillBtnActive : ''
+                }`}
+              >
+                Watch ({watchCount})
+              </button>
+              {onViewAllStudents && (
+                <button
+                  type="button"
+                  onClick={onViewAllStudents}
+                  className={styles.viewAllLink}
+                  title="View full student cohort matrix"
+                >
+                  View All <ChevronRight size={14} />
+                </button>
+              )}
+            </div>
+          </div>
+
+          {/* Table Container */}
+          <div className={styles.tableContainer}>
+            <table className={styles.worklistTable}>
+              <thead>
+                <tr>
+                  <th style={{ width: 36, textAlign: 'center' }}>
+                    <input
+                      type="checkbox"
+                      checked={
+                        paginatedStudents.length > 0 &&
+                        paginatedStudents.every((s) => selectedStudentIds[s.student_id])
+                      }
+                      onChange={toggleSelectAll}
+                      style={{ cursor: 'pointer' }}
+                      title="Select all students on current page"
+                    />
+                  </th>
+                  <th style={{ minWidth: 160 }}>Student</th>
+                  <th style={{ minWidth: 84 }}>Risk</th>
+                  <th style={{ minWidth: 70 }}>Score</th>
+                  <th style={{ minWidth: 80 }}>Trend (30d)</th>
+                  <th style={{ minWidth: 180 }}>Primary Warning Driver</th>
+                  <th style={{ minWidth: 140 }}>Suggested Action</th>
+                  <th style={{ width: 72, minWidth: 72, textAlign: 'center', paddingRight: 14 }}>Actions</th>
+                </tr>
+              </thead>
+              <tbody>
+                {paginatedStudents.length === 0 ? (
+                  <tr>
+                    <td colSpan={8} style={{ textAlign: 'center', padding: '32px 0', color: '#64748b' }}>
+                      No students in this risk band. All students are on track!
+                    </td>
+                  </tr>
+                ) : (
+                  paginatedStudents.map((st) => {
+                    const avatar = getAvatarColors(st.student_name, st.roll_number);
+                    const initials = getInitials(st.student_name);
+                    const isSelected = Boolean(selectedStudentIds[st.student_id]);
+                    const isHovered = hoveredStudentId === st.student_id;
+                    const score = st.score ?? st.risk_score ?? 50;
+
+                    const scoreFillColor =
+                      st.risk_band === 'critical'
+                        ? '#ef4444'
+                        : st.risk_band === 'high'
+                        ? '#f97316'
+                        : '#f59e0b';
+
+                    return (
+                      <tr
+                        key={st.student_id}
+                        onClick={() => onSelectStudent(st.student_id)}
+                        onMouseEnter={() => setHoveredStudentId(st.student_id)}
+                        onMouseLeave={() => setHoveredStudentId(null)}
+                        className={styles.worklistRow}
+                        style={{
+                          background: isHovered
+                            ? '#f8fafc'
+                            : isSelected
+                            ? '#f5f3ff'
+                            : undefined,
+                        }}
+                        title="Click to view Student 360 diagnostic profile"
+                      >
+                        {/* Checkbox */}
+                        <td
+                          style={{ textAlign: 'center' }}
+                          onClick={(e) => toggleSelectStudent(st.student_id, e)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isSelected}
+                            onChange={() => {}}
+                            style={{ cursor: 'pointer' }}
+                          />
+                        </td>
+
+                        {/* Student Name & Avatar */}
+                        <td>
+                          <div className={styles.studentCell}>
+                            <div
+                              className={styles.studentAvatar}
+                              style={{ background: avatar.bg, color: avatar.text }}
+                            >
+                              {initials}
+                            </div>
+                            <div>
+                              <div className={styles.studentName}>{st.student_name}</div>
+                              <div className={styles.studentRoll}>{st.roll_number}</div>
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* Risk Band Badge */}
+                        <td>
+                          {st.risk_band === 'critical' && (
+                            <span className={styles.riskBadgeCritical}>Critical</span>
+                          )}
+                          {st.risk_band === 'high' && (
+                            <span className={styles.riskBadgeHigh}>High</span>
+                          )}
+                          {st.risk_band === 'watch' && (
+                            <span className={styles.riskBadgeWatch}>Watch</span>
+                          )}
+                          {st.risk_band === 'ok' && (
+                            <span className={styles.riskBadgeOk}>On Track</span>
+                          )}
+                        </td>
+
+                        {/* Score & Progress Bar */}
+                        <td>
+                          <div style={{ width: 56 }}>
+                            <div className={styles.scoreNumber}>{score}</div>
+                            <div className={styles.scoreBarTrack}>
+                              <div
+                                className={styles.scoreBarFill}
+                                style={{
+                                  width: `${Math.min(100, Math.max(10, score))}%`,
+                                  background: scoreFillColor,
+                                }}
+                              />
+                            </div>
+                          </div>
+                        </td>
+
+                        {/* 30-Day Trend Sparkline */}
+                        <td>
+                          <TableSparkline trend={st.trend} />
+                        </td>
+
+                        {/* Primary Warning Driver */}
+                        <td>
+                          <div className={styles.warningDriverText} title={st.primary_warning_driver}>
+                            {st.primary_warning_driver}
+                          </div>
+                        </td>
+
+                        {/* Suggested Action */}
+                        <td>
+                          <button
+                            type="button"
+                            className={styles.actionBtn}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onActionClick) {
+                                onActionClick(st.suggested_action, st);
+                              } else {
+                                onSelectStudent(st.student_id);
+                              }
+                            }}
+                            title={`Execute: ${st.suggested_action}`}
+                          >
+                            {st.suggested_action}
+                          </button>
+                        </td>
+
+                        {/* Actions menu */}
+                        <td style={{ textAlign: 'center' }}>
+                          <button
+                            type="button"
+                            className={styles.moreBtn}
+                            title="Open Student 360 Drawer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectStudent(st.student_id);
+                            }}
+                          >
+                            <MoreHorizontal size={16} />
+                          </button>
+                        </td>
+                      </tr>
+                    );
+                  })
+                )}
+              </tbody>
+            </table>
+          </div>
+
+          {/* Pagination Controls Bar */}
+          <div className={styles.paginationRow}>
+            <div className={styles.paginationText}>
+              <span>
+                Showing {filteredStudents.length === 0 ? 0 : startIndex + 1}–{endIndex} of {filteredStudents.length} students
+              </span>
+              <span style={{ margin: '0 4px', color: '#cbd5e1' }}>|</span>
+              <label style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
+                <span>Per page:</span>
+                <select
+                  value={pageSize}
+                  onChange={(e) => {
+                    setPageSize(Number(e.target.value));
+                    setCurrentPage(1);
+                  }}
+                  className={styles.paginationSelect}
+                >
+                  <option value={10}>10</option>
+                  <option value={15}>15</option>
+                  <option value={25}>25</option>
+                </select>
+              </label>
+            </div>
+
+            <div className={styles.paginationButtons}>
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                className={`${styles.pageBtn} ${currentPage <= 1 ? styles.pageBtnDisabled : ''}`}
+              >
+                Prev
+              </button>
+              {Array.from({ length: totalPages }, (_, i) => i + 1).map((pageNum) => (
+                <button
+                  key={pageNum}
+                  type="button"
+                  onClick={() => setCurrentPage(pageNum)}
+                  className={`${styles.pageBtn} ${currentPage === pageNum ? styles.pageBtnActive : ''}`}
+                >
+                  {pageNum}
+                </button>
+              ))}
+              <button
+                type="button"
+                onClick={() => setCurrentPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                className={`${styles.pageBtn} ${currentPage >= totalPages ? styles.pageBtnDisabled : ''}`}
+              >
+                Next
+              </button>
+            </div>
+          </div>
+
+          {/* Bulk Selection Floating Action Bar */}
+          {selectedCount > 0 && (
+            <div className={styles.bulkActionBar}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <CheckSquare size={16} style={{ color: '#a78bfa' }} />
+                <span>
+                  <strong>{selectedCount}</strong> student{selectedCount > 1 ? 's' : ''} selected
+                </span>
+              </div>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                <button
+                  type="button"
+                  className={styles.bulkActionBtn}
+                  onClick={() => {
+                    alert(`Intervention scheduled for ${selectedCount} selected students.`);
+                  }}
+                >
+                  <Sparkles size={12} /> Schedule Group Catch-Up
+                </button>
+                <button
+                  type="button"
+                  className={styles.bulkActionBtn}
+                  style={{ background: '#334155', color: '#fff' }}
+                  onClick={() => setSelectedStudentIds({})}
+                >
+                  Clear
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+
     </div>
   );
 }

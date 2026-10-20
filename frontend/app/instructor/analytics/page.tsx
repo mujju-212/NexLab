@@ -506,6 +506,13 @@ function AnalyticsDashboard() {
     staleTime: 30 * 1000,
   });
 
+  const { data: atRiskData } = useQuery({
+    queryKey: ['instructor', 'analytics', 'atRisk', queryFilterParams],
+    queryFn: () => experienceService.analyticsAtRisk(queryFilterParams),
+    enabled: currentTab === 'today',
+    staleTime: 30 * 1000,
+  });
+
   // 4. Struggle Quadrant
   const { data: struggleData, isLoading: loadingStruggle } = useQuery({
     queryKey: ['instructor', 'struggle', ssId],
@@ -634,8 +641,8 @@ function AnalyticsDashboard() {
 
   // 11. Multi-Scope Rankings
   const { data: rankingsData, isLoading: loadingRankings } = useQuery({
-    queryKey: ['instructor', 'analytics', 'rankings', rankingScope, ssId],
-    queryFn: () => analyticsService.getScopeRankings(rankingScope, ssId || undefined, 50),
+    queryKey: ['instructor', 'analytics', 'rankings', rankingScope, ssId, currentSectionId],
+    queryFn: () => analyticsService.getScopeRankings(rankingScope, rankingScope === 'section' ? (currentSectionId || ssId || undefined) : undefined, 50),
     enabled: currentTab === 'rankings',
     staleTime: 60 * 1000,
   });
@@ -691,19 +698,24 @@ function AnalyticsDashboard() {
       }
     }
 
-    // 3. Fallback to roster
-    return roster.slice(0, 5).map((r, idx) => ({
-      student_id: r.student_id,
-      student_name: r.full_name,
-      roll_number: r.roll_number,
-      section_name: selectedSection?.section_name,
-      risk_score: 40 + idx * 10,
-      risk_band: (idx === 0 ? 'critical' : idx === 1 ? 'high' : 'watch') as any,
-      primary_reason: idx === 0 ? 'Missed last 2 lab sessions' : 'Consecutive low test scores',
-      trend: 'stable' as const,
-      suggested_action: 'Check in on progress during lab',
-    }));
-  }, [earlyWarningData, struggleData, roster, selectedSection]);
+    // 3. Fallback to real atRiskData when available
+    const atRiskList = Array.isArray(atRiskData) ? atRiskData : (atRiskData as any)?.students || [];
+    if (atRiskList.length > 0) {
+      return atRiskList.map((s: any) => ({
+        student_id: s.student_id,
+        student_name: s.full_name || s.name || 'Student',
+        roll_number: s.roll_number || '',
+        section_name: selectedSection?.section_name,
+        risk_score: Math.round(s.risk_score || 50),
+        risk_band: s.risk_band || 'watch',
+        primary_reason: Array.isArray(s.risk_factors) ? s.risk_factors.join(', ') : (s.reason || 'Academic support needed'),
+        trend: 'stable' as const,
+        suggested_action: 'Check in on progress during lab',
+      }));
+    }
+
+    return [];
+  }, [earlyWarningData, struggleData, atRiskData, selectedSection]);
 
   // Aggregate KPI figures
   const totalStudents = roster.length || struggleData?.students?.length || 0;
@@ -712,12 +724,12 @@ function AnalyticsDashboard() {
       ? Math.round(trends[trends.length - 1].avg_score || 0)
       : exps.length > 0
       ? Math.round(exps.reduce((acc, e) => acc + (e.avg_score || 0), 0) / exps.length)
-      : 74;
+      : 0;
 
   const avgFocus =
     engagement.length > 0
       ? Math.round(engagement.reduce((acc, e) => acc + (e.avg_focus_score || 0), 0) / engagement.length)
-      : 78;
+      : 0;
 
   const atRiskCount = worklistItems.filter((i) => i.risk_band === 'critical' || i.risk_band === 'high').length;
 
@@ -803,245 +815,185 @@ function AnalyticsDashboard() {
       {/* ── Cascading 4-Level Filter Hierarchy Toolbar ── */}
       {currentTab !== 'students' && (
         <div className={instructorStyles.cascadingToolbarCard}>
-          {/* Main Tier: 4-Level Cascading Path + Action Buttons */}
-          <div className={instructorStyles.cascadingPrimaryRow}>
-            <div className={instructorStyles.cascadingPathGroup}>
-              {/* LEVEL 1: Academic Year / Batch */}
-              <div
-                className={`${instructorStyles.cascadingLevelItem} ${
-                  selectedAcademicYear !== '2024-2025' ? instructorStyles.cascadingLevelItemActive : ''
-                }`}
-              >
-                <div className={instructorStyles.cascadingLevelHeader}>
-                  <span className={instructorStyles.cascadingStepLabel}>
-                    <span className={instructorStyles.stepNumberCircle}>1</span>
-                    Academic Year / Batch
-                  </span>
-                </div>
-                <div className={instructorStyles.cascadingControlBody}>
-                  <Calendar size={14} className={instructorStyles.cascadingLevelIcon} />
-                  <select
-                    className={instructorStyles.cascadingSelectInput}
-                    value={selectedAcademicYear}
-                    onChange={(e) => setSelectedAcademicYear(e.target.value)}
-                    aria-label="Academic Year / Batch"
-                  >
-                    <option value="all">All Years</option>
-                    <option value="2024-2025">2024–2025 (CSE 2nd Year)</option>
-                    <option value="2023-2024">2023–2024 (CSE 3rd Year)</option>
-                  </select>
-                </div>
+          {/* Main Tier: 5-Step Unified Pipeline Flow */}
+          <div className={instructorStyles.cascadingPipelineGrid}>
+            {/* LEVEL 1: Academic Year / Batch */}
+            <div
+              className={`${instructorStyles.cascadingLevelItem} ${
+                selectedAcademicYear !== '2024-2025' ? instructorStyles.cascadingLevelItemActive : ''
+              }`}
+            >
+              <div className={instructorStyles.cascadingLevelHeader}>
+                <span className={instructorStyles.cascadingStepLabel}>
+                  <span className={instructorStyles.stepNumberCircle}>1</span>
+                  Academic Year
+                </span>
               </div>
-
-              {/* Connecting Chevron */}
-              <div className={instructorStyles.cascadingConnector}>
-                <ChevronRight size={16} />
-              </div>
-
-              {/* LEVEL 2: Department / Program */}
-              <div
-                className={`${instructorStyles.cascadingLevelItem} ${
-                  selectedDepartment !== 'CSE' ? instructorStyles.cascadingLevelItemActive : ''
-                }`}
-              >
-                <div className={instructorStyles.cascadingLevelHeader}>
-                  <span className={instructorStyles.cascadingStepLabel}>
-                    <span className={instructorStyles.stepNumberCircle}>2</span>
-                    Department / Program
-                  </span>
-                </div>
-                <div className={instructorStyles.cascadingControlBody}>
-                  <Layers size={14} className={instructorStyles.cascadingLevelIcon} />
-                  <select
-                    className={instructorStyles.cascadingSelectInput}
-                    value={selectedDepartment}
-                    onChange={(e) => setSelectedDepartment(e.target.value)}
-                    aria-label="Department / Program"
-                  >
-                    <option value="CSE">Computer Science & Engineering (CSE)</option>
-                    <option value="ECE">Electronics & Communication (ECE)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Connecting Chevron */}
-              <div className={instructorStyles.cascadingConnector}>
-                <ChevronRight size={16} />
-              </div>
-
-              {/* LEVEL 3: Section A / B / All */}
-              <div
-                className={`${instructorStyles.cascadingLevelItem} ${
-                  selectedSectionFilter !== 'all' ? instructorStyles.cascadingLevelItemActive : ''
-                }`}
-              >
-                <div className={instructorStyles.cascadingLevelHeader}>
-                  <span className={instructorStyles.cascadingStepLabel}>
-                    <span className={instructorStyles.stepNumberCircle}>3</span>
-                    Section
-                  </span>
-                  <span className={instructorStyles.cascadingCountBadge}>
-                    {selectedSectionFilter === 'Section A'
-                      ? `${sectionACount} Students`
-                      : selectedSectionFilter === 'Section B'
-                      ? `${sectionBCount} Students`
-                      : `${totalSectionCount} Students`}
-                  </span>
-                </div>
-                <div className={instructorStyles.cascadingControlBody}>
-                  <Users size={14} className={instructorStyles.cascadingLevelIcon} />
-                  <select
-                    className={instructorStyles.cascadingSelectInput}
-                    value={selectedSectionFilter}
-                    onChange={(e) => handleSectionChange(e.target.value)}
-                    aria-label="Section Filter"
-                  >
-                    <option value="all">All My Sections (36 Students)</option>
-                    <option value="Section A">Section A (24 Students)</option>
-                    <option value="Section B">Section B (12 Students)</option>
-                  </select>
-                </div>
-              </div>
-
-              {/* Connecting Chevron */}
-              <div className={instructorStyles.cascadingConnector}>
-                <ChevronRight size={16} />
-              </div>
-
-              {/* LEVEL 4a: Subject (Cascades from Section) */}
-              <div
-                className={`${instructorStyles.cascadingLevelItem} ${
-                  selectedSubject ? instructorStyles.cascadingLevelItemActive : ''
-                }`}
-              >
-                <div className={instructorStyles.cascadingLevelHeader}>
-                  <span className={instructorStyles.cascadingStepLabel}>
-                    <span className={instructorStyles.stepNumberCircle}>4</span>
-                    Subject
-                  </span>
-                  <span className={instructorStyles.cascadingCountBadge}>
-                    {availableSubjects.length} Subj
-                  </span>
-                </div>
-                <div className={instructorStyles.cascadingControlBody}>
-                  <BookOpen size={14} className={instructorStyles.cascadingLevelIcon} />
-                  <select
-                    className={instructorStyles.cascadingSelectInput}
-                    value={selectedSubject}
-                    onChange={(e) => handleSubjectChange(e.target.value)}
-                    aria-label="Cascading Subject"
-                  >
-                    <option value="">
-                      {selectedSectionFilter !== 'all'
-                        ? `All ${selectedSectionFilter} Subjects`
-                        : 'All Subjects'}
-                    </option>
-                    {availableSubjects.map((sub) => (
-                      <option key={sub.id || sub.name} value={sub.name}>
-                        {sub.name}
-                      </option>
-                    ))}
-                  </select>
-                </div>
-              </div>
-
-              {/* Connecting Chevron */}
-              <div className={instructorStyles.cascadingConnector}>
-                <ChevronRight size={16} />
-              </div>
-
-              {/* LEVEL 4b: Experiment (Cascades from Subject) */}
-              <div
-                className={`${instructorStyles.cascadingLevelItem} ${
-                  selectedExpId ? instructorStyles.cascadingLevelItemActive : ''
-                }`}
-              >
-                <div className={instructorStyles.cascadingLevelHeader}>
-                  <span className={instructorStyles.cascadingStepLabel}>
-                    Experiment / Lab
-                  </span>
-                  <span className={instructorStyles.cascadingCountBadge}>
-                    {availableExperiments.length} Labs
-                  </span>
-                </div>
-                <div className={instructorStyles.cascadingControlBody}>
-                  <FlaskConical size={14} className={instructorStyles.cascadingLevelIcon} />
-                  <select
-                    className={instructorStyles.cascadingSelectInput}
-                    value={selectedExpId}
-                    onChange={(e) => setSelectedExpId(e.target.value)}
-                    aria-label="Cascading Experiment"
-                  >
-                    <option value="">
-                      {selectedSubject ? `All ${selectedSubject} Experiments` : 'All Experiments'}
-                    </option>
-                    {availableExperiments.map((exp) => (
-                      <option key={exp.id} value={exp.id}>
-                        {exp.title}
-                      </option>
-                    ))}
-                  </select>
-                </div>
+              <div className={instructorStyles.cascadingControlBody}>
+                <Calendar size={14} className={instructorStyles.cascadingLevelIcon} />
+                <select
+                  className={instructorStyles.cascadingSelectInput}
+                  value={selectedAcademicYear}
+                  onChange={(e) => setSelectedAcademicYear(e.target.value)}
+                  aria-label="Academic Year / Batch"
+                >
+                  <option value="all">All Years</option>
+                  <option value="2024-2025">2024–2025 (CSE 2nd Year)</option>
+                  <option value="2023-2024">2023–2024 (CSE 3rd Year)</option>
+                </select>
               </div>
             </div>
 
-            {/* Right Action Buttons */}
-            <div className={instructorStyles.cascadingActionsGroup}>
-              {/* Compare Toggle */}
-              <div
-                className={instructorStyles.toggleContainer}
-                onClick={() => setCompareActive(!compareActive)}
-                title="Toggle cohort comparison against previous period"
-              >
-                <div
-                  className={`${instructorStyles.toggleTrack} ${
-                    compareActive ? instructorStyles.toggleTrackActive : ''
-                  }`}
-                >
-                  <div
-                    className={`${instructorStyles.toggleThumb} ${
-                      compareActive ? instructorStyles.toggleThumbActive : ''
-                    }`}
-                  />
-                </div>
-                <span className={instructorStyles.toggleLabel}>Compare</span>
+            {/* Connecting Chevron */}
+            <div className={instructorStyles.cascadingConnector}>
+              <ChevronRight size={14} />
+            </div>
+
+            {/* LEVEL 2: Department / Program */}
+            <div
+              className={`${instructorStyles.cascadingLevelItem} ${
+                selectedDepartment !== 'CSE' ? instructorStyles.cascadingLevelItemActive : ''
+              }`}
+            >
+              <div className={instructorStyles.cascadingLevelHeader}>
+                <span className={instructorStyles.cascadingStepLabel}>
+                  <span className={instructorStyles.stepNumberCircle}>2</span>
+                  Department
+                </span>
               </div>
+              <div className={instructorStyles.cascadingControlBody}>
+                <Layers size={14} className={instructorStyles.cascadingLevelIcon} />
+                <select
+                  className={instructorStyles.cascadingSelectInput}
+                  value={selectedDepartment}
+                  onChange={(e) => setSelectedDepartment(e.target.value)}
+                  aria-label="Department / Program"
+                >
+                  <option value="CSE">Computer Science & Engineering (CSE)</option>
+                  <option value="ECE">Electronics & Communication (ECE)</option>
+                </select>
+              </div>
+            </div>
 
-              {/* Refresh Button */}
-              <button
-                type="button"
-                onClick={handleRefresh}
-                className={instructorStyles.refreshBtn}
-                title="Refresh analytics data"
-              >
-                <RefreshCw size={14} className={isRefreshingOverview ? 'animate-spin' : ''} />
-                Refresh
-              </button>
+            {/* Connecting Chevron */}
+            <div className={instructorStyles.cascadingConnector}>
+              <ChevronRight size={14} />
+            </div>
 
-              {/* Export Report */}
-              <button
-                type="button"
-                onClick={() => {
-                  if (overviewData?.needs_attention_students) {
-                    const rows = overviewData.needs_attention_students.map((st) => ({
-                      Student: st.student_name,
-                      Roll: st.roll_number,
-                      Band: st.risk_band,
-                      Score: st.risk_score || st.score || 0,
-                      Driver: st.primary_warning_driver,
-                      SuggestedAction: st.suggested_action,
-                    }));
-                    exportCSV(rows, `instructor_analytics_report_${new Date().toISOString().split('T')[0]}`);
-                    showToast('Analytics report exported as CSV.');
-                  } else {
-                    showToast('No data to export.');
-                  }
-                }}
-                className={instructorStyles.exportBtn}
-              >
-                <Download size={14} />
-                Export Report
-              </button>
+            {/* LEVEL 3: Section A / B / All */}
+            <div
+              className={`${instructorStyles.cascadingLevelItem} ${
+                selectedSectionFilter !== 'all' ? instructorStyles.cascadingLevelItemActive : ''
+              }`}
+            >
+              <div className={instructorStyles.cascadingLevelHeader}>
+                <span className={instructorStyles.cascadingStepLabel}>
+                  <span className={instructorStyles.stepNumberCircle}>3</span>
+                  Section
+                </span>
+                <span className={instructorStyles.cascadingCountBadge}>
+                  {selectedSectionFilter === 'Section A'
+                    ? `${sectionACount} Students`
+                    : selectedSectionFilter === 'Section B'
+                    ? `${sectionBCount} Students`
+                    : `${totalSectionCount} Students`}
+                </span>
+              </div>
+              <div className={instructorStyles.cascadingControlBody}>
+                <Users size={14} className={instructorStyles.cascadingLevelIcon} />
+                <select
+                  className={instructorStyles.cascadingSelectInput}
+                  value={selectedSectionFilter}
+                  onChange={(e) => handleSectionChange(e.target.value)}
+                  aria-label="Section Filter"
+                >
+                  <option value="all">All My Sections (36 Students)</option>
+                  <option value="Section A">Section A (24 Students)</option>
+                  <option value="Section B">Section B (12 Students)</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Connecting Chevron */}
+            <div className={instructorStyles.cascadingConnector}>
+              <ChevronRight size={14} />
+            </div>
+
+            {/* LEVEL 4a: Subject (Cascades from Section) */}
+            <div
+              className={`${instructorStyles.cascadingLevelItem} ${
+                selectedSubject ? instructorStyles.cascadingLevelItemActive : ''
+              }`}
+            >
+              <div className={instructorStyles.cascadingLevelHeader}>
+                <span className={instructorStyles.cascadingStepLabel}>
+                  <span className={instructorStyles.stepNumberCircle}>4</span>
+                  Subject
+                </span>
+                <span className={instructorStyles.cascadingCountBadge}>
+                  {availableSubjects.length} Subj
+                </span>
+              </div>
+              <div className={instructorStyles.cascadingControlBody}>
+                <BookOpen size={14} className={instructorStyles.cascadingLevelIcon} />
+                <select
+                  className={instructorStyles.cascadingSelectInput}
+                  value={selectedSubject}
+                  onChange={(e) => handleSubjectChange(e.target.value)}
+                  aria-label="Cascading Subject"
+                >
+                  <option value="">
+                    {selectedSectionFilter !== 'all'
+                      ? `All ${selectedSectionFilter} Subjects`
+                      : 'All Subjects'}
+                  </option>
+                  {availableSubjects.map((sub) => (
+                    <option key={sub.id || sub.name} value={sub.name}>
+                      {sub.name}
+                    </option>
+                  ))}
+                </select>
+              </div>
+            </div>
+
+            {/* Connecting Chevron */}
+            <div className={instructorStyles.cascadingConnector}>
+              <ChevronRight size={14} />
+            </div>
+
+            {/* LEVEL 4b: Experiment (Cascades from Subject) */}
+            <div
+              className={`${instructorStyles.cascadingLevelItem} ${
+                selectedExpId ? instructorStyles.cascadingLevelItemActive : ''
+              }`}
+            >
+              <div className={instructorStyles.cascadingLevelHeader}>
+                <span className={instructorStyles.cascadingStepLabel}>
+                  <span className={instructorStyles.stepNumberCircle}>5</span>
+                  Experiment / Lab
+                </span>
+                <span className={instructorStyles.cascadingCountBadge}>
+                  {availableExperiments.length} Labs
+                </span>
+              </div>
+              <div className={instructorStyles.cascadingControlBody}>
+                <FlaskConical size={14} className={instructorStyles.cascadingLevelIcon} />
+                <select
+                  className={instructorStyles.cascadingSelectInput}
+                  value={selectedExpId}
+                  onChange={(e) => setSelectedExpId(e.target.value)}
+                  aria-label="Cascading Experiment"
+                >
+                  <option value="">
+                    {selectedSubject ? `All ${selectedSubject} Experiments` : 'All Experiments'}
+                  </option>
+                  {availableExperiments.map((exp) => (
+                    <option key={exp.id} value={exp.id}>
+                      {exp.title}
+                    </option>
+                  ))}
+                </select>
+              </div>
             </div>
           </div>
 
@@ -1126,6 +1078,64 @@ function AnalyticsDashboard() {
                   <option value={90}>Last 90 Days</option>
                 </select>
               </div>
+
+              <div className={instructorStyles.cascadingDivider} />
+
+              {/* Compare Toggle */}
+              <div
+                className={instructorStyles.toggleContainer}
+                onClick={() => setCompareActive(!compareActive)}
+                title="Toggle cohort comparison against previous period"
+              >
+                <div
+                  className={`${instructorStyles.toggleTrack} ${
+                    compareActive ? instructorStyles.toggleTrackActive : ''
+                  }`}
+                >
+                  <div
+                    className={`${instructorStyles.toggleThumb} ${
+                      compareActive ? instructorStyles.toggleThumbActive : ''
+                    }`}
+                  />
+                </div>
+                <span className={instructorStyles.toggleLabel}>Compare</span>
+              </div>
+
+              {/* Refresh Button */}
+              <button
+                type="button"
+                onClick={handleRefresh}
+                className={instructorStyles.refreshBtn}
+                title="Refresh analytics data"
+              >
+                <RefreshCw size={14} className={isRefreshingOverview ? 'animate-spin' : ''} />
+                Refresh
+              </button>
+
+              {/* Export Report */}
+              <button
+                type="button"
+                onClick={() => {
+                  if (overviewData?.needs_attention_students) {
+                    const rows = overviewData.needs_attention_students.map((st) => ({
+                      Student: st.student_name,
+                      Roll: st.roll_number,
+                      Band: st.risk_band,
+                      Score: st.risk_score || st.score || 0,
+                      Driver: st.primary_warning_driver,
+                      SuggestedAction: st.suggested_action,
+                    }));
+                    exportCSV(rows, `instructor_analytics_report_${new Date().toISOString().split('T')[0]}`);
+                    showToast('Analytics report exported as CSV.');
+                  } else {
+                    showToast('No data to export.');
+                  }
+                }}
+                className={instructorStyles.exportBtn}
+              >
+                <Download size={14} />
+                Export Report
+              </button>
             </div>
           </div>
         </div>

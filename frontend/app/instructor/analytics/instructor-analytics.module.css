@@ -383,6 +383,22 @@
   height: 32px;
 }
 
+/* ── Overview Visual 4-Card Grid ── */
+.overviewVisualGrid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 16px;
+  width: 100%;
+  min-width: 0;
+  margin-bottom: 20px;
+}
+
+@media (max-width: 1100px) {
+  .overviewVisualGrid {
+    grid-template-columns: 1fr;
+  }
+}
+
 /* ── Middle Section Layout (Left / Right) ── */
 .middleGrid {
   display: grid;
@@ -2115,6 +2131,7 @@
     width: 100%;
     max-width: 100%;
     min-width: 0;
+    align-items: start;
   }
 
   .integrityBottomGrid {
@@ -2124,6 +2141,7 @@
     width: 100%;
     max-width: 100%;
     min-width: 0;
+    align-items: start;
   }
 
   @media (max-width: 1240px) {
@@ -2857,7 +2875,7 @@
   background: #ffffff;
   border: 1px solid #e2e8f0;
   border-radius: 16px;
-  padding: 12px 18px;
+  padding: 12px 16px;
   box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05), 0 1px 3px rgba(15, 23, 42, 0.03);
   margin-bottom: 20px;
   transition: all 0.2s ease;
@@ -2868,20 +2886,13 @@
   box-shadow: 0 6px 20px -2px rgba(15, 23, 42, 0.07);
 }
 
-.cascadingPrimaryRow {
-  display: flex;
+/* ── Primary Row: The 5-Step Pipeline Chain ── */
+.cascadingPipelineGrid {
+  display: grid;
+  grid-template-columns: minmax(140px, 1.05fr) auto minmax(150px, 1.25fr) auto minmax(150px, 1.15fr) auto minmax(150px, 1.15fr) auto minmax(160px, 1.35fr);
   align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  flex-wrap: wrap;
-}
-
-.cascadingPathGroup {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  flex-wrap: wrap;
-  flex: 1;
+  gap: 6px;
+  width: 100%;
 }
 
 .cascadingLevelItem {
@@ -2891,68 +2902,74 @@
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   border-radius: 10px;
-  padding: 5px 10px;
-  min-width: 140px;
+  padding: 5px 9px;
+  min-width: 0;
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
 .cascadingLevelItem:hover {
   background: #ffffff;
   border-color: #94a3b8;
-  box-shadow: 0 2px 6px rgba(15, 23, 42, 0.04);
+  box-shadow: 0 2px 8px rgba(15, 23, 42, 0.05);
 }
 
 .cascadingLevelItemActive {
   background: #faf5ff;
   border-color: #c084fc;
-  box-shadow: 0 0 0 1px rgba(192, 132, 252, 0.3);
+  box-shadow: 0 0 0 1px rgba(192, 132, 252, 0.35);
 }
 
 .cascadingLevelHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  gap: 6px;
+  gap: 4px;
+  overflow: hidden;
 }
 
 .cascadingStepLabel {
   display: inline-flex;
   align-items: center;
   gap: 5px;
-  font-size: 0.65rem;
+  font-size: 0.63rem;
   font-weight: 700;
   letter-spacing: 0.05em;
   text-transform: uppercase;
   color: #64748b;
+  white-space: nowrap;
 }
 
 .stepNumberCircle {
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  width: 14px;
-  height: 14px;
+  width: 15px;
+  height: 15px;
   border-radius: 50%;
   background: #7c3aed;
   color: #ffffff;
   font-size: 0.58rem;
   font-weight: 800;
+  flex-shrink: 0;
 }
 
 .cascadingCountBadge {
-  font-size: 0.65rem;
+  font-size: 0.63rem;
   font-weight: 700;
   color: #6d28d9;
   background: #ede9fe;
-  padding: 1px 6px;
+  padding: 1px 5px;
   border-radius: 9999px;
   border: 1px solid #ddd6fe;
+  white-space: nowrap;
+  flex-shrink: 0;
 }
 
 .cascadingControlBody {
   display: flex;
   align-items: center;
   gap: 6px;
+  min-width: 0;
 }
 
 .cascadingLevelIcon {
@@ -2970,6 +2987,9 @@
   cursor: pointer;
   width: 100%;
   padding: 2px 0;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .cascadingSelectInput:focus {
@@ -2982,17 +3002,10 @@
   justify-content: center;
   color: #cbd5e1;
   flex-shrink: 0;
+  width: 14px;
 }
 
-.cascadingActionsGroup {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-wrap: nowrap;
-  flex-shrink: 0;
-}
-
-/* ── Secondary Summary & Filter Badges Bar ── */
+/* ── Secondary Controls & Action Bar ── */
 .cascadingMetaRow {
   display: flex;
   align-items: center;
@@ -3008,19 +3021,21 @@
   align-items: center;
   gap: 8px;
   flex-wrap: wrap;
+  flex: 1;
 }
 
 .cascadingActiveTag {
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  padding: 3px 9px;
+  padding: 3px 8px;
   border-radius: 6px;
   background: #f1f5f9;
   border: 1px solid #e2e8f0;
   font-size: 0.72rem;
   font-weight: 600;
   color: #334155;
+  white-space: nowrap;
 }
 
 .cascadingActiveTagHighlight {
@@ -3038,6 +3053,9 @@
   border-radius: 6px;
   font-size: 0.72rem;
   font-weight: 600;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
   transition: all 0.15s ease;
 }
 
@@ -3050,20 +3068,22 @@
 .cascadingAuxControls {
   display: flex;
   align-items: center;
-  gap: 10px;
-  flex-wrap: nowrap;
+  gap: 8px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
 }
 
 .cascadingAuxItem {
   display: flex;
   align-items: center;
-  gap: 6px;
+  gap: 5px;
 }
 
 .cascadingAuxLabel {
   font-size: 0.72rem;
   font-weight: 600;
   color: #64748b;
+  white-space: nowrap;
 }
 
 .cascadingAuxSelect {
@@ -3087,4 +3107,116 @@
 .cascadingAuxSelect:focus {
   border-color: #7c3aed;
   box-shadow: 0 0 0 2px rgba(124, 58, 237, 0.15);
+}
+
+.cascadingDivider {
+  width: 1px;
+  height: 20px;
+  background: #e2e8f0;
+  margin: 0 2px;
+}
+
+/* Responsive adjustments */
+@media (max-width: 1200px) {
+  .cascadingPipelineGrid {
+    grid-template-columns: repeat(3, 1fr);
+    gap: 10px;
+  }
+  .cascadingConnector {
+    display: none;
+  }
+}
+
+@media (max-width: 768px) {
+  .cascadingPipelineGrid {
+    grid-template-columns: 1fr;
+    gap: 8px;
+  }
+  .cascadingMetaRow {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .cascadingAuxControls {
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+}
+
+/* ── Universal Table Pagination ── */
+.paginationRow {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 18px;
+  border-top: 1px solid #f1f5f9;
+  background: #ffffff;
+  border-radius: 0 0 14px 14px;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.paginationText {
+  font-size: 13px;
+  color: #64748b;
+  font-weight: 500;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.paginationSelect {
+  padding: 4px 8px;
+  font-size: 12px;
+  font-weight: 600;
+  color: #334155;
+  background: #f8fafc;
+  border: 1px solid #cbd5e1;
+  border-radius: 6px;
+  cursor: pointer;
+  outline: none;
+}
+
+.paginationSelect:focus {
+  border-color: #7c3aed;
+}
+
+.paginationButtons {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.pageBtn {
+  min-width: 32px;
+  height: 32px;
+  padding: 0 8px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 12.5px;
+  font-weight: 600;
+  border-radius: 6px;
+  border: 1px solid #e2e8f0;
+  background: #ffffff;
+  color: #475569;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.pageBtn:hover:not(:disabled) {
+  background: #f8fafc;
+  border-color: #cbd5e1;
+  color: #1e293b;
+}
+
+.pageBtnActive {
+  background: #7c3aed !important;
+  color: #ffffff !important;
+  border-color: #7c3aed !important;
+}
+
+.pageBtnDisabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+  pointer-events: none;
 }
