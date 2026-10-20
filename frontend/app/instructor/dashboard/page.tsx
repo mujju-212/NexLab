@@ -40,6 +40,7 @@ interface ActivityEvent {
 interface ConceptItem {
   concept: string;
   score: number;
+  student_count?: number;
   color: string;
 }
 
@@ -120,22 +121,23 @@ export default function InstructorDashboard() {
   });
 
   const stats: DashStats = data?.stats ?? {
-    experiment_count: 4,
-    student_count: 24,
+    experiment_count: 0,
+    student_count: 0,
     active_session_count: 0,
-    pending_grading_count: 11,
-    new_experiments_this_month: 2,
+    pending_grading_count: 0,
+    new_experiments_this_month: 0,
+    sections_taught: 0,
   };
   const upcomingSessions: SessionItem[] = data?.upcoming_sessions ?? [];
   const recentActivity: ActivityEvent[] = data?.recent_activity ?? [];
   const conceptMastery: ConceptItem[] = data?.concept_mastery ?? [];
   const performance: StudentPerformance = data?.student_performance ?? {
-    total: 71,
-    excellent: 20,
-    good: 35,
-    needs_support: 12,
-    at_risk: 4,
-    performing_well_pct: 65,
+    total: 0,
+    excellent: 0,
+    good: 0,
+    needs_support: 0,
+    at_risk: 0,
+    performing_well_pct: 0,
   };
   const recentSubmissions: RecentSubmission[] = data?.recent_submissions ?? [];
 
@@ -155,7 +157,7 @@ export default function InstructorDashboard() {
     return 'Good evening,';
   }, []);
 
-  const instructorName = user?.full_name || 'Dr. Priya Sharma';
+  const instructorName = user?.full_name || user?.email?.split('@')[0] || 'Instructor';
 
   // Donut chart stroke dashes for student performance
   const donutValues = useMemo(() => {
@@ -262,7 +264,9 @@ export default function InstructorDashboard() {
               <div className={styles.statBody}>
                 <span className={styles.statLabel}>My Students</span>
                 <div className={styles.statValue}>{loading ? '…' : stats.student_count}</div>
-                <span className={styles.statTrendPositive}>↑ 12% from last month</span>
+                <span className={styles.statTrendPositive}>
+                  {stats.sections_taught ? `${stats.sections_taught} section${stats.sections_taught === 1 ? '' : 's'} assigned` : 'Enrolled students'}
+                </span>
               </div>
             </div>
 
@@ -274,7 +278,9 @@ export default function InstructorDashboard() {
               <div className={styles.statBody}>
                 <span className={styles.statLabel}>My Experiments</span>
                 <div className={styles.statValue}>{loading ? '…' : stats.experiment_count}</div>
-                <span className={styles.statTrendPositive}>↑ 2 new this month</span>
+                <span className={styles.statTrendPositive}>
+                  {stats.new_experiments_this_month ? `↑ ${stats.new_experiments_this_month} new this month` : 'Active lab modules'}
+                </span>
               </div>
             </div>
 
@@ -286,7 +292,9 @@ export default function InstructorDashboard() {
               <div className={styles.statBody}>
                 <span className={styles.statLabel}>Active Sessions</span>
                 <div className={styles.statValue}>{loading ? '…' : stats.active_session_count}</div>
-                <span className={styles.statTrendNeutral}>{upcomingSessions.length} upcoming</span>
+                <span className={styles.statTrendNeutral}>
+                  {stats.active_session_count > 0 ? `${stats.active_session_count} live now` : `${upcomingSessions.length} upcoming`}
+                </span>
               </div>
             </div>
 
@@ -298,7 +306,9 @@ export default function InstructorDashboard() {
               <div className={styles.statBody}>
                 <span className={styles.statLabel}>Pending Grading</span>
                 <div className={styles.statValue}>{loading ? '…' : stats.pending_grading_count}</div>
-                <span className={styles.statTrendWarning}>↑ 5 need attention</span>
+                <span className={stats.pending_grading_count > 0 ? styles.statTrendWarning : styles.statTrendPositive}>
+                  {stats.pending_grading_count > 0 ? `↑ ${stats.pending_grading_count} need attention` : 'All graded'}
+                </span>
               </div>
             </div>
 
@@ -342,7 +352,7 @@ export default function InstructorDashboard() {
                     <div className={styles.sessionDetails}>
                       <h3 className={styles.sessionTitle}>{session.experiment_title || session.title || 'Interactive Lab'}</h3>
                       <p className={styles.sessionMeta}>
-                        {fmtTimeRange(session.scheduled_at, session.duration_minutes)} | {session.student_count || 24} students
+                        {fmtTimeRange(session.scheduled_at, session.duration_minutes)} | {session.student_count || 0} students
                       </p>
                     </div>
 
@@ -434,15 +444,23 @@ export default function InstructorDashboard() {
                   <BarChart2 size={18} className={styles.panelTitleIcon} />
                   <h2>Concept Mastery Snapshot</h2>
                 </div>
-                <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/analytics')}>
+                <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/analytics?tab=mastery')}>
                   View full analytics →
                 </button>
               </div>
 
               <div className={styles.conceptList}>
+                {conceptMastery.length === 0 && !loading && (
+                  <div className={styles.emptyNotice}>No concept mastery recorded yet.</div>
+                )}
                 {conceptMastery.map((cm, idx) => (
-                  <div key={idx} className={styles.conceptRow}>
-                    <span className={styles.conceptName}>{cm.concept}</span>
+                  <div
+                    key={idx}
+                    className={styles.conceptRow}
+                    onClick={() => router.push('/instructor/analytics?tab=mastery')}
+                    title={`${cm.concept}: ${Math.round(cm.score)}% average score${cm.student_count ? ` (${cm.student_count} evaluations)` : ''} - Click to view detailed analysis`}
+                  >
+                    <span className={styles.conceptName} title={cm.concept}>{cm.concept}</span>
                     <div className={styles.conceptTrack}>
                       <div
                         className={styles.conceptFill}
@@ -465,44 +483,59 @@ export default function InstructorDashboard() {
                   <Cloud size={18} className={styles.panelTitleIcon} />
                   <h2>Student Performance</h2>
                 </div>
+                <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/analytics?tab=students')}>
+                  View cohort →
+                </button>
               </div>
 
               <div className={styles.donutContent}>
-                <div className={styles.donutChartWrap}>
+                <div
+                  className={styles.donutChartWrap}
+                  onClick={() => router.push('/instructor/analytics?tab=students')}
+                  title="Click to view detailed student breakdown"
+                >
                   <svg className={styles.donutSvg} viewBox="0 0 100 100">
                     <circle cx="50" cy="50" r="40" className={styles.donutTrack} />
                     {/* Excellent */}
-                    <circle
-                      cx="50" cy="50" r="40"
-                      className={styles.donutSegment}
-                      stroke="#10b981"
-                      strokeDasharray={`${donutValues.lenExc} ${donutValues.c}`}
-                      strokeDashoffset={donutValues.offExc}
-                    />
+                    {donutValues.lenExc > 0 && (
+                      <circle
+                        cx="50" cy="50" r="40"
+                        className={styles.donutSegment}
+                        stroke="#10b981"
+                        strokeDasharray={`${donutValues.lenExc} ${donutValues.c}`}
+                        strokeDashoffset={donutValues.offExc}
+                      />
+                    )}
                     {/* Good */}
-                    <circle
-                      cx="50" cy="50" r="40"
-                      className={styles.donutSegment}
-                      stroke="#06b6d4"
-                      strokeDasharray={`${donutValues.lenGood} ${donutValues.c}`}
-                      strokeDashoffset={donutValues.offGood}
-                    />
+                    {donutValues.lenGood > 0 && (
+                      <circle
+                        cx="50" cy="50" r="40"
+                        className={styles.donutSegment}
+                        stroke="#06b6d4"
+                        strokeDasharray={`${donutValues.lenGood} ${donutValues.c}`}
+                        strokeDashoffset={donutValues.offGood}
+                      />
+                    )}
                     {/* Needs Support */}
-                    <circle
-                      cx="50" cy="50" r="40"
-                      className={styles.donutSegment}
-                      stroke="#f59e0b"
-                      strokeDasharray={`${donutValues.lenNeeds} ${donutValues.c}`}
-                      strokeDashoffset={donutValues.offNeeds}
-                    />
+                    {donutValues.lenNeeds > 0 && (
+                      <circle
+                        cx="50" cy="50" r="40"
+                        className={styles.donutSegment}
+                        stroke="#f59e0b"
+                        strokeDasharray={`${donutValues.lenNeeds} ${donutValues.c}`}
+                        strokeDashoffset={donutValues.offNeeds}
+                      />
+                    )}
                     {/* At Risk */}
-                    <circle
-                      cx="50" cy="50" r="40"
-                      className={styles.donutSegment}
-                      stroke="#ef4444"
-                      strokeDasharray={`${donutValues.lenRisk} ${donutValues.c}`}
-                      strokeDashoffset={donutValues.offRisk}
-                    />
+                    {donutValues.lenRisk > 0 && (
+                      <circle
+                        cx="50" cy="50" r="40"
+                        className={styles.donutSegment}
+                        stroke="#ef4444"
+                        strokeDasharray={`${donutValues.lenRisk} ${donutValues.c}`}
+                        strokeDashoffset={donutValues.offRisk}
+                      />
+                    )}
                   </svg>
                   <div className={styles.donutCenter}>
                     <span className={styles.donutNumber}>{performance.total}</span>
@@ -511,32 +544,72 @@ export default function InstructorDashboard() {
                 </div>
 
                 <div className={styles.donutLegend}>
-                  <div className={styles.legendItem}>
+                  <div
+                    className={styles.legendItem}
+                    onClick={() => router.push('/instructor/analytics?tab=students')}
+                    title="View excellent performing students"
+                  >
                     <span className={styles.legendDot} style={{ background: '#10b981' }} />
                     <span className={styles.legendLabel}>Excellent ({performance.excellent})</span>
                   </div>
-                  <div className={styles.legendItem}>
+                  <div
+                    className={styles.legendItem}
+                    onClick={() => router.push('/instructor/analytics?tab=students')}
+                    title="View good performing students"
+                  >
                     <span className={styles.legendDot} style={{ background: '#06b6d4' }} />
                     <span className={styles.legendLabel}>Good ({performance.good})</span>
                   </div>
-                  <div className={styles.legendItem}>
+                  <div
+                    className={styles.legendItem}
+                    onClick={() => router.push('/instructor/analytics?tab=students')}
+                    title="View students needing support"
+                  >
                     <span className={styles.legendDot} style={{ background: '#f59e0b' }} />
                     <span className={styles.legendLabel}>Needs Support ({performance.needs_support})</span>
                   </div>
-                  <div className={styles.legendItem}>
+                  <div
+                    className={styles.legendItem}
+                    onClick={() => router.push('/instructor/analytics?tab=students')}
+                    title="View at-risk students"
+                  >
                     <span className={styles.legendDot} style={{ background: '#ef4444' }} />
                     <span className={styles.legendLabel}>At Risk ({performance.at_risk})</span>
                   </div>
                 </div>
               </div>
 
-              <div className={styles.insightCallout}>
-                <div className={styles.insightIcon}>💡</div>
-                <div className={styles.insightText}>
-                  <strong>{performance.performing_well_pct}% of your students are performing well!</strong>
-                  <p>Consider reviewing concepts for at-risk students.</p>
+              {performance.total > 0 ? (
+                <div className={styles.insightCallout}>
+                  <div className={styles.insightIcon}>💡</div>
+                  <div className={styles.insightText}>
+                    <strong>{performance.performing_well_pct}% of your students are performing well!</strong>
+                    <p>
+                      {performance.at_risk > 0 ? (
+                        <>
+                          <span>{performance.at_risk} student{performance.at_risk === 1 ? '' : 's'} may require intervention. </span>
+                          <button
+                            className={styles.insightActionBtn}
+                            onClick={() => router.push('/instructor/analytics?tab=students')}
+                          >
+                            View at-risk →
+                          </button>
+                        </>
+                      ) : (
+                        'Cohort is actively progressing across experiments.'
+                      )}
+                    </p>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <div className={styles.insightCallout}>
+                  <div className={styles.insightIcon}>ℹ️</div>
+                  <div className={styles.insightText}>
+                    <strong>Awaiting cohort submissions</strong>
+                    <p>Performance analytics will populate once students complete code attempts.</p>
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Col 3: Recent Submissions */}
@@ -555,11 +628,12 @@ export default function InstructorDashboard() {
                 {recentSubmissions.length === 0 && !loading && (
                   <div className={styles.emptyNotice}>No submissions logged yet.</div>
                 )}
-                {recentSubmissions.slice(0, 3).map((sub, idx) => (
+                {recentSubmissions.slice(0, 5).map((sub, idx) => (
                   <div
                     key={sub.id || idx}
                     className={styles.submissionItem}
                     onClick={() => router.push('/instructor/grading')}
+                    title={`Grade ${sub.student_name}'s submission for ${sub.experiment_title}`}
                   >
                     <div className={styles.subIconWrap}>
                       <FileText size={16} color="#7c3aed" />
@@ -569,11 +643,18 @@ export default function InstructorDashboard() {
                       <p className={styles.subStudent}>{sub.student_name}</p>
                     </div>
                     <div className={styles.subEnd}>
-                      <span className={`${styles.subScorePill} ${sub.test_cases_passed === sub.test_cases_total ? styles.scoreGreen : styles.scoreAmber}`}>
-                        {sub.test_cases_passed}/{sub.test_cases_total}
-                      </span>
+                      {sub.test_cases_total > 0 && (
+                        <span className={`${styles.subScorePill} ${sub.test_cases_passed === sub.test_cases_total ? styles.scoreGreen : styles.scoreAmber}`}>
+                          {sub.test_cases_passed}/{sub.test_cases_total}
+                        </span>
+                      )}
+                      {sub.is_graded && sub.grade !== null && (
+                        <span className={styles.subScorePill} style={{ background: '#ecfdf5', color: '#059669' }}>
+                          {sub.grade} pts
+                        </span>
+                      )}
                       <span className={styles.subTime}>{timeAgo(sub.submitted_at)}</span>
-                      <button className={styles.subMoreBtn} onClick={(e) => { e.stopPropagation(); router.push('/instructor/grading'); }}>
+                      <button className={styles.subMoreBtn} onClick={(e) => { e.stopPropagation(); router.push('/instructor/grading'); }} title="Open grading">
                         <MoreVertical size={14} />
                       </button>
                     </div>

@@ -132,11 +132,11 @@ export const experimentService = {
     return data.subject;
   },
 
-  // ── Instructor: Subject grade-summary rollup matrix ─────────────────────────
-  // GET /api/instructor/subjects/<subject_id>/grade-summary
-  async getSubjectGradeSummary(subjectId: string): Promise<SubjectGradeSummary> {
+  // GET /api/instructor/subjects/<subject_id>/grade-summary?section_id=
+  async getSubjectGradeSummary(subjectId: string, sectionId?: string): Promise<SubjectGradeSummary> {
     const { data } = await apiClient.get<SubjectGradeSummary>(
-      `/instructor/subjects/${subjectId}/grade-summary`
+      `/instructor/subjects/${subjectId}/grade-summary`,
+      { params: sectionId ? { section_id: sectionId } : {} }
     );
     return data;
   },

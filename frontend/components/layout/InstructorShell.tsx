@@ -5,9 +5,9 @@ import { useRouter } from 'next/navigation';
 import Link from 'next/link';
 import {
   LayoutDashboard, FlaskConical, PlayCircle, Radio,
-  ClipboardCheck, BarChart3, Users,
+  ClipboardCheck, BarChart3,
   Bell, Search, ChevronRight, LogOut, Settings, User, Menu,
-  MessageSquare, FileText, Crown, ArrowRight,
+  FileText, Crown, ArrowRight,
   ClipboardList, RotateCcw, HeartHandshake, Star
 } from 'lucide-react';
 import Image from 'next/image';
@@ -22,14 +22,12 @@ const NAV_MAIN = [
   { id: 'Experiments',     label: 'Experiments',     Icon: FlaskConical,    route: '/instructor/experiments' },
   { id: 'Sessions',        label: 'Sessions',        Icon: PlayCircle,      route: '/instructor/sessions' },
   { id: 'Live Conductor',  label: 'Live Conductor',  Icon: Radio,           route: '/instructor/live-lab' },
-  { id: 'Students',        label: 'Students',        Icon: Users,          route: '/instructor/analytics?tab=students' },
   { id: 'Grading',         label: 'Grading',         Icon: ClipboardCheck,  route: '/instructor/grading' },
   { id: 'Analytics',       label: 'Analytics',       Icon: BarChart3,       route: '/instructor/analytics' },
 ];
 
 const NAV_TEACHING = [
   { id: 'Exams',            label: 'Exams',            Icon: ClipboardList,   route: '/instructor/exams' },
-  { id: 'Viva',             label: 'Viva Panel',       Icon: MessageSquare,   route: '/instructor/viva' },
   { id: 'Catch-Up Reviews', label: 'Catch-Up Reviews', Icon: RotateCcw,       route: '/instructor/catch-up' },
   { id: 'Management',       label: 'Class Management', Icon: HeartHandshake,  route: '/instructor/management' },
 ];

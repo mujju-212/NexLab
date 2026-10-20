@@ -1123,7 +1123,7 @@ export default function ConductorPage() {
                   roster={grid.map(r => ({
                     id: r.student_id, name: r.full_name, roll: r.roll_number,
                     focus: r.focus_score as number | null,
-                    connected: !!screenshots[r.student_id] || r.focus_score !== null,
+                    connected: !!screenshots[r.student_id] || r.focus_score !== null || (r.attempts ?? 0) > 0 || (r.verified_checkpoints ?? 0) > 0,
                     screenshot: screenshots[r.student_id]?.frames[0]?.frame ?? null,
                   }))}
                   shareActive={shareState !== 'idle'}

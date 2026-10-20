@@ -513,11 +513,30 @@
   min-width: 0;
 }
 
+.emptyNotice {
+  padding: 16px;
+  text-align: center;
+  color: #6b7280;
+  font-size: 12px;
+  background: #faf8fd;
+  border-radius: 10px;
+  border: 1px dashed #e2e8f0;
+}
+
 .conceptRow {
   display: flex;
   align-items: center;
   gap: 10px;
   min-width: 0;
+  padding: 6px 8px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.conceptRow:hover {
+  background: #f7f3fd;
+  transform: translateX(2px);
 }
 
 .conceptName {
@@ -570,6 +589,12 @@
   width: 100px;
   height: 100px;
   flex-shrink: 0;
+  cursor: pointer;
+  transition: transform 0.2s ease;
+}
+
+.donutChartWrap:hover {
+  transform: scale(1.05);
 }
 
 .donutSvg {
@@ -626,6 +651,15 @@
   align-items: center;
   gap: 7px;
   min-width: 0;
+  padding: 3px 6px;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.legendItem:hover {
+  background: #f3f0f9;
+  transform: translateX(2px);
 }
 
 .legendDot {
@@ -654,6 +688,22 @@
   align-items: flex-start;
   gap: 10px;
   min-width: 0;
+}
+
+.insightActionBtn {
+  background: none;
+  border: none;
+  color: #7c3aed;
+  font-weight: 700;
+  font-size: 11px;
+  cursor: pointer;
+  padding: 0;
+  margin-left: 4px;
+  text-decoration: underline;
+}
+
+.insightActionBtn:hover {
+  color: #6d28d9;
 }
 
 .insightIcon {

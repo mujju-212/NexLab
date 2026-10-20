@@ -352,10 +352,13 @@ export const instructorService = {
   },
 
   // ── Viva Review ───────────────────────────────────────────────────────
-  // GET /api/instructor/vivas?status=
-  async listVivas(status?: string): Promise<VivaListItem[]> {
+  // GET /api/instructor/vivas?status=&experiment_id=
+  async listVivas(status?: string, experimentId?: string): Promise<VivaListItem[]> {
     const { data } = await apiClient.get<{ vivas: VivaListItem[] }>('/instructor/vivas', {
-      params: status ? { status } : {},
+      params: {
+        ...(status ? { status } : {}),
+        ...(experimentId ? { experiment_id: experimentId } : {})
+      },
     });
     return data.vivas;
   },
