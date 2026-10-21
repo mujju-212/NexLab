@@ -74,6 +74,8 @@ def get_user_course_analytics(user_id: str) -> Dict[str, Any]:
                 'course_slug': course.slug,
                 'completed_at': completed_at,
                 'verification_slug': f"cert-{cert_id.lower()}",
+                'download_url': f"/api/free/courses/{course.id}/certificate",
+                'type': 'course',
             })
         else:
             cert_id = None
@@ -97,6 +99,30 @@ def get_user_course_analytics(user_id: str) -> Dict[str, Any]:
             'certificate_id': cert_id,
             'completed_at': completed_at,
         })
+
+    # Also blend completed Study Plan certificates
+    try:
+        from app.models.practice import StudyPlan, StudyPlanProgress
+        completed_plans = (
+            db.session.query(StudyPlanProgress, StudyPlan)
+            .join(StudyPlan, StudyPlanProgress.plan_id == StudyPlan.id)
+            .filter(StudyPlanProgress.student_id == user_id, StudyPlanProgress.completed_at.isnot(None))
+            .all()
+        )
+        for prog, plan in completed_plans:
+            plan_cert_id = f"NEX-{plan.slug[:10].upper()}-{user_id[:8].upper()}"
+            certificates.append({
+                'certificate_id': plan_cert_id,
+                'course_id': plan.id,
+                'course_title': f"Study Plan: {plan.title}",
+                'course_slug': plan.slug,
+                'completed_at': prog.completed_at.isoformat() if prog.completed_at else datetime.utcnow().isoformat(),
+                'verification_slug': f"cert-{plan_cert_id.lower()}",
+                'download_url': f"/api/practice/plans/{plan.id}/certificate",
+                'type': 'study_plan',
+            })
+    except Exception:
+        pass
 
     # Sort courses: active with progress first, then alphabetical or order_index
     course_items.sort(key=lambda c: (c['completion_pct'] == 0, -c['completion_pct']))

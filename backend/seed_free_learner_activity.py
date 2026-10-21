@@ -41,8 +41,7 @@ with app.app_context():
         db.session.add(xp)
 
     xp.streak_days = 6
-    xp.longest_streak = 12
-    xp.last_active_date = datetime.utcnow().date()
+    xp.streak_last_date = datetime.utcnow().date()
     xp.profile_public = True
     xp.profile_slug = "free-learner"
 
@@ -104,7 +103,7 @@ with app.app_context():
                         user_id=user.id,
                         course_id=c.id,
                         exercise_id=ex.id,
-                        status="completed",
+                        status="solved",
                         attempts=1,
                         best_score=100.0,
                         xp_earned=ex.xp_reward or 20,

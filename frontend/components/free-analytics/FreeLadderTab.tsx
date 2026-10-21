@@ -35,14 +35,16 @@ interface FreeLadderTabProps {
 }
 
 const TOPICS_LIST = [
-  'Arrays',
+  'Array',
+  'String',
   'Hash Table',
   'Two Pointers',
-  'Linked Lists',
+  'Linked List',
+  'Tree',
+  'Graph',
   'Dynamic Programming',
-  'Trees',
   'Binary Search',
-  'Algorithms',
+  'Stack',
 ];
 
 export const FreeLadderTab: React.FC<FreeLadderTabProps> = ({
@@ -53,7 +55,7 @@ export const FreeLadderTab: React.FC<FreeLadderTabProps> = ({
 }) => {
   const router = useRouter();
   const [scope, setScope] = useState<'global' | 'topic'>('global');
-  const [topic, setTopic] = useState('Arrays');
+  const [topic, setTopic] = useState('Array');
   const [period, setPeriod] = useState<'monthly' | 'weekly' | 'all_time'>('all_time');
   const [timeframe, setTimeframe] = useState('All Time');
 
@@ -71,9 +73,11 @@ export const FreeLadderTab: React.FC<FreeLadderTabProps> = ({
   });
 
   // Dynamic user statistics from real database data (nullish coalescing)
+  const totalSolved = standing?.problems_solved ?? difficultyMix?.total_solved ?? 0;
   const rating = Math.round(standing?.rating ?? 0);
+  const isRanked = totalSolved > 0 && rating > 0 && standing?.global_rank != null;
   const rankMovement = standing?.rank_movement ?? 0;
-  const percentile = standing?.global_percentile != null
+  const percentile = (isRanked && standing?.global_percentile != null)
     ? Math.max(1, 100 - Math.round(standing.global_percentile))
     : null;
   const level = standing?.level ?? 1;
@@ -83,7 +87,6 @@ export const FreeLadderTab: React.FC<FreeLadderTabProps> = ({
   const levelPct = nextXp > 0 ? Math.min(100, Math.max(0, Math.round((currentXp / nextXp) * 100))) : 0;
   const xpRemaining = Math.max(0, nextXp - currentXp);
   const streak = standing?.streak_days ?? 0;
-  const totalSolved = standing?.problems_solved ?? difficultyMix?.total_solved ?? 0;
   const easySolved = standing?.easy_solved ?? difficultyMix?.easy ?? 0;
   const mediumSolved = standing?.medium_solved ?? difficultyMix?.medium ?? 0;
   const hardSolved = standing?.hard_solved ?? difficultyMix?.hard ?? 0;
@@ -230,13 +233,15 @@ export const FreeLadderTab: React.FC<FreeLadderTabProps> = ({
           <div className={styles.ladderCardBodyFlex}>
             <div>
               <div style={{ display: 'flex', alignItems: 'baseline' }}>
-                <span className={styles.ladderScoreBig}>{rating.toLocaleString()}</span>
-                <span className={styles.ladderTrendChip}>
-                  {rankMovement > 0 ? `▲ +${rankMovement} this week` : rankMovement < 0 ? `▼ ${rankMovement}` : 'Stable this week'}
-                </span>
+                <span className={styles.ladderScoreBig}>{isRanked ? rating.toLocaleString() : 'Unranked'}</span>
+                {isRanked && (
+                  <span className={styles.ladderTrendChip}>
+                    {rankMovement > 0 ? `▲ +${rankMovement} this week` : rankMovement < 0 ? `▼ ${rankMovement}` : 'Stable this week'}
+                  </span>
+                )}
               </div>
               <div className={styles.ladderSubHead}>
-                {percentile ? `Top ${percentile}% worldwide` : 'Unranked · Complete challenges to rank'}
+                {isRanked && percentile ? `Top ${percentile}% worldwide` : 'Unranked · Solve 1 problem to rank'}
               </div>
               <div className={styles.ladderFootnote}>
                 {cohortSize > 0 ? `Out of ${cohortSize.toLocaleString()} active platform coders` : 'Across all NexLab coders'}

@@ -772,7 +772,7 @@ export const FreeOverviewTab: React.FC<FreeOverviewTabProps> = ({
 
                     <button
                       className={styles.solveNowBtn}
-                      onClick={() => router.push(`/practice/library?problem=${rec.slug || rec.id}`)}
+                      onClick={() => router.push(`/practice/library/${rec.slug || rec.id}`)}
                     >
                       Solve Now <ArrowRight size={13} />
                     </button>

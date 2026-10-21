@@ -249,7 +249,7 @@ export const FreeSkillsTab: React.FC<FreeSkillsTabProps> = ({
                 <div
                   key={prob.id}
                   className={styles.reinforceItem}
-                  onClick={() => router.push(`/practice/library?problem=${prob.slug || prob.id}`)}
+                  onClick={() => router.push(`/practice/library/${prob.slug || prob.id}`)}
                   style={{ cursor: 'pointer' }}
                 >
                   <div className={styles.reinforceItemTop}>

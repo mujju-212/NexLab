@@ -82,6 +82,11 @@ export interface SubmitResult {
   solved: boolean;
   xp_earned: number;
   status: 'solved' | 'attempted';
+  results?: Array<{
+    input: string; expected: string; output: string;
+    passed: boolean; time_ms: number | null; memory_kb: number | null;
+    status: string; stderr?: string; compile_output?: string; error?: string;
+  }>;
 }
 
 export interface Progress {
@@ -396,6 +401,8 @@ export interface FreeCoursesAnalytics {
     course_slug: string;
     completed_at: string;
     verification_slug: string;
+    download_url?: string;
+    type?: string;
   }>;
   courses: FreeCourseItem[];
 }

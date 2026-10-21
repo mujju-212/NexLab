@@ -18,6 +18,7 @@ import {
   Check,
   X,
   Trophy,
+  Download,
 } from 'lucide-react';
 import {
   freeService,
@@ -62,7 +63,9 @@ export const FreeCoursesTab: React.FC<FreeCoursesTabProps> = ({
   const [viewingCert, setViewingCert] = useState<{
     certId: string;
     courseTitle: string;
+    courseId?: string;
     completedAt?: string;
+    downloadUrl?: string;
   } | null>(null);
 
   // Load persistent bookmarks from localStorage
@@ -194,7 +197,9 @@ export const FreeCoursesTab: React.FC<FreeCoursesTabProps> = ({
     setViewingCert({
       certId: cert?.certificate_id || `NEX-${course.slug.toUpperCase()}-VERIFIED`,
       courseTitle: course.title,
+      courseId: course.id,
       completedAt: cert?.completed_at || course.completed_at || 'Recently Completed',
+      downloadUrl: cert?.download_url || `/api/free/courses/${course.id}/certificate`,
     });
   };
 
@@ -551,6 +556,116 @@ export const FreeCoursesTab: React.FC<FreeCoursesTabProps> = ({
           </div>
         </div>
       </div>
+
+      {/* ═════════════════════════════════════════════════════════════════════
+          2b. EARNED CERTIFICATES SHOWCASE (Live Database Tracking)
+         ═════════════════════════════════════════════════════════════════════ */}
+      {coursesData?.certificates && coursesData.certificates.length > 0 && (
+        <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: '1rem', padding: '1.25rem 1.5rem', boxShadow: '0 1px 3px rgba(0,0,0,0.05)' }}>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '1rem', flexWrap: 'wrap', gap: '0.5rem' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '0.625rem' }}>
+              <div style={{ width: '36px', height: '36px', borderRadius: '10px', background: '#f5f3ff', color: '#7c3aed', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                <Award size={20} />
+              </div>
+              <div>
+                <h3 style={{ margin: 0, fontSize: '1rem', fontWeight: 800, color: '#0f172a' }}>
+                  Earned Verified Certificates ({coursesData.certificates.length})
+                </h3>
+                <p style={{ margin: 0, fontSize: '0.8rem', color: '#64748b' }}>
+                  Official credentials issued for complete curriculum mastery.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(280px, 1fr))', gap: '1rem' }}>
+            {coursesData.certificates.map((cert) => (
+              <div
+                key={cert.certificate_id}
+                style={{
+                  border: '1px solid #c4b5fd',
+                  borderRadius: '0.75rem',
+                  padding: '1rem',
+                  background: 'linear-gradient(135deg, #ffffff 0%, #faf5ff 100%)',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  justifyContent: 'space-between',
+                  gap: '0.75rem',
+                }}
+              >
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
+                    <span style={{ fontSize: '0.72rem', fontWeight: 800, color: '#7c3aed', letterSpacing: '0.5px' }}>
+                      {cert.certificate_id}
+                    </span>
+                    <span style={{ fontSize: '0.72rem', background: '#dcfce7', color: '#15803d', padding: '2px 8px', borderRadius: '6px', fontWeight: 700, display: 'flex', alignItems: 'center', gap: '4px' }}>
+                      <CheckCircle2 size={12} /> Verified
+                    </span>
+                  </div>
+                  <h4 style={{ margin: '0 0 0.25rem', fontSize: '0.95rem', fontWeight: 700, color: '#1e293b' }}>
+                    {cert.course_title}
+                  </h4>
+                  <div style={{ fontSize: '0.75rem', color: '#64748b' }}>
+                    Completed {new Date(cert.completed_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })}
+                  </div>
+                </div>
+
+                <div style={{ display: 'flex', gap: '0.5rem', marginTop: '0.25rem' }}>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const dlUrl = cert.download_url || `/api/free/courses/${cert.course_id}/certificate`;
+                      window.open(dlUrl, '_blank');
+                    }}
+                    style={{
+                      flex: 1,
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: '6px',
+                      padding: '0.5rem 0.75rem',
+                      borderRadius: '0.5rem',
+                      background: '#7c3aed',
+                      color: '#ffffff',
+                      fontSize: '0.8rem',
+                      fontWeight: 700,
+                      border: 'none',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    <Download size={13} />
+                    <span>Download PDF</span>
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setViewingCert({
+                        certId: cert.certificate_id,
+                        courseTitle: cert.course_title,
+                        courseId: cert.course_id,
+                        completedAt: cert.completed_at,
+                        downloadUrl: cert.download_url,
+                      });
+                    }}
+                    style={{
+                      padding: '0.5rem 0.75rem',
+                      borderRadius: '0.5rem',
+                      background: '#ffffff',
+                      color: '#64748b',
+                      fontSize: '0.8rem',
+                      fontWeight: 600,
+                      border: '1px solid #cbd5e1',
+                      cursor: 'pointer',
+                    }}
+                  >
+                    View
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
 
       {/* ═════════════════════════════════════════════════════════════════════
           3. SEARCH, FILTERS & STATUS PILLS BAR
@@ -965,12 +1080,24 @@ export const FreeCoursesTab: React.FC<FreeCoursesTabProps> = ({
                 type="button"
                 className={styles.certPrimaryBtn}
                 onClick={() => {
+                  const url = viewingCert.downloadUrl || `/api/free/courses/${viewingCert.courseId}/certificate`;
+                  window.open(url, '_blank');
+                }}
+                style={{ background: '#7c3aed', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}
+              >
+                <Download size={14} />
+                <span>Download PDF</span>
+              </button>
+              <button
+                type="button"
+                className={styles.certSecondaryBtn}
+                onClick={() => {
                   navigator.clipboard.writeText(`${window.location.origin}/verify/${viewingCert.certId}`);
                   showToast('Verification URL copied!');
                 }}
               >
                 <Share2 size={14} />
-                <span>Share Certificate</span>
+                <span>Share Link</span>
               </button>
               <button
                 type="button"

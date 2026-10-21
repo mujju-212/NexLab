@@ -86,12 +86,25 @@ export const RankHero: React.FC<RankHeroProps> = ({
         <div className={styles.heroMetricCard}>
           <span className={styles.metricLabel}>Global Ladder</span>
           <div className={styles.metricValueWrap}>
-            <span className={styles.metricPrimary}>
-              #{standing.global_rank ? standing.global_rank.toLocaleString() : '1'}
-            </span>
-            <span className={styles.metricDelta} style={{ color: '#7c3aed' }}>
-              Top {Math.max(1, 100 - Math.round(standing.global_percentile || 99))}%
-            </span>
+            {standing.global_rank && (standing.problems_solved || 0) > 0 && (standing.rating || 0) > 0 ? (
+              <>
+                <span className={styles.metricPrimary}>
+                  #{standing.global_rank.toLocaleString()}
+                </span>
+                <span className={styles.metricDelta} style={{ color: '#7c3aed' }}>
+                  Top {Math.max(1, 100 - Math.round(standing.global_percentile || 0))}%
+                </span>
+              </>
+            ) : (
+              <>
+                <span className={styles.metricPrimary} style={{ fontSize: '1.25rem' }}>
+                  Unranked
+                </span>
+                <span className={styles.metricDelta} style={{ color: '#64748b', fontSize: '0.78rem' }}>
+                  Solve 1 problem to rank
+                </span>
+              </>
+            )}
           </div>
           <span className={styles.metricSubtext}>Across all worldwide platform coders</span>
         </div>
