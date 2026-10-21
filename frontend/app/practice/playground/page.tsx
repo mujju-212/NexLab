@@ -14,7 +14,7 @@ import {
   Cpu, Send, Info, Eraser, ChevronDown, Globe, Eye,
   FolderOpen, Save, FileCode2, Home, ChevronRight, Code2, Plus, Search,
   MoreVertical, MoreHorizontal, Maximize2, Minimize2, Trash2, BarChart3,
-  Bot, X, ArrowRight, Layers, HelpCircle, Activity, Square, Gauge, ChevronLeft,
+  Bot, X, ArrowRight, Layers, HelpCircle, Activity, Square, Gauge, ChevronLeft, Share2,
 } from 'lucide-react';
 import IndividualShell from '@/components/layout/IndividualShell';
 import CodeEditor from '@/components/editor/code-editor';
@@ -478,8 +478,15 @@ export default function PlaygroundPage() {
     try {
       const s = await practiceExtraService.getPlaygroundSession(id);
       const target = languages.find((l) => l.id === s.language);
-      if (target && target.id !== langId) {
-        setLangId(target.id);
+      if (target) {
+        writeLocal(draftKey(target.id), s.code ?? '');
+        if (s.stdin_data != null) {
+          writeLocal(stdinKey(target.id), s.stdin_data);
+        }
+        writeLocal(LANG_KEY, target.id);
+        if (target.id !== langId) {
+          setLangId(target.id);
+        }
       }
       setCode(s.code ?? '');
       setStdin(s.stdin_data ?? '');
@@ -491,6 +498,51 @@ export default function PlaygroundPage() {
       flash(errMsg(e, 'Could not open file.'), true);
     }
   }, [flash, langId, languages]);
+
+  const shareFile = useCallback(async (fileId?: string) => {
+    const targetId = fileId || currentFileId;
+    if (!targetId) {
+      if (!lang || !code.trim()) {
+        flash('Write some code before sharing.', true);
+        return;
+      }
+      try {
+        setSaving(true);
+        const title = fileTitle || 'main.py';
+        const s = await practiceExtraService.savePlaygroundSession({
+          title,
+          language: lang.id,
+          code,
+          stdin_data: stdin || undefined,
+        });
+        setCurrentFileId(s.id);
+        setFileTitle(s.title || title);
+        setFiles((prev) => [s, ...prev.filter((f) => f.id !== s.id)]);
+        const shareUrl = await practiceExtraService.sharePlaygroundSession(s.id, true);
+        if (shareUrl) {
+          const fullUrl = `${window.location.origin}${shareUrl}`;
+          await navigator.clipboard.writeText(fullUrl);
+          flash('Share link copied to clipboard!');
+        }
+      } catch (e) {
+        flash(errMsg(e, 'Failed to share session.'), true);
+      } finally {
+        setSaving(false);
+      }
+      return;
+    }
+
+    try {
+      const shareUrl = await practiceExtraService.sharePlaygroundSession(targetId, true);
+      if (shareUrl) {
+        const fullUrl = `${window.location.origin}${shareUrl}`;
+        await navigator.clipboard.writeText(fullUrl);
+        flash('Share link copied to clipboard!');
+      }
+    } catch (e) {
+      flash(errMsg(e, 'Failed to share session.'), true);
+    }
+  }, [code, currentFileId, fileTitle, flash, lang, stdin]);
 
   const saveFile = useCallback(async (opts?: { asNew?: boolean; name?: string }) => {
     if (!lang || !code.trim()) {
@@ -727,8 +779,17 @@ export default function PlaygroundPage() {
           </button>
         </div>
 
-        {/* Right Toolbar Actions */}
         <div className={styles.toolbarRight}>
+          <button
+            className={styles.toolActionBtn}
+            onClick={() => shareFile()}
+            disabled={saving}
+            title="Share session — copies read-only public link"
+          >
+            <Share2 size={14} />
+            <span>Share</span>
+          </button>
+
           <button
             className={styles.toolActionBtn}
             onClick={() => saveFile()}
@@ -930,7 +991,16 @@ export default function PlaygroundPage() {
                         onClick={e => e.stopPropagation()}
                       >
                         <button
-                          style={{ display: 'block', width: '100%', padding: '4px 8px', fontSize: 11, textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer' }}
+                          style={{ display: 'block', width: '100%', padding: '6px 10px', fontSize: 11, textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', color: '#7c3aed', fontWeight: 600 }}
+                          onClick={() => {
+                            setFileMenuOpenId(null);
+                            shareFile(file.id);
+                          }}
+                        >
+                          Share Link
+                        </button>
+                        <button
+                          style={{ display: 'block', width: '100%', padding: '6px 10px', fontSize: 11, textAlign: 'left', border: 'none', background: 'none', cursor: 'pointer', color: '#ef4444' }}
                           onClick={() => deleteFile(file.id)}
                         >
                           Delete
@@ -997,7 +1067,26 @@ export default function PlaygroundPage() {
             <div className={styles.editorTabBar}>
               <div className={styles.editorTabsLeft}>
                 <div className={`${styles.fileTab} ${styles.fileTabActive}`}>
-                  <span>{fileTitle || lang?.filename || 'main.py'}</span>
+                  <input
+                    type="text"
+                    value={fileTitle || ''}
+                    onChange={(e) => {
+                      setFileTitle(e.target.value);
+                      setDirty(true);
+                    }}
+                    placeholder={lang?.filename || 'main.py'}
+                    style={{
+                      background: 'transparent',
+                      border: 'none',
+                      outline: 'none',
+                      color: 'inherit',
+                      fontSize: 'inherit',
+                      fontWeight: 'inherit',
+                      width: `${Math.max(8, (fileTitle || lang?.filename || 'main.py').length + 1)}ch`,
+                      cursor: 'text',
+                    }}
+                    title="Click to rename session"
+                  />
                   <button className={styles.tabCloseBtn} onClick={copyCode} title="Copy code">
                     {copied ? <Check size={12} /> : <Copy size={12} />}
                   </button>

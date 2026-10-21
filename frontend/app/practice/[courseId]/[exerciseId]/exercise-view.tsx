@@ -61,11 +61,18 @@ export default function ExerciseView({ basePath = '/practice', embedded = false 
       setLang(defaultLang);
       setCode(ex.starter_code?.[defaultLang] ?? '');
 
-      // Simulation exercises: pre-load completion state
+      // Simulation/coding exercises: pre-load completion state and restore saved code
       if (user) {
         try {
           const prog = await freeService.getCourseProgress(c.id);
           setSimSolved((prog.solved_ids ?? []).includes(ex.id));
+          const exProg = (prog.records ?? []).find((r: any) => r.exercise_id === ex.id);
+          if (exProg?.last_code) {
+            setCode(exProg.last_code);
+            if (exProg.language_used && (ex.allowed_languages || []).includes(exProg.language_used)) {
+              setLang(exProg.language_used);
+            }
+          }
         } catch { /* progress is best-effort */ }
       }
     } catch {
@@ -104,7 +111,7 @@ export default function ExerciseView({ basePath = '/practice', embedded = false 
       const res = await freeService.submitCode(exercise.id, code, lang);
       setSubmitResult({ solved: res.solved, score: res.score, xp_earned: res.xp_earned });
       setRunResult({
-        results: [], passed: res.passed, total: res.total,
+        results: res.results || [], passed: res.passed, total: res.total,
         score: res.score, all_passed: res.solved,
       });
     } catch { /* error */ } finally {
@@ -195,8 +202,8 @@ export default function ExerciseView({ basePath = '/practice', embedded = false 
             <h1 className={styles.exTitle}>{exercise.title}</h1>
           </div>
 
-          {/* Tabs (hidden for simulations — no test cases) */}
-          {exercise.exercise_type !== 'simulation' && (
+          {/* Tabs (hidden for simulations & reading — no test cases) */}
+          {exercise.exercise_type !== 'simulation' && exercise.exercise_type !== 'reading' && (
           <div className={styles.tabs}>
             <button className={`${styles.tab} ${activeTab === 'problem' ? styles.tabActive : ''}`}
               onClick={() => setActiveTab('problem')}>Problem</button>
@@ -233,6 +240,27 @@ export default function ExerciseView({ basePath = '/practice', embedded = false 
                 <button className={styles.btnComplete} onClick={handleSimComplete} disabled={completing}>
                   {completing ? <RefreshCw size={14} className={styles.spinIcon} /> : <CheckCircle2 size={14} />}
                   Mark Experiment Complete (+{exercise.xp_reward} XP)
+                </button>
+              )}
+            </div>
+          </div>
+          ) : exercise.exercise_type === 'reading' ? (
+          <div className={styles.panelContent}>
+            <div className={styles.problemContent}>
+              <div className={styles.description}
+                dangerouslySetInnerHTML={{
+                  __html: (exercise.description || '').replace(/\n/g, '<br/>').replace(/`([^`]+)`/g, '<code>$1</code>').replace(/\*\*([^*]+)\*\*/g, '<strong>$1</strong>'),
+                }}
+              />
+              {simSolved ? (
+                <div className={`${styles.submitBanner} ${styles.bannerSolved}`}>
+                  <Trophy size={18} /> Reading completed
+                  {submitResult && submitResult.xp_earned > 0 && <>&nbsp;— +{submitResult.xp_earned} XP</>}
+                </div>
+              ) : (
+                <button className={styles.btnComplete} onClick={handleSimComplete} disabled={completing}>
+                  {completing ? <RefreshCw size={14} className={styles.spinIcon} /> : <CheckCircle2 size={14} />}
+                  Mark as Read (+{exercise.xp_reward} XP)
                 </button>
               )}
             </div>

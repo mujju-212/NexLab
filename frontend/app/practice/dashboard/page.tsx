@@ -757,7 +757,13 @@ export default function IndividualDashboardPage() {
                     recentRecords.map((rec, i) => {
                       const course = courseMap[rec.course_id];
                       return (
-                        <div key={`${rec.exercise_id}-${i}`} className={styles.timelineItem}>
+                        <div
+                          key={`${rec.exercise_id}-${i}`}
+                          className={styles.timelineItem}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => router.push(rec.course_id && rec.exercise_id ? `/practice/${rec.course_id}/${rec.exercise_id}` : '/practice')}
+                          title={`Go to ${(rec as any).exercise_title || 'Exercise'}`}
+                        >
                           {i < recentRecords.length - 1 && <div className={styles.timelineConnector} />}
                           <div
                             className={styles.timelineIconBox}
@@ -769,7 +775,7 @@ export default function IndividualDashboardPage() {
                             {rec.status === 'solved' ? <CheckCircle2 size={14} /> : <Target size={14} />}
                           </div>
                           <div className={styles.timelineContent}>
-                            <p className={styles.timelineTitle}>{rec.exercise_id}</p>
+                            <p className={styles.timelineTitle}>{(rec as any).exercise_title || rec.exercise_id}</p>
                             <p className={styles.timelineDesc}>{course?.title || 'Practice Module'}</p>
                           </div>
                           <span className={styles.timelineTime}>

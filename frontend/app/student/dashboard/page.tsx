@@ -187,7 +187,7 @@ export default function StudentDashboardPage() {
     );
   }
 
-  const overallProgress = dash.overall_progress ?? (dash.avg_grade != null ? Math.round(dash.avg_grade) : 66);
+  const overallProgress = dash.overall_progress ?? (dash.avg_grade != null ? Math.round(dash.avg_grade) : 0);
   const studentDisplayName = user?.full_name ?? 'Test Student';
 
   // SVG Circular progress math (radius = 38)
@@ -441,7 +441,7 @@ export default function StudentDashboardPage() {
             </div>
             <div className={styles.metricBody}>
               <span className={styles.metricLabel}>Daily Streak</span>
-              <div className={styles.metricValue}>{dash.daily_streak ?? 5} Days</div>
+              <div className={styles.metricValue}>{dash.daily_streak ?? 0} Days</div>
               <span className={styles.metricSub}>Keep it going! 🔥</span>
             </div>
           </div>

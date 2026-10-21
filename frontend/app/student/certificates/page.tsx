@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import StudentShell from '@/components/layout/StudentShell';
 import { studentService } from '@/services/student.service';
 import { freeService, type FreeCoursesAnalytics, type FreeCourseItem } from '@/services/free.service';
+import { practiceExtraService } from '@/services/practice-extra.service';
 import type { SectionSubject } from '@/types';
 import { Loader2, Download, ExternalLink, ShieldCheck, Award, BookOpen, CheckCircle2, Copy } from 'lucide-react';
 import styles from './page.module.css';
@@ -31,6 +32,14 @@ export default function CertificatesPage() {
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([]);
   const [subjects, setSubjects] = useState<SectionSubject[]>([]);
   const [coursesAnalytics, setCoursesAnalytics] = useState<FreeCoursesAnalytics | null>(null);
+  const [studyPlans, setStudyPlans] = useState<Array<{
+    id: string;
+    slug: string;
+    title: string;
+    difficulty_mix: string;
+    total_problems: number;
+    completed: boolean;
+  }>>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
@@ -45,8 +54,9 @@ export default function CertificatesPage() {
       studentService.getHistory(),
       studentService.getSubjects(),
       freeService.getCoursesAnalytics(),
+      practiceExtraService.getPlans(),
     ])
-      .then(([hRes, sRes, cRes]) => {
+      .then(([hRes, sRes, cRes, pRes]) => {
         if (hRes.status === 'fulfilled') {
           setHistoryRows((hRes.value as HistoryRow[]).filter(r => r.grade != null));
         }
@@ -55,6 +65,9 @@ export default function CertificatesPage() {
         }
         if (cRes.status === 'fulfilled') {
           setCoursesAnalytics(cRes.value);
+        }
+        if (pRes.status === 'fulfilled') {
+          setStudyPlans(((pRes.value as any)?.plans || []) as any[]);
         }
       })
       .catch(e => setError(e instanceof Error ? e.message : 'Failed to load records'))
@@ -83,6 +96,8 @@ export default function CertificatesPage() {
   };
 
   const earnedCerts = coursesAnalytics?.certificates || [];
+  const completedPlans = studyPlans.filter(p => p.completed);
+  const totalPlatformCerts = earnedCerts.length + completedPlans.length;
   const inProgressCourses = (coursesAnalytics?.courses || []).filter(c => c.completion_pct > 0 && !c.cert_eligible);
 
   if (loading) {
@@ -111,7 +126,7 @@ export default function CertificatesPage() {
           onClick={() => setActiveTab('platform')}
         >
           <Award size={16} />
-          <span>Platform Skill Certifications ({earnedCerts.length})</span>
+          <span>Platform Skill Certifications ({totalPlatformCerts})</span>
         </button>
       </div>
 
@@ -259,7 +274,7 @@ export default function CertificatesPage() {
             <div className={styles.summaryCard}>
               <div className={styles.summaryIcon}>📜</div>
               <div>
-                <p className={styles.summaryNum}>{earnedCerts.length}</p>
+                <p className={styles.summaryNum}>{totalPlatformCerts}</p>
                 <p className={styles.summaryLabel}>Certificates Earned</p>
               </div>
             </div>
@@ -288,17 +303,18 @@ export default function CertificatesPage() {
 
           {/* Earned Certificates Grid */}
           <h4 style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', marginBottom: 14 }}>
-            Earned Competency Certificates ({earnedCerts.length})
+            Earned Competency Certificates ({totalPlatformCerts})
           </h4>
 
-          {earnedCerts.length === 0 ? (
+          {totalPlatformCerts === 0 ? (
             <div className={styles.emptyState}>
               <div style={{ fontSize: 48 }}>🏆</div>
               <h3>No platform certificates earned yet</h3>
-              <p>Complete all exercises in any track (Python, Algorithms, Systems) to unlock your certificate.</p>
+              <p>Complete all exercises in any track or practice study plan to unlock verified certificates.</p>
             </div>
           ) : (
             <div className={styles.certGrid}>
+              {/* Free Course Certificates */}
               {earnedCerts.map(cert => (
                 <div key={cert.certificate_id} className={styles.certCard}>
                   <div className={styles.certBanner} style={{ background: 'linear-gradient(135deg, #1e1b4b, #4338ca)' }}>
@@ -327,6 +343,42 @@ export default function CertificatesPage() {
                       >
                         <Copy size={13} style={{ display: 'inline', marginRight: 4 }} />
                         {copiedId === cert.certificate_id ? 'Copied!' : 'Copy ID'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              ))}
+
+              {/* Study Plan Completion Certificates */}
+              {completedPlans.map(plan => (
+                <div key={plan.id} className={styles.certCard}>
+                  <div className={styles.certBanner} style={{ background: 'linear-gradient(135deg, #0f172a, #2563eb)' }}>
+                    <div className={styles.certSeal}>🏅</div>
+                    <p className={styles.certTitle}>NexLab Study Plan Credential</p>
+                    <p className={styles.certSub}>Practice Curriculum Certification</p>
+                  </div>
+                  <div className={styles.certBody}>
+                    <p className={styles.certExp}>{plan.title}</p>
+                    <div className={styles.credId}>PLAN: {plan.slug.toUpperCase()}</div>
+                    <div className={styles.certMeta}>
+                      <span>🎯 {plan.total_problems} Problems Solved</span>
+                      <span>✓ 100% Completed</span>
+                    </div>
+                    <div className={styles.certActions}>
+                      <button
+                        className={styles.downloadBtn}
+                        onClick={() => practiceExtraService.downloadCertificate(plan.slug)}
+                        title="Download official Certificate PDF"
+                      >
+                        <Download size={13} style={{ display: 'inline', marginRight: 4 }} /> Download PDF
+                      </button>
+                      <button
+                        className={styles.shareBtn}
+                        onClick={() => copyCredential(plan.slug)}
+                        title="Copy Plan Identifier"
+                      >
+                        <Copy size={13} style={{ display: 'inline', marginRight: 4 }} />
+                        {copiedId === plan.slug ? 'Copied!' : 'Copy ID'}
                       </button>
                     </div>
                   </div>

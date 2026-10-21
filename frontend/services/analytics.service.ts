@@ -325,7 +325,7 @@ export const analyticsService = {
 
   // ── Early Warning (Tier 2 Integration) ─────────────────────────────────────
   async getEarlyWarning(sectionSubjectId: string) {
-    const { data } = await apiClient.get(`/instructor/tier2/early-warning/${sectionSubjectId}`);
+    const { data } = await apiClient.get(`/instructor/early-warning/${sectionSubjectId}`);
     return data;
   },
 
