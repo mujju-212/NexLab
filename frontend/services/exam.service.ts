@@ -292,4 +292,28 @@ export const examService = {
     const { data } = await apiClient.get<ExamResult>(`/student/exams/${examId}/result`);
     return data;
   },
+
+  async runCode(examId: string, payload: {
+    question_id?: string;
+    code: string;
+    language?: string;
+    stdin?: string;
+  }): Promise<{
+    results: Array<{
+      index: number;
+      input: string;
+      expected: string | null;
+      actual: string;
+      stderr: string;
+      compile_output?: string;
+      passed: boolean;
+      status: string;
+      time_ms?: number;
+      memory_kb?: number;
+    }>;
+    language: string;
+  }> {
+    const { data } = await apiClient.post(`/student/exams/${examId}/run-code`, payload);
+    return data;
+  },
 };

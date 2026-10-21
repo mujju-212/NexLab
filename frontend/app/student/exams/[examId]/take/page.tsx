@@ -4,6 +4,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Loader2, Timer, Send, ChevronLeft, ChevronRight, HelpCircle, Code2, ArrowLeft,
+  Play, Terminal,
 } from 'lucide-react';
 import StudentShell from '@/components/layout/StudentShell';
 import styles from '../../exams.module.css';
@@ -31,6 +32,22 @@ export default function TakeExamPage({ params }: { params: Promise<{ examId: str
   const [submitting, setSubmitting] = useState(false);
   const [saveState, setSaveState] = useState<'idle' | 'saving' | 'saved'>('idle');
   const [confirmOpen, setConfirmOpen] = useState(false);
+
+  // Coding execution states
+  const [runningQuestionId, setRunningQuestionId] = useState<string | null>(null);
+  const [testResults, setTestResults] = useState<Record<string, Array<{
+    index: number;
+    input: string;
+    expected: string | null;
+    actual: string;
+    stderr: string;
+    compile_output?: string;
+    passed: boolean;
+    status: string;
+    time_ms?: number;
+    memory_kb?: number;
+  }>>>({});
+  const [runError, setRunError] = useState<Record<string, string>>({});
 
   // Refs keep the latest values available to timers/effects without re-firing them.
   const answersRef = useRef<Answers>({});
@@ -130,6 +147,30 @@ export default function TakeExamPage({ params }: { params: Promise<{ examId: str
     const starter = qq.starter_code ?? '';
     return code.trim().length > 0 && code !== starter;
   }, [answers]);
+
+  const handleRunSampleTests = async (q: ExamQuestion) => {
+    if (!examId) return;
+    const currentCode = typeof answers[q.id] === 'string' ? (answers[q.id] as string) : (q.starter_code ?? '');
+    if (!currentCode.trim()) {
+      setRunError(prev => ({ ...prev, [q.id]: 'Please write some code before testing.' }));
+      return;
+    }
+    setRunningQuestionId(q.id);
+    setRunError(prev => ({ ...prev, [q.id]: '' }));
+
+    try {
+      const res = await examService.runCode(examId, {
+        question_id: q.id,
+        code: currentCode,
+        language: q.language || 'python',
+      });
+      setTestResults(prev => ({ ...prev, [q.id]: res.results }));
+    } catch (err: any) {
+      setRunError(prev => ({ ...prev, [q.id]: err?.response?.data?.error || err?.message || 'Execution error.' }));
+    } finally {
+      setRunningQuestionId(null);
+    }
+  };
 
   if (loading) {
     return (
@@ -244,10 +285,105 @@ export default function TakeExamPage({ params }: { params: Promise<{ examId: str
                     spellCheck={false}
                     value={typeof answers[q.id] === 'string' ? (answers[q.id] as string) : (q.starter_code ?? '')}
                     onChange={e => setAnswer(q.id, e.target.value)}
+                    placeholder="# Write your exam solution code here..."
                   />
+
+                  {/* Run Sample Tests Action Row */}
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 10, flexWrap: 'wrap', gap: 10 }}>
+                    <button
+                      type="button"
+                      disabled={runningQuestionId === q.id}
+                      onClick={() => handleRunSampleTests(q)}
+                      style={{
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: 8,
+                        padding: '9px 18px',
+                        background: 'linear-gradient(135deg, #3b82f6 0%, #2563eb 100%)',
+                        color: '#ffffff',
+                        border: 'none',
+                        borderRadius: 8,
+                        fontSize: 13,
+                        fontWeight: 700,
+                        cursor: runningQuestionId === q.id ? 'not-allowed' : 'pointer',
+                        boxShadow: '0 2px 8px rgba(37, 99, 235, 0.25)',
+                      }}
+                    >
+                      {runningQuestionId === q.id ? (
+                        <Loader2 size={14} style={{ animation: 'spin 1s linear infinite' }} />
+                      ) : (
+                        <Play size={14} fill="#ffffff" />
+                      )}
+                      <span>{runningQuestionId === q.id ? 'Running Tests…' : 'Run Sample Tests'}</span>
+                    </button>
+
+                    <span style={{ fontSize: 12, color: '#64748b' }}>
+                      Tests your code against public sample cases (does not submit exam attempt).
+                    </span>
+                  </div>
+
+                  {runError[q.id] && (
+                    <div style={{ marginTop: 12, padding: '10px 14px', borderRadius: 8, background: '#fef2f2', border: '1px solid #fecaca', color: '#dc2626', fontSize: 13 }}>
+                      ⚠️ {runError[q.id]}
+                    </div>
+                  )}
+
+                  {/* Real Execution Console & Results */}
+                  {testResults[q.id] && testResults[q.id].length > 0 && (
+                    <div style={{ marginTop: 16, border: '1px solid #334155', borderRadius: 10, overflow: 'hidden', background: '#0f172a', color: '#f8fafc' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#1e293b', borderBottom: '1px solid #334155' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                          <Terminal size={15} color="#38bdf8" />
+                          <span style={{ fontSize: 13, fontWeight: 700, color: '#f8fafc' }}>Sample Test Cases Console</span>
+                        </div>
+                        <span style={{
+                          fontSize: 12, fontWeight: 700,
+                          padding: '3px 10px', borderRadius: 999,
+                          background: testResults[q.id].every(r => r.passed) ? 'rgba(74, 222, 128, 0.15)' : 'rgba(245, 158, 11, 0.15)',
+                          color: testResults[q.id].every(r => r.passed) ? '#4ade80' : '#fbbf24'
+                        }}>
+                          {testResults[q.id].filter(r => r.passed).length} / {testResults[q.id].length} Passed
+                        </span>
+                      </div>
+                      <div style={{ padding: '12px 14px', display: 'flex', flexDirection: 'column', gap: 10 }}>
+                        {testResults[q.id].map((r, i) => (
+                          <div key={i} style={{ background: '#1e293b', borderRadius: 8, padding: 12, border: `1px solid ${r.passed ? 'rgba(74, 222, 128, 0.3)' : 'rgba(239, 68, 68, 0.3)'}` }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: '#94a3b8' }}>Sample Case #{r.index}</span>
+                              <span style={{
+                                fontSize: 11, fontWeight: 800, padding: '2px 8px', borderRadius: 999,
+                                background: r.passed ? 'rgba(74, 222, 128, 0.15)' : 'rgba(239, 68, 68, 0.15)',
+                                color: r.passed ? '#4ade80' : '#f87171'
+                              }}>
+                                {r.passed ? 'PASSED ✅' : 'FAILED ❌'} {r.time_ms != null ? `· ${r.time_ms}ms` : ''}
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 12, fontFamily: 'monospace' }}>
+                              <div style={{ color: '#94a3b8', marginBottom: 3 }}>Input: <span style={{ color: '#f8fafc' }}>{r.input || '(none)'}</span></div>
+                              {r.expected !== null && (
+                                <div style={{ color: '#94a3b8', marginBottom: 3 }}>Expected: <span style={{ color: '#4ade80' }}>{r.expected}</span></div>
+                              )}
+                              <div style={{ color: '#94a3b8', marginBottom: 3 }}>Actual Output: <span style={{ color: r.passed ? '#f8fafc' : '#f87171' }}>{r.actual || '(no output)'}</span></div>
+                              {r.stderr && (
+                                <div style={{ color: '#f87171', marginTop: 4, background: 'rgba(239, 68, 68, 0.1)', padding: '4px 8px', borderRadius: 4 }}>
+                                  Stderr: {r.stderr}
+                                </div>
+                              )}
+                              {r.compile_output && (
+                                <div style={{ color: '#fbbf24', marginTop: 4, background: 'rgba(245, 158, 11, 0.1)', padding: '4px 8px', borderRadius: 4 }}>
+                                  Compiler: {r.compile_output}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+
                   {(q.test_cases || []).length > 0 && (
                     <div style={{ marginTop: 18, display: 'flex', flexDirection: 'column', gap: 10 }}>
-                      <p className={styles.tcLabel}>Sample test cases</p>
+                      <p className={styles.tcLabel}>Sample test case specifications</p>
                       {q.test_cases!.map((tc, i) => (
                         <div key={i} className={styles.tcBox}>
                           <div className={styles.tcLabel}>Input</div>

@@ -10,8 +10,9 @@ import {
   Radio, Clock, Loader2, RotateCcw, Video, CalendarDays,
   Calendar, CheckCircle2, ArrowRight, BookOpen, Search,
   Filter as FilterIcon, X, Terminal, Shield, Eye, AlertCircle,
-  Sparkles, Check, ChevronLeft, ChevronRight, Layers, FileText
+  Sparkles, Check, ChevronLeft, ChevronRight, Layers, FileText, Star
 } from 'lucide-react';
+import SessionFeedbackModal from '@/components/student/SessionFeedbackModal';
 import styles from './page.module.css';
 
 interface SessionWithMeta extends LabSession {
@@ -54,6 +55,7 @@ export default function StudentLiveLabPage() {
   const [error, setError] = useState('');
   const [catchupBusy, setCatchupBusy] = useState<string | null>(null);
   const [notice, setNotice] = useState('');
+  const [feedbackSession, setFeedbackSession] = useState<SessionWithMeta | null>(null);
 
   // UI state matching instructor dashboard
   const [activeTab, setActiveTab] = useState<FilterTab>('All Sessions');
@@ -552,14 +554,27 @@ export default function StudentLiveLabPage() {
                         </button>
                       )}
 
-                      {isEnded && !catchupAvailable && (
-                        <button
-                          className={styles.openDetailsBtn}
-                          onClick={() => setSelectedDrawerSession(s)}
-                        >
-                          <Eye size={14} />
-                          <span>Review Session</span>
-                        </button>
+                      {isEnded && (
+                        <>
+                          <button
+                            className={styles.openDetailsBtn}
+                            style={{ borderColor: '#7c3aed', color: '#7c3aed', background: 'rgba(124,58,237,0.06)' }}
+                            onClick={() => setFeedbackSession(s)}
+                            title="Rate this session"
+                          >
+                            <Star size={14} />
+                            <span>Rate Session</span>
+                          </button>
+                          {!catchupAvailable && (
+                            <button
+                              className={styles.openDetailsBtn}
+                              onClick={() => setSelectedDrawerSession(s)}
+                            >
+                              <Eye size={14} />
+                              <span>Review Session</span>
+                            </button>
+                          )}
+                        </>
                       )}
                     </div>
                   </div>
@@ -837,6 +852,19 @@ export default function StudentLiveLabPage() {
           </div>
         )}
 
+        {feedbackSession && (
+          <SessionFeedbackModal
+            isOpen={!!feedbackSession}
+            sessionId={feedbackSession.id}
+            sessionTitle={feedbackSession.experiment_title || expTitles[feedbackSession.experiment_id]}
+            instructorName={(feedbackSession as any).instructor_name}
+            onClose={() => setFeedbackSession(null)}
+            onSuccess={() => {
+              setNotice('Thank you! Your feedback was submitted.');
+              setTimeout(() => setNotice(''), 3000);
+            }}
+          />
+        )}
       </div>
     </StudentShell>
   );

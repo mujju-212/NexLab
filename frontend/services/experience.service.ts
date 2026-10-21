@@ -406,6 +406,35 @@ export const experienceService = {
     return data;
   },
 
+  async analyticsAtRisk(params?: Record<string, unknown>) {
+    const { data } = await apiClient.get<{
+      at_risk_students: Array<{
+        student_id: string;
+        full_name: string;
+        roll_number: string | null;
+        risk_score: number;
+        risk_band: string;
+        reasons: string[];
+      }>;
+      summary: { critical: number; high: number; watch: number; total: number };
+    }>('/instructor/analytics/at-risk', { params });
+    return data;
+  },
+
+  async analyticsConceptHeatmap(params?: Record<string, unknown>) {
+    const { data } = await apiClient.get<{
+      concepts: string[];
+      students: Array<{
+        student_id: string;
+        full_name: string;
+        roll_number: string | null;
+        scores: Record<string, number>;
+      }>;
+      matrix: Record<string, Record<string, number>>;
+    }>('/instructor/analytics/concept-heatmap', { params });
+    return data;
+  },
+
   /** Lightweight roster for the trajectory picker — avoids the heavy integrity endpoint */
   async analyticsRoster() {
     const { data } = await apiClient.get<{ roster: { student_id: string; full_name: string; roll_number: string | null }[] }>(

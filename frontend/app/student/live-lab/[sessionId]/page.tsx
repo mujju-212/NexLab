@@ -39,6 +39,7 @@ import {
 } from '@livekit/components-react';
 import { Track, type Participant, type TrackPublication } from 'livekit-client';
 import '@livekit/components-styles';
+import SessionFeedbackModal from '@/components/student/SessionFeedbackModal';
 
 type JoinStep = 'attendance' | 'permissions' | 'room' | 'video' | 'workspace';
 
@@ -92,6 +93,7 @@ interface ExperimentWorkbenchProps {
   setLanguage: (l: Language) => void;
   handleTab: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onSelfReportCheckpoint?: (checkpointNumber: number, passed: number) => void;
+  onCodeChange?: (code: string) => void;
 }
 
 function ExperimentWorkbench({
@@ -108,6 +110,7 @@ function ExperimentWorkbench({
   setLanguage,
   handleTab,
   onSelfReportCheckpoint,
+  onCodeChange,
 }: ExperimentWorkbenchProps) {
   const hasAuthoredPages = expPages.length > 0;
   const displayPages = useMemo(() => {
@@ -298,10 +301,14 @@ function ExperimentWorkbench({
 
     if (activeModule.type === 'code') {
       const cd = (activeModule.content_data as any) || {};
-      setExpCode(String(cd.code || '# Code snippet\n'));
+      const codeVal = String(cd.code || '# Code snippet\n');
+      setExpCode(codeVal);
+      onCodeChange?.(codeVal);
     } else if (activeModule.type === 'assign') {
       const cd = (activeModule.content_data as any) || {};
-      setAssignCode(String(cd.starter_code || ''));
+      const starterVal = String(cd.starter_code || '');
+      setAssignCode(starterVal);
+      onCodeChange?.(starterVal);
       setAssignResult(null);
       setAssignError('');
     } else if (activeModule.type === 'quiz') {
@@ -385,6 +392,38 @@ function ExperimentWorkbench({
       setExpOutput(`Execution failed: ${e instanceof Error ? e.message : 'unknown error'}`);
     } finally {
       setExpRunning(false);
+    }
+  };
+
+  // Submit Final Code
+  const [expSubmitting, setExpSubmitting] = useState(false);
+  const submitFinalCode = async () => {
+    setExpSubmitting(true);
+    setExpOutput('');
+    try {
+      const res = await executionService.runCode({
+        files: { main: expCode },
+        language,
+        stdin: stdin || undefined,
+        experiment_id: experimentId,
+        session_id: sessionId,
+        is_final_submission: true,
+      });
+      const parts = [
+        `>>> [FINAL SUBMISSION RECORDED]`,
+        res.compile_output ? `[Compile]\n${res.compile_output}` : '',
+        res.stdout || '',
+        res.stderr ? `[Error]\n${res.stderr}` : '',
+        `\n>>> Status: ${res.status} | Tests Passed: ${res.test_cases_passed ?? 0}/${res.test_cases_total ?? 0} | Quality Score: ${res.quality_score ?? 100}%`,
+      ].filter(Boolean);
+      setExpOutput(parts.join('\n'));
+      if (typeof res.test_cases_passed === 'number' && onSelfReportCheckpoint) {
+        onSelfReportCheckpoint(currentModIdx + 1, res.test_cases_passed);
+      }
+    } catch (e) {
+      setExpOutput(`Submission failed: ${e instanceof Error ? e.message : 'unknown error'}`);
+    } finally {
+      setExpSubmitting(false);
     }
   };
 
@@ -716,7 +755,10 @@ function ExperimentWorkbench({
                     </div>
                     <textarea
                       value={expCode}
-                      onChange={e => setExpCode(e.target.value)}
+                      onChange={e => {
+                        setExpCode(e.target.value);
+                        onCodeChange?.(e.target.value);
+                      }}
                       onKeyDown={handleTab}
                       spellCheck={false}
                       className={styles.expEditorInput}
@@ -727,10 +769,21 @@ function ExperimentWorkbench({
                     <button
                       className={styles.runBtn}
                       onClick={runCode}
-                      disabled={expRunning}
+                      disabled={expRunning || expSubmitting}
                     >
                       {expRunning ? <Loader2 size={13} className={styles.spinner} /> : <Play size={13} fill="#ffffff" />}
-                      <span>{expRunning ? 'Running on server…' : 'Run Code'}</span>
+                      <span>{expRunning ? 'Running…' : 'Run Code'}</span>
+                    </button>
+
+                    <button
+                      className={styles.runBtn}
+                      style={{ background: 'linear-gradient(135deg, #10b981 0%, #059669 100%)', borderColor: '#10b981' }}
+                      onClick={submitFinalCode}
+                      disabled={expRunning || expSubmitting}
+                      title="Submit your code for grading and test evaluation"
+                    >
+                      {expSubmitting ? <Loader2 size={13} className={styles.spinner} /> : <CheckCircle2 size={13} />}
+                      <span>{expSubmitting ? 'Submitting…' : 'Submit Final Code'}</span>
                     </button>
 
                     <button
@@ -789,7 +842,10 @@ function ExperimentWorkbench({
                   <textarea
                     className={styles.codeEditor}
                     value={assignCode}
-                    onChange={e => setAssignCode(e.target.value)}
+                    onChange={e => {
+                      setAssignCode(e.target.value);
+                      onCodeChange?.(e.target.value);
+                    }}
                     placeholder="# Write your solution here..."
                   />
                   <div className={styles.editorActions}>
@@ -1145,6 +1201,7 @@ export default function LiveLabRoomPage() {
   const [sessionTimer, setSessionTimer] = useState(1455); // 00:24:15 default
   const [showReactions, setShowReactions] = useState(false);
   const [floatingReaction, setFloatingReaction] = useState<string | null>(null);
+  const [showFeedbackModal, setShowFeedbackModal] = useState(false);
 
   // Experiment Tab states
   const [activeExpStep, setActiveExpStep] = useState(0);
@@ -2119,6 +2176,13 @@ export default function LiveLabRoomPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', fontSize: 13.5 }}>
             <FileDown size={15} color="#ef4444" />
             <span style={{ flex: 1 }}><b>Session ended by instructor.</b> {forcedSubmit.reason} — your code was auto-submitted.</span>
+            <button
+              className={styles.checkBtn}
+              style={{ background: '#7c3aed', color: '#ffffff', fontWeight: 600, border: 'none' }}
+              onClick={() => setShowFeedbackModal(true)}
+            >
+              Rate Session
+            </button>
             <button className={styles.checkBtn} onClick={() => setForcedSubmit(null)}><X size={13} /> OK</button>
           </div>
         )}
@@ -2164,6 +2228,7 @@ export default function LiveLabRoomPage() {
                 expPages={expPages}
                 expLoading={expLoading}
                 onSelfReportCheckpoint={selfReportCheckpoint}
+                onCodeChange={(c) => { codeRef.current = c; }}
                 handleTab={handleTab}
                 language={language}
                 setLanguage={setLanguage}
@@ -2194,10 +2259,24 @@ export default function LiveLabRoomPage() {
               expPages={expPages}
               expLoading={expLoading}
               onSelfReportCheckpoint={selfReportCheckpoint}
+              onCodeChange={(c) => { codeRef.current = c; }}
               handleTab={handleTab}
               language={language}
               setLanguage={setLanguage}
               mediaSignal={mediaSignal}
+            />
+          )}
+          {showFeedbackModal && (
+            <SessionFeedbackModal
+              isOpen={showFeedbackModal}
+              sessionId={sessionId}
+              sessionTitle={sessionTitleText}
+              instructorName={instructorName}
+              onClose={() => setShowFeedbackModal(false)}
+              onSuccess={() => {
+                setToastMsg('Thank you! Your anonymous feedback was recorded.');
+                setTimeout(() => setToastMsg(null), 3500);
+              }}
             />
           )}
           {toastMsg && (
@@ -2241,6 +2320,7 @@ interface StudentConferenceProps {
   expPages: ContentPage[];
   expLoading: boolean;
   onSelfReportCheckpoint?: (checkpointNumber: number, passed: number) => void;
+  onCodeChange?: (code: string) => void;
   handleTab: (e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   language: Language;
   setLanguage: (lang: Language) => void;
@@ -2268,6 +2348,7 @@ function StudentLiveConference({
   expPages,
   expLoading,
   onSelfReportCheckpoint,
+  onCodeChange,
   handleTab,
   language,
   setLanguage,
@@ -2840,6 +2921,7 @@ function StudentLiveConference({
             setLanguage={setLanguage}
             handleTab={handleTab}
             onSelfReportCheckpoint={onSelfReportCheckpoint}
+            onCodeChange={onCodeChange}
           />
         )}
       </div>
@@ -3136,6 +3218,7 @@ function StudentLiveConferenceStandalone({
   expPages,
   expLoading,
   onSelfReportCheckpoint,
+  onCodeChange,
   handleTab,
   language,
   setLanguage,
@@ -3584,6 +3667,7 @@ function StudentLiveConferenceStandalone({
             setLanguage={setLanguage}
             handleTab={handleTab}
             onSelfReportCheckpoint={onSelfReportCheckpoint}
+            onCodeChange={onCodeChange}
           />
         )}
       </div>

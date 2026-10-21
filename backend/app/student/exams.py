@@ -19,8 +19,10 @@ from flask import Blueprint, request, jsonify, g, current_app
 from app.auth.utils import require_role
 from app.extensions import db, limiter
 from app.models.exam import Exam, ExamQuestion, ExamAttempt
+from app.models.experiment import Experiment
 from app.models.academic import SectionSubject, SectionStudent
 from app.models.session import _iso_z
+from sqlalchemy import or_
 
 student_exam_bp = Blueprint('student_exams', __name__)
 
@@ -250,7 +252,6 @@ def _finalize_attempt(exam, attempt, raw_answers, force_expired=False):
                     grade = Grade(
                         student_id=attempt.student_id,
                         experiment_id=target_exp_id,
-                        institution_id=g.institution_id,
                     )
                     db.session.add(grade)
                 current_final = grade.final_grade or 0.0
@@ -435,7 +436,11 @@ def start_exam(exam_id):
     now = datetime.utcnow()
 
     # Reject if a coding exam can't be graded (engine off) — fail fast before starting.
-    has_coding = ExamQuestion.query.filter_by(exam_id=exam.id, question_type='coding').first() is not None
+    if isinstance(exam, Experiment):
+        from app.models.experiment import TestCase
+        has_coding = TestCase.query.filter_by(experiment_id=exam.id).count() > 0 or getattr(exam, 'starter_code', None) is not None
+    else:
+        has_coding = ExamQuestion.query.filter_by(exam_id=exam.id, question_type='coding').first() is not None
     if has_coding and not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
         return jsonify({'error': 'Code execution engine is not enabled on this server.'}), 503
 
@@ -473,12 +478,14 @@ def start_exam(exam_id):
     if attempts_used >= (exam.max_attempts or 1):
         return jsonify({'error': 'You have used all your attempts for this exam.'}), 403
 
-    # expires_at = min(now + duration, due_at or now + duration)
-    natural_expiry = now + timedelta(minutes=exam.duration_minutes or 30)
+    is_unified = isinstance(exam, Experiment) or not hasattr(exam, 'duration_minutes')
+    dur_mins = max(1, (getattr(exam, 'time_limit_sec', 3600) or 3600) // 60) if is_unified else (exam.duration_minutes or 30)
+    natural_expiry = now + timedelta(minutes=dur_mins)
     expires_at = min(natural_expiry, exam.due_at) if exam.due_at else natural_expiry
 
     attempt = ExamAttempt(
-        exam_id=exam.id,
+        exam_id=None if is_unified else exam.id,
+        experiment_id=exam.id if is_unified else None,
         student_id=g.user_id,
         started_at=now,
         expires_at=expires_at,
@@ -506,8 +513,11 @@ def save_attempt(exam_id, attempt_id):
     exam, err = _visible_exam_or_404(exam_id)
     if err:
         return err
-    attempt = ExamAttempt.query.filter_by(
-        id=attempt_id, exam_id=exam_id, student_id=g.user_id).first_or_404()
+    attempt = ExamAttempt.query.filter(
+        ExamAttempt.id == attempt_id,
+        ExamAttempt.student_id == g.user_id,
+        or_(ExamAttempt.exam_id == exam_id, ExamAttempt.experiment_id == exam_id),
+    ).first_or_404()
     if attempt.status != 'in_progress':
         return jsonify({'error': 'This attempt is no longer active.'}), 409
 
@@ -530,8 +540,11 @@ def submit_attempt(exam_id, attempt_id):
     exam, err = _visible_exam_or_404(exam_id)
     if err:
         return err
-    attempt = ExamAttempt.query.filter_by(
-        id=attempt_id, exam_id=exam_id, student_id=g.user_id).first_or_404()
+    attempt = ExamAttempt.query.filter(
+        ExamAttempt.id == attempt_id,
+        ExamAttempt.student_id == g.user_id,
+        or_(ExamAttempt.exam_id == exam_id, ExamAttempt.experiment_id == exam_id),
+    ).first_or_404()
 
     if attempt.status != 'in_progress':
         # Idempotent: already graded — return the stored result.
@@ -569,7 +582,7 @@ def exam_result(exam_id):
 
     answers = attempt.answers or {}
     review = []
-    for q in exam.questions.all():
+    for q in _get_exam_questions_list(exam):
         d = answers.get(q.id, {})
         item = {
             'id': q.id,
@@ -590,11 +603,86 @@ def exam_result(exam_id):
 
     return jsonify({
         'attempt': attempt.to_dict(),
-        'exam': {'id': exam.id, 'title': exam.title, 'pass_threshold': exam.pass_threshold,
-                 'exam_type': exam.exam_type},
+        'exam': {'id': exam.id, 'title': exam.title, 'pass_threshold': getattr(exam, 'pass_threshold', 40.0),
+                 'exam_type': getattr(exam, 'exam_type', None) or getattr(exam, 'experiment_type', 'mcq')},
         'score': attempt.score,
         'passed': bool(attempt.passed),
         'total_points': attempt.total_points,
         'max_points': attempt.max_points,
         'review': review,
     }), 200
+
+
+@student_exam_bp.route('/exams/<exam_id>/run-code', methods=['POST'])
+@require_role('student')
+@limiter.limit("30 per minute")
+def run_exam_code(exam_id):
+    """
+    Execute student code against visible/sample test cases during a timed exam
+    without consuming attempts or recording grades.
+    """
+    exam, err = _visible_exam_or_404(exam_id)
+    if err:
+        return err
+
+    data = request.get_json() or {}
+    question_id = data.get('question_id')
+    code = (data.get('code') or '').strip()
+    if not code:
+        return jsonify({'error': 'No code provided.'}), 400
+
+    questions = _get_exam_questions_list(exam)
+    q = next((item for item in questions if item.id == question_id), None)
+
+    language = data.get('language') or (getattr(q, 'language', None) if q else None) or 'python'
+    spec = resolve_language(language)
+    if not spec:
+        return jsonify({'error': f'Unsupported language: {language}'}), 400
+
+    # Extract non-hidden test cases only
+    sample_cases = []
+    if q and getattr(q, 'test_cases', None):
+        sample_cases = [tc for tc in q.test_cases if not tc.get('hidden')]
+    elif isinstance(exam, Experiment):
+        from app.models.experiment import TestCase
+        tcs = TestCase.query.filter_by(experiment_id=exam.id, is_hidden=False).all()
+        sample_cases = [{'input': tc.input_data or '', 'expected': tc.expected_output or ''} for tc in tcs]
+
+    if not sample_cases:
+        custom_in = data.get('stdin', '')
+        sample_cases = [{'input': custom_in, 'expected': None}]
+
+    results = []
+    for i, tc in enumerate(sample_cases):
+        tc_in = str(tc.get('input', '') or '')
+        res, rerr = _run_docker(code, spec['id'], tc_in, g.user_id)
+        if rerr:
+            return jsonify({'error': 'Code execution engine unavailable. Try again shortly.'}), 503
+
+        stdout = res.get('stdout') or ''
+        stderr = res.get('stderr') or ''
+        compile_out = res.get('compile_output') or ''
+        status_desc = res.get('status_description') or 'Executed'
+
+        expected = tc.get('expected')
+        passed = False
+        if expected is not None:
+            passed = (res.get('status_id') == 3 and _norm_output(stdout) == _norm_output(str(expected)))
+        else:
+            passed = res.get('status_id') == 3
+
+        results.append({
+            'index': i + 1,
+            'input': tc_in,
+            'expected': expected,
+            'actual': stdout,
+            'stderr': stderr,
+            'compile_output': compile_out,
+            'passed': passed,
+            'status': status_desc,
+            'time_ms': res.get('time_ms'),
+            'memory_kb': res.get('memory_kb'),
+        })
+
+    return jsonify({'results': results, 'language': language}), 200
+

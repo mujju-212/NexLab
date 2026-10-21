@@ -15,6 +15,9 @@ import logging
 
 _log = logging.getLogger(__name__)
 
+# Cache of latest screenshots: (session_id, student_id) -> {'full_name': str, 'frame': str, 'timestamp': str}
+_LATEST_SCREENSHOTS = {}
+
 
 def _persist_proctor_event(institution_id: str, session_id: str, student_id: str,
                             event_type: str, payload: dict, severity: str) -> None:
@@ -32,6 +35,11 @@ def _persist_proctor_event(institution_id: str, session_id: str, student_id: str
                 u = User.query.get(student_id)
                 if u and u.institution_id:
                     institution_id = u.institution_id
+
+        if severity in ('high', 'critical') and not payload.get('evidence_screenshot'):
+            cached_shot = _LATEST_SCREENSHOTS.get((session_id, student_id))
+            if cached_shot and cached_shot.get('frame'):
+                payload['evidence_screenshot'] = cached_shot['frame']
 
         row = ProctorEvent(
             institution_id = institution_id,
@@ -168,6 +176,15 @@ def handle_join_session(data):
         # Instructor joins instructor room
         join_room(f"session_{session_id}_instructor")
         emit('joined', {'room': 'instructor', 'session_id': session_id})
+        # Hydrate instructor with latest screenshots cached for this session
+        for (sid, stid), shot in list(_LATEST_SCREENSHOTS.items()):
+            if sid == session_id:
+                emit('student_screenshot', {
+                    'student_id': stid,
+                    'full_name':  shot.get('full_name', ''),
+                    'frame':      shot.get('frame', ''),
+                    'timestamp':  shot.get('timestamp', ''),
+                })
     else:
         # Enrollment check: only students enrolled in the session's section
         # may join (and get attendance). Prevents a student from another
@@ -682,11 +699,38 @@ def handle_screenshot_frame(data):
     session_id = data.get('session_id')
     frame      = data.get('frame', '')
 
+    ts = datetime.utcnow().isoformat()
+    _LATEST_SCREENSHOTS[(session_id, user['user_id'])] = {
+        'full_name': user.get('full_name', ''),
+        'frame':     frame,
+        'timestamp': ts,
+    }
+
+    # If any recent high-severity ProctorEvent occurred within the last 60s, attach screenshot evidence
+    if frame:
+        try:
+            from app.models.proctor_event import ProctorEvent
+            from datetime import timedelta
+            recent_events = ProctorEvent.query.filter(
+                ProctorEvent.session_id == session_id,
+                ProctorEvent.student_id == user['user_id'],
+                ProctorEvent.created_at >= datetime.utcnow() - timedelta(seconds=60),
+                ProctorEvent.severity.in_(['high', 'critical']),
+            ).all()
+            for pe in recent_events:
+                p_load = dict(pe.payload or {})
+                if not p_load.get('evidence_screenshot'):
+                    p_load['evidence_screenshot'] = frame
+                    pe.payload = p_load
+            db.session.commit()
+        except Exception:
+            pass
+
     emit('student_screenshot', {
         'student_id': user['user_id'],
         'full_name':  user.get('full_name', ''),
         'frame':      frame,
-        'timestamp':  datetime.utcnow().isoformat(),
+        'timestamp':  ts,
     }, room=f"session_{session_id}_instructor")
 
 

@@ -14,6 +14,7 @@ from app.models.knowledge import ConceptMastery, StudentRanking, FocusScore
 from app.ml.knowledge_tracing import update_concept_mastery
 from app.models.feedback import SessionFeedback, Notification
 from app.models.academic import SectionSubject, SectionStudent
+from app.models.subject import Subject
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import or_
 
@@ -88,6 +89,32 @@ def my_subjects():
         }
         any_attempts = {a.experiment_id: a for a in attempts}
 
+        from app.models.exam import ExamAttempt
+        from app.models.content import ContentProgress, ContentModule
+        from collections import defaultdict
+
+        exam_attempts = ExamAttempt.query.filter(
+            ExamAttempt.student_id == g.user_id,
+            ExamAttempt.experiment_id.in_(exp_ids)
+        ).all() if exp_ids else []
+        submitted_exams = {ea.experiment_id for ea in exam_attempts if ea.status == 'submitted'}
+        in_progress_exams = {ea.experiment_id for ea in exam_attempts if ea.status != 'submitted'}
+
+        exp_modules = ContentModule.query.filter(
+            ContentModule.experiment_id.in_(exp_ids)
+        ).all() if exp_ids else []
+        exp_mod_map = defaultdict(list)
+        for m in exp_modules:
+            exp_mod_map[m.experiment_id].append(m.id)
+
+        all_mod_ids = [m.id for m in exp_modules]
+        progress_rows = ContentProgress.query.filter(
+            ContentProgress.student_id == g.user_id,
+            ContentProgress.module_id.in_(all_mod_ids)
+        ).all() if all_mod_ids else []
+        completed_mod_set = {p.module_id for p in progress_rows if p.completed}
+        any_mod_set = {p.module_id for p in progress_rows}
+
         completed_count = 0
         in_progress_count = 0
         all_tags = []
@@ -96,9 +123,13 @@ def my_subjects():
                 for t in e.concept_tags:
                     if t and t not in all_tags:
                         all_tags.append(t)
-            if e.id in grades or e.id in final_attempts:
+            e_mods = exp_mod_map.get(e.id, [])
+            all_mods_done = bool(e_mods and all(mid in completed_mod_set for mid in e_mods))
+            any_mods_touched = bool(e_mods and any(mid in any_mod_set for mid in e_mods))
+
+            if e.id in grades or e.id in final_attempts or e.id in submitted_exams or all_mods_done:
                 completed_count += 1
-            elif e.id in any_attempts:
+            elif e.id in any_attempts or e.id in in_progress_exams or any_mods_touched:
                 in_progress_count += 1
 
         total_exps = len(exps)
@@ -207,9 +238,31 @@ def list_experiments(subject_id):
         if ea.experiment_id not in latest_exam_attempts:
             latest_exam_attempts[ea.experiment_id] = ea
 
+    from app.models.content import ContentProgress, ContentModule
+    from collections import defaultdict
+
+    exp_modules = ContentModule.query.filter(
+        ContentModule.experiment_id.in_(exp_ids)
+    ).all() if exp_ids else []
+    exp_mod_map = defaultdict(list)
+    for m in exp_modules:
+        exp_mod_map[m.experiment_id].append(m.id)
+
+    all_mod_ids = [m.id for m in exp_modules]
+    progress_rows = ContentProgress.query.filter(
+        ContentProgress.student_id == g.user_id,
+        ContentProgress.module_id.in_(all_mod_ids)
+    ).all() if all_mod_ids else []
+    completed_mod_set = {p.module_id for p in progress_rows if p.completed}
+    any_mod_set = {p.module_id for p in progress_rows}
+
     enriched = []
     for e in exps:
         d = e.to_dict()
+        e_mods = exp_mod_map.get(e.id, [])
+        all_mods_done = bool(e_mods and all(mid in completed_mod_set for mid in e_mods))
+        any_mods_touched = bool(e_mods and any(mid in any_mod_set for mid in e_mods))
+
         if e.id in grades:
             gr = grades[e.id]
             d['student_status'] = 'completed'
@@ -230,7 +283,11 @@ def list_experiments(subject_id):
             d['student_status'] = 'completed'
             d['completed_at'] = att.submitted_at.strftime('%b %d, %Y') if att.submitted_at else None
             d['score'] = att.test_cases_passed
-        elif e.id in any_attempts:
+        elif all_mods_done:
+            d['student_status'] = 'completed'
+            d['completed_at'] = None
+            d['score'] = 100.0
+        elif e.id in any_attempts or any_mods_touched:
             d['student_status'] = 'in_progress'
             d['completed_at'] = None
             d['score'] = None
@@ -341,6 +398,27 @@ def get_prelab_content(experiment_id):
     # the conductor "launch an unpublished quiz live" flow keeps working.
     from app.services.content_publish import resolve_published_snapshot, snapshot_to_objects
     _exp_for_snapshot = Experiment.query.get(experiment_id)
+    if not _exp_for_snapshot:
+        return jsonify({'error': 'Experiment not found'}), 404
+    if _exp_for_snapshot.institution_id != g.institution_id:
+        return jsonify({'error': 'Unauthorized'}), 403
+
+    # Check student enrollment in the subject
+    my_sections = [e.section_id for e in SectionStudent.query.filter_by(student_id=g.user_id).all()]
+    if my_sections:
+        enrolled_subjects = {ss.subject_id for ss in SectionSubject.query.filter(
+            SectionSubject.section_id.in_(my_sections),
+            SectionSubject.institution_id == g.institution_id
+        ).all()}
+        if _exp_for_snapshot.subject_id not in enrolled_subjects:
+            return jsonify({'error': 'You are not enrolled in this subject'}), 403
+    else:
+        return jsonify({'error': 'You are not enrolled in any sections'}), 403
+
+    # Check window availability
+    if hasattr(_exp_for_snapshot, 'window_state') and _exp_for_snapshot.window_state() == 'upcoming':
+        return jsonify({'error': 'This experiment is not yet open for students'}), 403
+
     _snapshot = resolve_published_snapshot(_exp_for_snapshot)
     if _snapshot:
         all_pages, modules = snapshot_to_objects(_snapshot)
@@ -446,8 +524,18 @@ def get_prelab_content(experiment_id):
                 } for i, q in enumerate(questions)],
                 'attempts_used': progress.attempts if progress else 0,
             }
+        elif module.module_type == 'assign':
+            raw_cfg = dict(module.content_data or {})
+            raw_cfg.pop('solution_code', None)
+            raw_tcs = raw_cfg.get('test_cases') or []
+            raw_cfg['test_cases'] = [
+                {'input': tc.get('input', ''), 'expected': tc.get('expected', ''), 'hidden': False}
+                if not tc.get('hidden') else {'hidden': True}
+                for tc in raw_tcs
+            ]
+            module_data['content_data'] = raw_cfg
         else:
-            # text/pdf/video/markdown/code/image/html/link/file/assign
+            # text/pdf/video/markdown/code/image/html/link/file
             module_data['content_data'] = module.content_data
 
         result.append(module_data)
@@ -617,51 +705,10 @@ def submit_quiz(module_id):
 
     # ── Real Data Collection: Persist Grade ──
     try:
-        from app.models.grading import Grade
-        from app.models.academic import SectionStudent, SectionSubject
-        exp_id = module.experiment_id
-        quiz_session = None
-        my_secs = [e.section_id for e in SectionStudent.query.filter_by(student_id=g.user_id).all()]
-        if my_secs:
-            quiz_session = LabSession.query.join(
-                SectionSubject, SectionSubject.id == LabSession.section_subject_id
-            ).filter(
-                SectionSubject.section_id.in_(my_secs),
-                LabSession.experiment_id == exp_id,
-                LabSession.status == 'active',
-            ).order_by(LabSession.started_at.desc()).first()
-
-        gr = Grade.query.filter_by(
-            student_id=g.user_id,
-            experiment_id=exp_id,
-        ).first()
-        if not gr:
-            gr = Grade(
-                student_id=g.user_id,
-                experiment_id=exp_id,
-                session_id=quiz_session.id if quiz_session else None,
-                quiz_grade=round(score, 1),
-                final_grade=round(score, 1),
-                status='graded',
-                graded_at=datetime.utcnow(),
-            )
-            db.session.add(gr)
-        else:
-            gr.quiz_grade = max(gr.quiz_grade or 0.0, round(score, 1))
-            if gr.manual_grade is None:
-                components = [gr.quiz_grade]
-                if gr.auto_grade is not None:
-                    components.append(gr.auto_grade)
-                if gr.viva_grade is not None:
-                    components.append(gr.viva_grade)
-                gr.final_grade = round(sum(components) / len(components), 1)
-            gr.status = 'graded'
-            gr.graded_at = datetime.utcnow()
-            if not gr.session_id and quiz_session:
-                gr.session_id = quiz_session.id
-        db.session.commit()
+        from app.services.grading_service import sync_student_experiment_grade
+        sync_student_experiment_grade(g.user_id, module.experiment_id)
     except Exception:
-        db.session.rollback()
+        pass
 
     # P0: Update concept mastery after quiz submission (with fallback tags)
     try:
@@ -813,9 +860,26 @@ def my_mastery():
 @student_bp.route('/rankings', methods=['GET'])
 @require_role('student')
 def my_rankings():
-    """Student's rankings â€” only for section-subjects whose instructor kept
+    """Student's rankings — only for section-subjects whose instructor kept
     rankings public (T3-15: the ranking_visible toggle follows the latest
     published experiment of that subject)."""
+    # Enrolled section-subjects
+    enrollments = SectionStudent.query.filter_by(student_id=g.user_id).all()
+    sec_ids = [e.section_id for e in enrollments]
+    sec_subjects = SectionSubject.query.filter(
+        SectionSubject.section_id.in_(sec_ids),
+        SectionSubject.institution_id == g.institution_id
+    ).all() if sec_ids else []
+
+    from app.ml.ranking import compute_rankings_for_section_subject
+    for ss in sec_subjects:
+        has_rank = StudentRanking.query.filter_by(section_subject_id=ss.id).first()
+        if not has_rank:
+            try:
+                compute_rankings_for_section_subject(ss.id, g.institution_id)
+            except Exception:
+                pass
+
     rankings = StudentRanking.query.filter_by(student_id=g.user_id).all()
     visible = []
     for r in rankings:
@@ -828,8 +892,17 @@ def my_rankings():
         ).order_by(Experiment.exp_number.desc()).first())
         if latest and latest.ranking_visible is False:
             continue
-        visible.append(r)
-    return jsonify({'rankings': [r.to_dict() for r in visible]}), 200
+        rd = r.to_dict()
+        subj = Subject.query.get(ss.subject_id) if ss.subject_id else None
+        if subj:
+            rd['subject_name'] = subj.name
+            rd['subject_code'] = subj.code or ''
+            rd['subject_color'] = subj.color or '#7c3aed'
+            rd['subject_icon'] = subj.icon or 'datastruct'
+        cohort_count = StudentRanking.query.filter_by(section_subject_id=ss.id).count()
+        rd['cohort_size'] = cohort_count or 1
+        visible.append(rd)
+    return jsonify({'rankings': visible}), 200
 
 
 @student_bp.route('/notifications', methods=['GET'])
@@ -851,8 +924,8 @@ def my_notifications():
 @student_bp.route('/feedback', methods=['POST'])
 @require_role('student')
 def submit_feedback():
-    """Submit anonymous session feedback â€” student_id is NOT stored"""
-    data = request.get_json()
+    """Submit anonymous session feedback — student_id is NOT stored"""
+    data = request.get_json() or {}
     session_id = data.get('session_id')
 
     session = LabSession.query.filter_by(
@@ -862,6 +935,31 @@ def submit_feedback():
     # Check feedback window (24 hours after session ended)
     if session.ended_at and datetime.utcnow() > session.ended_at + timedelta(hours=24):
         return jsonify({'error': 'Feedback window has closed (24 hours after session end)'}), 400
+
+    # Verify student attendance or enrollment
+    att = SessionAttendance.query.filter_by(
+        session_id=session_id, student_id=g.user_id
+    ).first()
+    if not att:
+        from app.models.academic import SectionSubject, SectionStudent
+        enrolled = SectionStudent.query.join(
+            SectionSubject, SectionSubject.section_id == SectionStudent.section_id
+        ).filter(
+            SectionStudent.student_id == g.user_id,
+            SectionSubject.id == session.section_subject_id
+        ).first()
+        if not enrolled:
+            return jsonify({'error': 'You are not enrolled in this session'}), 403
+        att = SessionAttendance(
+            session_id=session_id,
+            student_id=g.user_id,
+            status='present',
+            feedback_submitted=False
+        )
+        db.session.add(att)
+
+    if getattr(att, 'feedback_submitted', False):
+        return jsonify({'error': 'You have already submitted feedback for this session.'}), 400
 
     feedback = SessionFeedback(
         session_id=session_id,
@@ -874,6 +972,7 @@ def submit_feedback():
         comment=data.get('comment'),
     )
     db.session.add(feedback)
+    att.feedback_submitted = True
     db.session.commit()
     return jsonify({'message': 'Feedback submitted anonymously. Thank you!'}), 201
 
@@ -972,57 +1071,37 @@ def dashboard():
         total_exps = len(exps)
         exp_ids = [e.id for e in exps]
         if exp_ids:
-            completed_grades = Grade.query.filter(
-                Grade.student_id == g.user_id,
-                Grade.experiment_id.in_(exp_ids)
-            ).count()
-            completed_attempts = CodeAttempt.query.filter(
-                CodeAttempt.student_id == g.user_id,
-                CodeAttempt.experiment_id.in_(exp_ids),
-                CodeAttempt.is_final_submission == True
-            ).distinct(CodeAttempt.experiment_id).count()
-            completed_exps = max(completed_grades, completed_attempts)
+            graded_exp_ids = {
+                r[0] for r in db.session.query(Grade.experiment_id).filter(
+                    Grade.student_id == g.user_id,
+                    Grade.experiment_id.in_(exp_ids),
+                ).all()
+            }
+            submitted_exp_ids = {
+                r[0] for r in db.session.query(CodeAttempt.experiment_id).filter(
+                    CodeAttempt.student_id == g.user_id,
+                    CodeAttempt.experiment_id.in_(exp_ids),
+                    CodeAttempt.is_final_submission == True,
+                ).all()
+            }
+            completed_exps = len(graded_exp_ids | submitted_exp_ids)
 
-    overall_progress = round((completed_exps / total_exps) * 100) if total_exps > 0 else (round(avg_grade) if avg_grade else (66 if total_submissions > 0 else 25))
+    overall_progress = round((completed_exps / total_exps) * 100) if total_exps > 0 else 0
 
     # Daily streak from StudentXP
-    daily_streak = 5
+    daily_streak = 0
     try:
         from app.models.practice import StudentXP
         xp = StudentXP.query.filter_by(student_id=g.user_id).first()
         if xp and xp.streak_days and xp.streak_days > 0:
             daily_streak = xp.streak_days
         else:
-            daily_streak = max(5, total_submissions)
+            daily_streak = total_submissions if total_submissions > 0 else 0
     except Exception:
-        daily_streak = 5
+        daily_streak = 0
 
-    # Top concepts formatting with curriculum fallback
     top_concepts_data = [c.to_dict() for c in top_concepts]
-    if not top_concepts_data:
-        default_concepts = ['stacks', 'arrays', 'data-structures', 'python', 'basics']
-        if section_subjects:
-            subj_ids = list({ss.subject_id for ss in section_subjects})
-            found_tags = []
-            for e in Experiment.query.filter(Experiment.subject_id.in_(subj_ids)).limit(20).all():
-                if e.concept_tags and isinstance(e.concept_tags, list):
-                    for tag in e.concept_tags:
-                        if tag and tag.lower() not in found_tags:
-                            found_tags.append(tag.lower())
-            if found_tags:
-                default_concepts = found_tags[:5]
-        top_concepts_data = [
-            {'concept': c_name, 'mastery_score': max(0, min(100, int((overall_progress or 66) * (1.0 - idx * 0.18))))}
-            for idx, c_name in enumerate(default_concepts)
-        ]
-
     weak_concepts_data = [c.to_dict() for c in weak_concepts]
-    if not weak_concepts_data:
-        weak_candidates = ['recursion', 'dynamic-programming', 'pointers']
-        weak_concepts_data = [
-            {'concept': c_name, 'mastery_score': min(38, max(5, int((overall_progress or 40) * 0.45 - idx * 5)))}
-            for idx, c_name in enumerate(weak_candidates)
-        ]
 
     return jsonify({
         'subjects_enrolled': len(section_subjects),
@@ -1131,7 +1210,11 @@ def start_catchup(session_id):
 @student_bp.route('/history', methods=['GET'])
 @require_role('student')
 def my_experiment_history():
-    """All experiments the student has attempted, with latest attempt stats"""
+    """All experiments the student has attempted, with latest attempt stats,
+    including CodeAttempt, Grade, ExamAttempt, and completed ContentProgress."""
+    from app.models.exam import ExamAttempt
+    from app.models.content import ContentModule, ContentProgress
+
     attempts = db.session.query(
         CodeAttempt.experiment_id,
         db.func.max(CodeAttempt.submitted_at).label('last_attempt'),
@@ -1142,21 +1225,64 @@ def my_experiment_history():
         student_id=g.user_id
     ).group_by(CodeAttempt.experiment_id).all()
 
+    att_map = {row.experiment_id: row for row in attempts}
+
+    grades = Grade.query.filter_by(student_id=g.user_id).all()
+    grade_map = {g_row.experiment_id: g_row for g_row in grades}
+
+    exam_attempts = ExamAttempt.query.filter_by(student_id=g.user_id).all()
+    exam_map = {}
+    for ea in exam_attempts:
+        eid = ea.experiment_id or ea.exam_id
+        if eid and (eid not in exam_map or (ea.score or 0) > (exam_map[eid].score or 0)):
+            exam_map[eid] = ea
+
+    completed_progs = ContentProgress.query.filter_by(
+        student_id=g.user_id, completed=True
+    ).all()
+    comp_mod_ids = [cp.module_id for cp in completed_progs]
+    completed_exp_ids = set()
+    if comp_mod_ids:
+        modules = ContentModule.query.filter(ContentModule.id.in_(comp_mod_ids)).all()
+        for m in modules:
+            completed_exp_ids.add(m.experiment_id)
+
+    all_exp_ids = set(att_map.keys()) | set(grade_map.keys()) | set(exam_map.keys()) | completed_exp_ids
+
     result = []
-    for row in attempts:
-        exp = Experiment.query.get(row.experiment_id)
-        grade = Grade.query.filter_by(
-            student_id=g.user_id, experiment_id=row.experiment_id
-        ).first()
+    for exp_id in all_exp_ids:
+        if not exp_id:
+            continue
+        exp = Experiment.query.get(exp_id)
+        if not exp:
+            continue
+        att_row = att_map.get(exp_id)
+        grade_row = grade_map.get(exp_id)
+        exam_row = exam_map.get(exp_id)
+
+        last_attempt = None
+        if att_row and att_row.last_attempt:
+            last_attempt = att_row.last_attempt.isoformat()
+        elif exam_row and (exam_row.submitted_at or exam_row.started_at):
+            last_attempt = (exam_row.submitted_at or exam_row.started_at).isoformat()
+        elif grade_row and (grade_row.graded_at or grade_row.created_at):
+            last_attempt = (grade_row.graded_at or grade_row.created_at).isoformat()
+
+        final_grade = None
+        if grade_row and grade_row.final_grade is not None:
+            final_grade = grade_row.final_grade
+        elif exam_row and exam_row.score is not None:
+            final_grade = exam_row.score
+
         result.append({
-            'experiment_id': row.experiment_id,
+            'experiment_id': exp_id,
             'experiment_title': exp.title if exp else 'Unknown',
             'concept_tags': exp.concept_tags if exp else [],
-            'last_attempt': row.last_attempt.isoformat() if row.last_attempt else None,
-            'total_attempts': row.total_attempts,
-            'best_tests_passed': row.best_tests_passed,
-            'tests_total': row.tests_total,
-            'grade': grade.final_grade if grade else None,
+            'last_attempt': last_attempt,
+            'total_attempts': att_row.total_attempts if att_row else (1 if (exam_row or grade_row) else 0),
+            'best_tests_passed': att_row.best_tests_passed if att_row else None,
+            'tests_total': att_row.tests_total if att_row else None,
+            'grade': final_grade,
         })
     return jsonify({'history': result}), 200
 
@@ -1345,6 +1471,9 @@ def submit_assignment(module_id):
             LabSession.status == 'active',
         ).order_by(LabSession.started_at.desc()).first()
 
+    from app.ml.code_quality import analyze_code_quality
+    quality_metrics = analyze_code_quality(code, language)
+
     attempt_count = CodeAttempt.query.filter_by(
         student_id=g.user_id, experiment_id=module.experiment_id
     ).count()
@@ -1359,6 +1488,9 @@ def submit_assignment(module_id):
         compile_status='graded',
         test_cases_passed=passed_count,
         test_cases_total=len(test_cases),
+        loc=quality_metrics.get('loc'),
+        cyclomatic_complexity=quality_metrics.get('cyclomatic_complexity'),
+        quality_grade=quality_metrics.get('quality_grade'),
         is_final_submission=True,
     )
     db.session.add(attempt)
@@ -1398,39 +1530,12 @@ def submit_assignment(module_id):
 
     # ── Real Data Collection: Persist Grade ──
     try:
-        from app.models.grading import Grade
-        exp_id = module.experiment_id
-        gr = Grade.query.filter_by(
-            student_id=g.user_id,
-            experiment_id=exp_id,
-        ).first()
-        if not gr:
-            gr = Grade(
-                student_id=g.user_id,
-                experiment_id=exp_id,
-                session_id=active_session.id if active_session else None,
-                auto_grade=round(best, 1),
-                final_grade=round(best, 1),
-                status='graded',
-                graded_at=datetime.utcnow(),
-            )
-            db.session.add(gr)
-        else:
-            gr.auto_grade = max(gr.auto_grade or 0.0, round(best, 1))
-            if gr.manual_grade is None:
-                components = [gr.auto_grade]
-                if gr.quiz_grade is not None:
-                    components.append(gr.quiz_grade)
-                if gr.viva_grade is not None:
-                    components.append(gr.viva_grade)
-                gr.final_grade = round(sum(components) / len(components), 1)
-            gr.status = 'graded'
-            gr.graded_at = datetime.utcnow()
-            if not gr.session_id and active_session:
-                gr.session_id = active_session.id
-        db.session.commit()
+        from app.services.grading_service import sync_student_experiment_grade
+        sync_student_experiment_grade(
+            g.user_id, module.experiment_id, session_id=active_session.id if active_session else None
+        )
     except Exception:
-        db.session.rollback()
+        pass
 
     # P0: Update concept mastery after coding assignment submission (with fallback tags)
     try:
@@ -1587,36 +1692,10 @@ def submit_viva(module_id):
 
     # ── Real Data Collection: Persist Grade ──
     try:
-        from app.models.grading import Grade
-        exp_id = module.experiment_id
-        gr = Grade.query.filter_by(
-            student_id=g.user_id,
-            experiment_id=exp_id,
-        ).first()
-        if not gr:
-            gr = Grade(
-                student_id=g.user_id,
-                experiment_id=exp_id,
-                viva_grade=round(best, 1),
-                final_grade=round(best, 1),
-                status='graded',
-                graded_at=datetime.utcnow(),
-            )
-            db.session.add(gr)
-        else:
-            gr.viva_grade = max(gr.viva_grade or 0.0, round(best, 1))
-            if gr.manual_grade is None:
-                components = [gr.viva_grade]
-                if gr.auto_grade is not None:
-                    components.append(gr.auto_grade)
-                if gr.quiz_grade is not None:
-                    components.append(gr.quiz_grade)
-                gr.final_grade = round(sum(components) / len(components), 1)
-            gr.status = 'graded'
-            gr.graded_at = datetime.utcnow()
-        db.session.commit()
+        from app.services.grading_service import sync_student_experiment_grade
+        sync_student_experiment_grade(g.user_id, module.experiment_id)
     except Exception:
-        db.session.rollback()
+        pass
 
     # P0: Update concept mastery after viva submission (with fallback tags)
     try:
