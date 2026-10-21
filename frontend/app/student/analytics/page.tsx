@@ -3,19 +3,27 @@
 import React, { useState, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { RotateCw, Lightbulb, Sparkles } from 'lucide-react';
+import {
+  RotateCw,
+  Calendar,
+  ChevronDown,
+  Sparkles,
+  GraduationCap,
+  Trophy,
+  Network,
+  Lightbulb,
+} from 'lucide-react';
 
 import StudentShell from '@/components/layout/StudentShell';
 import { useAuthStore } from '@/store/auth-store';
 import { studentAnalyticsService } from '@/services/student-analytics.service';
 import {
-  TwoTrackHero,
   OverviewTab,
   AcademicTab,
   PlatformTab,
   KnowledgeMapTab,
 } from '@/components/student-analytics';
-import styles from '@/components/student-analytics/student-analytics.module.css';
+import growthStyles from '@/components/student-analytics/growth-overview.module.css';
 
 function StudentAnalyticsDashboard() {
   const router = useRouter();
@@ -23,8 +31,9 @@ function StudentAnalyticsDashboard() {
   const queryClient = useQueryClient();
   const { user } = useAuthStore();
 
-  const currentTab = searchParams.get('tab') || 'overview';
+  const currentTab = searchParams.get('tab') || 'academic';
   const selectedSubjectId = searchParams.get('subject') || null;
+  const [dateRange, setDateRange] = useState('30');
 
   const handleTabChange = (tab: string) => {
     const params = new URLSearchParams(searchParams.toString());
@@ -54,8 +63,8 @@ function StudentAnalyticsDashboard() {
     isRefetching,
     refetch,
   } = useQuery({
-    queryKey: ['student-analytics-overview'],
-    queryFn: () => studentAnalyticsService.getOverview(),
+    queryKey: ['student-analytics-overview', dateRange],
+    queryFn: () => studentAnalyticsService.getOverview({ period: dateRange }),
     staleTime: 60 * 1000,
   });
 
@@ -131,85 +140,125 @@ function StudentAnalyticsDashboard() {
   });
 
   const handleRefresh = async () => {
-    await queryClient.invalidateQueries({ queryKey: ['student-analytics'] });
-    await queryClient.invalidateQueries({ queryKey: ['platform-leaderboard'] });
+    await Promise.all([
+      queryClient.invalidateQueries({ queryKey: ['student-analytics'] }),
+      queryClient.invalidateQueries({ queryKey: ['student-analytics-overview'] }),
+      queryClient.invalidateQueries({ queryKey: ['student-academic-dashboard'] }),
+      queryClient.invalidateQueries({ queryKey: ['student-platform-dashboard'] }),
+      queryClient.invalidateQueries({ queryKey: ['student-knowledge-map-dashboard'] }),
+      queryClient.invalidateQueries({ queryKey: ['platform-leaderboard'] }),
+      queryClient.invalidateQueries({ queryKey: ['student-study-plans-overview'] }),
+    ]);
     refetch();
   };
 
-  const highlights = overview?.highlights;
-
   return (
-    <StudentShell
-      activePage="Performance Analytics"
-      title="My Growth"
-      subtitle="Two-Track Growth Profile: Academic Mastery & Platform Competitive Standing"
-    >
-      <div className={styles.container}>
-        {/* Dual-Rank Hero Banner (<ProfileHero>) */}
-        <TwoTrackHero
-          overview={overview ?? null}
-          activeTab={currentTab}
-          onTabChange={handleTabChange}
-          studentName={user?.full_name || 'Student'}
-          rollNumber={(user as any)?.roll_number}
-          department={(user as any)?.department || 'Computer Science'}
-        />
-
-        {/* Action Controls & Refetch Status */}
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: '-0.5rem' }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: '0.5rem' }}>
-            {highlights?.suggestions && highlights.suggestions.length > 0 && (
-              <span className={styles.metaBadge} style={{ background: '#f5f3ff', color: '#6d28d9' }}>
-                <Lightbulb size={13} /> {highlights.suggestions[0]}
-              </span>
-            )}
+    <StudentShell activePage="Performance Analytics">
+      <div className={growthStyles.container}>
+        {/* ── Top Header Row: Title, Subtitle, and Date Range Dropdown ── */}
+        <div className={growthStyles.topHeaderBar}>
+          <div className={growthStyles.headerTitleGroup}>
+            <h1>My Growth</h1>
+            <p>Track your academic progress, practice journey, and build a stronger you.</p>
           </div>
 
+          <div style={{ display: 'flex', alignItems: 'center', gap: '0.75rem' }}>
+            <div className={growthStyles.dateFilterWrapper}>
+              <Calendar size={15} className={growthStyles.dateFilterIcon} />
+              <select
+                value={dateRange}
+                onChange={(e) => setDateRange(e.target.value)}
+                className={growthStyles.dateFilterSelect}
+              >
+                <option value="30">Last 30 Days</option>
+                <option value="60">Last 60 Days</option>
+                <option value="90">Last 90 Days</option>
+                <option value="semester">This Semester</option>
+                <option value="all">All Time</option>
+              </select>
+              <ChevronDown size={14} className={growthStyles.chevronIcon} />
+            </div>
+
+            <button
+              onClick={handleRefresh}
+              disabled={isRefetching}
+              title="Refresh Telemetry"
+              style={{
+                display: 'inline-flex',
+                alignItems: 'center',
+                gap: '0.4rem',
+                padding: '0.5rem 0.75rem',
+                borderRadius: '0.5rem',
+                border: '1px solid #e2e8f0',
+                background: '#ffffff',
+                color: '#64748b',
+                fontSize: '0.8rem',
+                fontWeight: 600,
+                cursor: 'pointer',
+              }}
+            >
+              <RotateCw size={13} className={isRefetching ? 'animate-spin' : ''} />
+            </button>
+          </div>
+        </div>
+
+        {/* ── 4 Primary Navigation Tabs ── */}
+        <div className={growthStyles.mainTabNav}>
           <button
-            onClick={handleRefresh}
-            disabled={isRefetching}
-            style={{
-              display: 'inline-flex',
-              alignItems: 'center',
-              gap: '0.4rem',
-              padding: '0.45rem 0.85rem',
-              borderRadius: '0.5rem',
-              border: '1px solid #e2e8f0',
-              background: '#ffffff',
-              color: '#475569',
-              fontSize: '0.8rem',
-              fontWeight: 600,
-              cursor: 'pointer',
-            }}
+            onClick={() => handleTabChange('overview')}
+            className={`${growthStyles.mainTabBtn} ${currentTab === 'overview' ? growthStyles.mainTabActive : ''}`}
           >
-            <RotateCw size={13} className={isRefetching ? styles.spinner : ''} />
-            <span>{isRefetching ? 'Updating…' : 'Refresh Telemetry'}</span>
+            <Sparkles size={16} />
+            <span>Overview</span>
+          </button>
+          <button
+            onClick={() => handleTabChange('academic')}
+            className={`${growthStyles.mainTabBtn} ${currentTab === 'academic' ? growthStyles.mainTabActive : ''}`}
+          >
+            <GraduationCap size={16} />
+            <span>Academic</span>
+          </button>
+          <button
+            onClick={() => handleTabChange('platform')}
+            className={`${growthStyles.mainTabBtn} ${currentTab === 'platform' ? growthStyles.mainTabActive : ''}`}
+          >
+            <Trophy size={16} />
+            <span>Platform</span>
+          </button>
+          <button
+            onClick={() => handleTabChange('knowledge')}
+            className={`${growthStyles.mainTabBtn} ${currentTab === 'knowledge' ? growthStyles.mainTabActive : ''}`}
+          >
+            <Network size={16} />
+            <span>Knowledge Map</span>
           </button>
         </div>
 
-        {/* ── 4 PRIMARY TABS ──────────────────────────────────────────────── */}
+        {/* ── TAB CONTENT ── */}
 
-        {/* Tab 1: 🏠 Overview */}
+        {/* Tab 1: Overview */}
         {currentTab === 'overview' && (
-          <OverviewTab overview={overview ?? null} onNavigateTab={handleTabChange} />
-        )}
-
-        {/* Tab 2: 🎓 Academic */}
-        {currentTab === 'academic' && (
-          <AcademicTab
-            subjects={subjects}
-            selectedSubjectId={selectedSubjectId}
-            onSubjectChange={handleSubjectChange}
-            mastery={mastery}
-            trends={trends}
-            forecast={forecast}
-            standing={standing}
-            attendance={attendance || overview?.academic?.attendance}
-            academicRanks={ranks?.academic || overview?.academic?.ranks}
+          <OverviewTab
+            overview={overview ?? null}
+            onNavigateTab={handleTabChange}
+            studentName={user?.full_name || 'Aditi Rao'}
+            rollNumber={(user as any)?.roll_number}
+            department={(user as any)?.department || 'Computer Science'}
+            dateRange={dateRange}
           />
         )}
 
-        {/* Tab 3: 🏆 Platform */}
+        {/* Tab 2: Academic Deep-Dive */}
+        {currentTab === 'academic' && (
+          <AcademicTab
+            initialSubjectId={selectedSubjectId}
+            onSubjectChange={handleSubjectChange}
+            onNavigateTab={handleTabChange}
+            dateRange={dateRange}
+          />
+        )}
+
+        {/* Tab 3: Platform Competitive & Leaderboards */}
         {currentTab === 'platform' && (
           <PlatformTab
             standing={overview?.platform}
@@ -223,15 +272,19 @@ function StudentAnalyticsDashboard() {
             onScopeChange={setBoardScope}
             onPeriodChange={setBoardPeriod}
             onTopicChange={setBoardTopic}
+            onNavigateTab={handleTabChange}
+            dateRange={dateRange}
           />
         )}
 
-        {/* Tab 4: 🧭 Knowledge Map */}
+        {/* Tab 4: Blended Knowledge Map & Prerequisite Intelligence */}
         {currentTab === 'knowledge' && (
           <KnowledgeMapTab
             knowledgeMap={overview?.knowledge_map}
-            focusTopics={highlights?.focus_topics}
+            focusTopics={overview?.highlights?.focus_topics}
             prerequisiteBlocks={mastery?.prerequisite_blocks}
+            onNavigateTab={handleTabChange}
+            dateRange={dateRange}
           />
         )}
       </div>
@@ -243,13 +296,10 @@ export default function AnalyticsPage() {
   return (
     <Suspense
       fallback={
-        <StudentShell
-          activePage="Performance Analytics"
-          title="My Growth"
-          subtitle="Loading your personalized growth profile…"
-        >
-          <div className={styles.loadingBox}>
-            <RotateCw size={20} className={styles.spinner} /> Loading telemetry…
+        <StudentShell activePage="Performance Analytics">
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', minHeight: '50vh', gap: '0.5rem', color: '#64748b' }}>
+            <RotateCw size={18} className="animate-spin" />
+            <span>Loading your personalized growth profile…</span>
           </div>
         </StudentShell>
       }

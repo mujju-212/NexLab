@@ -41,6 +41,7 @@ export const BlendedKnowledgeRadar: React.FC<BlendedKnowledgeRadarProps> = ({
         return styles.bandMastered;
       case 'Proficient':
         return styles.bandProficient;
+      case 'Developing':
       case 'Learning':
         return styles.bandLearning;
       default:
@@ -215,7 +216,7 @@ export const BlendedKnowledgeRadar: React.FC<BlendedKnowledgeRadarProps> = ({
                             ? 'linear-gradient(90deg, #10b981, #059669)'
                             : item.band === 'Proficient'
                             ? 'linear-gradient(90deg, #0284c7, #2563eb)'
-                            : item.band === 'Learning'
+                            : item.band === 'Learning' || item.band === 'Developing'
                             ? 'linear-gradient(90deg, #f59e0b, #d97706)'
                             : 'linear-gradient(90deg, #ef4444, #dc2626)',
                       }}
