@@ -393,10 +393,22 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
   // Filter states
   const [search, setSearch] = useState('');
   const [diffFilter, setDiffFilter] = useState('');
-  const [selectedTopic, setSelectedTopic] = useState('');
+  const [selectedTopic, setSelectedTopic] = useState<string>(() => searchParams.get('topic') || '');
   const [statusFilter, setStatusFilter] = useState('');
   const [acceptanceFilter, setAcceptanceFilter] = useState('');
   const [sortBy, setSortBy] = useState<'relevant' | 'acc_desc' | 'acc_asc' | 'title' | 'difficulty'>('relevant');
+
+  // Sync with URL query parameters (?topic=, ?problem=)
+  useEffect(() => {
+    const topicParam = searchParams.get('topic');
+    if (topicParam !== null) {
+      setSelectedTopic(topicParam);
+    }
+    const probParam = searchParams.get('problem');
+    if (probParam) {
+      router.push(`/practice/library/${probParam}`);
+    }
+  }, [searchParams, router]);
 
   // Pagination
   const [page, setPage] = useState(1);

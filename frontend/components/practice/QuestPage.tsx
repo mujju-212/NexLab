@@ -111,18 +111,21 @@ interface LbEntry {
 }
 
 const BADGE_CATALOG = [
-  { id: 'first_solve', emoji: '🎯', name: 'First Solve', desc: 'Solve your first problem' },
-  { id: 'streak_7', emoji: '🔥', name: '7-Day Streak', desc: 'Maintain a 7-day streak' },
-  { id: 'streak_30', emoji: '🌟', name: '30-Day Streak', desc: 'Maintain a 30-day streak' },
+  { id: 'first_solve', emoji: '🎯', name: 'First Steps', desc: 'Solve your first problem' },
+  { id: 'streak_7', emoji: '🔥', name: 'Week Warrior', desc: 'Maintain a 7-day streak' },
+  { id: 'streak_30', emoji: '🌟', name: 'Month Master', desc: 'Maintain a 30-day streak' },
   { id: 'easy_10', emoji: '✅', name: 'Easy Mode', desc: 'Solve 10 Easy problems' },
   { id: 'medium_10', emoji: '⚡', name: 'Rising Star', desc: 'Solve 10 Medium problems' },
   { id: 'hard_5', emoji: '💎', name: 'Diamond Coder', desc: 'Solve 5 Hard problems' },
-  { id: 'nexlab75', emoji: '🏆', name: 'NexLab 75', desc: 'Complete the NexLab 75 plan' },
-  { id: 'beginner_path', emoji: '🌱', name: 'Beginner', desc: 'Complete Beginner Path plan' },
-  { id: 'dp_mastery', emoji: '🧠', name: 'DP Master', desc: 'Complete DP Mastery plan' },
-  { id: 'trees_graphs', emoji: '🌳', name: 'Graph Explorer', desc: 'Complete Trees & Graphs plan' },
-  { id: 'sql_50', emoji: '🗄️', name: 'SQL Expert', desc: 'Complete SQL 50 plan' },
-  { id: 'century', emoji: '💯', name: 'Centurion', desc: 'Solve 100 problems' },
+  { id: 'centurion', emoji: '💯', name: 'Centurion', desc: 'Solve 100 problems' },
+  { id: 'speed_demon', emoji: '⚡', name: 'Speed Demon', desc: 'Submit & accepted under 5 min' },
+  { id: 'top_10', emoji: '🏆', name: 'Top 10', desc: 'Top 10 on the institution leaderboard' },
+  { id: 'nexlab75', emoji: '🎯', name: 'NexLab 75', desc: 'Complete the NexLab 75 plan' },
+  { id: 'beginner_path', emoji: '🌱', name: 'Beginner Badge', desc: 'Complete Beginner Path plan' },
+  { id: 'dp_mastery', emoji: '🧠', name: 'DP Expert', desc: 'Complete DP Mastery plan' },
+  { id: 'trees_graphs', emoji: '🌳', name: 'Tree Climber', desc: 'Complete Trees & Graphs plan' },
+  { id: 'sql_50', emoji: '🗄️', name: 'SQL Pro', desc: 'Complete SQL 50 plan' },
+  { id: 'interview_ready', emoji: '💼', name: 'Interview Ready', desc: 'Complete Interview Ready plan' },
 ];
 
 export default function QuestPage({ baseRoute }: { baseRoute: string }) {

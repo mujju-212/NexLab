@@ -177,6 +177,25 @@ export const practiceExtraService = {
     return data;
   },
 
+  // ── Study Plans ───────────────────────────────────────────────────────────
+  async getPlans(): Promise<{
+    plans: Array<{
+      id: string;
+      slug: string;
+      title: string;
+      description?: string;
+      difficulty_mix: string;
+      total_problems: number;
+      badge_id?: string;
+      enrolled: boolean;
+      solved_count: number;
+      completed: boolean;
+    }>;
+  }> {
+    const { data } = await apiClient.get('/practice/plans');
+    return data;
+  },
+
   // ── Certificates ───────────────────────────────────────────────────────────
   async downloadCertificate(planId: string) {
     const res = await apiClient.get(`/practice/plans/${planId}/certificate`, { responseType: 'blob' });

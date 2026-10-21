@@ -179,6 +179,8 @@ export default function ProblemSolverPage({ slug, baseRoute }: ProblemSolverPage
   const [problem, setProblem] = useState<ProblemDetail | null>(null);
   const [samples, setSamples] = useState<SampleCase[]>([]);
   const [mySubmissions, setMySubmissions] = useState<Submission[]>([]);
+  const [prevSlug, setPrevSlug] = useState<string | null>(null);
+  const [nextSlug, setNextSlug] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Editor state
@@ -228,6 +230,8 @@ export default function ProblemSolverPage({ slug, baseRoute }: ProblemSolverPage
         setProblem(p);
         setSamples(sc);
         setMySubmissions(subs);
+        setPrevSlug(res.data.prev_slug || null);
+        setNextSlug(res.data.next_slug || null);
 
         // Initialise code from starter or default
         const starters: Record<string, string> = {};
@@ -364,8 +368,24 @@ export default function ProblemSolverPage({ slug, baseRoute }: ProblemSolverPage
           <ArrowLeft size={15} /> Practice Library
         </button>
         <div className={styles.probNav}>
-          <button className={styles.navBtn}><ChevronLeft size={14} /> Prev</button>
-          <button className={styles.navBtn}>Next <ChevronRight size={14} /></button>
+          <button
+            className={styles.navBtn}
+            disabled={!prevSlug}
+            onClick={() => prevSlug && router.push(`${baseRoute}/${prevSlug}`)}
+            style={{ opacity: prevSlug ? 1 : 0.4, cursor: prevSlug ? 'pointer' : 'not-allowed' }}
+            title={prevSlug ? `Go to previous problem` : 'No previous problem'}
+          >
+            <ChevronLeft size={14} /> Prev
+          </button>
+          <button
+            className={styles.navBtn}
+            disabled={!nextSlug}
+            onClick={() => nextSlug && router.push(`${baseRoute}/${nextSlug}`)}
+            style={{ opacity: nextSlug ? 1 : 0.4, cursor: nextSlug ? 'pointer' : 'not-allowed' }}
+            title={nextSlug ? `Go to next problem` : 'No next problem'}
+          >
+            Next <ChevronRight size={14} />
+          </button>
         </div>
       </div>
 

@@ -26,9 +26,18 @@ from app.extensions import db
 from app.models.practice import Problem, PracticeTestCase, StudyPlan, StudyPlanSection
 import topic_balance as tb
 
-PROBLEMS_FILE = os.path.join(
-    os.path.dirname(__file__), '..', '..', 'docs', '05-platform-expansion', 'problems', 'problems_nexlab.json'
-)
+def _find_problems_file():
+    candidates = [
+        os.path.join(os.path.dirname(__file__), '..', 'database', 'problems_nexlab.json'),
+        os.path.join(os.path.dirname(__file__), '..', '..', 'docs', '05-platform-expansion', 'problems', 'problems_nexlab.json'),
+        os.path.join(os.path.dirname(__file__), 'problems_nexlab.json'),
+    ]
+    for c in candidates:
+        if os.path.exists(c):
+            return os.path.abspath(c)
+    return None
+
+PROBLEMS_FILE = _find_problems_file()
 
 # Soft cap for balanced topic labeling. balance() only RELABELS a problem within its
 # own tags (never drops one), so this is a flatten knob, not a selection knob. The key
@@ -217,6 +226,10 @@ def seed_sample_cases(problem, examples):
     """Replace this problem's visible sample cases with ones parsed from its
     examples. Only touches is_sample=True rows, so instructor-added hidden cases
     (is_sample=False) survive a reseed. Returns the number of sample cases written."""
+    # PLT-05: If problem already has curated test cases (from seed_test_cases.py), do not overwrite
+    if PracticeTestCase.query.filter_by(problem_id=problem.id, is_sample=False).count() > 0:
+        return 0
+
     PracticeTestCase.query.filter_by(problem_id=problem.id, is_sample=True).delete()
     n = 0
     for ex in (examples or []):
@@ -269,7 +282,53 @@ def print_distribution(assign, cap):
     print(f"    min={min(vals)}  max={max(vals)}  thin={thin or 'none'}")
 
 
+def _seed_fallback_problems():
+    """Fallback when problems_nexlab.json is missing: seeds 78 problems from seed_test_cases.py
+    and all problem slugs mentioned in STUDY_PLANS."""
+    try:
+        from seed_test_cases import TEST_CASES
+        slugs = set(TEST_CASES.keys())
+    except Exception:
+        slugs = set()
+
+    for plan in STUDY_PLANS:
+        for _, plan_slugs in plan.get('sections', []):
+            slugs.update(plan_slugs)
+
+    inserted = 0
+    updated = 0
+    for idx, slug in enumerate(sorted(slugs)):
+        existing = Problem.query.filter_by(slug=slug).first()
+        title = slug.replace('-', ' ').title()
+        if existing:
+            updated += 1
+        else:
+            p = Problem(
+                slug=slug,
+                lc_id=str(idx + 1),
+                title=title,
+                difficulty='Medium',
+                nexlab_topic='Algorithms',
+                topics=['Algorithm'],
+                description=f'Solve the challenge: {title}.',
+                examples=[],
+                constraints=[],
+                hints=[],
+                acceptance=0.65,
+                source='nexlab',
+            )
+            db.session.add(p)
+            inserted += 1
+    db.session.commit()
+    print(f"  [OK] Fallback Problems: {inserted} inserted, {updated} updated")
+
+
 def seed_problems():
+    if not PROBLEMS_FILE or not os.path.exists(PROBLEMS_FILE):
+        print("⚠️ Warning: problems_nexlab.json not found! Falling back to curated problem set from seed_test_cases.py and study plans...")
+        _seed_fallback_problems()
+        return
+
     with open(PROBLEMS_FILE, 'r', encoding='utf-8') as f:
         problems_data = json.load(f)
 
@@ -369,7 +428,13 @@ if __name__ == '__main__':
         print("=" * 50)
         print("NexLab Practice Library — DB Seed")
         print("=" * 50)
-        seed_problems()
-        seed_study_plans()
+        try:
+            seed_problems()
+        except Exception as e:
+            print(f"⚠️ Error seeding problems: {e}")
+        try:
+            seed_study_plans()
+        except Exception as e:
+            print(f"⚠️ Error seeding study plans: {e}")
         print("=" * 50)
         print("DONE [OK]")

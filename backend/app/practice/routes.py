@@ -159,6 +159,12 @@ def _reward_solve(student_id, problem, xp_earned, elapsed_sec=None):
         _award_badge(student_id, 'streak_7')
     if xp.streak_days >= 30:
         _award_badge(student_id, 'streak_30')
+    if xp.easy_solved >= 10:
+        _award_badge(student_id, 'easy_10')
+    if xp.medium_solved >= 10:
+        _award_badge(student_id, 'medium_10')
+    if xp.hard_solved >= 5:
+        _award_badge(student_id, 'hard_5')
 
     # Speed demon — accepted within 5 minutes of opening (frontend passes elapsed_sec)
     if elapsed_sec is not None and 0 < elapsed_sec <= 300:
@@ -178,6 +184,15 @@ def _reward_solve(student_id, problem, xp_earned, elapsed_sec=None):
 
     # Study-plan progress + plan-completion badges
     _update_plan_progress(student_id, problem.slug)
+
+    # Precompute and update Track-2 PlatformRating in DB for fast O(1) reads
+    try:
+        from app.platform_rank.rating import compute_student_platform_rating, update_all_platform_ranks
+        compute_student_platform_rating(student_id, commit=False)
+        update_all_platform_ranks()
+    except Exception:
+        pass
+
     return xp
 
 
@@ -194,7 +209,9 @@ def list_problems():
     search = request.args.get('search', '').strip()
 
     if topic:
-        q = q.filter_by(nexlab_topic=topic)
+        from app.platform_rank.blended import expand_topic_aliases
+        aliases = expand_topic_aliases(topic)
+        q = q.filter(Problem.nexlab_topic.in_(aliases))
     if difficulty:
         q = q.filter_by(difficulty=difficulty)
     if search:
@@ -245,10 +262,40 @@ def get_problem(slug):
         student_id=g.user_id, problem_id=problem.id, is_run=False
     ).order_by(PracticeSubmission.submitted_at.desc()).limit(10).all()
 
+    # Navigation: prev and next problems
+    prev_prob = None
+    next_prob = None
+    try:
+        curr_lc = int(problem.lc_id) if problem.lc_id and str(problem.lc_id).isdigit() else None
+        if curr_lc is not None:
+            prev_prob = Problem.query.filter(
+                Problem.is_active == True,
+                db.cast(Problem.lc_id, db.Integer) < curr_lc
+            ).order_by(db.cast(Problem.lc_id, db.Integer).desc()).first()
+            next_prob = Problem.query.filter(
+                Problem.is_active == True,
+                db.cast(Problem.lc_id, db.Integer) > curr_lc
+            ).order_by(db.cast(Problem.lc_id, db.Integer).asc()).first()
+    except Exception:
+        pass
+
+    if not prev_prob:
+        prev_prob = Problem.query.filter(
+            Problem.is_active == True,
+            Problem.id < problem.id
+        ).order_by(Problem.id.desc()).first()
+    if not next_prob:
+        next_prob = Problem.query.filter(
+            Problem.is_active == True,
+            Problem.id > problem.id
+        ).order_by(Problem.id.asc()).first()
+
     return jsonify({
         'problem': problem.to_dict(include_description=True),
         'sample_cases': [tc.to_dict() for tc in samples],
         'my_submissions': [s.to_dict(include_code=True) for s in my_subs],
+        'prev_slug': prev_prob.slug if prev_prob else None,
+        'next_slug': next_prob.slug if next_prob else None,
     }), 200
 
 
@@ -1057,29 +1104,14 @@ def submit_problem(slug):
         status='Accepted', is_run=False
     ).first() is not None
 
-    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
-        all_cases = PracticeTestCase.query.filter_by(problem_id=problem.id).all()
-        total = max(len(all_cases), 1)
-        sub = PracticeSubmission(
-            student_id=g.user_id, problem_id=problem.id,
-            language=language, code=code, status='Accepted',
-            passed=total, total=total, is_run=False,
-        )
-        xp_earned = 0 if already_solved else xp_reward
-        if not already_solved:
-            sub.xp_earned = xp_earned
-            _reward_solve(g.user_id, problem, xp_earned, elapsed_sec)
-        db.session.add(sub)
-        db.session.commit()
-        return jsonify({
-            'status': 'Accepted', 'passed': total, 'total': total,
-            'score': 100.0, 'xp_earned': xp_earned, 'runtime_ms': None,
-        }), 200
-
     all_cases = PracticeTestCase.query.filter_by(problem_id=problem.id).all()
     if not all_cases:
-        # No test cases seeded — auto-accept (same as dev-mode fallback)
-        total = 1
+        return jsonify({
+            'error': 'No test cases configured for this problem yet. Please try another problem.'
+        }), 400
+
+    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+        total = len(all_cases)
         sub = PracticeSubmission(
             student_id=g.user_id, problem_id=problem.id,
             language=language, code=code, status='Accepted',
@@ -1094,7 +1126,6 @@ def submit_problem(slug):
         return jsonify({
             'status': 'Accepted', 'passed': total, 'total': total,
             'score': 100.0, 'xp_earned': xp_earned, 'runtime_ms': None,
-            'note': 'No test cases configured — submission accepted by default.',
         }), 200
 
     passed_count = 0

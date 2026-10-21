@@ -354,7 +354,7 @@ def get_quest_dashboard_data(user_id: str, role: str = 'student', institution_id
             'is_earned': (xp.hard_solved >= 5) or ('hard_5' in badge_ids),
         },
         {
-            'id': "century",
+            'id': "centurion",
             'title': "Centurion",
             'subtitle': "Solve 100 problems",
             'icon': "award",
