@@ -56,14 +56,16 @@ def compute_student_platform_rating(student_id: str, commit: bool = True) -> Dic
         .all()
     )
 
+    BASE_RATING = 1000.0
+
     if not first_solves and not course_solves:
-        # Reset or return zero rating
+        # Initial baseline rating for new student
         rating_rec = PlatformRating.query.get(student_id)
         if not rating_rec:
-            rating_rec = PlatformRating(student_id=student_id, rating=0.0)
+            rating_rec = PlatformRating(student_id=student_id, rating=BASE_RATING)
             db.session.add(rating_rec)
         else:
-            rating_rec.rating = 0.0
+            rating_rec.rating = BASE_RATING
             rating_rec.problems_solved = 0
             rating_rec.easy_solved = 0
             rating_rec.medium_solved = 0
@@ -74,7 +76,7 @@ def compute_student_platform_rating(student_id: str, commit: bool = True) -> Dic
 
         return {
             'student_id': student_id,
-            'rating': 0.0,
+            'rating': BASE_RATING,
             'problems_solved': 0,
             'easy_solved': 0,
             'medium_solved': 0,
@@ -87,7 +89,7 @@ def compute_student_platform_rating(student_id: str, commit: bool = True) -> Dic
     problem_ids = list(first_solves.keys())
     problems = {p.id: p for p in Problem.query.filter(Problem.id.in_(problem_ids)).all()} if problem_ids else {}
 
-    total_rating = 0.0
+    total_xp_earned = 0.0
     easy_count = 0
     medium_count = 0
     hard_count = 0
@@ -125,7 +127,7 @@ def compute_student_platform_rating(student_id: str, commit: bool = True) -> Dic
             recency = max(0.7, 1.0 - ((days_old - 90) / 275.0) * 0.3)
 
         problem_rating = base * quality * recency
-        total_rating += problem_rating
+        total_xp_earned += problem_rating
 
     # 4b. Score course exercise solves (anti-farming: each exercise unique per user)
     for prog, ex in course_solves:
@@ -154,10 +156,17 @@ def compute_student_platform_rating(student_id: str, commit: bool = True) -> Dic
             recency = max(0.7, 1.0 - ((days_old - 90) / 275.0) * 0.3)
 
         exercise_rating = base * quality * recency
-        total_rating += exercise_rating
+        total_xp_earned += exercise_rating
 
-    total_rating = round(total_rating, 1)
+    # 4c. Anti-farming protection: single-solve credit de-duplicates by problem_id so repeat solves earn 0 XP
+    anti_farming_penalty = 0.0
+
     total_solved = len(first_solves) + len(course_solves)
+    if total_solved == 0:
+        total_rating = 0.0
+    else:
+        # Formula: Rating = 1000.0 + sum(BaseXP * RecencyWeight) - AntiFarmingPenalty
+        total_rating = round(max(500.0, BASE_RATING + total_xp_earned - anti_farming_penalty), 1)
 
     # 5. Save/update PlatformRating
     rating_rec = PlatformRating.query.get(student_id)
@@ -199,21 +208,28 @@ def compute_student_platform_rating(student_id: str, commit: bool = True) -> Dic
 def update_all_platform_ranks() -> int:
     """
     Ranks all platform users by rating DESC and updates global_rank and global_percentile.
-    Can be executed periodically or on first-solve events.
+    Users with 0 solves or 0 rating remain unranked (global_rank=None, percentile=0.0).
     """
     ratings = PlatformRating.query.order_by(PlatformRating.rating.desc()).all()
-    n = len(ratings)
-    if n == 0:
+    if not ratings:
         return 0
 
-    for i, rec in enumerate(ratings):
+    ranked_users = [r for r in ratings if (r.problems_solved or 0) > 0 and (r.rating or 0.0) > 0]
+    unranked_users = [r for r in ratings if (r.problems_solved or 0) == 0 or (r.rating or 0.0) <= 0]
+    n = len(ranked_users)
+
+    for i, rec in enumerate(ranked_users):
         rank = i + 1
         percentile = round(100.0 * (1.0 - (float(rank - 1) / max(1, n))), 1)
         rec.global_rank = rank
         rec.global_percentile = percentile
 
+    for rec in unranked_users:
+        rec.global_rank = None
+        rec.global_percentile = 0.0
+
     db.session.commit()
-    return n
+    return len(ratings)
 
 
 def get_student_platform_standing(student_id: str) -> Dict[str, Any]:
@@ -232,9 +248,15 @@ def get_student_platform_standing(student_id: str) -> Dict[str, Any]:
         rating_rec = PlatformRating.query.get(student_id)
 
     # Fallback rank calculation if uncomputed
-    if rating_rec and (rating_rec.global_rank is None or rating_rec.global_rank == 0):
-        higher = PlatformRating.query.filter(PlatformRating.rating > rating_rec.rating).count()
-        total = max(1, PlatformRating.query.count())
+    if rating_rec and ((rating_rec.problems_solved or 0) == 0 or (rating_rec.rating or 0.0) <= 0):
+        rating_rec.global_rank = None
+        rating_rec.global_percentile = 0.0
+    elif rating_rec and (rating_rec.global_rank is None or rating_rec.global_rank == 0):
+        higher = PlatformRating.query.filter(
+            PlatformRating.problems_solved > 0,
+            PlatformRating.rating > rating_rec.rating
+        ).count()
+        total = max(1, PlatformRating.query.filter(PlatformRating.problems_solved > 0).count())
         rating_rec.global_rank = higher + 1
         rating_rec.global_percentile = round(100.0 * (1.0 - (float(higher) / float(total))), 1)
 
@@ -264,20 +286,22 @@ def get_student_platform_standing(student_id: str) -> Dict[str, Any]:
         # positive means moved up in rank (e.g. from 50 to 40 = +10)
         rank_movement = last_period.rank_pos - rating_rec.global_rank
 
+    is_unranked = not rating_rec or (rating_rec.problems_solved or 0) == 0 or (rating_rec.rating or 0.0) <= 0
+
     return {
         'student_id': student_id,
-        'rating': round(float(rating_rec.rating or 0.0), 1) if rating_rec else 0.0,
+        'rating': 0.0 if is_unranked else round(float(rating_rec.rating or 0.0), 1),
         'level': level,
         'level_name': level_name,
         'total_xp': total_xp,
         'next_level_xp': next_xp,
-        'global_rank': rating_rec.global_rank if rating_rec else 1,
-        'global_percentile': round(float(rating_rec.global_percentile or 0.0), 1) if rating_rec else 100.0,
-        'rank_movement': rank_movement,
-        'problems_solved': rating_rec.problems_solved if rating_rec else (xp.problems_solved if xp else 0),
-        'easy_solved': rating_rec.easy_solved if rating_rec else (xp.easy_solved if xp else 0),
-        'medium_solved': rating_rec.medium_solved if rating_rec else (xp.medium_solved if xp else 0),
-        'hard_solved': rating_rec.hard_solved if rating_rec else (xp.hard_solved if xp else 0),
+        'global_rank': None if is_unranked else rating_rec.global_rank,
+        'global_percentile': 0.0 if is_unranked else round(float(rating_rec.global_percentile or 0.0), 1),
+        'rank_movement': 0 if is_unranked else rank_movement,
+        'problems_solved': 0 if is_unranked else (rating_rec.problems_solved if rating_rec else 0),
+        'easy_solved': 0 if is_unranked else (rating_rec.easy_solved if rating_rec else 0),
+        'medium_solved': 0 if is_unranked else (rating_rec.medium_solved if rating_rec else 0),
+        'hard_solved': 0 if is_unranked else (rating_rec.hard_solved if rating_rec else 0),
         'streak_days': xp.streak_days if xp else 0,
         'badges': badges,
     }

@@ -42,6 +42,28 @@ def _canonicalize_topic(name: str) -> str:
     return TOPIC_SYNONYMS.get(cleaned, (name or 'General').strip().title())
 
 
+def expand_topic_aliases(name: str) -> List[str]:
+    """
+    Expands a canonical or raw topic name into all possible synonyms/aliases
+    used across Problem.nexlab_topic, ConceptMastery.concept, etc.
+    e.g. 'Arrays & Strings' -> ['Arrays & Strings', 'Array', 'Arrays', 'String', 'Strings']
+    """
+    if not name:
+        return []
+    cleaned = name.strip().lower()
+    canonical = TOPIC_SYNONYMS.get(cleaned, name.strip().title())
+
+    aliases = {name.strip(), canonical}
+    for syn_raw, can_target in TOPIC_SYNONYMS.items():
+        if can_target.lower() == canonical.lower():
+            aliases.add(syn_raw.title())
+            aliases.add(syn_raw)
+            aliases.add(syn_raw.capitalize())
+            aliases.add(syn_raw.lower())
+
+    return list(aliases)
+
+
 def compute_blended_knowledge_map(
     student_id: str,
     institution_id: Optional[str] = None,
@@ -92,12 +114,18 @@ def compute_blended_knowledge_map(
         acad = academic_scores.get(topic)
         prac = practice_scores.get(topic)
 
+        # Formula: Blended Score = 0.60 * Academic Mastery + 0.40 * Practice Strength
+        # Academic Mastery derived from ConceptMastery.mastery_score (or 70.0 base score if not evaluated)
+        # Practice Strength derived from PracticeSubmission.passed / total and topic strength
+        effective_acad = float(acad) if acad is not None else 70.0
+        effective_prac = float(prac) if prac is not None else 0.0
+
         if acad is not None and prac is not None:
             blended = round((acad * weight_academic) + (prac * weight_practice), 1)
         elif acad is not None:
-            blended = round(acad, 1)
+            blended = round((acad * weight_academic) + (effective_prac * weight_practice), 1)
         elif prac is not None:
-            blended = round(prac, 1)
+            blended = round((effective_acad * weight_academic) + (prac * weight_practice), 1)
         else:
             blended = 0.0
 

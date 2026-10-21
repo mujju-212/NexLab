@@ -25,17 +25,20 @@ def check_content_unlocks(student_id: str) -> Dict[str, Any]:
     total_xp = xp.total_xp if xp else 0
     level, _ = xp_to_level(total_xp)
 
-    # 1. Medium check
-    medium_unlocked = easy_solved >= 15 or rating >= 300.0
-    medium_progress = min(100.0, round(max((easy_solved / 15.0), (rating / 300.0)) * 100.0, 1))
+    # Earned rating above baseline
+    earned_rating = max(0.0, rating - 1000.0) if rating >= 1000.0 else rating
 
-    # 2. Hard check
+    # 1. Medium check (15 easy solves or 300+ rating earned)
+    medium_unlocked = easy_solved >= 15 or earned_rating >= 300.0
+    medium_progress = min(100.0, round(max((easy_solved / 15.0), (earned_rating / 300.0)) * 100.0, 1))
+
+    # 2. Hard check (20 medium solves or 1500+ rating)
     hard_unlocked = medium_solved >= 20 or rating >= 1500.0
-    hard_progress = min(100.0, round(max((medium_solved / 20.0), (rating / 1500.0)) * 100.0, 1))
+    hard_progress = min(100.0, round(max((medium_solved / 20.0), (earned_rating / 500.0)) * 100.0, 1))
 
-    # 3. Contests / Advanced study plans check
-    contests_unlocked = level >= 3 or rating >= 500.0
-    contests_progress = min(100.0, round(max((level / 3.0), (rating / 500.0)) * 100.0, 1))
+    # 3. Contests / Advanced study plans check (Level 3 or 500+ rating earned)
+    contests_unlocked = level >= 3 or earned_rating >= 500.0
+    contests_progress = min(100.0, round(max((level / 3.0), (earned_rating / 500.0)) * 100.0, 1))
 
     unlocked_tiers = ['Easy']
     if medium_unlocked:

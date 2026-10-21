@@ -59,7 +59,9 @@ def compute_student_atomic_metrics(
     window_end: Optional[datetime] = None,
     min_sample_size: int = 3,
     halflife_days: int = 30,
-    now: Optional[datetime] = None
+    now: Optional[datetime] = None,
+    experiment_ids: Optional[List[str]] = None,
+    session_ids: Optional[List[str]] = None,
 ) -> Dict[str, Any]:
     """Compute atomic metrics for a single student."""
     res = batch_student_atomic_metrics(
@@ -70,6 +72,8 @@ def compute_student_atomic_metrics(
         min_sample_size=min_sample_size,
         halflife_days=halflife_days,
         now=now,
+        experiment_ids=experiment_ids,
+        session_ids=session_ids,
     )
     return res.get(student_id, {})
 
@@ -81,7 +85,9 @@ def batch_student_atomic_metrics(
     window_end: Optional[datetime] = None,
     min_sample_size: int = 3,
     halflife_days: int = 30,
-    now: Optional[datetime] = None
+    now: Optional[datetime] = None,
+    experiment_ids: Optional[List[str]] = None,
+    session_ids: Optional[List[str]] = None,
 ) -> Dict[str, Dict[str, Any]]:
     """
     High-performance batch loader for atomic student metrics.
@@ -118,12 +124,16 @@ def batch_student_atomic_metrics(
         })
 
     # ── 2. Grades: avg, slope, consistency ─────────────────────────────────
-    grade_rows = Grade.query.filter(
+    grade_filters = [
         Grade.student_id.in_(student_ids),
         Grade.created_at >= window_start,
         Grade.created_at <= window_end,
         Grade.final_grade.isnot(None),
-    ).order_by(Grade.created_at.asc()).all()
+    ]
+    if experiment_ids:
+        grade_filters.append(Grade.experiment_id.in_(experiment_ids))
+
+    grade_rows = Grade.query.filter(*grade_filters).order_by(Grade.created_at.asc()).all()
 
     grade_map = defaultdict(list)
     for g in grade_rows:
@@ -135,6 +145,16 @@ def batch_student_atomic_metrics(
     # ── 3. Attendance & Effort ─────────────────────────────────────────────
     # Expected sessions for students in window
     # Join SessionAttendance with LabSession
+    att_filters = [
+        SessionAttendance.student_id.in_(student_ids),
+        LabSession.institution_id == institution_id,
+        LabSession.scheduled_at >= window_start,
+        LabSession.scheduled_at <= window_end,
+        LabSession.status != 'cancelled',
+    ]
+    if session_ids:
+        att_filters.append(LabSession.id.in_(session_ids))
+
     att_rows = db.session.query(
         SessionAttendance.student_id,
         SessionAttendance.status,
@@ -142,13 +162,7 @@ def batch_student_atomic_metrics(
         SessionAttendance.session_id,
     ).join(
         LabSession, SessionAttendance.session_id == LabSession.id
-    ).filter(
-        SessionAttendance.student_id.in_(student_ids),
-        LabSession.institution_id == institution_id,
-        LabSession.scheduled_at >= window_start,
-        LabSession.scheduled_at <= window_end,
-        LabSession.status != 'cancelled',
-    ).all()
+    ).filter(*att_filters).all()
 
     att_map = defaultdict(list)
     for r in att_rows:

@@ -83,12 +83,22 @@ def resolve_scope_entities(
             for sr in sess_rows:
                 session_ids.add(sr.id)
 
-    elif scope_level == 'section' and scope_id:
-        section_ids.add(scope_id)
-        stud_rows = SectionStudent.query.filter_by(section_id=scope_id).all()
+    elif scope_level in ('section', 'section_subject') and scope_id:
+        actual_section_id = scope_id
+        # If scope_id is a section_subject_id, resolve to actual section_id
+        ss_match = SectionSubject.query.filter_by(id=scope_id).first()
+        if ss_match:
+            actual_section_id = ss_match.section_id
+            ss_ids.add(ss_match.id)
+            sub_exps = Experiment.query.filter_by(subject_id=ss_match.subject_id).all()
+            for e in sub_exps:
+                experiment_ids.add(e.id)
+
+        section_ids.add(actual_section_id)
+        stud_rows = SectionStudent.query.filter_by(section_id=actual_section_id).all()
         for sr in stud_rows:
             student_ids.add(sr.student_id)
-        sss = SectionSubject.query.filter_by(section_id=scope_id).all()
+        sss = SectionSubject.query.filter_by(section_id=actual_section_id).all()
         for s in sss:
             ss_ids.add(s.id)
             # Find subject experiments

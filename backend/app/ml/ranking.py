@@ -135,3 +135,15 @@ def _update_rank_positions(section_subject_id: str):
         ranking.rank_position = position
 
     db.session.commit()
+
+
+def compute_rankings_for_section_subject(section_subject_id: str, institution_id: str):
+    """Compute holistic rankings for all students enrolled in a section_subject."""
+    from app.models.academic import SectionSubject, SectionStudent
+    ss = SectionSubject.query.get(section_subject_id)
+    if not ss:
+        return
+    enrollments = SectionStudent.query.filter_by(section_id=ss.section_id).all()
+    for e in enrollments:
+        compute_holistic_rank(e.student_id, section_subject_id, institution_id)
+

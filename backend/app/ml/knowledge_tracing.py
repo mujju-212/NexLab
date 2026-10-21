@@ -56,13 +56,16 @@ def update_concept_mastery(student_id: str, institution_id: str,
 
         current = mastery.mastery_score
 
-        if passed:
-            gain = 15 * diff_weight * attempt_factor * hint_factor * score_pct
-        else:
-            gain = -5 * diff_weight
+        # Realistic baseline anchor + performance-scaled EMA
+        target_perf = 100.0 * score_pct * attempt_factor * hint_factor * min(1.15, 0.75 + 0.1 * difficulty)
+        target_perf = max(0.0, min(100.0, target_perf))
 
-        # Exponential moving average — harder to gain at high mastery
-        new_score = current + gain * (1 - current / 100)
+        if mastery.experiment_count == 0:
+            new_score = target_perf * 0.85 if passed else max(10.0, target_perf * 0.35)
+        else:
+            alpha = 0.45 if passed else 0.25
+            new_score = (1 - alpha) * current + alpha * target_perf
+
         new_score = max(0.0, min(100.0, new_score))
 
         mastery.mastery_score   = round(new_score, 2)

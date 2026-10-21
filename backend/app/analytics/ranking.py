@@ -75,21 +75,26 @@ def compute_rank_for_scope(
     else:
         window_start = window_end - timedelta(days=90)
 
+    exp_scope_ids = entities.get('experiment_ids') or None
+    sess_scope_ids = entities.get('session_ids') or None
+
     # High performance batch metric computation (replaces slow N+1 single queries)
     all_metrics = batch_student_atomic_metrics(
         student_ids=student_ids,
         institution_id=institution_id,
         window_start=window_start,
         window_end=window_end,
+        experiment_ids=exp_scope_ids,
+        session_ids=sess_scope_ids,
     )
 
-    # Bulk load submission counts in 1 query
-    sub_counts = dict(
-        db.session.query(CodeAttempt.student_id, func.count(CodeAttempt.id))
-        .filter(CodeAttempt.student_id.in_(student_ids))
-        .group_by(CodeAttempt.student_id)
-        .all()
-    ) if student_ids else {}
+    # Bulk load submission counts in 1 query (scoped if experiment_ids present)
+    sub_query = db.session.query(CodeAttempt.student_id, func.count(CodeAttempt.id)).filter(
+        CodeAttempt.student_id.in_(student_ids)
+    )
+    if exp_scope_ids:
+        sub_query = sub_query.filter(CodeAttempt.experiment_id.in_(exp_scope_ids))
+    sub_counts = dict(sub_query.group_by(CodeAttempt.student_id).all()) if student_ids else {}
 
     users_map = {
         u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()

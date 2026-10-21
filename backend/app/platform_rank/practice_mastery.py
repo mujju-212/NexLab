@@ -67,6 +67,8 @@ def get_practice_topic_mastery(student_id: str) -> List[Dict[str, Any]]:
         'hard_solved': 0,
         'total_subs': 0,
         'accepted_subs': 0,
+        'total_passed_cases': 0,
+        'total_test_cases': 0,
     })
 
     # 3a. Process practice library submissions
@@ -77,6 +79,8 @@ def get_practice_topic_mastery(student_id: str) -> List[Dict[str, Any]]:
         td = topic_data[top]
         td['attempted_pids'].add(prob.id)
         td['total_subs'] += 1
+        td['total_passed_cases'] += (sub.passed or 0)
+        td['total_test_cases'] += max(1, (sub.total or 1))
 
         if sub.status == 'Accepted':
             td['accepted_subs'] += 1
@@ -98,7 +102,11 @@ def get_practice_topic_mastery(student_id: str) -> List[Dict[str, Any]]:
             top_name = str(tag).strip().title()
             td = topic_data[top_name]
             td['attempted_pids'].add(f"course_ex_{ex.id}")
-            td['total_subs'] += (prog.attempts or 1)
+            attempts = (prog.attempts or 1)
+            td['total_subs'] += attempts
+            best_score = float(prog.best_score or 0.0)
+            td['total_passed_cases'] += int(round(best_score))
+            td['total_test_cases'] += 100
 
             if prog.status == 'solved':
                 td['accepted_subs'] += 1
@@ -123,7 +131,15 @@ def get_practice_topic_mastery(student_id: str) -> List[Dict[str, Any]]:
         # e.g., 5 Easy + 3 Medium + 1 Hard = 5*1 + 3*2.5 + 1*5 = 17.5 points
         # Benchmark for 100% mastery = 15 points
         raw_pts = (easy * 1.0) + (med * 2.5) + (hard * 5.0)
-        strength = min(100.0, round((raw_pts / 15.0) * 100.0, 1))
+        solve_strength = min(100.0, round((raw_pts / 15.0) * 100.0, 1))
+
+        # Test case pass ratio: passed / total
+        pass_ratio = round(100.0 * (data['total_passed_cases'] / max(1, data['total_test_cases'])), 1)
+        # Combined practice strength: blends test case passing ratio and difficulty solve coverage
+        if total_solved > 0:
+            strength = round(0.5 * pass_ratio + 0.5 * solve_strength, 1)
+        else:
+            strength = pass_ratio
 
         if strength >= 80:
             band = 'Mastered'
@@ -139,6 +155,7 @@ def get_practice_topic_mastery(student_id: str) -> List[Dict[str, Any]]:
         result.append({
             'topic': top,
             'strength': strength,
+            'pass_ratio': pass_ratio,
             'band': band,
             'solved_by_difficulty': {'Easy': easy, 'Medium': med, 'Hard': hard},
             'total_solved': total_solved,

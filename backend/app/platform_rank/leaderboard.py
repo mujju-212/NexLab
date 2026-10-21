@@ -10,6 +10,7 @@ from app.extensions import db
 from app.models.user import User
 from app.models.practice import Problem, PracticeSubmission, StudentXP, PlatformRating, PlatformRatingPeriod, xp_to_level
 from app.platform_rank.rating import compute_student_platform_rating
+from app.platform_rank.blended import expand_topic_aliases
 
 
 def get_platform_leaderboard(
@@ -44,11 +45,7 @@ def get_platform_leaderboard(
             )
             .join(Problem, PracticeSubmission.problem_id == Problem.id)
             .filter(
-                or_(
-                    Problem.nexlab_topic == scope_id,
-                    Problem.nexlab_topic.ilike(f"%{scope_id}%"),
-                    Problem.nexlab_topic.ilike(f"%{scope_id.rstrip('s')}%")
-                ),
+                Problem.nexlab_topic.in_(expand_topic_aliases(scope_id)),
                 PracticeSubmission.status == 'Accepted',
                 PracticeSubmission.is_run == False,
             )

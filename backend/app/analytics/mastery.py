@@ -52,6 +52,18 @@ def compute_scoped_mastery(
             .all()
         )
         target_concepts = list({ec.concept for ec in exp_concepts})
+        if not target_concepts:
+            from app.models.experiment import Experiment
+            exp_rows = Experiment.query.filter(Experiment.id.in_(experiment_ids)).all()
+            tags_set = set()
+            for er in exp_rows:
+                tags = er.concept_tags or []
+                if isinstance(tags, list):
+                    for t in tags:
+                        if isinstance(t, str) and t.strip():
+                            tags_set.add(t.strip().lower())
+            if tags_set:
+                target_concepts = list(tags_set)
 
     # If no explicit ExperimentConcept mapping was configured, query student's existing ConceptMastery rows
     q = ConceptMastery.query.filter_by(student_id=student_id)
