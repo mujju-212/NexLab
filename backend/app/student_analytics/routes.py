@@ -47,6 +47,17 @@ def _enforce_self_scope(target_student_id: str):
 
 
 # ══════════════════════════════════════════════════════════════════════════════
+from app.student_analytics.overview_builder import (
+    build_growth_student_profile,
+    build_learning_trend_12_weeks,
+    build_recent_activity,
+    build_upcoming_goals,
+    build_achievements,
+    build_concept_breakdowns,
+    build_summary_kpis,
+)
+
+# ══════════════════════════════════════════════════════════════════════════════
 # UNIFIED OVERVIEW (The One Call for the Student Analytics Hub)
 # ══════════════════════════════════════════════════════════════════════════════
 
@@ -59,11 +70,14 @@ def student_analytics_overview():
       - Platform Track (rating, level, streak, badges, global rank, unlocks)
       - Blended 'What I Know' competency map
       - Curated highlights & next steps
+      - Enriched Growth Dashboard telemetry (12-week trend, recent activity, upcoming goals, achievements)
     """
     student_id = request.args.get('student_id') or g.user_id
     blocked = _enforce_self_scope(student_id)
     if blocked:
         return blocked
+
+    period = request.args.get('period', '30d')
 
     # 1. Academic 360 overview
     academic_360 = get_student_360_overview(student_id=student_id, institution_id=g.institution_id)
@@ -99,6 +113,28 @@ def student_analytics_overview():
         'next_unlock': unlocks.get('next_unlock'),
     }
 
+    # 6. Enriched Visual & Telemetry Modules for Growth Dashboard
+    student_profile = build_growth_student_profile(student_id, g.institution_id)
+
+    avg_grade = academic_360.get('grades', {}).get('avg_grade', 78.0) or 78.0
+    rating_val = platform_standing.get('rating', 1540.0) or 1540.0
+    learning_trend = build_learning_trend_12_weeks(student_id, target_grade=avg_grade, target_rating=rating_val, period=period)
+
+    recent_activity = build_recent_activity(student_id, period=period)
+    upcoming_goals = build_upcoming_goals(
+        completion=academic_360.get('completion', {}),
+        unlocks=unlocks,
+        focus_topics=focus_topics,
+    )
+    achievements = build_achievements(student_id, platform_standing)
+    concept_breakdown = build_concept_breakdowns(blended_map.get('knowledge_map', []))
+    summary_kpis = build_summary_kpis(
+        average_blended=blended_map.get('average_blended_mastery', 72.0),
+        completion=academic_360.get('completion', {}),
+        platform=platform_standing,
+        knowledge_map=blended_map.get('knowledge_map', []),
+    )
+
     return jsonify({
         'student_id': student_id,
         'academic': {
@@ -116,6 +152,14 @@ def student_analytics_overview():
         'unlocks': unlocks,
         'knowledge_map': blended_map.get('knowledge_map', []),
         'highlights': highlights,
+        'profile': student_profile,
+        'summary_kpis': summary_kpis,
+        'learning_trend': learning_trend,
+        'strongest_concepts': concept_breakdown['strongest'],
+        'focus_next_concepts': concept_breakdown['focus_next'],
+        'recent_activity': recent_activity,
+        'upcoming_goals': upcoming_goals,
+        'achievements': achievements,
     }), 200
 
 
@@ -159,7 +203,7 @@ def student_subjects_analytics():
         )
         exp_ids = [e.id for e in exps]
 
-        # Fetch student grades for these experiments
+        # Fetch student grades and submissions for these experiments
         grades_map = {
             g_row.experiment_id: g_row
             for g_row in Grade.query.filter(
@@ -167,6 +211,14 @@ def student_subjects_analytics():
                 Grade.experiment_id.in_(exp_ids),
             ).all()
         } if exp_ids else {}
+
+        submitted_ids = {
+            r[0] for r in db.session.query(CodeAttempt.experiment_id).filter(
+                CodeAttempt.student_id == student_id,
+                CodeAttempt.experiment_id.in_(exp_ids),
+                CodeAttempt.is_final_submission == True,
+            ).all()
+        } if exp_ids else set()
 
         completed_count = 0
         total_grade_weighted = 0.0
@@ -176,7 +228,7 @@ def student_subjects_analytics():
         for e in exps:
             g_item = grades_map.get(e.id)
             final_gr = float(g_item.final_grade) if (g_item and g_item.final_grade is not None) else None
-            is_comp = final_gr is not None and final_gr >= 50.0
+            is_comp = (final_gr is not None) or (e.id in submitted_ids)
             if is_comp:
                 completed_count += 1
 
@@ -482,6 +534,114 @@ def student_knowledge_map():
 
     kmap = compute_blended_knowledge_map(student_id=student_id, institution_id=g.institution_id)
     return jsonify(kmap), 200
+
+
+@student_facing_analytics_bp.route('/knowledge-map-dashboard', methods=['GET'])
+@require_auth
+def student_knowledge_map_dashboard():
+    """
+    Returns calculated interactive knowledge map analytics matching the reference mockup UI:
+      - 5 KPI summary metrics (blended mastery, concepts mastered, strong areas, areas to improve, not started)
+      - Hierarchical radial mindmap graph across 5 core domains with concept nodes and scores
+      - Active concept deep diagnostics with mastery/practice/academic breakdown and recommended actions
+      - Top strengths list (1-5)
+      - Focus next list (1-5)
+      - Learning path & unlocks progress
+    """
+    student_id = request.args.get('student_id') or g.user_id
+    blocked = _enforce_self_scope(student_id)
+    if blocked:
+        return blocked
+
+    view = request.args.get('view', 'blended')
+    subject = request.args.get('subject', 'all')
+    topic = request.args.get('topic', 'all')
+    period = request.args.get('period', '30d')
+
+    from app.student_analytics.knowledge_map_builder import build_knowledge_map_dashboard_payload
+    payload = build_knowledge_map_dashboard_payload(
+        student_id=student_id,
+        view=view,
+        subject=subject,
+        topic=topic,
+        period=period,
+        institution_id=g.institution_id,
+    )
+    return jsonify(payload), 200
+
+
+@student_facing_analytics_bp.route('/academic-dashboard', methods=['GET'])
+@require_auth
+def student_academic_dashboard():
+    """
+    Returns calculated academic performance analytics matching the reference mockup UI:
+      - 5 KPI summary metrics with sparklines & progress rings
+      - 12-week academic performance trends across enrolled subjects
+      - Subject performance with sparklines
+      - Concept mastery bar levels
+      - Attendance donut chart
+      - Risk & guidance advice cards
+      - Recent grades records
+      - Course completion progress
+    """
+    student_id = request.args.get('student_id') or g.user_id
+    blocked = _enforce_self_scope(student_id)
+    if blocked:
+        return blocked
+
+    subject_id = request.args.get('subject_id')
+    semester = request.args.get('semester')
+    experiment_id = request.args.get('experiment_id')
+    period = request.args.get('period', '30d')
+
+    from app.student_analytics.academic_dashboard_builder import build_academic_dashboard_payload
+    payload = build_academic_dashboard_payload(
+        student_id=student_id,
+        subject_id=subject_id,
+        semester=semester,
+        experiment_id=experiment_id,
+        period=period,
+        institution_id=g.institution_id,
+    )
+    return jsonify(payload), 200
+
+
+@student_facing_analytics_bp.route('/platform-dashboard', methods=['GET'])
+@require_auth
+def student_platform_dashboard():
+    """
+    Returns calculated platform performance practice analytics matching the reference mockup UI:
+      - Profile standing with rating, level, streak, and badges
+      - 4 KPI summary metrics (problems solved, acceptance rate, avg time, hints used)
+      - 12-week dual-axis practice activity trend (problems line + XP bars)
+      - Difficulty distribution donut chart
+      - Topic performance with strongest and needs-focus toggles
+      - Recent practice submissions table
+      - Next unlock requirements
+      - Platform leaderboards (global, topic, friends, institution)
+    """
+    student_id = request.args.get('student_id') or g.user_id
+    blocked = _enforce_self_scope(student_id)
+    if blocked:
+        return blocked
+
+    problem_type = request.args.get('problem_type', 'all')
+    difficulty = request.args.get('difficulty', 'all')
+    topic = request.args.get('topic', 'all')
+    period = request.args.get('period', '30d')
+
+    from app.student_analytics.platform_dashboard_builder import build_platform_dashboard_payload
+    payload = build_platform_dashboard_payload(
+        student_id=student_id,
+        problem_type=problem_type,
+        difficulty=difficulty,
+        topic=topic,
+        period=period,
+        institution_id=g.institution_id,
+    )
+    return jsonify(payload), 200
+
+
 
 
 # ══════════════════════════════════════════════════════════════════════════════

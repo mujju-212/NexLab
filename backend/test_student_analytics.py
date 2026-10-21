@@ -64,6 +64,8 @@ class TestStudentSideAnalytics(unittest.TestCase):
         try:
             db.session.rollback()
             from app.models.practice import PlatformRatingPeriod
+            from app.models.free import FreeProgress
+            FreeProgress.query.delete()
             PlatformRatingPeriod.query.delete()
             PlatformRating.query.delete()
             PracticeSubmission.query.delete()
@@ -88,6 +90,8 @@ class TestStudentSideAnalytics(unittest.TestCase):
     def setUp(self):
         db.session.rollback()
         from app.models.practice import PlatformRatingPeriod
+        from app.models.free import FreeProgress
+        FreeProgress.query.delete()
         PlatformRatingPeriod.query.delete()
         PlatformRating.query.delete()
         PracticeSubmission.query.delete()
@@ -469,6 +473,124 @@ class TestStudentSideAnalytics(unittest.TestCase):
         res = client.get(f'/api/student/analytics/subjects?student_id={self.bob.id}', headers=headers)
         self.assertEqual(res.status_code, 403)
 
+    def test_08_academic_dashboard_api(self):
+        """Test GET /api/student/analytics/academic-dashboard returns calculated payload."""
+        token = create_access_token(
+            identity=self.alice.id,
+            additional_claims={'role': 'student', 'institution_id': self.inst_id, 'email': self.alice.email}
+        )
+        headers = {'Authorization': f'Bearer {token}'}
+        client = self.app.test_client()
+
+        res = client.get('/api/student/analytics/academic-dashboard', headers=headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+
+        # Validate 5 KPI Summary metrics
+        self.assertIn('kpi_metrics', data)
+        kpis = data['kpi_metrics']
+        self.assertIn('overall_score', kpis)
+        self.assertIn('subjects_enrolled', kpis)
+        self.assertIn('experiments_completed', kpis)
+        self.assertIn('attendance_rate', kpis)
+        self.assertIn('academic_rank', kpis)
+
+        # Validate Performance Trend
+        self.assertIn('performance_trend', data)
+        self.assertIn('weeks', data['performance_trend'])
+        self.assertIn('subjects', data['performance_trend'])
+
+        # Validate Subject Performance Table
+        self.assertIn('subject_performance', data)
+        self.assertIsInstance(data['subject_performance'], list)
+
+        # Validate Concept Mastery Bars
+        self.assertIn('concept_mastery', data)
+        self.assertIsInstance(data['concept_mastery'], list)
+
+        # Validate Attendance Donut
+        self.assertIn('attendance_breakdown', data)
+        self.assertIn('rate', data['attendance_breakdown'])
+
+        # Validate Risk & Guidance
+        self.assertIn('risk_and_guidance', data)
+        self.assertIn('items', data['risk_and_guidance'])
+
+        # Validate Recent Grades
+        self.assertIn('recent_grades', data)
+        self.assertIsInstance(data['recent_grades'], list)
+
+        # Validate Completion Progress
+        self.assertIn('completion_progress', data)
+
+    def test_09_platform_dashboard_api(self):
+        """Test GET /api/student/analytics/platform-dashboard returns calculated Track 2 payload."""
+        token = create_access_token(
+            identity=self.alice.id,
+            additional_claims={'role': 'student', 'institution_id': self.inst_id, 'email': self.alice.email}
+        )
+        headers = {'Authorization': f'Bearer {token}'}
+        client = self.app.test_client()
+
+        res = client.get('/api/student/analytics/platform-dashboard', headers=headers)
+        self.assertEqual(res.status_code, 200)
+        data = res.get_json()
+
+        # Validate student profile
+        self.assertIn('student_profile', data)
+        self.assertIn('name', data['student_profile'])
+
+        # Validate standing metrics (Rating, Level, Streak)
+        self.assertIn('standing', data)
+        standing = data['standing']
+        self.assertIn('rating', standing)
+        self.assertIn('level', standing)
+        self.assertIn('streak_days', standing)
+        self.assertIn('sparkline_rating', standing)
+
+        # Validate badges
+        self.assertIn('badges', data)
+        self.assertIsInstance(data['badges'], list)
+
+        # Validate 4 KPI metrics
+        self.assertIn('kpi_metrics', data)
+        kpis = data['kpi_metrics']
+        self.assertIn('problems_solved', kpis)
+        self.assertIn('acceptance_rate', kpis)
+        self.assertIn('avg_time', kpis)
+        self.assertIn('hints_used', kpis)
+
+        # Validate activity trend
+        self.assertIn('activity_trend', data)
+        self.assertIn('weeks', data['activity_trend'])
+        self.assertIn('problems_series', data['activity_trend'])
+        self.assertIn('xp_series', data['activity_trend'])
+
+        # Validate difficulty distribution
+        self.assertIn('difficulty_distribution', data)
+        self.assertIn('easy', data['difficulty_distribution'])
+        self.assertIn('medium', data['difficulty_distribution'])
+        self.assertIn('hard', data['difficulty_distribution'])
+
+        # Validate topic performance
+        self.assertIn('topic_performance', data)
+        self.assertIn('strongest', data['topic_performance'])
+        self.assertIn('needs_focus', data['topic_performance'])
+
+        # Validate recent submissions
+        self.assertIn('recent_submissions', data)
+        self.assertIsInstance(data['recent_submissions'], list)
+
+        # Validate next unlocks
+        self.assertIn('next_unlocks', data)
+        self.assertIsInstance(data['next_unlocks'], list)
+
+        # Validate leaderboard
+        self.assertIn('leaderboard', data)
+        self.assertIn('entries', data['leaderboard'])
+
 
 if __name__ == '__main__':
     unittest.main()
+
+
