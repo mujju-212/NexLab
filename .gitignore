@@ -51,7 +51,9 @@ backend/docker/redis_data/
 
 # ── Runtime output directories ──────────────────────────────────────────
 backend/app/reports_out/
+backend/uploads/
 backend/.pip_cache/
+*.zip
 
 # ── Logs ────────────────────────────────────────────────────────────────
 *.log

@@ -137,7 +137,8 @@ def _cleanup_telemetry():
     for model, key, default in windows:
         cutoff = now - timedelta(days=_days(key, default))
         try:
-            deleted = model.query.filter(model.created_at < cutoff).delete()
+            ts_col = getattr(model, 'created_at', None) or getattr(model, 'recorded_at')
+            deleted = model.query.filter(ts_col < cutoff).delete()
             db.session.commit()
             if deleted:
                 scheduler.app.logger.info('[jobs] retention: pruned %d %s rows older than %s',
@@ -476,3 +477,6 @@ def _run_nightly_metric_snapshots():
             scheduler.app.logger.info('[jobs] Nightly analytics snapshots completed: %s', res)
         except Exception as exc:
             scheduler.app.logger.warning('[jobs] Nightly analytics snapshots failed: %s', exc)
+
+
+compute_all_snapshots = _run_nightly_metric_snapshots

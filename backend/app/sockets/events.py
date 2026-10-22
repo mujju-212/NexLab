@@ -353,6 +353,26 @@ def handle_checkpoint(data):
     test_cases_done = data.get('test_cases_passed', 0)
     checkpoint_id   = data.get('checkpoint_id')   # optional — direct CP id
 
+    # Resolve checkpoint_id from checkpoint_number if frontend omitted checkpoint_id
+    if not checkpoint_id and session_id and checkpoint_num is not None:
+        try:
+            from app.models.conductor import Checkpoint
+            sess_obj = LabSession.query.get(session_id)
+            if sess_obj and sess_obj.experiment_id:
+                cp_row = Checkpoint.query.filter_by(
+                    experiment_id=sess_obj.experiment_id,
+                    order=int(checkpoint_num),
+                ).first()
+                if not cp_row:
+                    cps_all = Checkpoint.query.filter_by(experiment_id=sess_obj.experiment_id).order_by(Checkpoint.order.asc()).all()
+                    idx_cp = max(0, int(checkpoint_num) - 1)
+                    if idx_cp < len(cps_all):
+                        cp_row = cps_all[idx_cp]
+                if cp_row:
+                    checkpoint_id = cp_row.id
+        except Exception:
+            pass
+
     # Persist to CheckpointProgress (D-S1 Hybrid model)
     if checkpoint_id and session_id:
         try:
@@ -714,7 +734,7 @@ def handle_screenshot_frame(data):
             recent_events = ProctorEvent.query.filter(
                 ProctorEvent.session_id == session_id,
                 ProctorEvent.student_id == user['user_id'],
-                ProctorEvent.created_at >= datetime.utcnow() - timedelta(seconds=60),
+                ProctorEvent.recorded_at >= datetime.utcnow() - timedelta(seconds=60),
                 ProctorEvent.severity.in_(['high', 'critical']),
             ).all()
             for pe in recent_events:
@@ -798,7 +818,7 @@ def handle_behavioral_signals(data):
     # Auto-resolve session_id if missing
     if not session_id:
         try:
-            from app.models.conductor import SessionAttendance
+            from app.models.session import SessionAttendance
             att = SessionAttendance.query.filter_by(student_id=student_id, left_at=None).order_by(SessionAttendance.joined_at.desc()).first()
             if not att:
                 att = SessionAttendance.query.filter_by(student_id=student_id).order_by(SessionAttendance.joined_at.desc()).first()
@@ -883,3 +903,51 @@ def handle_behavioral_signals(data):
         'alerts':      alerts,
         'timestamp':   datetime.utcnow().isoformat(),
     }, room=f"session_{session_id}_instructor")
+
+
+# ── AI Harness Real-Time Streaming Socket Handler ─────────────────────────────
+
+@socketio.on('ai:message')
+def handle_ai_harness_message(data):
+    """
+    Real-time Socket.IO entrypoint for the Unified AI Harness (`ai:message`).
+    Emits `ai:tool_start`, `ai:tool_result`, `ai:confirm_action`, `ai:token`, and `ai:done`
+    to the caller's personal room (`user_<user_id>`).
+    """
+    from flask import session as sock_session
+    user = sock_session.get('user')
+    if not user or not user.get('user_id'):
+        emit('ai:error', {'error': 'Authentication required'})
+        return
+
+    prompt = ((data or {}).get('prompt') or '').strip()
+    if not prompt:
+        emit('ai:error', {'error': 'prompt is required'})
+        return
+
+    uid = user['user_id']
+    iid = user.get('institution_id')
+    role = user.get('role') or 'student'
+    mode = 'chat' if role in ('student', 'free_user') else ((data or {}).get('mode') or 'chat')
+    session_id = (data or {}).get('session_id')
+    page_context = (data or {}).get('page_context') if isinstance((data or {}).get('page_context'), dict) else {}
+
+    g.user_id = uid
+    g.institution_id = iid
+    g.role = role
+
+    try:
+        from app.ai.harness import run_harness_turn
+        res = run_harness_turn(
+            prompt=prompt,
+            institution_id=iid,
+            user_id=uid,
+            role=role,
+            mode=mode,
+            page_context=page_context,
+            session_id=session_id,
+        )
+        emit('ai:response', res)
+    except Exception as exc:
+        _log.warning('[sockets.ai] ai:message error: %s', exc)
+        emit('ai:error', {'error': str(exc)})

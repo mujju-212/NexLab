@@ -29,27 +29,57 @@ def _password_change_block(claims: dict):
     }), 403
 
 
-def _is_force_logged_out(claims: dict) -> bool:
-    """
-    True when an admin force-logged-out this user AFTER the presented
-    token was issued — i.e. the token predates force_logout_at and must
-    be rejected (there is no blacklist, so we compare timestamps).
-    """
-    iat = claims.get('iat')
-    if not iat:
-        return False
-    from app.extensions import db
-    from app.models.user import User
-    user = db.session.get(User, claims.get('sub'))
-    if user is None or user.force_logout_at is None:
-        return False
-    return user.force_logout_at > datetime.utcfromtimestamp(int(iat))
+import time as _time
+_FORCE_LOGOUT_CACHE: dict = {}  # user_id -> (expires_monotonic, force_logout_at)
+
+
+def invalidate_force_logout_cache(user_id: str = None) -> None:
+    """Invalidate cached force_logout_at for a specific user (or all users)."""
+    if user_id:
+        _FORCE_LOGOUT_CACHE.pop(user_id, None)
+    else:
+        _FORCE_LOGOUT_CACHE.clear()
+
+
+invalidate_auth_cache = invalidate_force_logout_cache
+_AUTH_USER_CACHE = _FORCE_LOGOUT_CACHE
 
 
 def _force_logout_response():
     return jsonify({
-        'error': 'Your session was terminated by an administrator. Please log in again.'
+        'error': 'Your session is invalid or has expired. Please log in again.'
     }), 401
+
+
+def _is_force_logged_out(claims: dict) -> bool:
+    """
+    True when an admin force-logged-out this user AFTER the presented
+    token was issued, OR the user account no longer exists in the database
+    (cached for 30s in memory to avoid per-request DB scans).
+    """
+    iat = claims.get('iat')
+    uid = claims.get('sub')
+    if not iat or not uid:
+        return True
+    now_mono = _time.monotonic()
+    cached = _FORCE_LOGOUT_CACHE.get(uid)
+    if cached and cached[0] > now_mono:
+        force_dt, user_exists = cached[1], cached[2]
+        if not user_exists:
+            return True
+    else:
+        from app.extensions import db
+        from app.models.user import User
+        row = db.session.query(User.id, User.force_logout_at).filter_by(id=uid).first()
+        if not row:
+            # User row does not exist in database (deleted or stale token)
+            _FORCE_LOGOUT_CACHE[uid] = (now_mono + 30.0, None, False)
+            return True
+        force_dt = row[1]
+        _FORCE_LOGOUT_CACHE[uid] = (now_mono + 30.0, force_dt, True)
+    if force_dt is None:
+        return False
+    return force_dt > datetime.utcfromtimestamp(int(iat))
 
 
 def require_auth(f):

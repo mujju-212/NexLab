@@ -1,28 +1,16 @@
 import os
 from datetime import timedelta
+from dotenv import load_dotenv
+
+# Ensure .env is always loaded when config is accessed
+_backend_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+load_dotenv(os.path.join(_backend_dir, '.env'))
 
 
 def _get_db_url():
-    db_url = os.environ.get('DATABASE_URL')
-    if db_url and db_url.startswith('postgresql'):
-        try:
-            import socket
-            from urllib.parse import urlparse
-            parsed = urlparse(db_url)
-            host = parsed.hostname or 'localhost'
-            port = parsed.port or 5432
-            s = socket.create_connection((host, port), timeout=1)
-            s.close()
-            return db_url
-        except Exception:
-            base_dir = os.path.dirname(os.path.dirname(__file__))
-            dev_db = os.path.join(base_dir, 'dev.db').replace('\\', '/')
-            return f'sqlite:///{dev_db}'
-    if not db_url:
-        base_dir = os.path.dirname(os.path.dirname(__file__))
-        dev_db = os.path.join(base_dir, 'dev.db').replace('\\', '/')
-        return f'sqlite:///{dev_db}'
-    return db_url
+    """Return the application database URL. Enforces PostgreSQL without falling back to SQLite."""
+    return os.environ.get('DATABASE_URL', 'postgresql://postgres:vlabpass@localhost:5433/virtuallab')
+
 
 
 class Config:

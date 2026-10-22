@@ -160,13 +160,72 @@ def create_app(config_name=None):
         admission.init_app(app)
         reaper.init_app(app)
 
-    # ── Seed platform config defaults ─────────────────────────────────────
+    # ── Seed platform config defaults & ensure hot-path DB indexes + AI Harness schema ──
     with app.app_context():
         try:
             from app.models.institution import PlatformConfig
             PlatformConfig.seed_defaults()
         except Exception:
-            pass  # Table may not exist yet (before first migration)
+            pass
+        try:
+            from app.models.admin_copilot import AIGeneratedDocument
+            AIGeneratedDocument.__table__.create(bind=db.engine, checkfirst=True)
+        except Exception:
+            pass
+        try:
+            from sqlalchemy import text as _sa_text
+            _SCHEMA_AND_INDEX_DDL = [
+                # AI Harness Phase 1 & 2 schema upgrades (safe idempotent column additions)
+                "ALTER TABLE admin_chat_sessions ADD COLUMN role_scope VARCHAR(30) DEFAULT 'institution_admin'",
+                "ALTER TABLE admin_chat_sessions ADD COLUMN compact_memory TEXT",
+                "ALTER TABLE admin_chat_sessions ADD COLUMN page_context JSON",
+                "ALTER TABLE admin_chat_messages ADD COLUMN generated_doc JSON",
+                "ALTER TABLE admin_chat_messages ADD COLUMN socratic_filtered BOOLEAN DEFAULT FALSE",
+                "ALTER TABLE institution_documents ADD COLUMN scope_type VARCHAR(30) DEFAULT 'institution'",
+                "ALTER TABLE institution_documents ADD COLUMN scope_id VARCHAR(36)",
+                "ALTER TABLE institution_documents ADD COLUMN doc_type VARCHAR(20) DEFAULT 'pdf'",
+                "ALTER TABLE batches ADD COLUMN department_id VARCHAR(36) REFERENCES departments(id)",
+                "CREATE INDEX IF NOT EXISTS ix_batches_department_id ON batches (department_id)",
+                "ALTER TABLE session_attendance ADD COLUMN feedback_submitted BOOLEAN DEFAULT FALSE",
+                # Hot-path indexes
+                "CREATE INDEX IF NOT EXISTS ix_grades_student_exp ON grades (student_id, experiment_id)",
+                "CREATE INDEX IF NOT EXISTS ix_grades_exp_final ON grades (experiment_id, final_grade)",
+                "CREATE INDEX IF NOT EXISTS ix_grades_student_created ON grades (student_id, created_at)",
+                "CREATE INDEX IF NOT EXISTS ix_code_attempts_student_exp_sub ON code_attempts (student_id, experiment_id, submitted_at)",
+                "CREATE INDEX IF NOT EXISTS ix_code_attempts_student_sub ON code_attempts (student_id, submitted_at)",
+                "CREATE INDEX IF NOT EXISTS ix_code_versions_student_exp_ver ON code_versions (student_id, experiment_id, version_number)",
+                "CREATE INDEX IF NOT EXISTS ix_code_versions_session_student ON code_versions (session_id, student_id, saved_at)",
+                "CREATE INDEX IF NOT EXISTS ix_session_attendance_student_status ON session_attendance (student_id, status)",
+                "CREATE INDEX IF NOT EXISTS ix_concept_mastery_inst_student ON concept_mastery (institution_id, student_id)",
+                "CREATE INDEX IF NOT EXISTS ix_concept_mastery_inst_concept ON concept_mastery (institution_id, concept)",
+                "CREATE INDEX IF NOT EXISTS ix_notifications_user_unread ON notifications (user_id, is_read, created_at)",
+                "CREATE INDEX IF NOT EXISTS ix_section_subjects_inst_instr ON section_subjects (institution_id, instructor_id)",
+                "CREATE INDEX IF NOT EXISTS ix_section_subjects_sec_subj ON section_subjects (section_id, subject_id)",
+                "CREATE INDEX IF NOT EXISTS ix_subjects_inst_dept ON subjects (institution_id, department_id)",
+                "CREATE INDEX IF NOT EXISTS ix_experiments_inst_subj ON experiments (institution_id, subject_id)",
+                "CREATE INDEX IF NOT EXISTS ix_experiments_instructor ON experiments (instructor_id)",
+                "CREATE INDEX IF NOT EXISTS ix_test_cases_experiment ON test_cases (experiment_id)",
+                "CREATE INDEX IF NOT EXISTS ix_content_modules_exp_order ON content_modules (experiment_id, display_order)",
+                "CREATE INDEX IF NOT EXISTS ix_quiz_questions_module ON quiz_questions (module_id)",
+                "CREATE INDEX IF NOT EXISTS ix_exams_inst_subj ON exams (institution_id, subject_id)",
+                "CREATE INDEX IF NOT EXISTS ix_exam_questions_exam ON exam_questions (exam_id, display_order)",
+                "CREATE INDEX IF NOT EXISTS ix_exam_questions_exp ON exam_questions (experiment_id, display_order)",
+                "CREATE INDEX IF NOT EXISTS ix_exam_attempts_student_exam ON exam_attempts (student_id, exam_id)",
+                "CREATE INDEX IF NOT EXISTS ix_exam_attempts_student_exp ON exam_attempts (student_id, experiment_id)",
+                "CREATE INDEX IF NOT EXISTS ix_practice_subs_stu_run_status_dt ON practice_submissions (student_id, is_run, status, submitted_at)",
+                "CREATE INDEX IF NOT EXISTS ix_free_exercises_course_order ON free_exercises (course_id, order_index)",
+                "CREATE INDEX IF NOT EXISTS ix_free_progress_user_course ON free_progress (user_id, course_id, status)",
+                "CREATE INDEX IF NOT EXISTS ix_admin_chat_sessions_user_role ON admin_chat_sessions (user_id, role_scope)",
+                "CREATE INDEX IF NOT EXISTS ix_inst_docs_scope ON institution_documents (scope_type, scope_id)",
+            ]
+            for _ddl in _SCHEMA_AND_INDEX_DDL:
+                try:
+                    with db.engine.begin() as _conn:
+                        _conn.execute(_sa_text(_ddl))
+                except Exception:
+                    pass
+        except Exception:
+            pass
 
     # ── Root & Health check routes ─────────────────────────────────────────
     @app.route('/')
@@ -209,8 +268,15 @@ def create_app(config_name=None):
     @app.route('/workspace/<path:filename>')
     def serve_workspace(filename='index.html'):
         from flask import send_from_directory
-        ws_dir = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'workspace')
-        return send_from_directory(ws_dir, filename)
+        ws_dir = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), '..', 'workspace')
+        return send_from_directory(_os.path.abspath(ws_dir), filename)
+
+    @app.route('/courses/<slug>')
+    @app.route('/courses/<slug>/<path:subpath>')
+    def serve_course_frontend(slug, subpath=''):
+        from flask import send_from_directory
+        ws_dir = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), '..', 'workspace')
+        return send_from_directory(_os.path.abspath(ws_dir), 'course.html')
 
     # ── Local lab record PDF serving (dev mode — no Cloudinary) ──────────
     @app.route('/lab_records/<path:filename>')
@@ -221,7 +287,7 @@ def create_app(config_name=None):
             abort(404)
         return send_from_directory(lab_dir, filename, mimetype='application/pdf')
 
-    # ── Global error handlers ─────────────────────────────────────────────
+    # ── Global error handlers ──────────────────────────────────────────────
     @app.errorhandler(404)
     def not_found(e):
         return {'error': 'Not found'}, 404
@@ -232,6 +298,7 @@ def create_app(config_name=None):
 
     @app.errorhandler(500)
     def internal_error(e):
+        db.session.rollback()
         return {'error': 'Internal server error'}, 500
 
     return app
