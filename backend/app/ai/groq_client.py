@@ -24,20 +24,19 @@ from flask import current_app
 DEFAULT_POOLS = {
     # fast, cheap models for hints / short evaluations
     'fast': [
-        'groq/compound-mini',
-        'groq/compound',
+        'qwen/qwen3.8-27b',
+        'openai/gpt-oss-120b',
         'openai/gpt-oss-20b',
     ],
     # stronger reasoning for chat / viva / test-case generation
     'quality': [
-        'groq/compound-mini',
-        'groq/compound',
-        'qwen/qwen3.6-27b',
+        'qwen/qwen3.8-27b',
+        'openai/gpt-oss-120b',
         'openai/gpt-oss-20b',
     ],
 }
 
-REASONING_MODELS = {'qwen/qwen3.6-27b', 'qwen/qwen3.8-27b'}
+REASONING_MODELS = {'qwen/qwen3.8-27b'}
 
 # OpenRouter Free Models Pool (100% verified active sub-second models)
 
@@ -245,7 +244,10 @@ def groq_chat(messages: list, pool: str = 'fast',
                 params['reasoning_effort'] = 'low'
                 params['reasoning_format'] = 'hidden'
             resp = client.chat.completions.create(**params)
-            content = resp.choices[0].message.content
+            msg_obj = resp.choices[0].message
+            content = getattr(msg_obj, 'content', None) or ''
+            if not content.strip() and getattr(msg_obj, 'reasoning_content', None):
+                content = msg_obj.reasoning_content
             if content is not None and content.strip():
                 # Capture token usage from the provider response
                 usage = resp.usage

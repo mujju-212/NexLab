@@ -930,33 +930,45 @@ def _generate_smart_fallback_title(prompt: str) -> str:
 
 
 @ai_bp.route('/chat/sessions', methods=['GET'])
+@ai_bp.route('/harness/sessions', methods=['GET'])
 @require_auth
-@require_role('institution_admin')
 def list_chat_sessions():
-    """List all AI chat sessions for this admin, pinned threads first, then newest."""
+    """List all AI Harness chat sessions for the authenticated user across any role, pinned first."""
     from app.models.admin_copilot import AdminChatSession
-    sessions = AdminChatSession.query.filter_by(
-        institution_id=g.institution_id,
-        user_id=g.user_id,
-    ).order_by(AdminChatSession.is_pinned.desc(), AdminChatSession.updated_at.desc()).all()
+    q = AdminChatSession.query.filter_by(user_id=g.user_id)
+    if g.institution_id:
+        q = q.filter(
+            (AdminChatSession.institution_id == g.institution_id) |
+            (AdminChatSession.institution_id.is_(None))
+        )
+    sessions = q.order_by(
+        AdminChatSession.is_pinned.desc(),
+        AdminChatSession.updated_at.desc()
+    ).all()
     return jsonify({'sessions': [s.to_dict() for s in sessions]}), 200
 
 
 @ai_bp.route('/chat/sessions', methods=['POST'])
+@ai_bp.route('/harness/sessions', methods=['POST'])
 @require_auth
-@require_role('institution_admin')
 def create_chat_session():
-    """Create a new chat conversation thread."""
+    """Create a new AI Harness conversation thread for any authenticated role."""
     from app.models.admin_copilot import AdminChatSession
     data = request.get_json(silent=True) or {}
     title = (data.get('title') or '').strip() or 'New Conversation'
     mode = data.get('mode') or 'chat'
+    from app.models.user import User
+    current_user = User.query.get(g.user_id)
+    if not current_user:
+        return jsonify({'error': 'User account not found or session expired. Please log in again.'}), 401
 
     session = AdminChatSession(
-        institution_id=g.institution_id,
-        user_id=g.user_id,
+        institution_id=g.institution_id or current_user.institution_id,
+        user_id=current_user.id,
+        role_scope=current_user.role or g.role or 'student',
         title=title,
         mode=mode,
+        page_context=page_context,
     )
     db.session.add(session)
     db.session.commit()
@@ -964,14 +976,13 @@ def create_chat_session():
 
 
 @ai_bp.route('/chat/sessions/<session_id>', methods=['GET'])
+@ai_bp.route('/harness/sessions/<session_id>', methods=['GET'])
 @require_auth
-@require_role('institution_admin')
 def get_chat_session(session_id):
-    """Get full message history for a specific chat thread."""
+    """Get full message history for a specific chat thread owned by the authenticated user."""
     from app.models.admin_copilot import AdminChatSession, AdminChatMessage
     session = AdminChatSession.query.filter_by(
         id=session_id,
-        institution_id=g.institution_id,
         user_id=g.user_id,
     ).first()
     if not session:
@@ -985,14 +996,13 @@ def get_chat_session(session_id):
 
 
 @ai_bp.route('/chat/sessions/<session_id>', methods=['PATCH'])
+@ai_bp.route('/harness/sessions/<session_id>', methods=['PATCH'])
 @require_auth
-@require_role('institution_admin')
 def update_chat_session(session_id):
-    """Rename or pin/unpin a chat session."""
+    """Rename, pin/unpin, or update live page_context on a chat session."""
     from app.models.admin_copilot import AdminChatSession
     session = AdminChatSession.query.filter_by(
         id=session_id,
-        institution_id=g.institution_id,
         user_id=g.user_id,
     ).first()
     if not session:
@@ -1003,20 +1013,21 @@ def update_chat_session(session_id):
         session.title = (data['title'] or '').strip()[:255] or session.title
     if 'is_pinned' in data:
         session.is_pinned = bool(data['is_pinned'])
+    if 'page_context' in data and isinstance(data['page_context'], dict):
+        session.page_context = data['page_context']
     session.updated_at = datetime.utcnow()
     db.session.commit()
     return jsonify({'session': session.to_dict()}), 200
 
 
 @ai_bp.route('/chat/sessions/<session_id>', methods=['DELETE'])
+@ai_bp.route('/harness/sessions/<session_id>', methods=['DELETE'])
 @require_auth
-@require_role('institution_admin')
 def delete_chat_session(session_id):
     """Delete a chat session and all its messages."""
     from app.models.admin_copilot import AdminChatSession
     session = AdminChatSession.query.filter_by(
         id=session_id,
-        institution_id=g.institution_id,
         user_id=g.user_id,
     ).first()
     if not session:
@@ -1028,22 +1039,25 @@ def delete_chat_session(session_id):
 
 
 @ai_bp.route('/chat/message', methods=['POST'])
+@ai_bp.route('/harness/message', methods=['POST'])
 @require_auth
-@require_role('institution_admin')
-@limiter.limit("15 per minute")
+@limiter.limit("20 per minute")
 def send_chat_message():
     """
-    Unified AI Copilot messaging endpoint.
+    Unified Multi-Role AI Harness messaging endpoint (supports all 5 roles:
+    student, free_user, instructor, institution_admin, admin).
     Accepts:
       - session_id: optional (creates new if missing)
       - prompt: string (required)
       - mode: 'chat' | 'agent' (default 'chat')
-      - doc_id: optional string (target PDF for RAG)
+      - doc_id: optional string (target document for RAG)
       - web_search: optional bool
+      - page_context: optional dict (active route, experiment_id, problem_slug, code, error)
     """
     import json
     from app.models.admin_copilot import AdminChatSession, AdminChatMessage
-    from app.ai.agent import run_copilot, AIDisabled as AgentAIDisabled, AIQuotaExceeded as AgentQuotaExceeded
+    from app.ai.harness import run_harness_turn, maybe_compact_session_memory
+    from app.ai.gate import AIDisabled as AgentAIDisabled, AIQuotaExceeded as AgentQuotaExceeded
     from app.models.ai_usage import AIAgentRun
 
     data = request.get_json(silent=True) or {}
@@ -1052,32 +1066,50 @@ def send_chat_message():
     doc_id = data.get('doc_id')
     web_search = bool(data.get('web_search', False))
     session_id = data.get('session_id')
+    page_context = data.get('page_context') if isinstance(data.get('page_context'), dict) else {}
+
+    # Students and Free Users are always in Socratic 'chat' mode (cannot execute administrative agent mutations)
+    if g.role in ('student', 'free_user'):
+        mode = 'chat'
 
     if not prompt:
         return jsonify({'error': 'prompt is required'}), 400
-    if len(prompt) > 3000:
-        return jsonify({'error': 'prompt must be 3000 characters or fewer'}), 400
+    if len(prompt) > 4000:
+        return jsonify({'error': 'prompt must be 4000 characters or fewer'}), 400
 
-    # Ensure session exists
     session = None
     if session_id:
         session = AdminChatSession.query.filter_by(
             id=session_id,
-            institution_id=g.institution_id,
             user_id=g.user_id,
         ).first()
 
+    from app.models.user import User
+    current_user = User.query.get(g.user_id)
+    if not current_user:
+        return jsonify({'error': 'User account not found or session expired. Please log in again.'}), 401
+
+    inst_id = g.institution_id or current_user.institution_id
+
     if not session:
-        # Generate initial clean smart title from prompt
         title = _generate_smart_fallback_title(prompt)
         session = AdminChatSession(
-            institution_id=g.institution_id,
-            user_id=g.user_id,
+            institution_id=inst_id,
+            user_id=current_user.id,
+            role_scope=current_user.role or g.role or 'student',
             title=title or 'New Chat',
             mode=mode,
+            page_context=page_context,
         )
         db.session.add(session)
         db.session.flush()
+    elif page_context or mode:
+        if mode:
+            session.mode = mode
+        if page_context:
+            merged_ctx = dict(session.page_context or {})
+            merged_ctx.update(page_context)
+            session.page_context = merged_ctx
 
     # Record User Message
     user_msg = AdminChatMessage(
@@ -1087,13 +1119,14 @@ def send_chat_message():
         mode=mode,
     )
     db.session.add(user_msg)
+    db.session.flush()
 
     # Fetch recent history for multi-turn context
-    recent_msgs = session.messages.order_by(AdminChatMessage.created_at.desc()).limit(6).all()
-    history = [{'role': m.role, 'content': m.content} for m in reversed(recent_msgs)]
+    recent_msgs = session.messages.order_by(AdminChatMessage.created_at.desc()).limit(7).all()
+    history = [{'role': m.role, 'content': m.content} for m in reversed(recent_msgs) if m.id != user_msg.id]
 
     try:
-        copilot_result = run_copilot(
+        harness_result = run_harness_turn(
             prompt=prompt,
             institution_id=g.institution_id,
             user_id=g.user_id,
@@ -1102,42 +1135,58 @@ def send_chat_message():
             doc_id=doc_id,
             web_search_enabled=web_search,
             chat_history=history,
+            page_context=session.page_context or page_context,
+            compact_memory=session.compact_memory,
+            session_id=session.id,
         )
     except AgentAIDisabled as e:
+        db.session.rollback()
         return jsonify({'error': str(e.reason)}), 403
     except AgentQuotaExceeded as e:
+        db.session.rollback()
         return jsonify({'error': e.reason}), 429
 
     # Record Assistant Message
     assistant_msg = AdminChatMessage(
         session_id=session.id,
         role='assistant',
-        content=copilot_result.get('answer', ''),
+        content=harness_result.get('answer', ''),
         mode=mode,
-        tool_calls=copilot_result.get('tool_calls', []),
-        pending_action=copilot_result.get('pending_action'),
-        sources=copilot_result.get('sources', []),
-        total_tokens=copilot_result.get('total_tokens', 0),
+        tool_calls=harness_result.get('tool_calls', []),
+        pending_action=harness_result.get('pending_action'),
+        sources=harness_result.get('sources', []),
+        generated_doc=harness_result.get('generated_doc'),
+        socratic_filtered=bool(harness_result.get('socratic_filtered', False)),
+        total_tokens=harness_result.get('total_tokens', 0),
     )
     db.session.add(assistant_msg)
 
-    # Also log to AIAgentRun for centralized platform analytics
-    run_row = AIAgentRun(
-        institution_id=g.institution_id,
-        user_id=g.user_id,
-        prompt=prompt,
-        tool_calls=json.dumps(copilot_result.get('tool_calls', []), default=str),
-        result=copilot_result.get('answer', ''),
-        total_tokens=copilot_result.get('total_tokens', 0),
-        status=copilot_result.get('status', 'completed'),
-    )
-    db.session.add(run_row)
+    # Log to AIAgentRun if institution_id is present
+    run_id = None
+    if g.institution_id:
+        try:
+            run_row = AIAgentRun(
+                institution_id=g.institution_id,
+                user_id=g.user_id,
+                prompt=prompt,
+                tool_calls=json.dumps(harness_result.get('tool_calls', []), default=str),
+                result=harness_result.get('answer', ''),
+                total_tokens=harness_result.get('total_tokens', 0),
+                status=harness_result.get('status', 'completed'),
+            )
+            db.session.add(run_row)
+            db.session.flush()
+            run_id = run_row.id
+        except Exception:
+            pass
 
-    # Update session touch timestamp and mode
     session.updated_at = datetime.utcnow()
     session.mode = mode
 
-    # Smart title: generate a concise 3-5 word title after the first exchange
+    # Auto-compact memory when conversation reaches threshold
+    maybe_compact_session_memory(session, g.institution_id, g.user_id, g.role)
+
+    # Smart title generation after first exchange
     msg_count = session.messages.count()
     needs_smart_title = (
         msg_count <= 2 or
@@ -1149,12 +1198,12 @@ def send_chat_message():
         try:
             from app.ai.gate import guarded_ai_call
             title_text, _, is_fb, _ = guarded_ai_call(
-                'agent',
+                'chat' if g.role in ('student', 'free_user') else 'agent',
                 institution_id=g.institution_id,
                 user_id=g.user_id,
                 role=g.role,
                 messages=[
-                    {'role': 'system', 'content': 'Generate a concise 3 to 5 word title summarizing this user request. Reply ONLY with the title. Do not include quotes, punctuation at the end, or prefix.'},
+                    {'role': 'system', 'content': 'Generate a concise 3 to 5 word title summarizing this user request. Reply ONLY with the title. Do not include quotes or punctuation at the end.'},
                     {'role': 'user', 'content': f"User prompt: {prompt[:250]}"},
                 ],
                 pool='fast',
@@ -1162,7 +1211,7 @@ def send_chat_message():
                 temperature=0.3,
             )
             if title_text and not is_fb:
-                cleaned = title_text.strip().strip('"\'`').rstrip('.?!')
+                cleaned = title_text.strip().strip('"`').rstrip('.?!')
                 if 2 < len(cleaned) <= 80 and not cleaned.lower().startswith('title:'):
                     session.title = cleaned
                     ai_title_applied = True
@@ -1181,21 +1230,26 @@ def send_chat_message():
         'session_title': session.title,
         'user_message': user_msg.to_dict(),
         'assistant_message': assistant_msg.to_dict(),
-        'pending_action': copilot_result.get('pending_action'),
-        'sources': copilot_result.get('sources', []),
-        'run_id': run_row.id,
+        'pending_action': harness_result.get('pending_action'),
+        'generated_doc': harness_result.get('generated_doc'),
+        'socratic_filtered': harness_result.get('socratic_filtered', False),
+        'sources': harness_result.get('sources', []),
+        'run_id': run_id,
     }), 201
 
 
 @ai_bp.route('/chat/actions/execute', methods=['POST'])
+@ai_bp.route('/harness/actions/execute', methods=['POST'])
 @require_auth
-@require_role('institution_admin')
 def execute_chat_action():
     """
-    Executes a confirmed administrative action directly against the database.
+    Executes a confirmed pending_action for authorized roles (institution_admin, instructor, admin).
     """
-    from app.ai.agent import execute_copilot_action
+    from app.ai.role_tools import execute_role_action
     from app.models.admin_copilot import AdminChatMessage
+
+    if g.role in ('student', 'free_user'):
+        return jsonify({'error': 'Students and free learners cannot execute administrative write actions.'}), 403
 
     data = request.get_json(silent=True) or {}
     action_payload = data.get('action_payload')
@@ -1205,13 +1259,13 @@ def execute_chat_action():
         return jsonify({'error': 'action_payload object is required'}), 400
 
     try:
-        result = execute_copilot_action(
+        result = execute_role_action(
             action_payload=action_payload,
             institution_id=g.institution_id,
             user_id=g.user_id,
+            role=g.role,
         )
 
-        # If message_id provided, clear pending_action and append system acknowledgement
         if message_id:
             msg = AdminChatMessage.query.filter_by(id=message_id).first()
             if msg:
@@ -1228,32 +1282,41 @@ def execute_chat_action():
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# PDF Document Management for RAG
+# Multi-Format Document Management for Scoped RAG + Generated Document Downloads
 # ══════════════════════════════════════════════════════════════════════════════
 
 @ai_bp.route('/documents', methods=['GET'])
+@ai_bp.route('/harness/documents', methods=['GET'])
 @require_auth
-@require_role('institution_admin')
 def list_documents():
-    """List all uploaded PDF documents for this institution."""
+    """List uploaded RAG documents visible to the authenticated user."""
     from app.models.admin_copilot import InstitutionDocument
-    docs = InstitutionDocument.query.filter_by(
-        institution_id=g.institution_id
-    ).order_by(InstitutionDocument.created_at.desc()).all()
+    from sqlalchemy import or_
+    q = InstitutionDocument.query
+    if g.institution_id:
+        q = q.filter(or_(
+            InstitutionDocument.institution_id == g.institution_id,
+            InstitutionDocument.uploaded_by == g.user_id,
+        ))
+    else:
+        q = q.filter(InstitutionDocument.uploaded_by == g.user_id)
+    docs = q.order_by(InstitutionDocument.created_at.desc()).all()
     return jsonify({'documents': [d.to_dict() for d in docs]}), 200
 
 
 @ai_bp.route('/documents/upload', methods=['POST'])
+@ai_bp.route('/harness/documents/upload', methods=['POST'])
 @require_auth
-@require_role('institution_admin')
 def upload_document():
     """
-    Upload a PDF document, extract text page-by-page, chunk it, and index for RAG.
+    Upload a document (.pdf, .docx, .xlsx, .csv, .md, .txt), extract text & chunks,
+    and index for scoped RAG retrieval.
     """
     import os
-    import pypdf
+    import uuid
     from werkzeug.utils import secure_filename
     from app.models.admin_copilot import InstitutionDocument
+    from app.ai.harness import extract_multi_format_chunks, SUPPORTED_RAG_EXTENSIONS
 
     if 'file' not in request.files:
         return jsonify({'error': 'No file uploaded'}), 400
@@ -1263,8 +1326,10 @@ def upload_document():
         return jsonify({'error': 'Filename is empty'}), 400
 
     orig_filename = secure_filename(file.filename)
-    if not orig_filename.lower().endswith('.pdf'):
-        return jsonify({'error': 'Only PDF documents are supported for RAG indexing'}), 400
+    if not orig_filename.lower().endswith(SUPPORTED_RAG_EXTENSIONS):
+        return jsonify({
+            'error': f"Unsupported file format. Supported formats: {', '.join(SUPPORTED_RAG_EXTENSIONS)}"
+        }), 400
 
     upload_dir = os.path.join(current_app.root_path, '..', 'uploads', 'institution_docs')
     os.makedirs(upload_dir, exist_ok=True)
@@ -1275,37 +1340,22 @@ def upload_document():
     file.save(file_path)
     file_size = os.path.getsize(file_path)
 
-    # Extract text using pypdf
-    chunks = []
-    page_count = 0
     try:
-        reader = pypdf.PdfReader(file_path)
-        page_count = len(reader.pages)
-
-        for page_num, page in enumerate(reader.pages, start=1):
-            text = (page.extract_text() or '').strip()
-            if not text:
-                continue
-
-            # Split into ~600-char semantic chunks with 100-char overlap
-            step = 500
-            for i in range(0, len(text), step):
-                chunk_text = text[i:i + 650].strip()
-                if len(chunk_text) > 30:
-                    chunks.append({
-                        'chunk_id': f"{file_id}_p{page_num}_{len(chunks)}",
-                        'page': page_num,
-                        'text': chunk_text,
-                        'tokens': len(chunk_text.split()),
-                    })
+        chunks, page_count, doc_type = extract_multi_format_chunks(file_path, orig_filename, file_id)
     except Exception as exc:
-        log.warning("[copilot.pdf] parsing error for %s: %s", orig_filename, exc)
-        return jsonify({'error': f'Failed to parse PDF: {str(exc)}'}), 400
+        current_app.logger.warning("[harness.rag] parsing error for %s: %s", orig_filename, exc)
+        return jsonify({'error': f'Failed to parse document: {str(exc)}'}), 400
+
+    scope_type = request.form.get('scope_type') or ('institution' if g.role == 'institution_admin' else 'user')
+    scope_id = request.form.get('scope_id') or (g.institution_id if scope_type == 'institution' else g.user_id)
 
     doc = InstitutionDocument(
         id=file_id,
         institution_id=g.institution_id,
         uploaded_by=g.user_id,
+        scope_type=scope_type,
+        scope_id=scope_id,
+        doc_type=doc_type,
         filename=orig_filename,
         file_path=file_path,
         file_size=file_size,
@@ -1316,9 +1366,13 @@ def upload_document():
     db.session.add(doc)
     db.session.commit()
 
-    from app.institution.audit import write_audit
-    write_audit(g.user_id, g.institution_id, 'upload_document', 'document', doc.id,
-                f"Uploaded PDF '{orig_filename}' ({page_count} pages, {len(chunks)} chunks)")
+    if g.institution_id and g.role == 'institution_admin':
+        try:
+            from app.institution.audit import write_audit
+            write_audit(g.user_id, g.institution_id, 'upload_document', 'document', doc.id,
+                        f"Uploaded {doc_type.upper()} '{orig_filename}' ({page_count} pages, {len(chunks)} chunks)")
+        except Exception:
+            pass
 
     return jsonify({
         'success': True,
@@ -1328,32 +1382,61 @@ def upload_document():
 
 
 @ai_bp.route('/documents/<doc_id>', methods=['DELETE'])
+@ai_bp.route('/harness/documents/<doc_id>', methods=['DELETE'])
 @require_auth
-@require_role('institution_admin')
 def delete_document(doc_id):
-    """Delete an uploaded PDF document and remove from RAG index."""
+    """Delete an uploaded RAG document."""
     import os
     from app.models.admin_copilot import InstitutionDocument
 
-    doc = InstitutionDocument.query.filter_by(
-        id=doc_id,
-        institution_id=g.institution_id
-    ).first()
+    q = InstitutionDocument.query.filter_by(id=doc_id)
+    if g.role != 'institution_admin':
+        q = q.filter_by(uploaded_by=g.user_id)
+    elif g.institution_id:
+        q = q.filter_by(institution_id=g.institution_id)
+    doc = q.first()
     if not doc:
-        return jsonify({'error': 'Document not found'}), 404
+        return jsonify({'error': 'Document not found or permission denied'}), 404
 
     try:
         if os.path.exists(doc.file_path):
             os.remove(doc.file_path)
-    except Exception as exc:
-        log.warning("[copilot.pdf] could not remove file %s: %s", doc.file_path, exc)
+    except Exception:
+        pass
 
     db.session.delete(doc)
     db.session.commit()
-
-    from app.institution.audit import write_audit
-    write_audit(g.user_id, g.institution_id, 'delete_document', 'document', doc_id,
-                f"Deleted PDF '{doc.filename}'")
-
     return jsonify({'success': True, 'deleted_id': doc_id}), 200
 
+
+@ai_bp.route('/generated-docs/<doc_id>/download', methods=['GET'])
+@require_auth
+def download_generated_document(doc_id):
+    """Download an on-demand AI-generated study sheet, cheat sheet, study plan, or report."""
+    import os
+    import io
+    from flask import send_file
+    from app.models.admin_copilot import AIGeneratedDocument
+
+    doc = AIGeneratedDocument.query.filter_by(id=doc_id).first()
+    if not doc:
+        return jsonify({'error': 'Generated document not found'}), 404
+    if doc.user_id != g.user_id and g.role not in ('institution_admin', 'admin'):
+        return jsonify({'error': 'Access denied'}), 403
+
+    mime_map = {
+        'md': 'text/markdown',
+        'csv': 'text/csv',
+        'xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        'pdf': 'application/pdf',
+        'txt': 'text/plain',
+    }
+    mimetype = mime_map.get(doc.format, 'application/octet-stream')
+    dl_name = f"{doc.title.replace(' ', '_')}.{doc.format}"
+
+    if doc.file_path and os.path.exists(doc.file_path):
+        return send_file(doc.file_path, mimetype=mimetype, as_attachment=True, download_name=dl_name)
+
+    # Fallback to serving content_text from DB
+    buf = io.BytesIO((doc.content_text or '').encode('utf-8'))
+    return send_file(buf, mimetype=mimetype, as_attachment=True, download_name=dl_name)

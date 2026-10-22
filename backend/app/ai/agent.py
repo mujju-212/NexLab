@@ -131,14 +131,24 @@ def search_document_chunks(institution_id: str, query: str, doc_id: str = None, 
 # ══════════════════════════════════════════════════════════════════════════════
 
 def run_web_search(query: str, max_results: int = 4):
-    """Executes live web search using duckduckgo_search."""
+    """Executes live web search using duckduckgo_search / ddgs."""
     if not query or not query.strip():
         return []
+    clean_query = query.strip()
+    for prefix in ('search the web for', 'search the web', 'search online for', 'search online', 'browse the web for', 'browse web for', 'web search for', 'google', 'look up online for', 'look up online'):
+        if clean_query.lower().startswith(prefix):
+            clean_query = clean_query[len(prefix):].strip(' :-,')
+            break
+    if not clean_query:
+        clean_query = query.strip()
     try:
-        from duckduckgo_search import DDGS
+        try:
+            from ddgs import DDGS
+        except ImportError:
+            from duckduckgo_search import DDGS
         results = []
         with DDGS() as ddgs:
-            for r in ddgs.text(query.strip(), max_results=max_results):
+            for r in ddgs.text(clean_query, max_results=max_results):
                 results.append({
                     'title': r.get('title', ''),
                     'snippet': r.get('body', ''),
@@ -1483,7 +1493,7 @@ def run_copilot(prompt: str, institution_id: str, user_id: str, role: str,
         text, _model, is_fallback, usage = guarded_ai_call(
             'agent',
             institution_id=institution_id, user_id=user_id, role=role,
-            messages=planner_history, pool='quality', max_tokens=350, temperature=0.1,
+            messages=planner_history, pool='quality', max_tokens=2048, temperature=0.1,
         )
         total_tokens += (usage or {}).get('total_tokens', 0)
 
@@ -1576,7 +1586,7 @@ def run_copilot(prompt: str, institution_id: str, user_id: str, role: str,
             {'role': 'system', 'content': _ANSWER_SYSTEM.format(mode=mode)},
             {'role': 'user', 'content': f"Admin Request: {prompt}\n\nContext & Tool Observations:\n{obs_summary or '(No tools were called - answer from institutional dashboard knowledge)'}"},
         ],
-        pool='quality', max_tokens=700, temperature=0.25,
+        pool='quality', max_tokens=1500, temperature=0.25,
     )
     total_tokens += (usage or {}).get('total_tokens', 0)
 

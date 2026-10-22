@@ -197,8 +197,10 @@ def guarded_ai_call(
     # ── 1. Platform global switch ─────────────────────────────────────────
     try:
         from app.models.institution import PlatformConfig
-        if PlatformConfig.get('ai_hints_enabled', 'true').lower() == 'false':
+        if PlatformConfig.get('ai_enabled', 'true').lower() == 'false':
             raise AIDisabled('AI features are disabled platform-wide by the administrator.')
+        if feature == 'hint' and PlatformConfig.get('ai_hints_enabled', 'true').lower() == 'false':
+            raise AIDisabled('AI hints are disabled platform-wide by the administrator.')
     except AIDisabled:
         raise
     except Exception:
