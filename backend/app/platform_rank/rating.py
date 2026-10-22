@@ -190,6 +190,20 @@ def compute_student_platform_rating(student_id: str, commit: bool = True) -> Dic
         xp.hard_solved = hard_count
         rating_rec.streak_days = xp.streak_days or 0
 
+    # Fast O(1) indexed rank calculation for this user without scanning all rows in Python
+    if total_solved > 0 and total_rating > 0:
+        db.session.flush()
+        higher_cnt = PlatformRating.query.filter(
+            PlatformRating.problems_solved > 0,
+            PlatformRating.rating > total_rating,
+        ).count()
+        total_ranked = max(1, PlatformRating.query.filter(PlatformRating.problems_solved > 0).count())
+        rating_rec.global_rank = higher_cnt + 1
+        rating_rec.global_percentile = round(100.0 * (1.0 - (float(higher_cnt) / float(total_ranked))), 1)
+    else:
+        rating_rec.global_rank = None
+        rating_rec.global_percentile = 0.0
+
     if commit:
         db.session.commit()
 

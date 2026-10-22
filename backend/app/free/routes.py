@@ -110,8 +110,8 @@ def get_course(course_id):
     pct_xp = round((earned_xp / total_xp) * 100) if total_xp else 0
 
     rank_in_course = 1
-    global_rank = 86
-    top_percentile = 12
+    global_rank = None
+    top_percentile = 100
     try:
         from app.models.practice import StudentXP
         from sqlalchemy import func
@@ -123,13 +123,13 @@ def get_course(course_id):
             ).scalar() or 0
             rank_in_course = better_count + 1
 
-            my_xp = db.session.query(StudentXP.xp).filter_by(student_id=user_id).scalar() or earned_xp
+            my_xp = db.session.query(StudentXP.total_xp).filter_by(student_id=user_id).scalar() or earned_xp
             higher_xp_count = db.session.query(func.count(StudentXP.student_id)).filter(
-                StudentXP.xp > my_xp
+                StudentXP.total_xp > my_xp
             ).scalar() or 0
             global_rank = max(1, higher_xp_count + 1)
-            total_students = db.session.query(func.count(StudentXP.student_id)).scalar() or 100
-            top_percentile = max(1, min(99, round((global_rank / max(1, total_students)) * 100)))
+            total_students = db.session.query(func.count(StudentXP.student_id)).scalar() or 1
+            top_percentile = max(1, min(100, round((global_rank / max(1, total_students)) * 100)))
     except Exception:
         pass
 
@@ -399,8 +399,8 @@ def submit_exercise(exercise_id):
             xp.update_streak()
             if not StudentBadge.query.filter_by(student_id=g.user_id, badge_id='first_solve').first():
                 db.session.add(StudentBadge(student_id=g.user_id, badge_id='first_solve'))
+            db.session.flush()
             compute_student_platform_rating(g.user_id, commit=False)
-            update_all_platform_ranks()
     else:
         if not was_already_solved:
             prog.status = 'attempted'
@@ -457,6 +457,7 @@ def submit_mcq(exercise_id):
         xp.update_streak()
         if not StudentBadge.query.filter_by(student_id=g.user_id, badge_id='first_solve').first():
             db.session.add(StudentBadge(student_id=g.user_id, badge_id='first_solve'))
+        db.session.flush()
         compute_student_platform_rating(g.user_id, commit=False)
 
     db.session.commit()

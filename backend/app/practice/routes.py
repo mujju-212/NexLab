@@ -187,9 +187,8 @@ def _reward_solve(student_id, problem, xp_earned, elapsed_sec=None):
 
     # Precompute and update Track-2 PlatformRating in DB for fast O(1) reads
     try:
-        from app.platform_rank.rating import compute_student_platform_rating, update_all_platform_ranks
+        from app.platform_rank.rating import compute_student_platform_rating
         compute_student_platform_rating(student_id, commit=False)
-        update_all_platform_ranks()
     except Exception:
         pass
 
@@ -1120,8 +1119,10 @@ def submit_problem(slug):
         xp_earned = 0 if already_solved else xp_reward
         if not already_solved:
             sub.xp_earned = xp_earned
-            _reward_solve(g.user_id, problem, xp_earned, elapsed_sec)
         db.session.add(sub)
+        db.session.flush()
+        if not already_solved:
+            _reward_solve(g.user_id, problem, xp_earned, elapsed_sec)
         db.session.commit()
         return jsonify({
             'status': 'Accepted', 'passed': total, 'total': total,
@@ -1172,9 +1173,11 @@ def submit_problem(slug):
     if accepted and not already_solved:
         xp_earned = xp_reward
         sub.xp_earned = xp_earned
-        _reward_solve(g.user_id, problem, xp_earned, elapsed_sec)
 
     db.session.add(sub)
+    db.session.flush()
+    if accepted and not already_solved:
+        _reward_solve(g.user_id, problem, xp_earned, elapsed_sec)
     db.session.commit()
 
     resp = {

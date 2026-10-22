@@ -175,7 +175,7 @@ def get_free_user_activity(user_id: str, days: int = 365) -> Dict[str, Any]:
     }
 
 
-def get_free_user_accuracy_and_bests(user_id: str) -> Dict[str, Any]:
+def get_free_user_accuracy_and_bests(user_id: str, precomputed_activity: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Computes accuracy metrics (acceptance rate, first-try rate, average attempts)
     and personal bests across both practice library and course exercises.
@@ -280,8 +280,8 @@ def get_free_user_accuracy_and_bests(user_id: str) -> Dict[str, Any]:
     xp_rec = StudentXP.query.filter_by(student_id=user_id).first()
     longest_streak = xp_rec.streak_days if xp_rec else 0
 
-    # Most active day
-    act_data = get_free_user_activity(user_id, days=180)
+    # Most active day (reuse precomputed_activity when provided to avoid duplicate scan)
+    act_data = precomputed_activity if precomputed_activity is not None else get_free_user_activity(user_id, days=180)
     most_active_day = {
         'date': act_data['summary']['most_active_date'],
         'count': act_data['summary']['max_daily_count'],

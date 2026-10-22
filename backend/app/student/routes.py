@@ -90,7 +90,6 @@ def my_subjects():
         any_attempts = {a.experiment_id: a for a in attempts}
 
         from app.models.exam import ExamAttempt
-        from app.models.content import ContentProgress, ContentModule
         from collections import defaultdict
 
         exam_attempts = ExamAttempt.query.filter(
@@ -163,7 +162,7 @@ def my_subjects():
             fallback_subs = Subject.query.filter_by(institution_id=g.institution_id, is_active=True).all()
             if not fallback_subs:
                 fallback_subs = Subject.query.filter_by(institution_id=g.institution_id).all()
-        if not fallback_subs:
+        if not fallback_subs and not g.institution_id:
             fallback_subs = Subject.query.filter_by(is_active=True).limit(10).all()
             if not fallback_subs:
                 fallback_subs = Subject.query.limit(10).all()
@@ -238,7 +237,6 @@ def list_experiments(subject_id):
         if ea.experiment_id not in latest_exam_attempts:
             latest_exam_attempts[ea.experiment_id] = ea
 
-    from app.models.content import ContentProgress, ContentModule
     from collections import defaultdict
 
     exp_modules = ContentModule.query.filter(
@@ -1213,7 +1211,6 @@ def my_experiment_history():
     """All experiments the student has attempted, with latest attempt stats,
     including CodeAttempt, Grade, ExamAttempt, and completed ContentProgress."""
     from app.models.exam import ExamAttempt
-    from app.models.content import ContentModule, ContentProgress
 
     attempts = db.session.query(
         CodeAttempt.experiment_id,
@@ -1992,7 +1989,7 @@ def record_proctor_event(session_id=None):
 
     # Auto-resolve session_id if omitted
     if not sid:
-        from app.models.conductor import SessionAttendance
+        from app.models.session import SessionAttendance
         att = SessionAttendance.query.filter_by(student_id=g.user_id, left_at=None).order_by(SessionAttendance.joined_at.desc()).first()
         if not att:
             att = SessionAttendance.query.filter_by(student_id=g.user_id).order_by(SessionAttendance.joined_at.desc()).first()

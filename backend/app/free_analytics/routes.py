@@ -81,18 +81,18 @@ def free_analytics_overview():
     # 1. Platform Standing
     standing = get_student_platform_standing(user_id)
 
-    # 2. Accuracy & Difficulty Mix
-    accuracy_data = get_free_user_accuracy_and_bests(user_id)
+    # 2. Activity Heatmap & Trends (last 365 days) — computed once and shared
+    activity = get_free_user_activity(user_id, days=365)
+
+    # 3. Accuracy & Difficulty Mix
+    accuracy_data = get_free_user_accuracy_and_bests(user_id, precomputed_activity=activity)
     difficulty_mix = accuracy_data['difficulty_mix']
 
-    # 3. Topic Strength
+    # 4. Topic Strength
     topic_strength = get_practice_topic_mastery(user_id)
 
-    # 4. Content Unlocks
+    # 5. Content Unlocks
     unlocks = check_content_unlocks(user_id)
-
-    # 5. Activity Heatmap & Trends (last 365 days)
-    activity = get_free_user_activity(user_id, days=365)
 
     # 6. Course Progress Rollups
     course_analytics = get_user_course_analytics(user_id)

@@ -54,7 +54,7 @@ def focus_score():
 
     # Auto-resolve session_id if not explicitly provided
     if not session_id:
-        from app.models.conductor import SessionAttendance
+        from app.models.session import SessionAttendance
         att = SessionAttendance.query.filter_by(student_id=g.user_id, left_at=None).order_by(SessionAttendance.joined_at.desc()).first()
         if not att:
             att = SessionAttendance.query.filter_by(student_id=g.user_id).order_by(SessionAttendance.joined_at.desc()).first()

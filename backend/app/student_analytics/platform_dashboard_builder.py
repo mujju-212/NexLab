@@ -156,10 +156,10 @@ def build_platform_dashboard_payload(
         'top_10': {'title': 'Top 10', 'subtext': 'Campus Top 10', 'type': 'rank', 'color': '#ec4899', 'bg': '#fdf2f8', 'icon': 'trophy'},
     }
     for b in user_badges:
-        cfg = BADGE_CONFIG.get(b.badge_type, {
-            'title': b.badge_type.replace('_', ' ').title(),
-            'subtext': b.badge_type.replace('_', ' ').title(),
-            'type': b.badge_type,
+        cfg = BADGE_CONFIG.get(b.badge_id, {
+            'title': b.badge_id.replace('_', ' ').title(),
+            'subtext': b.badge_id.replace('_', ' ').title(),
+            'type': b.badge_id,
             'color': '#0284c7',
             'bg': '#f0f9ff',
             'icon': 'award',
