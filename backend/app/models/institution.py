@@ -1,6 +1,7 @@
 import uuid
 from datetime import datetime
 from app.extensions import db
+from app.models.academic import AuditLog  # noqa: F401 re-export for backward compat
 
 
 class Institution(db.Model):

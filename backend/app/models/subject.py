@@ -5,6 +5,9 @@ from app.extensions import db
 
 class Subject(db.Model):
     __tablename__ = 'subjects'
+    __table_args__ = (
+        db.Index('ix_subjects_inst_dept', 'institution_id', 'department_id'),
+    )
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     institution_id  = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
     name            = db.Column(db.Text, nullable=False)

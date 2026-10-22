@@ -49,6 +49,9 @@ class FreeCourse(db.Model):
 
 class FreeExercise(db.Model):
     __tablename__ = 'free_exercises'
+    __table_args__ = (
+        db.Index('ix_free_exercises_course_order', 'course_id', 'order_index'),
+    )
 
     id           = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     course_id    = db.Column(db.String(36), db.ForeignKey('free_courses.id'), nullable=False)
@@ -136,6 +139,7 @@ class FreeProgress(db.Model):
 
     __table_args__ = (
         db.UniqueConstraint('user_id', 'exercise_id', name='uq_free_progress'),
+        db.Index('ix_free_progress_user_course', 'user_id', 'course_id', 'status'),
     )
 
     def to_dict(self):

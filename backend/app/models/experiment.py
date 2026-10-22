@@ -13,6 +13,10 @@ def _iso_z(dt):
 
 class Experiment(db.Model):
     __tablename__ = 'experiments'
+    __table_args__ = (
+        db.Index('ix_experiments_inst_subj', 'institution_id', 'subject_id'),
+        db.Index('ix_experiments_instructor', 'instructor_id'),
+    )
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     institution_id  = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
     subject_id      = db.Column(db.String(36), db.ForeignKey('subjects.id'), nullable=False)
@@ -180,6 +184,9 @@ class Experiment(db.Model):
 
 class TestCase(db.Model):
     __tablename__ = 'test_cases'
+    __table_args__ = (
+        db.Index('ix_test_cases_experiment', 'experiment_id'),
+    )
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     experiment_id   = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=False)
     input_data      = db.Column(db.Text)
@@ -245,6 +252,9 @@ class ContentPage(db.Model):
 class ContentModule(db.Model):
     """Pre-lab content blocks: text, video, pdf, quiz"""
     __tablename__ = 'content_modules'
+    __table_args__ = (
+        db.Index('ix_content_modules_exp_order', 'experiment_id', 'display_order'),
+    )
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     experiment_id   = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=False)
     page_id         = db.Column(db.String(36), db.ForeignKey('content_pages.id'), nullable=True, index=True)
@@ -265,6 +275,9 @@ class ContentModule(db.Model):
 
 class QuizQuestion(db.Model):
     __tablename__ = 'quiz_questions'
+    __table_args__ = (
+        db.Index('ix_quiz_questions_module', 'module_id'),
+    )
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     module_id       = db.Column(db.String(36), db.ForeignKey('content_modules.id'), nullable=False)
     question_text   = db.Column(db.Text, nullable=False)

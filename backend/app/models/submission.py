@@ -6,6 +6,10 @@ from app.extensions import db
 class CodeVersion(db.Model):
     """Every auto-save and on-run save — versioned for code replay"""
     __tablename__ = 'code_versions'
+    __table_args__ = (
+        db.Index('ix_code_versions_student_exp_ver', 'student_id', 'experiment_id', 'version_number'),
+        db.Index('ix_code_versions_session_student', 'session_id', 'student_id', 'saved_at'),
+    )
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     student_id      = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
     experiment_id   = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=False)
@@ -31,6 +35,8 @@ class CodeAttempt(db.Model):
         # dashboard pending/recent finals
         db.Index('ix_code_attempts_exp_final_submitted',
                  'experiment_id', 'is_final_submission', 'submitted_at'),
+        db.Index('ix_code_attempts_student_exp_sub', 'student_id', 'experiment_id', 'submitted_at'),
+        db.Index('ix_code_attempts_student_sub', 'student_id', 'submitted_at'),
     )
     id                  = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     student_id          = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
@@ -70,6 +76,7 @@ class CodeAttempt(db.Model):
             'id': self.id,
             'attempt_number': self.attempt_number,
             'language': self.language,
+            'files': self.files,
             'compile_status': self.compile_status,
             'stdout': self.stdout,
             'stderr': self.stderr,

@@ -152,6 +152,9 @@ class PracticeTestCase(db.Model):
 class PracticeSubmission(db.Model):
     """A student's submission for a practice problem."""
     __tablename__ = 'practice_submissions'
+    __table_args__ = (
+        db.Index('ix_practice_subs_stu_run_status_dt', 'student_id', 'is_run', 'status', 'submitted_at'),
+    )
 
     id          = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     student_id  = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False, index=True)

@@ -23,7 +23,7 @@ class Batch(db.Model):
     institution_id = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
     year_id        = db.Column(db.String(36), db.ForeignKey('academic_years.id'), nullable=False)
     name           = db.Column(db.Text, nullable=False)       # e.g. "CSE 2nd Year"
-    program        = db.Column(db.String(20))                 # e.g. "B.E. CSE"
+    program        = db.Column(db.String(100))                # e.g. "B.E. CSE", "Information Science and Engineering"
     department_id  = db.Column(db.String(36), db.ForeignKey('departments.id'), nullable=True)
     created_at     = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -112,6 +112,10 @@ class SectionStudent(db.Model):
 class SectionSubject(db.Model):
     """Maps subjects to sections + assigns instructor"""
     __tablename__ = 'section_subjects'
+    __table_args__ = (
+        db.Index('ix_section_subjects_inst_instr', 'institution_id', 'instructor_id'),
+        db.Index('ix_section_subjects_sec_subj', 'section_id', 'subject_id'),
+    )
     id             = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     institution_id = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
     section_id     = db.Column(db.String(36), db.ForeignKey('sections.id'), nullable=False)

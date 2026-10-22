@@ -88,4 +88,13 @@ class User(db.Model):
             'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
             'last_login': self.last_login.isoformat() + 'Z' if self.last_login else None,
         }
+        if self.institution_id:
+            try:
+                from app.models.institution import Institution
+                inst = db.session.get(Institution, self.institution_id)
+                if inst:
+                    data['institution_name'] = inst.name
+                    data['institution_code'] = inst.code
+            except Exception:
+                pass
         return data

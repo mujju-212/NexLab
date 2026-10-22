@@ -6,6 +6,10 @@ from app.extensions import db
 class ConceptMastery(db.Model):
     """Per-student, per-concept knowledge mastery (0–100)"""
     __tablename__ = 'concept_mastery'
+    __table_args__ = (
+        db.Index('ix_concept_mastery_inst_student', 'institution_id', 'student_id'),
+        db.Index('ix_concept_mastery_inst_concept', 'institution_id', 'concept'),
+    )
     student_id      = db.Column(db.String(36), db.ForeignKey('users.id'), primary_key=True)
     institution_id  = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
     concept         = db.Column(db.Text, primary_key=True)   # e.g. 'recursion'

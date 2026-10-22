@@ -123,7 +123,7 @@ class AIPolicy(db.Model):
         'code_assist':    True,
         'viva_generate':  True,
         'viva_evaluate':  True,
-        'agent':          False,   # off until WS-D ships
+        'agent':          True,   # WS-D Autonomous Harness enabled
     }
 
     def feature_flags(self) -> dict:

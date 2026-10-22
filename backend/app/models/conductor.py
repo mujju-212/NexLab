@@ -159,7 +159,7 @@ class ProctorPolicy(db.Model):
     block_copy_paste    = db.Column(db.Boolean, default=True)
     block_tab_switch    = db.Column(db.Boolean, default=True)
     plagiarism_scan     = db.Column(db.Boolean, default=True)
-    focus_ml            = db.Column(db.Boolean, default=False)
+    focus_ml            = db.Column(db.Boolean, default=True)
     webcam_required     = db.Column(db.Boolean, default=False)
 
     created_at          = db.Column(db.DateTime, default=datetime.utcnow)

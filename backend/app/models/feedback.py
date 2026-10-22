@@ -59,6 +59,9 @@ class PlagiarismFlag(db.Model):
 
 class Notification(db.Model):
     __tablename__ = 'notifications'
+    __table_args__ = (
+        db.Index('ix_notifications_user_unread', 'user_id', 'is_read', 'created_at'),
+    )
     id          = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id     = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
     type        = db.Column(db.String(30))

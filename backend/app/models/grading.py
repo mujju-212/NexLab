@@ -8,6 +8,9 @@ class Grade(db.Model):
     __table_args__ = (
         # analytics trends grade bucket per session
         db.Index('ix_grades_session_id', 'session_id'),
+        db.Index('ix_grades_student_exp', 'student_id', 'experiment_id'),
+        db.Index('ix_grades_exp_final', 'experiment_id', 'final_grade'),
+        db.Index('ix_grades_student_created', 'student_id', 'created_at'),
     )
     id                  = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     student_id          = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)

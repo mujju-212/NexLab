@@ -58,7 +58,7 @@ class LabSession(db.Model):
     catchup_deadline        = db.Column(db.DateTime)
 
     # Features
-    focus_ml_enabled        = db.Column(db.Boolean, default=False)
+    focus_ml_enabled        = db.Column(db.Boolean, default=True)
     lockdown_enabled        = db.Column(db.Boolean, default=False)
 
     status                  = db.Column(db.String(20), default='scheduled')
@@ -103,6 +103,7 @@ class SessionAttendance(db.Model):
     __table_args__ = (
         # live_dashboard/roster status filters (PK leads session_id; status adds)
         db.Index('ix_session_attendance_session_status', 'session_id', 'status'),
+        db.Index('ix_session_attendance_student_status', 'student_id', 'status'),
     )
     session_id          = db.Column(db.String(36), db.ForeignKey('lab_sessions.id'), primary_key=True)
     student_id          = db.Column(db.String(36), db.ForeignKey('users.id'), primary_key=True)
