@@ -213,6 +213,125 @@ function dayKey(d: Date): string {
   return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
 }
 
+function parseTimeStringToHourMinute(timeStr?: string): { hour: number; minute: number } {
+  if (!timeStr) return { hour: 9, minute: 0 };
+  const clean = timeStr.trim().toUpperCase();
+  const isPM = clean.includes('PM');
+  const isAM = clean.includes('AM');
+  const stripped = clean.replace('AM', '').replace('PM', '').trim();
+  const parts = stripped.split(':');
+  let hour = parseInt(parts[0], 10) || 9;
+  const minute = parts.length > 1 ? parseInt(parts[1], 10) || 0 : 0;
+  if (isPM && hour < 12) hour += 12;
+  else if (isAM && hour === 12) hour = 0;
+  return { hour, minute };
+}
+
+const DAY_MAP_LOOKUP: Record<string, number> = {
+  mon: 0, monday: 0,
+  tue: 1, tuesday: 1,
+  wed: 2, wednesday: 2,
+  thu: 3, thursday: 3,
+  fri: 4, friday: 4,
+  sat: 5, saturday: 5,
+  sun: 6, sunday: 6,
+};
+
+function projectRecurringOccurrences(
+  plans: RecurringPlan[],
+  windowStart: Date,
+  windowEnd: Date,
+  existingSessions: SessionEnriched[],
+  allSections: Section[] = []
+): SessionEnriched[] {
+  if (!plans || plans.length === 0) return [];
+  const projected: SessionEnriched[] = [];
+
+  for (const plan of plans) {
+    if (plan.status !== 'active') continue;
+
+    const days = plan.schedule_days || [];
+    const targetDays: number[] = [];
+    for (const d of days) {
+      const idx = DAY_MAP_LOOKUP[String(d).toLowerCase().trim()];
+      if (idx !== undefined && !targetDays.includes(idx)) targetDays.push(idx);
+    }
+    if (targetDays.length === 0) targetDays.push(0); // Default to Monday
+
+    const { hour, minute } = parseTimeStringToHourMinute(plan.raw_start_time || plan.start_time);
+
+    // Date range bounds
+    const planStart = plan.start_date ? new Date(plan.start_date + 'T00:00:00') : windowStart;
+    const planEnd = plan.end_date ? new Date(plan.end_date + 'T23:59:59') : windowEnd;
+
+    const rangeStart = planStart > windowStart ? planStart : windowStart;
+    const rangeEnd = planEnd < windowEnd ? planEnd : windowEnd;
+
+    const cur = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate());
+    const stop = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate());
+
+    const planSecList = (plan.sections && plan.sections.length > 0) ? plan.sections : ['A'];
+    const firstSub = plan.subjects?.[0] || { name: plan.name, code: '' };
+
+    let occNum = 1;
+    while (cur <= stop) {
+      const jsDay = cur.getDay();
+      const monBasedDay = jsDay === 0 ? 6 : jsDay - 1;
+
+      if (targetDays.includes(monBasedDay)) {
+        const slotDate = new Date(cur.getFullYear(), cur.getMonth(), cur.getDate(), hour, minute, 0);
+        const k = dayKey(slotDate);
+
+        for (const rawSec of planSecList) {
+          const secName = typeof rawSec === 'object' ? (rawSec.name || rawSec.id || 'A') : String(rawSec);
+          const matchedSec = allSections.find(s => s.id === secName || s.name === secName);
+          const subName = firstSub.name || plan.name || 'Lab Session';
+
+          const hasCollision = existingSessions.some(s => {
+            if (!s.scheduled_at) return false;
+            const sd = new Date(s.scheduled_at);
+            if (dayKey(sd) !== k) return false;
+            if (sd.getHours() !== hour) return false;
+            const matchSec = (s.section_name && s.section_name === secName) || (s.section_id && matchedSec && s.section_id === matchedSec.id);
+            const matchSub = (s.subject_name && s.subject_name.toLowerCase() === subName.toLowerCase());
+            return matchSec || matchSub;
+          });
+
+          if (!hasCollision) {
+            projected.push({
+              id: `projected-${plan.id}-${k}-${secName}-${occNum}`,
+              title: `${plan.name} — Session ${occNum}`,
+              status: 'scheduled',
+              scheduled_at: slotDate.toISOString(),
+              duration_minutes: plan.duration_minutes || 60,
+              instructor_id: plan.instructor_id,
+              instructor_name: plan.instructor_name || 'Dr. Alan Turing',
+              subject_name: subName,
+              subject_code: firstSub.code || '',
+              section_id: matchedSec?.id,
+              section_name: secName,
+              batch_id: plan.batch_id,
+              batch_name: plan.batch_name || 'Batch 2026',
+              department_name: plan.department_name || 'Computer Science & Engineering',
+              department_code: plan.department_code || 'CSE',
+              academic_year_label: plan.academic_year_label || '2026 – 2027',
+              room: plan.room || 'Lab 1 (Main Block)',
+              student_count: 10,
+              students_total_count: 10,
+              students_online_count: 0,
+              is_recurring_projection: true,
+            });
+          }
+        }
+        occNum++;
+      }
+      cur.setDate(cur.getDate() + 1);
+    }
+  }
+
+  return projected;
+}
+
 // ── Edit modal for Upcoming sessions ──────────────────────────────────────────
 
 interface EditModalProps {
@@ -448,9 +567,20 @@ function SessionsPageContent() {
 
   // Start New Session modal
   const [showStartModal, setShowStartModal] = useState(false);
-  const [startForm, setStartForm] = useState({
+  const [startForm, setStartForm] = useState<{
+    title: string;
+    section_id: string;
+    section_ids?: string[];
+    subject_id: string;
+    instructor_id: string;
+    duration_minutes: number;
+    room: string;
+    start_immediately: boolean;
+    scheduled_at: string;
+  }>({
     title: '',
     section_id: '',
+    section_ids: [],
     subject_id: '',
     instructor_id: '',
     duration_minutes: 60,
@@ -558,7 +688,7 @@ function SessionsPageContent() {
   const [selectedSessionDetails, setSelectedSessionDetails] = useState<SessionEnriched | null>(null);
 
   // 7 Calendar filter states
-  const [selectedCalYear, setSelectedCalYear] = useState<string>('2026 - 2027');
+  const [selectedCalYear, setSelectedCalYear] = useState<string>('');
   const [selectedCalDept, setSelectedCalDept] = useState<string>('');
   const [selectedCalBatch, setSelectedCalBatch] = useState<string>('');
   const [selectedCalSection, setSelectedCalSection] = useState<string>('');
@@ -845,12 +975,22 @@ function SessionsPageContent() {
     setWeekLoading(true);
     try {
       const we = new Date(ws);
-      we.setDate(we.getDate() + 35); // Fetch 5 weeks to ensure day/agenda/week/month coverage
-      const fromISO = new Date(ws.getTime() - 7 * 86400000).toISOString();
+      we.setDate(we.getDate() + 45); // Fetch 6+ weeks to cover full month/agenda views
+      const fromDate = new Date(ws.getTime() - 7 * 86400000);
+      const fromISO = fromDate.toISOString();
       const toISO = we.toISOString();
-      const sessions = await cachedFetch(['week', fromISO, toISO],
-        () => institutionService.getSessionsRange(fromISO, toISO));
-      setWeekSessions(sessions);
+
+      const [sessions, plansRes] = await Promise.all([
+        cachedFetch(['week', fromISO, toISO], () => institutionService.getSessionsRange(fromISO, toISO)),
+        cachedFetch(['plans_active_calendar'], () => institutionService.getRecurringPlans({ status: 'active', per_page: 100 })).catch(() => ({ plans: [] })),
+      ]);
+
+      const concreteSessions: SessionEnriched[] = sessions || [];
+      const activePlans: RecurringPlan[] = (plansRes as any)?.plans || [];
+
+      // Project virtual recurring occurrences for future dates if concrete instances aren't generated yet
+      const projectedSessions = projectRecurringOccurrences(activePlans, fromDate, we, concreteSessions, allSections);
+      setWeekSessions([...concreteSessions, ...projectedSessions]);
     } catch {
       setWeekSessions([]);
     }
@@ -877,7 +1017,9 @@ function SessionsPageContent() {
       if (selectedCalYear && selectedCalYear !== 'All Years') {
         const yr = (s.academic_year_label || '').toLowerCase();
         const target = selectedCalYear.toLowerCase();
-        if (!yr.includes('2026') && !target.includes('2026') && !yr.includes(target)) return false;
+        const normYr = yr.replace(/[–—]/g, '-').replace(/\s+/g, '');
+        const normTarget = target.replace(/[–—]/g, '-').replace(/\s+/g, '');
+        if (normYr && !normYr.includes(normTarget) && !normTarget.includes(normYr)) return false;
       }
       if (selectedCalDept && selectedCalDept !== 'All Departments') {
         const dName = (s.department_name || '').toLowerCase();
@@ -1106,15 +1248,20 @@ function SessionsPageContent() {
     const schedDate = new Date(dateStr);
     schedDate.setHours(parseInt(h) || 9, parseInt(m) || 0, 0, 0);
 
+    const pad = (n: number) => String(n).padStart(2, '0');
+    const localIso = `${schedDate.getFullYear()}-${pad(schedDate.getMonth() + 1)}-${pad(schedDate.getDate())}T${pad(schedDate.getHours())}:${pad(schedDate.getMinutes())}`;
+    const defaultSecId = allSections[0]?.id || '';
+
     setStartForm({
       title: 'Practical Lab Session',
-      section_id: allSections[0]?.id || '',
+      section_id: defaultSecId,
+      section_ids: defaultSecId ? [defaultSecId] : [],
       subject_id: allSubjects[0]?.id || '',
       instructor_id: instructors[0]?.id || '',
       duration_minutes: 120,
       room,
       start_immediately: false,
-      scheduled_at: schedDate.toISOString().slice(0, 16),
+      scheduled_at: localIso,
     });
     setShowStartModal(true);
   };
@@ -1555,10 +1702,12 @@ function SessionsPageContent() {
 
   // When opening Start Modal, auto-select first section/subject if available
   useEffect(() => {
-    if (showStartModal && allSections.length > 0 && !startForm.section_id) {
+    if (showStartModal && allSections.length > 0 && !startForm.section_id && (startForm.section_ids || []).length === 0) {
+      const firstSecId = allSections[0]?.id || '';
       setStartForm(prev => ({
         ...prev,
-        section_id: allSections[0]?.id || '',
+        section_id: firstSecId,
+        section_ids: firstSecId ? [firstSecId] : [],
         subject_id: allSubjects[0]?.id || '',
         instructor_id: instructors[0]?.id || '',
         title: allSubjects[0]?.name ? `${allSubjects[0].name} Lab Session` : 'New Lab Session',
@@ -1605,14 +1754,18 @@ function SessionsPageContent() {
   // Create new session
   const handleCreateSession = async () => {
     if (!startForm.title.trim()) { toast3('Please enter a session title.'); return; }
-    if (!startForm.section_id) { toast3('Please select a section.'); return; }
+    const selectedSecIds = (startForm.section_ids && startForm.section_ids.length > 0)
+      ? startForm.section_ids
+      : (startForm.section_id ? [startForm.section_id] : []);
+    if (selectedSecIds.length === 0) { toast3('Please select at least one section.'); return; }
     if (!startForm.subject_id) { toast3('Please select a subject.'); return; }
 
     setStartSubmitting(true);
     try {
-      await institutionService.createLiveSession({
+      const res = await institutionService.createLiveSession({
         title: startForm.title.trim(),
-        section_id: startForm.section_id,
+        section_id: selectedSecIds[0],
+        section_ids: selectedSecIds,
         subject_id: startForm.subject_id,
         instructor_id: startForm.instructor_id || undefined,
         scheduled_at: startForm.scheduled_at ? new Date(startForm.scheduled_at).toISOString() : undefined,
@@ -1620,7 +1773,15 @@ function SessionsPageContent() {
         room: startForm.room || 'Lab 1 (Main Block)',
         start_immediately: startForm.start_immediately,
       });
-      toast3(startForm.start_immediately ? '✓ Live session launched!' : '✓ Session scheduled on calendar.');
+      const count = selectedSecIds.length;
+      toast3(
+        startForm.start_immediately
+          ? (count > 1 ? `✓ Live sessions launched for ${count} sections!` : '✓ Live session launched!')
+          : (count > 1 ? `✓ ${count} lab sessions scheduled on calendar!` : '✓ Session scheduled on calendar.')
+      );
+      if (res?.warnings && Array.isArray(res.warnings) && res.warnings.length > 0) {
+        setTimeout(() => toast3(`Notice: ${res.warnings[0]}`), 2500);
+      }
       setShowStartModal(false);
       invalidateSessions();
       loadLive();
@@ -2640,7 +2801,7 @@ function SessionsPageContent() {
                         onClick={() => { setSelectedCalYear('2026 - 2027'); setOpenCalFilter(null); }}>
                         <span>2026 – 2027</span>
                       </div>
-                      {academicYears.map(y => (
+                      {academicYears.filter(y => y.year_label !== '2026 - 2027').map(y => (
                         <div key={y.id} className={`${liveStyles.filterDropdownOption} ${selectedCalYear === y.year_label ? liveStyles.filterDropdownOptionSelected : ''}`}
                           onClick={() => { setSelectedCalYear(y.year_label); setOpenCalFilter(null); }}>
                           <span>{y.year_label}</span>
@@ -2659,7 +2820,7 @@ function SessionsPageContent() {
                     <div className={liveStyles.filterIconWrap}><Building2 size={15} /></div>
                     <div className={liveStyles.filterInfo}>
                       <span className={liveStyles.filterLabel}>Department</span>
-                      <span className={liveStyles.filterValue}>{selectedCalDept || 'Computer Science & Engg…'}</span>
+                      <span className={liveStyles.filterValue}>{selectedCalDept || 'All Departments'}</span>
                     </div>
                   </div>
                   <ChevronDown size={14} className={`${liveStyles.filterChevron} ${openCalFilter === 'dept' ? liveStyles.filterChevronOpen : ''}`} />
@@ -2668,10 +2829,6 @@ function SessionsPageContent() {
                       <div className={`${liveStyles.filterDropdownOption} ${!selectedCalDept ? liveStyles.filterDropdownOptionSelected : ''}`}
                         onClick={() => { setSelectedCalDept(''); setOpenCalFilter(null); }}>
                         <span>All Departments</span>
-                      </div>
-                      <div className={`${liveStyles.filterDropdownOption} ${selectedCalDept === 'Computer Science' ? liveStyles.filterDropdownOptionSelected : ''}`}
-                        onClick={() => { setSelectedCalDept('Computer Science'); setOpenCalFilter(null); }}>
-                        <span>Computer Science &amp; Engg</span>
                       </div>
                       {departments.map(d => (
                         <div key={d.id} className={`${liveStyles.filterDropdownOption} ${selectedCalDept === d.name ? liveStyles.filterDropdownOptionSelected : ''}`}
@@ -2692,7 +2849,7 @@ function SessionsPageContent() {
                     <div className={liveStyles.filterIconWrap}><Layers size={15} /></div>
                     <div className={liveStyles.filterInfo}>
                       <span className={liveStyles.filterLabel}>Batch</span>
-                      <span className={liveStyles.filterValue}>{selectedCalBatch || 'CSE 3rd Year (B.Tech)'}</span>
+                      <span className={liveStyles.filterValue}>{selectedCalBatch || 'All Batches'}</span>
                     </div>
                   </div>
                   <ChevronDown size={14} className={`${liveStyles.filterChevron} ${openCalFilter === 'batch' ? liveStyles.filterChevronOpen : ''}`} />
@@ -2701,10 +2858,6 @@ function SessionsPageContent() {
                       <div className={`${liveStyles.filterDropdownOption} ${!selectedCalBatch ? liveStyles.filterDropdownOptionSelected : ''}`}
                         onClick={() => { setSelectedCalBatch(''); setOpenCalFilter(null); }}>
                         <span>All Batches</span>
-                      </div>
-                      <div className={`${liveStyles.filterDropdownOption} ${selectedCalBatch === 'CSE 3rd Year' ? liveStyles.filterDropdownOptionSelected : ''}`}
-                        onClick={() => { setSelectedCalBatch('CSE 3rd Year'); setOpenCalFilter(null); }}>
-                        <span>CSE 3rd Year (B.Tech)</span>
                       </div>
                       {batches.map(b => (
                         <div key={b.id} className={`${liveStyles.filterDropdownOption} ${selectedCalBatch === b.name ? liveStyles.filterDropdownOptionSelected : ''}`}
@@ -2725,7 +2878,7 @@ function SessionsPageContent() {
                     <div className={liveStyles.filterIconWrap}><Users size={15} /></div>
                     <div className={liveStyles.filterInfo}>
                       <span className={liveStyles.filterLabel}>Section</span>
-                      <span className={liveStyles.filterValue}>{selectedCalSection || 'Section B'}</span>
+                      <span className={liveStyles.filterValue}>{selectedCalSection || 'All Sections'}</span>
                     </div>
                   </div>
                   <ChevronDown size={14} className={`${liveStyles.filterChevron} ${openCalFilter === 'section' ? liveStyles.filterChevronOpen : ''}`} />
@@ -2734,10 +2887,6 @@ function SessionsPageContent() {
                       <div className={`${liveStyles.filterDropdownOption} ${!selectedCalSection ? liveStyles.filterDropdownOptionSelected : ''}`}
                         onClick={() => { setSelectedCalSection(''); setOpenCalFilter(null); }}>
                         <span>All Sections</span>
-                      </div>
-                      <div className={`${liveStyles.filterDropdownOption} ${selectedCalSection === 'Section B' ? liveStyles.filterDropdownOptionSelected : ''}`}
-                        onClick={() => { setSelectedCalSection('Section B'); setOpenCalFilter(null); }}>
-                        <span>Section B</span>
                       </div>
                       {allSections.map(sec => (
                         <div key={sec.id} className={`${liveStyles.filterDropdownOption} ${selectedCalSection === sec.name ? liveStyles.filterDropdownOptionSelected : ''}`}
@@ -6726,22 +6875,163 @@ function SessionsPageContent() {
             </div>
 
             <div className={liveStyles.formField}>
-              <label className={liveStyles.formLabel}>Section *</label>
-              <select
-                className={liveStyles.formSelect}
-                value={startForm.section_id}
-                onChange={e => setStartForm({ ...startForm, section_id: e.target.value })}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 6 }}>
+                <label className={liveStyles.formLabel} style={{ marginBottom: 0 }}>
+                  Sections * <span style={{ fontSize: 11, fontWeight: 500, color: '#64748b' }}>(Select one or multiple)</span>
+                </label>
+                <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                  <span style={{
+                    fontSize: 11,
+                    padding: '2px 8px',
+                    borderRadius: 12,
+                    background: (startForm.section_ids || []).length > 0 ? '#ede9fe' : '#f1f5f9',
+                    color: (startForm.section_ids || []).length > 0 ? '#6d28d9' : '#64748b',
+                    fontWeight: 600,
+                  }}>
+                    {(startForm.section_ids || []).length} selected
+                  </span>
+                  <button
+                    type="button"
+                    style={{
+                      background: 'none',
+                      border: 'none',
+                      color: '#6366f1',
+                      fontSize: 12,
+                      cursor: 'pointer',
+                      fontWeight: 600,
+                      padding: 0,
+                    }}
+                    onClick={() => {
+                      const allIds = allSections.map(s => s.id);
+                      const isAll = (startForm.section_ids || []).length === allIds.length;
+                      const next = isAll ? [] : allIds;
+                      setStartForm({
+                        ...startForm,
+                        section_ids: next,
+                        section_id: next[0] || '',
+                      });
+                    }}
+                  >
+                    {(startForm.section_ids || []).length === allSections.length ? 'Clear All' : 'Select All'}
+                  </button>
+                </div>
+              </div>
+
+              {/* Multi-select section chip / badge preview */}
+              {(startForm.section_ids || []).length > 0 && (
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: 6, marginBottom: 8 }}>
+                  {(startForm.section_ids || []).map(sid => {
+                    const sec = allSections.find(s => s.id === sid);
+                    const b = sec ? batches.find(batch => batch.id === sec.batch_id) : null;
+                    return (
+                      <span
+                        key={sid}
+                        style={{
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: 6,
+                          padding: '4px 10px',
+                          borderRadius: 6,
+                          background: '#f5f3ff',
+                          border: '1px solid #ddd6fe',
+                          color: '#5b21b6',
+                          fontSize: 12,
+                          fontWeight: 500,
+                        }}
+                      >
+                        Section {sec ? sec.name : sid} {b ? `(${b.name})` : ''}
+                        <button
+                          type="button"
+                          style={{
+                            background: 'none',
+                            border: 'none',
+                            cursor: 'pointer',
+                            color: '#7c3aed',
+                            padding: 0,
+                            display: 'flex',
+                            alignItems: 'center',
+                          }}
+                          onClick={() => {
+                            const next = (startForm.section_ids || []).filter(id => id !== sid);
+                            setStartForm({
+                              ...startForm,
+                              section_ids: next,
+                              section_id: next[0] || '',
+                            });
+                          }}
+                        >
+                          <X size={12} />
+                        </button>
+                      </span>
+                    );
+                  })}
+                </div>
+              )}
+
+              {/* Scrollable Checkbox List for Sections */}
+              <div
+                style={{
+                  maxHeight: 160,
+                  overflowY: 'auto',
+                  border: '1px solid #cbd5e1',
+                  borderRadius: 10,
+                  padding: '6px 8px',
+                  background: '#f8fafc',
+                  display: 'flex',
+                  flexDirection: 'column',
+                  gap: 4,
+                }}
               >
-                <option value="">Select Section…</option>
-                {allSections.map(sec => {
-                  const b = batches.find(batch => batch.id === sec.batch_id);
-                  return (
-                    <option key={sec.id} value={sec.id}>
-                      Section {sec.name} {b ? `(${b.name})` : ''}
-                    </option>
-                  );
-                })}
-              </select>
+                {allSections.length === 0 ? (
+                  <div style={{ padding: '8px 10px', fontSize: 12, color: '#64748b' }}>No sections found.</div>
+                ) : (
+                  allSections.map(sec => {
+                    const b = batches.find(batch => batch.id === sec.batch_id);
+                    const isChecked = (startForm.section_ids || []).includes(sec.id);
+                    return (
+                      <label
+                        key={sec.id}
+                        style={{
+                          display: 'flex',
+                          alignItems: 'center',
+                          gap: 10,
+                          padding: '6px 10px',
+                          borderRadius: 6,
+                          background: isChecked ? '#ede9fe' : '#ffffff',
+                          border: `1px solid ${isChecked ? '#c4b5fd' : '#e2e8f0'}`,
+                          cursor: 'pointer',
+                          transition: 'all 0.15s ease',
+                        }}
+                      >
+                        <input
+                          type="checkbox"
+                          checked={isChecked}
+                          onChange={e => {
+                            const cur = startForm.section_ids || [];
+                            const next = e.target.checked
+                              ? [...cur, sec.id]
+                              : cur.filter(id => id !== sec.id);
+                            setStartForm({
+                              ...startForm,
+                              section_ids: next,
+                              section_id: next[0] || '',
+                            });
+                          }}
+                          style={{ accentColor: '#7c3aed', width: 15, height: 15, cursor: 'pointer' }}
+                        />
+                        <span style={{ fontSize: 13, fontWeight: isChecked ? 600 : 500, color: isChecked ? '#5b21b6' : '#1e293b' }}>
+                          Section {sec.name}
+                        </span>
+                        {b && (
+                          <span style={{ fontSize: 11, color: '#64748b', marginLeft: 'auto' }}>
+                            {b.name}
+                          </span>
+                        )}
+                      </label>
+                    );
+                  })
+                )}
+              </div>
             </div>
 
             <div className={liveStyles.formField}>
@@ -6870,6 +7160,12 @@ function SessionsPageContent() {
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: 12, fontSize: 13 }}>
+              {selectedSessionDetails.is_recurring_projection && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '8px 12px', background: '#f5f3ff', borderRadius: 8, border: '1px solid #ddd6fe', color: '#6d28d9', fontSize: 12, fontWeight: 500 }}>
+                  <Repeat size={14} /> Recurring Plan Projection (Virtual occurrence)
+                </div>
+              )}
+
               <div style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid #f1f5f9' }}>
                 <span style={{ color: '#64748b', fontWeight: 600 }}>Status</span>
                 <StatusBadge status={selectedSessionDetails.status} />
@@ -6911,7 +7207,7 @@ function SessionsPageContent() {
                   <ExternalLink size={13} /> Open Live Lab
                 </button>
               )}
-              {selectedSessionDetails.status === 'scheduled' && (
+              {selectedSessionDetails.status === 'scheduled' && !selectedSessionDetails.is_recurring_projection && (
                 <button
                   className={liveStyles.btnCardAction}
                   onClick={() => {
@@ -6920,6 +7216,32 @@ function SessionsPageContent() {
                   }}
                 >
                   <Edit2 size={13} /> Edit Session
+                </button>
+              )}
+              {selectedSessionDetails.is_recurring_projection && (
+                <button
+                  className={liveStyles.btnSubmit}
+                  style={{ background: '#7c3aed' }}
+                  onClick={() => {
+                    const d = new Date(selectedSessionDetails.scheduled_at);
+                    const pad = (n: number) => String(n).padStart(2, '0');
+                    const localIso = `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}T${pad(d.getHours())}:${pad(d.getMinutes())}`;
+                    setStartForm({
+                      title: selectedSessionDetails.title || 'Lab Session',
+                      section_id: selectedSessionDetails.section_id || '',
+                      section_ids: selectedSessionDetails.section_id ? [selectedSessionDetails.section_id] : [],
+                      subject_id: allSubjects.find(sub => sub.name === selectedSessionDetails.subject_name)?.id || allSubjects[0]?.id || '',
+                      instructor_id: selectedSessionDetails.instructor_id || '',
+                      duration_minutes: selectedSessionDetails.duration_minutes || 60,
+                      room: selectedSessionDetails.room || 'Lab 1 (Main Block)',
+                      start_immediately: false,
+                      scheduled_at: localIso,
+                    });
+                    setSelectedSessionDetails(null);
+                    setShowStartModal(true);
+                  }}
+                >
+                  <Plus size={13} /> Instantiate / Customize
                 </button>
               )}
               <button className={liveStyles.btnCancel} onClick={() => setSelectedSessionDetails(null)}>

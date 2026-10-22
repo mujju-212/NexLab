@@ -74,7 +74,8 @@ function formatDateTime(isoString?: string): string {
 export default function ProfilePage() {
   const router = useRouter();
   const queryClient = useQueryClient();
-  const { user: authUser, setUser: setAuthUser } = useAuthStore();
+  const { user, setUser: setAuthUser } = useAuthStore();
+  const authUser = user;
 
   // Active tab state
   const [activeTab, setActiveTab] = useState<'profile' | 'notifications' | 'billing' | 'ai' | 'faq'>('profile');
@@ -382,13 +383,13 @@ export default function ProfilePage() {
                   </div>
 
                   <p className={styles.heroInstitution}>
-                    {profileData?.institution?.name || 'Greenwood Institute'}
+                    {profileData?.institution?.name || user?.institution_name || 'Institution'}
                   </p>
 
                   <div className={styles.heroContactRow}>
                     <div className={styles.heroContactItem}>
                       <Mail size={14} color="#7c3aed" />
-                      <span>{profileData?.user?.email || 'inst.admin@nexlab.demo'}</span>
+                      <span>{profileData?.user?.email || user?.email || ''}</span>
                     </div>
 
                     <div className={styles.heroContactItem}>
@@ -522,7 +523,7 @@ export default function ProfilePage() {
                   <label className={styles.fieldLabel}>Institution</label>
                   <div className={styles.fieldReadOnlyBox}>
                     <Building2 size={15} color="#7c3aed" />
-                    <span>{profileData?.institution?.name || 'Greenwood Institute'}</span>
+                    <span>{profileData?.institution?.name || user?.institution_name || 'Institution'}</span>
                   </div>
                 </div>
 
@@ -1131,7 +1132,7 @@ export default function ProfilePage() {
                   Institution Administrator
                 </p>
                 <p style={{ margin: '0 0 16px 0', fontSize: 13, color: '#64748b' }}>
-                  {profileData?.institution?.name || 'Greenwood Institute'}
+                  {profileData?.institution?.name || user?.institution_name || 'Institution'}
                 </p>
                 <div style={{ background: '#f8fafc', padding: 14, borderRadius: 10, fontStyle: 'italic', fontSize: 13, color: '#475569', marginBottom: 16 }}>
                   &ldquo; {profileData?.user?.bio || 'Empowering education through technology.'} &rdquo;

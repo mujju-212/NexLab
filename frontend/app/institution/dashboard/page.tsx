@@ -51,7 +51,7 @@ export default function InstitutionDashboardPage() {
     }).format(new Date());
   }, []);
 
-  const institutionTitle = data?.institution_name || 'Greenwood Institute';
+  const institutionTitle = data?.institution_name || user?.institution_name || 'Institution';
 
   const stats = data?.stats;
 
@@ -60,9 +60,9 @@ export default function InstitutionDashboardPage() {
     {
       id: 'students',
       label: 'Total Students',
-      value: stats?.students ?? 245,
-      growth: stats?.students_growth ?? '+12%',
-      delta: stats?.students_delta ?? '+26 this month',
+      value: stats?.students ?? 0,
+      growth: stats?.students_growth && stats.students_growth !== '0%' ? stats.students_growth : undefined,
+      delta: stats?.students_delta ?? (stats?.students === 0 ? 'No students enrolled' : '0 this month'),
       Icon: GraduationCap,
       color: '#7c3aed',
       bg: '#f5f3ff',
@@ -71,9 +71,9 @@ export default function InstitutionDashboardPage() {
     {
       id: 'instructors',
       label: 'Total Instructors',
-      value: stats?.instructors ?? 18,
-      growth: stats?.instructors_growth ?? '+6%',
-      delta: stats?.instructors_delta ?? '+2 this month',
+      value: stats?.instructors ?? 0,
+      growth: stats?.instructors_growth && stats.instructors_growth !== '0%' ? stats.instructors_growth : undefined,
+      delta: stats?.instructors_delta ?? (stats?.instructors === 0 ? 'No instructors yet' : '0 this month'),
       Icon: Users,
       color: '#10b981',
       bg: '#ecfdf5',
@@ -82,9 +82,9 @@ export default function InstitutionDashboardPage() {
     {
       id: 'batches',
       label: 'Total Batches',
-      value: stats?.batches ?? 12,
-      growth: stats?.batches_growth ?? '+20%',
-      delta: stats?.batches_delta ?? '+2 this month',
+      value: stats?.batches ?? 0,
+      growth: stats?.batches_growth && stats.batches_growth !== '0%' ? stats.batches_growth : undefined,
+      delta: stats?.batches_delta ?? (stats?.batches === 0 ? 'No batches yet' : '0 this month'),
       Icon: Layers,
       color: '#3b82f6',
       bg: '#eff6ff',
@@ -93,9 +93,9 @@ export default function InstitutionDashboardPage() {
     {
       id: 'subjects',
       label: 'Total Subjects',
-      value: stats?.subjects ?? 36,
-      growth: stats?.subjects_growth ?? '+9%',
-      delta: stats?.subjects_delta ?? '+3 this month',
+      value: stats?.subjects ?? 0,
+      growth: stats?.subjects_growth && stats.subjects_growth !== '0%' ? stats.subjects_growth : undefined,
+      delta: stats?.subjects_delta ?? (stats?.subjects === 0 ? 'No subjects yet' : '0 this month'),
       Icon: BookOpen,
       color: '#f59e0b',
       bg: '#fffbeb',
@@ -104,9 +104,9 @@ export default function InstitutionDashboardPage() {
     {
       id: 'sessions',
       label: 'Active Sessions',
-      value: stats?.active_sessions ?? 4,
+      value: stats?.active_sessions ?? 0,
       isLiveBadge: true,
-      liveCount: stats?.live_sessions ?? 2,
+      liveCount: stats?.live_sessions ?? 0,
       Icon: Radio,
       color: '#ef4444',
       bg: '#fef2f2',
@@ -220,7 +220,7 @@ export default function InstitutionDashboardPage() {
                       </span>
                     ) : (
                       <>
-                        <span className={styles.kpiGrowth}>↑ {card.growth}</span>
+                        {card.growth && <span className={styles.kpiGrowth}>↑ {card.growth}</span>}
                         <span className={styles.kpiDelta}>{card.delta}</span>
                       </>
                     )}

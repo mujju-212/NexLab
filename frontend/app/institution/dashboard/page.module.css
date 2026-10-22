@@ -132,7 +132,7 @@
 /* â”€â”€ Modal â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€ */
 .modalOverlay {
   position: fixed; inset: 0; background: rgba(15,10,46,.38);
-  backdrop-filter: blur(6px); z-index: 200;
+  backdrop-filter: blur(6px); z-index: 1000;
   display: flex; align-items: center; justify-content: center;
   animation: fadeIn .15s ease;
 }

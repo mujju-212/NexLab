@@ -14,7 +14,8 @@ import {
   Plus, Upload, Download, Search, LayoutList, LayoutGrid, CheckCircle,
   X, Edit3, Mail, Phone, MapPin, Calendar, MoreHorizontal, KeyRound,
   Trash2, User, Shield, GraduationCap, Users, Clock, AlertTriangle,
-  ChevronLeft, ChevronRight, MessageSquare, Power, ArrowUpDown, Filter
+  ChevronLeft, ChevronRight, MessageSquare, Power, ArrowUpDown, Filter,
+  Copy, Eye, EyeOff, Check, CheckCircle2, RefreshCw, ShieldCheck
 } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -94,10 +95,26 @@ export default function UsersPage() {
   // Modals & Action Menus
   const [showAddModal, setShowAddModal] = useState(false);
   const [addMode, setAddMode] = useState<'single' | 'bulk'>('single');
+  const [showAddPw, setShowAddPw] = useState(false);
+  const [createdCreds, setCreatedCreds] = useState<{
+    user: InstitutionUser;
+    temp_password?: string;
+  } | null>(null);
+  const [copiedCreatedPw, setCopiedCreatedPw] = useState(false);
+  const [bulkCredsResult, setBulkCredsResult] = useState<{
+    created: number;
+    skipped: number;
+    credentials?: Array<{ email: string; temp_password: string }>;
+    message?: string;
+  } | null>(null);
   const [editUser, setEditUser] = useState<InstitutionUser | null>(null);
   const [resetPwUser, setResetPwUser] = useState<InstitutionUser | null>(null);
   const [tempPassword, setTempPassword] = useState<string | null>(null);
   const [copiedPw, setCopiedPw] = useState(false);
+  const [mustChangePw, setMustChangePw] = useState(true);
+  const [showResetPwText, setShowResetPwText] = useState(true);
+  const [resetPwSuccess, setResetPwSuccess] = useState<string | null>(null);
+  const [copiedFullCreds, setCopiedFullCreds] = useState(false);
   const [roleChangeUser, setRoleChangeUser] = useState<InstitutionUser | null>(null);
   const [newRole, setNewRole] = useState<'student' | 'instructor' | 'institution_admin'>('student');
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<InstitutionUser | null>(null);
@@ -181,9 +198,6 @@ export default function UsersPage() {
     if (selectedUser) {
       const fresh = users.find(u => u.id === selectedUser.id);
       if (fresh) setSelectedUser(fresh);
-    } else if (users.length > 0) {
-      // Auto-select first user (e.g. Aadhya Pillai) to match the reference preview!
-      setSelectedUser(users[0]);
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [users]);
@@ -195,11 +209,15 @@ export default function UsersPage() {
     enabled: !!selectedUser,
   });
 
-  // Close floating action menu when clicking outside
+  // Close floating action menu or open modals on Escape key
   useEffect(() => {
-    const handleDocClick = () => setOpenActionMenuId(null);
-    document.addEventListener('click', handleDocClick);
-    return () => document.removeEventListener('click', handleDocClick);
+    const handleKeyDown = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') {
+        setOpenActionMenuId(null);
+      }
+    };
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
   }, []);
 
   // ── 3. Role Tab Counts — from the server's stats block (whole-institution) ─
@@ -294,22 +312,40 @@ export default function UsersPage() {
     setResetPwUser(u);
     setTempPassword(generated);
     setCopiedPw(false);
+    setMustChangePw(true);
+    setShowResetPwText(true);
+    setResetPwSuccess(null);
+    setCopiedFullCreds(false);
   };
 
   const handleConfirmResetPassword = async () => {
     if (!resetPwUser || !tempPassword) return;
     setSaving(true);
     try {
-      const { apiClient } = await import('@/services/api-client');
-      await apiClient.post(`/institution/users/${resetPwUser.id}/reset-password`, { new_password: tempPassword });
-      showToast(`Temporary password generated for ${resetPwUser.full_name}.`);
-      setResetPwUser(null);
-      setTempPassword(null);
-    } catch {
-      showToast('Password reset failed.');
+      const res = await institutionService.resetUserPassword(
+        resetPwUser.id,
+        tempPassword.trim() || undefined,
+        mustChangePw
+      );
+      const finalPw = res.temp_password || res.new_password || tempPassword;
+      setTempPassword(finalPw);
+      setResetPwSuccess(finalPw);
+      refreshUsers();
+      showToast(`Password successfully reset for ${resetPwUser.full_name}.`);
+    } catch (err: any) {
+      showToast(err?.response?.data?.error ?? 'Password reset failed.');
     } finally {
       setSaving(false);
     }
+  };
+
+  const handleCopyFullCreds = () => {
+    if (!resetPwUser || !tempPassword) return;
+    const loginUrl = typeof window !== 'undefined' ? `${window.location.origin}/login` : 'https://nexlab.app/login';
+    const text = `NexLab Account Credentials\nName: ${resetPwUser.full_name}\nEmail: ${resetPwUser.email}\nRole: ${resetPwUser.role}\nPassword: ${tempPassword}\nLogin Portal: ${loginUrl}\nNote: Please change your password upon first login.`;
+    navigator.clipboard.writeText(text);
+    setCopiedFullCreds(true);
+    setTimeout(() => setCopiedFullCreds(false), 2500);
   };
 
   const handleDeleteUser = async () => {
@@ -376,16 +412,20 @@ export default function UsersPage() {
     e.preventDefault();
     setSaving(true);
     try {
+      const initialPasswordChoice = form.password;
       const res = await institutionService.createUser(form);
-      showToast('temp_password' in (res as any)
-        ? `User created. One-time temporary password: ${(res as any).temp_password}`
-        : 'User created successfully!');
       setShowAddModal(false);
       setForm({
         full_name: '', email: '', role: 'student', password: '', roll_number: '', phone: '',
-        staff_id: '', department_id: '', year_of_study: 2, semester: 3,
+        location: 'Bengaluru, Karnataka', staff_id: '', department_id: '', section_id: '',
+        year_of_study: 2, semester: 3,
       });
       refreshUsers();
+      setCreatedCreds({
+        user: res.user,
+        temp_password: res.temp_password || initialPasswordChoice || undefined,
+      });
+      setCopiedCreatedPw(false);
     } catch (err: any) {
       showToast(err?.response?.data?.error ?? 'Failed to create user.');
     } finally {
@@ -398,12 +438,38 @@ export default function UsersPage() {
     if (!file) return;
     try {
       const result = await institutionService.bulkUploadUsers(file);
-      showToast(`Imported ${result.created} users successfully! (${result.skipped} skipped)`);
       setShowAddModal(false);
       refreshUsers();
+      if (result.credentials && result.credentials.length > 0) {
+        setBulkCredsResult({
+          created: result.created,
+          skipped: result.skipped,
+          credentials: result.credentials,
+          message: result.message,
+        });
+      } else {
+        showToast(`Imported ${result.created} users successfully! (${result.skipped} skipped)`);
+      }
     } catch {
       showToast('Bulk CSV upload failed. Check format and try again.');
+    } finally {
+      if (fileRef.current) fileRef.current.value = '';
     }
+  };
+
+  const handleDownloadBulkCreds = () => {
+    if (!bulkCredsResult?.credentials || bulkCredsResult.credentials.length === 0) return;
+    const header = 'email,temporary_password\n';
+    const rows = bulkCredsResult.credentials.map(c => `"${c.email}","${c.temp_password}"`).join('\n');
+    const blob = new Blob([header + rows], { type: 'text/csv;charset=utf-8;' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `user_credentials_${new Date().toISOString().slice(0, 10)}.csv`;
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    showToast('Credentials CSV downloaded!');
   };
 
   const handleExportCsv = async () => {
@@ -418,6 +484,17 @@ export default function UsersPage() {
   return (
     <InstitutionShell activePage="Users">
       <div className={styles.userPageContainer}>
+
+        {/* ── Transparent Backdrop for Closing 3-Dot Action Menu ───────────── */}
+        {openActionMenuId && (
+          <div
+            className={styles.menuBackdrop}
+            onClick={(e) => {
+              e.stopPropagation();
+              setOpenActionMenuId(null);
+            }}
+          />
+        )}
 
         {/* ── Toast Notification ──────────────────────────────────────────── */}
         {toast && (
@@ -479,8 +556,10 @@ export default function UsersPage() {
               <p className={styles.kpiValue}>{loading ? '—' : (stats?.total_users ?? counts.all)}</p>
               <p className={styles.kpiLabel}>Total Users</p>
               <div className={styles.kpiMeta}>
-                <span className={styles.kpiGrowth}>↑ {stats?.total_users_growth ?? '12%'}</span>
-                <span className={styles.kpiDelta}>{stats?.total_users_delta ?? '+28 this month'}</span>
+                {stats?.total_users_growth && stats.total_users_growth !== '0%' && (
+                  <span className={styles.kpiGrowth}>↑ {stats.total_users_growth}</span>
+                )}
+                <span className={styles.kpiDelta}>{stats?.total_users_delta ?? (counts.all === 0 ? 'No users yet' : '0 this month')}</span>
               </div>
             </div>
           </div>
@@ -497,8 +576,10 @@ export default function UsersPage() {
               <p className={styles.kpiValue}>{loading ? '—' : (stats?.students ?? counts.student)}</p>
               <p className={styles.kpiLabel}>Students</p>
               <div className={styles.kpiMeta}>
-                <span className={styles.kpiGrowth}>↑ {stats?.students_growth ?? '10%'}</span>
-                <span className={styles.kpiDelta}>{stats?.students_delta ?? '+22 this month'}</span>
+                {stats?.students_growth && stats.students_growth !== '0%' && (
+                  <span className={styles.kpiGrowth}>↑ {stats.students_growth}</span>
+                )}
+                <span className={styles.kpiDelta}>{stats?.students_delta ?? (counts.student === 0 ? 'No students enrolled' : '0 this month')}</span>
               </div>
             </div>
           </div>
@@ -515,8 +596,10 @@ export default function UsersPage() {
               <p className={styles.kpiValue}>{loading ? '—' : (stats?.instructors ?? counts.instructor)}</p>
               <p className={styles.kpiLabel}>Instructors</p>
               <div className={styles.kpiMeta}>
-                <span className={styles.kpiGrowth}>↑ {stats?.instructors_growth ?? '29%'}</span>
-                <span className={styles.kpiDelta}>{stats?.instructors_delta ?? '+6 this month'}</span>
+                {stats?.instructors_growth && stats.instructors_growth !== '0%' && (
+                  <span className={styles.kpiGrowth}>↑ {stats.instructors_growth}</span>
+                )}
+                <span className={styles.kpiDelta}>{stats?.instructors_delta ?? (counts.instructor === 0 ? 'No instructors yet' : '0 this month')}</span>
               </div>
             </div>
           </div>
@@ -744,18 +827,20 @@ export default function UsersPage() {
                           </td>
                         </tr>
                       ) : (
-                        pagedUsers.map(u => {
+                        pagedUsers.map((u, index) => {
                           const isSelected = selectedUser?.id === u.id;
                           const isChecked = selectedIds.includes(u.id);
                           const avatarBg = getAvatarColor(u.full_name);
                           const initials = getInitials(u.full_name);
                           const statusStr = u.status || (u.is_active ? 'active' : 'inactive');
+                          const isNearBottom = index >= Math.max(1, pagedUsers.length - 3);
 
                           return (
                             <tr
                               key={u.id}
                               className={`${styles.tableRow} ${isSelected ? styles.tableRowSelected : ''}`}
                               onClick={() => setSelectedUser(u)}
+                              style={{ cursor: 'pointer' }}
                             >
                               {/* Checkbox */}
                               <td onClick={e => e.stopPropagation()}>
@@ -828,33 +913,99 @@ export default function UsersPage() {
                               {/* Actions Menu */}
                               <td style={{ textAlign: 'center', position: 'relative' }} onClick={e => e.stopPropagation()}>
                                 <button
-                                  className={styles.actionMenuBtn}
-                                  onClick={() => setOpenActionMenuId(openActionMenuId === u.id ? null : u.id)}
+                                  type="button"
+                                  className={`${styles.actionMenuBtn} ${openActionMenuId === u.id ? styles.actionMenuBtnActive : ''}`}
+                                  onClick={(e) => {
+                                    e.stopPropagation();
+                                    setOpenActionMenuId(prev => prev === u.id ? null : u.id);
+                                  }}
+                                  title="Actions"
+                                  aria-label={`Actions for ${u.full_name}`}
                                 >
                                   <MoreHorizontal size={16} />
                                 </button>
 
                                 {openActionMenuId === u.id && (
-                                  <div className={styles.floatingMenu}>
-                                    <button className={styles.menuItem} onClick={() => { setSelectedUser(u); setOpenActionMenuId(null); }}>
-                                      <User size={13} /> View Details
+                                  <div
+                                    className={`${styles.floatingMenu} ${isNearBottom ? styles.floatingMenuUp : ''}`}
+                                    onClick={e => e.stopPropagation()}
+                                  >
+                                    <button
+                                      type="button"
+                                      className={styles.menuItem}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenActionMenuId(null);
+                                        setSelectedUser(u);
+                                      }}
+                                    >
+                                      <User size={13} /> View Profile
                                     </button>
-                                    <button className={styles.menuItem} onClick={() => { handleOpenEdit(u); setOpenActionMenuId(null); }}>
+                                    <button
+                                      type="button"
+                                      className={styles.menuItem}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenActionMenuId(null);
+                                        handleOpenEdit(u);
+                                      }}
+                                    >
                                       <Edit3 size={13} /> Edit User
                                     </button>
-                                    <button className={styles.menuItem} onClick={() => { handleOpenResetPassword(u); setOpenActionMenuId(null); }}>
+                                    <button
+                                      type="button"
+                                      className={styles.menuItem}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenActionMenuId(null);
+                                        handleOpenResetPassword(u);
+                                      }}
+                                    >
                                       <KeyRound size={13} /> Reset Password
                                     </button>
-                                    <button className={styles.menuItem} onClick={() => { setRoleChangeUser(u); setNewRole(u.role); setOpenActionMenuId(null); }}>
+                                    <button
+                                      type="button"
+                                      className={styles.menuItem}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenActionMenuId(null);
+                                        setRoleChangeUser(u);
+                                        setNewRole(u.role);
+                                      }}
+                                    >
                                       <ArrowUpDown size={13} /> Change Role
                                     </button>
-                                    <button className={styles.menuItem} onClick={() => { handleForceLogout(u); setOpenActionMenuId(null); }}>
+                                    <button
+                                      type="button"
+                                      className={styles.menuItem}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenActionMenuId(null);
+                                        handleForceLogout(u);
+                                      }}
+                                    >
                                       <Power size={13} /> Force Logout
                                     </button>
-                                    <button className={styles.menuItem} onClick={() => { handleToggleActive(u); setOpenActionMenuId(null); }}>
+                                    <button
+                                      type="button"
+                                      className={styles.menuItem}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenActionMenuId(null);
+                                        handleToggleActive(u);
+                                      }}
+                                    >
                                       <Power size={13} /> {u.is_active ? 'Deactivate' : 'Activate'}
                                     </button>
-                                    <button className={`${styles.menuItem} ${styles.menuItemDanger}`} onClick={() => { setDeleteConfirmUser(u); setOpenActionMenuId(null); }}>
+                                    <button
+                                      type="button"
+                                      className={`${styles.menuItem} ${styles.menuItemDanger}`}
+                                      onClick={(e) => {
+                                        e.stopPropagation();
+                                        setOpenActionMenuId(null);
+                                        setDeleteConfirmUser(u);
+                                      }}
+                                    >
                                       <Trash2 size={13} /> Delete User
                                     </button>
                                   </div>
@@ -934,6 +1085,7 @@ export default function UsersPage() {
                       key={u.id}
                       className={`${styles.userCard} ${isSelected ? styles.userCardSelected : ''}`}
                       onClick={() => setSelectedUser(u)}
+                      style={{ cursor: 'pointer' }}
                     >
                       <div className={styles.userCardHeader}>
                         <div className={styles.userCell}>
@@ -978,227 +1130,263 @@ export default function UsersPage() {
               </div>
             )}
           </div>
+        </div>
 
-          {/* ── 6. Selected User Profile Side Drawer (Right Panel) ───────────── */}
-          {selectedUser && (
-            <div className={styles.sideDrawer}>
-              {/* Drawer Header */}
-              <div className={styles.drawerHeader}>
-                <div className={styles.drawerUserIdentity}>
-                  <div className={styles.drawerAvatar} style={{ background: getAvatarColor(selectedUser.full_name) }}>
+        {/* ── MODAL: User Profile Popup Window ──────────────────────────────── */}
+        {selectedUser && (
+          <div className={styles.modalOverlay} onClick={() => setSelectedUser(null)}>
+            <div
+              className={styles.modal}
+              onClick={e => e.stopPropagation()}
+              style={{ maxWidth: 640, width: '92vw', padding: 28, borderRadius: 22 }}
+            >
+              {/* Header */}
+              <div style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', marginBottom: 20 }}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 14 }}>
+                  <div
+                    className={styles.avatarCircle}
+                    style={{
+                      background: getAvatarColor(selectedUser.full_name),
+                      width: 58, height: 58, fontSize: 22, fontWeight: 800, color: '#ffffff',
+                      boxShadow: '0 4px 14px rgba(0,0,0,0.12)'
+                    }}
+                  >
                     {getInitials(selectedUser.full_name)}
                   </div>
-                  <div className={styles.drawerNameGroup}>
-                    <div className={styles.drawerNameRow}>
-                      <h3 className={styles.drawerUserName}>{selectedUser.full_name}</h3>
+                  <div>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
+                      <h3 style={{ margin: 0, fontSize: 19, fontWeight: 800, color: '#0f172a', fontFamily: 'Space Grotesk, sans-serif' }}>
+                        {selectedUser.full_name}
+                      </h3>
                       {selectedUser.is_active ? (
-                        <span className={styles.statusBadgeActive} style={{ fontSize: 10.5, padding: '2px 8px' }}>
+                        <span className={styles.statusBadgeActive} style={{ fontSize: 11, padding: '2px 8px' }}>
                           <span className={styles.statusDot} /> Active
                         </span>
                       ) : (
-                        <span className={styles.statusBadgeInactive} style={{ fontSize: 10.5, padding: '2px 8px' }}>
+                        <span className={styles.statusBadgeInactive} style={{ fontSize: 11, padding: '2px 8px' }}>
                           <span className={styles.statusDot} /> Inactive
                         </span>
                       )}
                     </div>
-                    <div className={styles.drawerMetaRow}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 4 }}>
                       {selectedUser.role === 'student' ? (
-                        <span className={styles.roleBadgeStudent} style={{ fontSize: 10.5, padding: '2px 8px' }}>Student</span>
+                        <span className={styles.roleBadgeStudent} style={{ fontSize: 11, padding: '2px 8px' }}>Student</span>
                       ) : (
-                        <span className={styles.roleBadgeInstructor} style={{ fontSize: 10.5, padding: '2px 8px' }}>Instructor</span>
+                        <span className={styles.roleBadgeInstructor} style={{ fontSize: 11, padding: '2px 8px' }}>Instructor</span>
                       )}
-                      <span style={{ fontFamily: 'JetBrains Mono', color: '#64748b', fontSize: 11 }}>
+                      <span style={{ fontFamily: 'JetBrains Mono, monospace', color: '#64748b', fontSize: 12 }}>
                         {selectedUser.roll_number || selectedUser.staff_id || 'NDU2024012'}
                       </span>
                     </div>
                   </div>
                 </div>
 
-                <button className={styles.drawerCloseBtn} onClick={() => setSelectedUser(null)} title="Close Panel">
-                  <X size={15} />
+                <button
+                  type="button"
+                  className={styles.modalCloseBtn}
+                  onClick={() => setSelectedUser(null)}
+                  title="Close Profile"
+                >
+                  <X size={16} />
                 </button>
               </div>
 
-              {/* Drawer Sub-tabs */}
-              <div className={styles.drawerTabs}>
-                <span
-                  className={`${styles.drawerTabItem} ${drawerTab === 'overview' ? styles.drawerTabItemActive : ''}`}
-                  onClick={() => setDrawerTab('overview')}
+              {/* Action Buttons Toolbar inside the profile popup */}
+              <div style={{
+                display: 'flex', gap: 8, flexWrap: 'wrap', padding: '12px 14px',
+                background: '#f8fafc', borderRadius: 14, border: '1px solid #e2e8f0', marginBottom: 20
+              }}>
+                <button
+                  type="button"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '8px 14px', borderRadius: 10, border: '1.5px solid #c4b5fd',
+                    background: '#ffffff', color: '#7c3aed', fontSize: 12.5, fontWeight: 700,
+                    cursor: 'pointer', boxShadow: '0 2px 8px rgba(124,58,237,0.1)'
+                  }}
+                  onClick={() => {
+                    const u = selectedUser;
+                    setSelectedUser(null);
+                    handleOpenResetPassword(u);
+                  }}
                 >
-                  Overview
-                </span>
-                <span
-                  className={`${styles.drawerTabItem} ${drawerTab === 'academic' ? styles.drawerTabItemActive : ''}`}
-                  onClick={() => setDrawerTab('academic')}
+                  <KeyRound size={14} /> Reset Password
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '8px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0',
+                    background: '#ffffff', color: '#334155', fontSize: 12.5, fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => {
+                    const u = selectedUser;
+                    setSelectedUser(null);
+                    handleOpenEdit(u);
+                  }}
                 >
-                  Academic
-                </span>
-                <span
-                  className={`${styles.drawerTabItem} ${drawerTab === 'activity' ? styles.drawerTabItemActive : ''}`}
-                  onClick={() => setDrawerTab('activity')}
+                  <Edit3 size={14} /> Edit Profile
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '8px 14px', borderRadius: 10, border: '1.5px solid #e2e8f0',
+                    background: '#ffffff', color: '#334155', fontSize: 12.5, fontWeight: 600,
+                    cursor: 'pointer'
+                  }}
+                  onClick={() => handleForceLogout(selectedUser)}
                 >
-                  Activity
-                </span>
+                  <Power size={14} /> Force Logout
+                </button>
+
+                <button
+                  type="button"
+                  style={{
+                    display: 'inline-flex', alignItems: 'center', gap: 6,
+                    padding: '8px 14px', borderRadius: 10,
+                    border: selectedUser.is_active ? '1.5px solid #fecaca' : '1.5px solid #bbf7d0',
+                    background: selectedUser.is_active ? '#fff5f5' : '#f0fdf4',
+                    color: selectedUser.is_active ? '#dc2626' : '#16a34a',
+                    fontSize: 12.5, fontWeight: 700, cursor: 'pointer', marginLeft: 'auto'
+                  }}
+                  onClick={async () => {
+                    await handleToggleActive(selectedUser);
+                    setSelectedUser(prev => prev ? { ...prev, is_active: !prev.is_active } : null);
+                  }}
+                >
+                  <Power size={14} /> {selectedUser.is_active ? 'Deactivate' : 'Activate'}
+                </button>
               </div>
 
-              {drawerTab === 'overview' && (
-                <>
-                  {/* Contact Information */}
-                  <div className={styles.drawerSection}>
-                    <div className={styles.drawerSectionHead}>
-                      <h4 className={styles.drawerSectionTitle}>Contact Information</h4>
-                      <button className={styles.drawerEditLink} onClick={() => handleOpenEdit(selectedUser)}>
-                        Edit
-                      </button>
-                    </div>
-
-                    <div className={styles.drawerInfoList}>
-                      <div className={styles.drawerInfoRow}>
-                        <Mail className={styles.drawerInfoIcon} />
-                        <span>{selectedUser.email}</span>
-                      </div>
-                      <div className={styles.drawerInfoRow}>
-                        <Phone className={styles.drawerInfoIcon} />
-                        <span>{selectedUser.phone || 'Not provided'}</span>
-                      </div>
-                      <div className={styles.drawerInfoRow}>
-                        <MapPin className={styles.drawerInfoIcon} />
-                        <span>{selectedUser.location || 'Bengaluru, Karnataka'}</span>
-                      </div>
-                      <div className={styles.drawerInfoRow}>
-                        <Calendar className={styles.drawerInfoIcon} />
-                        <span>Joined {formatDate(selectedUser.created_at)}</span>
-                      </div>
-                    </div>
+              {/* Profile Details Grid */}
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+                {/* Contact Card */}
+                <div style={{
+                  padding: 16, borderRadius: 14, background: '#f8fafc',
+                  border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 10
+                }}>
+                  <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Contact Information
+                  </p>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                    <Mail size={14} style={{ color: '#7c3aed', flexShrink: 0 }} />
+                    <span style={{ color: '#1e293b', fontWeight: 600, overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                      {selectedUser.email}
+                    </span>
                   </div>
-
-                  {/* Academic Details */}
-                  <div className={styles.drawerSection}>
-                    <div className={styles.drawerSectionHead}>
-                      <h4 className={styles.drawerSectionTitle}>Academic Details</h4>
-                    </div>
-
-                    <div className={styles.academicGrid}>
-                      <div className={styles.academicFieldFull}>
-                        <span className={styles.academicFieldLabel}>Department</span>
-                        <span className={styles.academicFieldValue}>
-                          {selectedUser.department_name || 'Not assigned'}
-                        </span>
-                      </div>
-                      <div className={styles.academicField}>
-                        <span className={styles.academicFieldLabel}>Batch / Section</span>
-                        <span className={styles.academicFieldValue}>
-                          {selectedUser.batch_section_name || (selectedUser.role === 'student' ? 'Not assigned' : '—')}
-                        </span>
-                      </div>
-                      <div className={styles.academicField}>
-                        <span className={styles.academicFieldLabel}>Year / Semester</span>
-                        <span className={styles.academicFieldValue}>
-                          {selectedUser.role === 'student'
-                            ? (selectedUser.year_of_study ? `Year ${selectedUser.year_of_study} / Sem ${selectedUser.semester || '—'}` : 'Not assigned')
-                            : '—'}
-                        </span>
-                      </div>
-                      <div className={styles.academicFieldFull}>
-                        <span className={styles.academicFieldLabel}>Roll Number / ID</span>
-                        <span className={styles.academicFieldValue} style={{ fontFamily: 'JetBrains Mono' }}>
-                          {selectedUser.roll_number || selectedUser.staff_id || 'Not assigned'}
-                        </span>
-                      </div>
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                    <Phone size={14} style={{ color: '#7c3aed', flexShrink: 0 }} />
+                    <span style={{ color: '#475569' }}>{selectedUser.phone || 'Not provided'}</span>
                   </div>
-
-                  {/* 4 Performance Metric Chips */}
-                  <div className={styles.metricChipsGrid}>
-                    <div className={styles.metricChip}>
-                      <span className={styles.metricChipValue} style={{ color: '#7c3aed' }}>
-                        {userRecord?.metrics?.sessions_attended ?? 12}
-                      </span>
-                      <span className={styles.metricChipLabel}>Sessions Attended</span>
-                    </div>
-
-                    <div className={styles.metricChip}>
-                      <span className={styles.metricChipValue} style={{ color: '#2563eb' }}>
-                        {userRecord?.metrics?.experiments_count ?? 4}
-                      </span>
-                      <span className={styles.metricChipLabel}>Experiments</span>
-                    </div>
-
-                    <div className={styles.metricChip}>
-                      <span className={styles.metricChipValue} style={{ color: '#059669' }}>
-                        {userRecord?.metrics?.current_grade ?? 'A'}
-                      </span>
-                      <span className={styles.metricChipLabel}>Current Grade</span>
-                    </div>
-
-                    <div className={styles.metricChip}>
-                      <span className={styles.metricChipValue} style={{ color: '#7c3aed' }}>
-                        {userRecord?.metrics?.attendance_rate ?? 98}%
-                      </span>
-                      <span className={styles.metricChipLabel}>Attendance</span>
-                    </div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                    <MapPin size={14} style={{ color: '#7c3aed', flexShrink: 0 }} />
+                    <span style={{ color: '#475569' }}>{selectedUser.location || 'Bengaluru, Karnataka'}</span>
                   </div>
-
-                  {/* Bottom Action Buttons */}
-                  <div className={styles.drawerActionsRow}>
-                    <button
-                      className={styles.btnDrawerMessage}
-                      onClick={() => showToast(`Message sent to ${selectedUser.full_name}`)}
-                    >
-                      <MessageSquare size={14} /> Message
-                    </button>
-                    <button
-                      className={styles.btnDrawerEdit}
-                      onClick={() => handleOpenEdit(selectedUser)}
-                    >
-                      <Edit3 size={14} /> Edit User
-                    </button>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
+                    <Calendar size={14} style={{ color: '#7c3aed', flexShrink: 0 }} />
+                    <span style={{ color: '#475569' }}>Joined {formatDate(selectedUser.created_at)}</span>
                   </div>
+                </div>
 
-                  <button
-                    className={styles.btnDrawerDeactivate}
-                    onClick={() => handleToggleActive(selectedUser)}
-                  >
-                    <Power size={14} /> {selectedUser.is_active ? 'Deactivate User' : 'Activate User'}
-                  </button>
-                </>
-              )}
-
-              {drawerTab === 'academic' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <h4 className={styles.drawerSectionTitle}>Enrolled Sections & Subjects</h4>
-                  {userRecord?.enrolments && userRecord.enrolments.length > 0 ? (
-                    userRecord.enrolments.map(en => (
-                      <div key={en.section_id} style={{ padding: '10px 12px', background: '#fbfbfe', border: '1px solid #f1f5f9', borderRadius: 10 }}>
-                        <p style={{ margin: 0, fontWeight: 700, fontSize: 13 }}>Section: {en.section_name}</p>
-                        <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#64748b' }}>Batch: {en.batch_name || 'CS-2026'}</p>
-                      </div>
-                    ))
-                  ) : (
-                    <div style={{ padding: '10px 12px', background: '#fbfbfe', border: '1px solid #f1f5f9', borderRadius: 10 }}>
-                      <p style={{ margin: 0, fontWeight: 700, fontSize: 13 }}>Primary Section: {selectedUser.batch_section_name || 'CS-2026 A'}</p>
-                      <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#64748b' }}>Department: {selectedUser.department_name || 'Computer Science'}</p>
+                {/* Academic Placement Card */}
+                <div style={{
+                  padding: 16, borderRadius: 14, background: '#f8fafc',
+                  border: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', gap: 10
+                }}>
+                  <p style={{ margin: 0, fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Academic Placement
+                  </p>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                    <span style={{ color: '#64748b' }}>Department:</span>
+                    <span style={{ fontWeight: 600, color: '#1e293b' }}>
+                      {selectedUser.department_name || 'Not assigned'}
+                    </span>
+                  </div>
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                    <span style={{ color: '#64748b' }}>Batch / Section:</span>
+                    <span style={{ fontWeight: 600, color: '#1e293b' }}>
+                      {selectedUser.batch_section_name || '—'}
+                    </span>
+                  </div>
+                  {selectedUser.role === 'student' && (
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                      <span style={{ color: '#64748b' }}>Year / Sem:</span>
+                      <span style={{ fontWeight: 600, color: '#1e293b' }}>
+                        {selectedUser.year_of_study ? `Year ${selectedUser.year_of_study} · Sem ${selectedUser.semester || '—'}` : '—'}
+                      </span>
                     </div>
                   )}
+                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                    <span style={{ color: '#64748b' }}>ID / Code:</span>
+                    <span style={{ fontFamily: 'JetBrains Mono, monospace', fontWeight: 600, color: '#64748b' }}>
+                      {selectedUser.roll_number || selectedUser.staff_id || '—'}
+                    </span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Performance Metric Chips */}
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(4, 1fr)', gap: 10, marginBottom: 20 }}>
+                <div style={{ background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 12, padding: '12px 10px', textAlign: 'center' }}>
+                  <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#7c3aed', fontFamily: 'Space Grotesk, sans-serif' }}>
+                    {userRecord?.metrics?.sessions_attended ?? 12}
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 10.5, fontWeight: 700, color: '#64748b' }}>Sessions</p>
+                </div>
+                <div style={{ background: '#eff6ff', border: '1px solid #dbeafe', borderRadius: 12, padding: '12px 10px', textAlign: 'center' }}>
+                  <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#2563eb', fontFamily: 'Space Grotesk, sans-serif' }}>
+                    {userRecord?.metrics?.experiments_count ?? 4}
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 10.5, fontWeight: 700, color: '#64748b' }}>Experiments</p>
+                </div>
+                <div style={{ background: '#ecfdf5', border: '1px solid #d1fae5', borderRadius: 12, padding: '12px 10px', textAlign: 'center' }}>
+                  <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#059669', fontFamily: 'Space Grotesk, sans-serif' }}>
+                    {userRecord?.metrics?.current_grade ?? 'A'}
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 10.5, fontWeight: 700, color: '#64748b' }}>Grade</p>
+                </div>
+                <div style={{ background: '#faf5ff', border: '1px solid #ede9fe', borderRadius: 12, padding: '12px 10px', textAlign: 'center' }}>
+                  <p style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#7c3aed', fontFamily: 'Space Grotesk, sans-serif' }}>
+                    {userRecord?.metrics?.attendance_rate ?? 98}%
+                  </p>
+                  <p style={{ margin: '2px 0 0', fontSize: 10.5, fontWeight: 700, color: '#64748b' }}>Attendance</p>
+                </div>
+              </div>
+
+              {/* Enrolled Sections or Teaching Subjects if available */}
+              {userRecord?.enrolments && userRecord.enrolments.length > 0 && (
+                <div style={{ marginBottom: 20 }}>
+                  <p style={{ margin: '0 0 8px', fontSize: 11, fontWeight: 800, color: '#94a3b8', textTransform: 'uppercase', letterSpacing: '0.05em' }}>
+                    Enrolled Sections
+                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    {userRecord.enrolments.map(en => (
+                      <div key={en.section_id} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 12px', background: '#f8fafc', borderRadius: 10, border: '1px solid #e2e8f0', fontSize: 12.5 }}>
+                        <span style={{ fontWeight: 600, color: '#1e293b' }}>{en.section_name}</span>
+                        <span style={{ color: '#64748b' }}>{en.batch_name || en.program || 'Active'}</span>
+                      </div>
+                    ))}
+                  </div>
                 </div>
               )}
 
-              {drawerTab === 'activity' && (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
-                  <h4 className={styles.drawerSectionTitle}>Recent System Activity</h4>
-                  <div style={{ padding: '10px 12px', background: '#fbfbfe', border: '1px solid #f1f5f9', borderRadius: 10, fontSize: 12, color: '#475569' }}>
-                    <p style={{ margin: 0, fontWeight: 600 }}>Account Created</p>
-                    <p style={{ margin: '2px 0 0', color: '#94a3b8', fontSize: 11 }}>{formatDate(selectedUser.created_at)}</p>
-                  </div>
-                  <div style={{ padding: '10px 12px', background: '#fbfbfe', border: '1px solid #f1f5f9', borderRadius: 10, fontSize: 12, color: '#475569' }}>
-                    <p style={{ margin: 0, fontWeight: 600 }}>Security Status</p>
-                    <p style={{ margin: '2px 0 0', color: '#10b981', fontSize: 11 }}>Verified &amp; Active</p>
-                  </div>
-                </div>
-              )}
+              {/* Modal Footer */}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', borderTop: '1px solid #f1f5f9', paddingTop: 16 }}>
+                <button
+                  type="button"
+                  className={styles.btnModalCancel}
+                  onClick={() => setSelectedUser(null)}
+                >
+                  Close
+                </button>
+              </div>
             </div>
-          )}
-        </div>
+          </div>
+        )}
 
         {/* ── MODAL: Create User ────────────────────────────────────────────── */}
         {showAddModal && (
@@ -1261,6 +1449,50 @@ export default function UsersPage() {
                         value={form.email}
                         onChange={e => setForm({ ...form, email: e.target.value })}
                       />
+                    </div>
+
+                    <div className={styles.formField}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 2 }}>
+                        <label className={styles.formLabel} style={{ margin: 0 }}>Initial / Temporary Password</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const rand = `Nx-${Math.random().toString(36).slice(2, 8)}${Math.floor(Math.random() * 89 + 10)}!`;
+                            setForm(f => ({ ...f, password: rand }));
+                          }}
+                          style={{
+                            background: 'none', border: 'none', color: '#7c3aed', fontSize: 11.5,
+                            fontWeight: 700, cursor: 'pointer', padding: 0
+                          }}
+                        >
+                          Generate Random
+                        </button>
+                      </div>
+                      <div style={{ position: 'relative' }}>
+                        <input
+                          type={showAddPw ? 'text' : 'password'}
+                          className={styles.formInput}
+                          placeholder="Leave blank to auto-generate temporary password"
+                          value={form.password || ''}
+                          onChange={e => setForm({ ...form, password: e.target.value })}
+                          style={{ paddingRight: 38 }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowAddPw(v => !v)}
+                          style={{
+                            position: 'absolute', right: 10, top: '50%', transform: 'translateY(-50%)',
+                            background: 'none', border: 'none', cursor: 'pointer', color: '#94a3b8',
+                            display: 'flex', alignItems: 'center'
+                          }}
+                          aria-label={showAddPw ? 'Hide password' : 'Show password'}
+                        >
+                          {showAddPw ? <EyeOff size={15} /> : <Eye size={15} />}
+                        </button>
+                      </div>
+                      <span style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>
+                        User will be required to set their permanent password upon first login.
+                      </span>
                     </div>
 
                     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12 }}>
@@ -1556,54 +1788,172 @@ export default function UsersPage() {
 
         {/* ── MODAL: Reset Password ─────────────────────────────────────────── */}
         {resetPwUser && (
-          <div className={styles.modalOverlay} onClick={() => setResetPwUser(null)}>
-            <div className={styles.modal} onClick={e => e.stopPropagation()}>
+          <div className={styles.modalOverlay} onClick={() => { setResetPwUser(null); setResetPwSuccess(null); }}>
+            <div className={styles.modal} onClick={e => e.stopPropagation()} style={{ maxWidth: 460 }}>
               <div className={styles.modalHeader}>
-                <h3 className={styles.modalTitle}>Reset Password</h3>
-                <button className={styles.modalCloseBtn} onClick={() => setResetPwUser(null)}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                  <div style={{
+                    width: 36, height: 36, borderRadius: 10, background: '#faf5ff',
+                    color: '#9333ea', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <KeyRound size={18} />
+                  </div>
+                  <div>
+                    <h3 className={styles.modalTitle} style={{ margin: 0, fontSize: 16 }}>Reset User Password</h3>
+                    <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b' }}>{resetPwUser.full_name} ({resetPwUser.email})</p>
+                  </div>
+                </div>
+                <button className={styles.modalCloseBtn} onClick={() => { setResetPwUser(null); setResetPwSuccess(null); }}>
                   <X size={16} />
                 </button>
               </div>
 
-              <div className={styles.modalBody}>
-                <p style={{ fontSize: 13, color: '#64748b', margin: 0 }}>
-                  Generate a one-time temporary credential for <strong>{resetPwUser.full_name}</strong>. The user will be required to choose a new password upon logging in.
-                </p>
+              {resetPwSuccess ? (
+                <div>
+                  <div style={{ textAlign: 'center', padding: '10px 0 16px' }}>
+                    <div style={{
+                      width: 52, height: 52, borderRadius: '50%', background: '#ecfdf5',
+                      color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center',
+                      margin: '0 auto 12px'
+                    }}>
+                      <ShieldCheck size={28} />
+                    </div>
+                    <h4 style={{ margin: '0 0 4px', fontSize: 16, fontWeight: 700, color: '#0f172a' }}>Password Reset Successfully</h4>
+                    <p style={{ margin: 0, fontSize: 12.5, color: '#64748b' }}>
+                      The new credentials for <strong>{resetPwUser.full_name}</strong> are ready.
+                    </p>
+                  </div>
 
-                <div style={{
-                  background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 12, padding: '14px 16px',
-                  display: 'flex', alignItems: 'center', justifyContent: 'space-between',
-                }}>
-                  <span style={{ fontFamily: 'JetBrains Mono', fontSize: 15, fontWeight: 700, color: '#7c3aed' }}>
-                    {tempPassword}
-                  </span>
-                  <button
-                    type="button"
-                    style={{
-                      padding: '6px 12px', borderRadius: 8, border: '1px solid #ddd6fe',
-                      background: '#ffffff', color: '#7c3aed', fontSize: 12, fontWeight: 700, cursor: 'pointer',
-                    }}
-                    onClick={() => {
-                      if (tempPassword) {
-                        navigator.clipboard.writeText(tempPassword);
-                        setCopiedPw(true);
-                        setTimeout(() => setCopiedPw(false), 2000);
-                      }
-                    }}
-                  >
-                    {copiedPw ? 'Copied!' : 'Copy'}
-                  </button>
+                  <div style={{
+                    background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14,
+                    padding: '16px', display: 'flex', flexDirection: 'column', gap: 10, marginBottom: 20
+                  }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                      <span style={{ color: '#64748b' }}>Account Email:</span>
+                      <span style={{ fontWeight: 600, color: '#1e293b' }}>{resetPwUser.email}</span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5 }}>
+                      <span style={{ color: '#64748b' }}>New Password:</span>
+                      <span style={{
+                        fontFamily: 'JetBrains Mono, monospace', fontWeight: 700, fontSize: 14,
+                        color: '#7c3aed', background: '#ede9fe', padding: '3px 8px', borderRadius: 6
+                      }}>
+                        {resetPwSuccess}
+                      </span>
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
+                      <span style={{ color: '#64748b' }}>Force Logout:</span>
+                      <span style={{ color: '#16a34a', fontWeight: 600 }}>Active sessions revoked</span>
+                    </div>
+                  </div>
+
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                    <button
+                      type="button"
+                      className={styles.btnModalSubmit}
+                      style={{ justifyContent: 'center', width: '100%', padding: '10px 16px' }}
+                      onClick={handleCopyFullCreds}
+                    >
+                      {copiedFullCreds ? <Check size={16} /> : <Copy size={16} />}
+                      {copiedFullCreds ? 'Copied to Clipboard!' : 'Copy Full Credentials'}
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.btnModalCancel}
+                      style={{ justifyContent: 'center', width: '100%' }}
+                      onClick={() => { setResetPwUser(null); setResetPwSuccess(null); }}
+                    >
+                      Done
+                    </button>
+                  </div>
                 </div>
-              </div>
+              ) : (
+                <>
+                  <div className={styles.modalBody}>
+                    <p style={{ fontSize: 13, color: '#64748b', margin: '0 0 14px' }}>
+                      Set a custom password or generate a random one for <strong>{resetPwUser.full_name}</strong>. Existing sessions will be terminated.
+                    </p>
 
-              <div className={styles.modalFooter}>
-                <button type="button" className={styles.btnModalCancel} onClick={() => setResetPwUser(null)}>
-                  Cancel
-                </button>
-                <button type="button" className={styles.btnModalSubmit} onClick={handleConfirmResetPassword} disabled={saving}>
-                  {saving ? 'Applying…' : 'Apply Password'}
-                </button>
-              </div>
+                    <div style={{ marginBottom: 14 }}>
+                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                        <label className={styles.formLabel} style={{ margin: 0 }}>New Password</label>
+                        <button
+                          type="button"
+                          onClick={() => {
+                            const generated = `Nx-${Math.random().toString(36).slice(2, 8)}${Math.floor(Math.random() * 89 + 10)}!A`;
+                            setTempPassword(generated);
+                          }}
+                          style={{
+                            background: 'none', border: 'none', color: '#7c3aed', fontSize: 12,
+                            fontWeight: 600, cursor: 'pointer', display: 'inline-flex', alignItems: 'center', gap: 4
+                          }}
+                        >
+                          <RefreshCw size={11} /> Generate Random
+                        </button>
+                      </div>
+
+                      <div style={{ position: 'relative', display: 'flex', alignItems: 'center' }}>
+                        <input
+                          type={showResetPwText ? 'text' : 'password'}
+                          className={styles.formInput}
+                          value={tempPassword || ''}
+                          onChange={e => setTempPassword(e.target.value)}
+                          placeholder="Enter new password (min. 6 characters)"
+                          required
+                          style={{
+                            fontFamily: 'JetBrains Mono, monospace', fontSize: 13.5,
+                            paddingRight: 40, letterSpacing: showResetPwText ? '0.04em' : 'normal'
+                          }}
+                        />
+                        <button
+                          type="button"
+                          onClick={() => setShowResetPwText(!showResetPwText)}
+                          style={{
+                            position: 'absolute', right: 10, background: 'none', border: 'none',
+                            cursor: 'pointer', color: '#94a3b8', padding: 4, display: 'flex'
+                          }}
+                        >
+                          {showResetPwText ? <EyeOff size={16} /> : <Eye size={16} />}
+                        </button>
+                      </div>
+                      <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#94a3b8' }}>
+                        Must be at least 6 characters. Leave as generated or type a custom one.
+                      </p>
+                    </div>
+
+                    <div style={{
+                      background: 'rgba(245,243,255,0.6)', border: '1px solid #ede9fe',
+                      borderRadius: 10, padding: '10px 14px'
+                    }}>
+                      <label style={{ display: 'flex', alignItems: 'center', gap: 10, cursor: 'pointer', margin: 0 }}>
+                        <input
+                          type="checkbox"
+                          checked={mustChangePw}
+                          onChange={e => setMustChangePw(e.target.checked)}
+                          style={{ accentColor: '#7c3aed', width: 15, height: 15 }}
+                        />
+                        <span style={{ fontSize: 12.5, color: '#334155', fontWeight: 500 }}>
+                          Require user to change password on first login
+                        </span>
+                      </label>
+                    </div>
+                  </div>
+
+                  <div className={styles.modalFooter}>
+                    <button type="button" className={styles.btnModalCancel} onClick={() => setResetPwUser(null)}>
+                      Cancel
+                    </button>
+                    <button
+                      type="button"
+                      className={styles.btnModalSubmit}
+                      onClick={handleConfirmResetPassword}
+                      disabled={saving || !tempPassword || tempPassword.trim().length < 6}
+                    >
+                      {saving ? 'Applying…' : 'Apply Password Reset'}
+                    </button>
+                  </div>
+                </>
+              )}
             </div>
           </div>
         )}
@@ -1639,6 +1989,210 @@ export default function UsersPage() {
                   disabled={saving}
                 >
                   {saving ? 'Deleting…' : 'Confirm Delete'}
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── MODAL: Single User Created Credentials ──────────────────────── */}
+        {createdCreds && (
+          <div className={styles.modalOverlay} onClick={() => setCreatedCreds(null)}>
+            <div className={styles.modal} style={{ maxWidth: 480 }} onClick={e => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 12, background: 'rgba(16, 185, 129, 0.12)',
+                    color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <CheckCircle2 size={22} />
+                  </div>
+                  <div>
+                    <h3 className={styles.modalTitle}>Account Created!</h3>
+                    <p style={{ margin: 0, fontSize: 12.5, color: '#64748b' }}>
+                      {createdCreds.user.full_name} ({createdCreds.user.role})
+                    </p>
+                  </div>
+                </div>
+                <button className={styles.modalCloseBtn} onClick={() => setCreatedCreds(null)}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className={styles.modalBody}>
+                <p style={{ fontSize: 13, color: '#475569', margin: 0 }}>
+                  Share these login credentials with the user. They will be prompted to choose their own permanent password upon first login.
+                </p>
+
+                <div style={{
+                  background: '#f8fafc', border: '1.5px solid #e2e8f0', borderRadius: 14,
+                  padding: '16px 18px', display: 'flex', flexDirection: 'column', gap: 12
+                }}>
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Login Email
+                    </div>
+                    <div style={{ fontSize: 14, fontWeight: 600, color: '#1e293b', marginTop: 2 }}>
+                      {createdCreds.user.email}
+                    </div>
+                  </div>
+
+                  <div>
+                    <div style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase', letterSpacing: 0.5 }}>
+                      Temporary / Initial Password
+                    </div>
+                    <div style={{
+                      display: 'flex', alignItems: 'center', justifyContent: 'space-between',
+                      background: '#ffffff', border: '1.5px solid #ddd6fe', borderRadius: 10,
+                      padding: '8px 12px', marginTop: 4
+                    }}>
+                      <span style={{ fontFamily: 'monospace', fontSize: 15, fontWeight: 700, color: '#7c3aed' }}>
+                        {createdCreds.temp_password || '********'}
+                      </span>
+                      <button
+                        type="button"
+                        style={{
+                          padding: '6px 12px', borderRadius: 8, border: '1px solid #ddd6fe',
+                          background: '#f5f3ff', color: '#7c3aed', fontSize: 12, fontWeight: 700, cursor: 'pointer',
+                          display: 'flex', alignItems: 'center', gap: 5
+                        }}
+                        onClick={() => {
+                          if (createdCreds.temp_password) {
+                            navigator.clipboard.writeText(createdCreds.temp_password);
+                            setCopiedCreatedPw(true);
+                            setTimeout(() => setCopiedCreatedPw(false), 2000);
+                          }
+                        }}
+                      >
+                        {copiedCreatedPw ? <Check size={13} /> : <Copy size={13} />}
+                        {copiedCreatedPw ? 'Copied!' : 'Copy'}
+                      </button>
+                    </div>
+                  </div>
+                </div>
+
+                <div style={{
+                  background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10,
+                  padding: '10px 14px', fontSize: 12, color: '#92400e', lineHeight: 1.5
+                }}>
+                  🔒 <strong>How they log in:</strong> The user navigates to the login page (<code>/login</code>), signs in with this email and temporary password, and NexLab will automatically guide them to set their own private password.
+                </div>
+              </div>
+
+              <div className={styles.modalFooter} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  style={{
+                    padding: '9px 16px', borderRadius: 10, border: '1px solid #cbd5e1',
+                    background: '#ffffff', color: '#334155', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 6
+                  }}
+                  onClick={() => {
+                    const text = `NexLab Account Details\nRole: ${createdCreds.user.role}\nEmail: ${createdCreds.user.email}\nTemporary Password: ${createdCreds.temp_password}\nLogin Page: ${typeof window !== 'undefined' ? window.location.origin : ''}/login\n(Note: You will be required to change your password upon first login)`;
+                    navigator.clipboard.writeText(text);
+                    showToast('Full login credentials copied to clipboard!');
+                  }}
+                >
+                  <Copy size={14} /> Copy Full Details
+                </button>
+                <button
+                  type="button"
+                  className={styles.btnModalSubmit}
+                  onClick={() => setCreatedCreds(null)}
+                >
+                  Done
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── MODAL: Bulk CSV Import Credentials ───────────────────────────── */}
+        {bulkCredsResult && (
+          <div className={styles.modalOverlay} onClick={() => setBulkCredsResult(null)}>
+            <div className={styles.modal} style={{ maxWidth: 520 }} onClick={e => e.stopPropagation()}>
+              <div className={styles.modalHeader}>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+                  <div style={{
+                    width: 40, height: 40, borderRadius: 12, background: 'rgba(16, 185, 129, 0.12)',
+                    color: '#10b981', display: 'flex', alignItems: 'center', justifyContent: 'center'
+                  }}>
+                    <CheckCircle2 size={22} />
+                  </div>
+                  <div>
+                    <h3 className={styles.modalTitle}>Bulk Import Completed!</h3>
+                    <p style={{ margin: 0, fontSize: 12.5, color: '#64748b' }}>
+                      {bulkCredsResult.created} user(s) created · {bulkCredsResult.skipped} skipped
+                    </p>
+                  </div>
+                </div>
+                <button className={styles.modalCloseBtn} onClick={() => setBulkCredsResult(null)}>
+                  <X size={16} />
+                </button>
+              </div>
+
+              <div className={styles.modalBody}>
+                <p style={{ fontSize: 13, color: '#475569', margin: 0 }}>
+                  A unique temporary password was automatically generated for each newly imported account. Download the credentials spreadsheet below to distribute them to students or faculty.
+                </p>
+
+                {bulkCredsResult.credentials && bulkCredsResult.credentials.length > 0 && (
+                  <div style={{
+                    maxHeight: 180, overflowY: 'auto', border: '1px solid #e2e8f0',
+                    borderRadius: 10, background: '#f8fafc', padding: 8
+                  }}>
+                    <table style={{ width: '100%', fontSize: 12, borderCollapse: 'collapse' }}>
+                      <thead>
+                        <tr style={{ borderBottom: '1px solid #e2e8f0', color: '#64748b', textAlign: 'left' }}>
+                          <th style={{ padding: '6px 8px' }}>Email</th>
+                          <th style={{ padding: '6px 8px' }}>Temp Password</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {bulkCredsResult.credentials.slice(0, 50).map(c => (
+                          <tr key={c.email} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <td style={{ padding: '6px 8px', color: '#1e293b', fontWeight: 500 }}>{c.email}</td>
+                            <td style={{ padding: '6px 8px', fontFamily: 'monospace', color: '#7c3aed', fontWeight: 700 }}>
+                              {c.temp_password}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                    {bulkCredsResult.credentials.length > 50 && (
+                      <div style={{ textAlign: 'center', padding: 6, fontSize: 11, color: '#64748b' }}>
+                        + {bulkCredsResult.credentials.length - 50} more in downloaded CSV
+                      </div>
+                    )}
+                  </div>
+                )}
+
+                <div style={{
+                  background: '#fffbeb', border: '1px solid #fde68a', borderRadius: 10,
+                  padding: '10px 14px', fontSize: 12, color: '#92400e', lineHeight: 1.5
+                }}>
+                  🔒 Users will sign in at <code>/login</code> and must change this temporary password on their first login.
+                </div>
+              </div>
+
+              <div className={styles.modalFooter} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                <button
+                  type="button"
+                  style={{
+                    padding: '9px 16px', borderRadius: 10, border: '1px solid #ddd6fe',
+                    background: '#f5f3ff', color: '#7c3aed', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                    display: 'flex', alignItems: 'center', gap: 6
+                  }}
+                  onClick={handleDownloadBulkCreds}
+                >
+                  <Download size={15} /> Download Credentials CSV
+                </button>
+                <button
+                  type="button"
+                  className={styles.btnModalSubmit}
+                  onClick={() => setBulkCredsResult(null)}
+                >
+                  Done
                 </button>
               </div>
             </div>

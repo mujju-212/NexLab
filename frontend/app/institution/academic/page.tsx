@@ -910,7 +910,11 @@ function AcademicPageContent() {
                 <div className={styles.kpiMeta}>
                   <div className={styles.kpiNumber}>{years.length}</div>
                   <div className={styles.kpiLabel}>Academic Years</div>
-                  <div className={styles.kpiTrend}>&uarr; 2 this year</div>
+                  <div className={styles.kpiMetaSub}>
+                    {years.length === 0
+                      ? 'No academic years yet'
+                      : `${years.filter(y => y.is_active !== false).length} active${years.filter(y => y.is_active === false).length > 0 ? ` · ${years.filter(y => y.is_active === false).length} inactive` : ''}`}
+                  </div>
                 </div>
               </div>
 
@@ -921,7 +925,11 @@ function AcademicPageContent() {
                 <div className={styles.kpiMeta}>
                   <div className={styles.kpiNumber}>{batches.length}</div>
                   <div className={styles.kpiLabel}>Total Batches</div>
-                  <div className={styles.kpiTrend}>&uarr; 12%</div>
+                  <div className={styles.kpiMetaSub}>
+                    {batches.length === 0
+                      ? 'No batches yet'
+                      : `Across ${years.length} ${years.length === 1 ? 'academic year' : 'academic years'}`}
+                  </div>
                 </div>
               </div>
 
@@ -932,7 +940,11 @@ function AcademicPageContent() {
                 <div className={styles.kpiMeta}>
                   <div className={styles.kpiNumber}>{totalStudentsEnrolled}</div>
                   <div className={styles.kpiLabel}>Enrolled Students</div>
-                  <div className={styles.kpiTrend}>&uarr; 18%</div>
+                  <div className={styles.kpiMetaSub}>
+                    {totalStudentsEnrolled === 0
+                      ? 'No students enrolled'
+                      : `Across ${batches.length} ${batches.length === 1 ? 'batch' : 'batches'}`}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1249,7 +1261,11 @@ function AcademicPageContent() {
                 <div className={styles.kpiMeta}>
                   <div className={styles.kpiNumber}>{departments.length}</div>
                   <div className={styles.kpiLabel}>Total Departments</div>
-                  <div className={styles.kpiTrend}>&uarr; 25% <span className={styles.kpiSubtext}>+1 this month</span></div>
+                  <div className={styles.kpiMetaSub}>
+                    {departments.length === 0
+                      ? 'No departments yet'
+                      : `${departments.filter(d => d.is_active !== false).length} active${departments.filter(d => d.is_active === false).length > 0 ? ` · ${departments.filter(d => d.is_active === false).length} inactive` : ''}`}
+                  </div>
                 </div>
               </div>
 
@@ -1260,7 +1276,11 @@ function AcademicPageContent() {
                 <div className={styles.kpiMeta}>
                   <div className={styles.kpiNumber}>{totalStudentsEnrolled}</div>
                   <div className={styles.kpiLabel}>Students Enrolled</div>
-                  <div className={styles.kpiTrend}>&uarr; 18% <span className={styles.kpiSubtext}>+190 this month</span></div>
+                  <div className={styles.kpiMetaSub}>
+                    {totalStudentsEnrolled === 0
+                      ? 'No students enrolled'
+                      : `Across ${sections.length} ${sections.length === 1 ? 'section' : 'sections'}`}
+                  </div>
                 </div>
               </div>
 
@@ -1271,7 +1291,11 @@ function AcademicPageContent() {
                 <div className={styles.kpiMeta}>
                   <div className={styles.kpiNumber}>{subjects.length}</div>
                   <div className={styles.kpiLabel}>Total Subjects</div>
-                  <div className={styles.kpiTrend}>&uarr; 33% <span className={styles.kpiSubtext}>+6 this month</span></div>
+                  <div className={styles.kpiMetaSub}>
+                    {subjects.length === 0
+                      ? 'No subjects yet'
+                      : `${subjects.filter(s => s.is_active !== false).length} active${subjects.filter(s => s.is_active === false).length > 0 ? ` · ${subjects.filter(s => s.is_active === false).length} inactive` : ''}`}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1435,7 +1459,11 @@ function AcademicPageContent() {
                 <div className={styles.kpiMeta}>
                   <div className={styles.kpiNumber}>{sections.length}</div>
                   <div className={styles.kpiLabel}>Total Sections</div>
-                  <div className={styles.kpiTrend}>&uarr; 12% <span className={styles.kpiSubtext}>+5 this month</span></div>
+                  <div className={styles.kpiMetaSub}>
+                    {sections.length === 0
+                      ? 'No sections yet'
+                      : `${sections.filter(s => s.is_active !== false).length} active${sections.filter(s => s.is_active === false).length > 0 ? ` · ${sections.filter(s => s.is_active === false).length} inactive` : ''}`}
+                  </div>
                 </div>
               </div>
 
@@ -1446,7 +1474,11 @@ function AcademicPageContent() {
                 <div className={styles.kpiMeta}>
                   <div className={styles.kpiNumber}>{totalStudentsEnrolled}</div>
                   <div className={styles.kpiLabel}>Enrolled Students</div>
-                  <div className={styles.kpiTrend}>&uarr; 18% <span className={styles.kpiSubtext}>+190 this month</span></div>
+                  <div className={styles.kpiMetaSub}>
+                    {totalStudentsEnrolled === 0
+                      ? 'No students enrolled'
+                      : `Across ${sections.length} ${sections.length === 1 ? 'section' : 'sections'}`}
+                  </div>
                 </div>
               </div>
 
@@ -1457,7 +1489,11 @@ function AcademicPageContent() {
                 <div className={styles.kpiMeta}>
                   <div className={styles.kpiNumber}>{departments.length}</div>
                   <div className={styles.kpiLabel}>Departments</div>
-                  <div className={styles.kpiTrend}>0% <span className={styles.kpiSubtext}>No change</span></div>
+                  <div className={styles.kpiMetaSub}>
+                    {departments.length === 0
+                      ? 'No departments yet'
+                      : `${departments.filter(d => d.is_active !== false).length} active`}
+                  </div>
                 </div>
               </div>
 
@@ -1468,7 +1504,11 @@ function AcademicPageContent() {
                 <div className={styles.kpiMeta}>
                   <div className={styles.kpiNumber}>{batches.length}</div>
                   <div className={styles.kpiLabel}>Active Batches</div>
-                  <div className={styles.kpiTrend}>&uarr; 20% <span className={styles.kpiSubtext}>+1 this month</span></div>
+                  <div className={styles.kpiMetaSub}>
+                    {batches.length === 0
+                      ? 'No batches yet'
+                      : `Across ${years.length} ${years.length === 1 ? 'academic year' : 'academic years'}`}
+                  </div>
                 </div>
               </div>
             </div>
@@ -1699,7 +1739,11 @@ function AcademicPageContent() {
                 <div className={styles.kpiMeta}>
                   <div className={styles.kpiNumber}>{subjects.length}</div>
                   <div className={styles.kpiLabel}>Total Subjects</div>
-                  <div className={styles.kpiTrend}>&uarr; 12% <span className={styles.kpiSubtext}>+3 this month</span></div>
+                  <div className={styles.kpiMetaSub}>
+                    {subjects.length === 0
+                      ? 'No subjects yet'
+                      : `${subjects.filter(s => s.is_active !== false).length} active${subjects.filter(s => s.is_active === false).length > 0 ? ` · ${subjects.filter(s => s.is_active === false).length} inactive` : ''}`}
+                  </div>
                 </div>
               </div>
 
@@ -1710,7 +1754,11 @@ function AcademicPageContent() {
                 <div className={styles.kpiMeta}>
                   <div className={styles.kpiNumber}>{totalStudentsEnrolled}</div>
                   <div className={styles.kpiLabel}>Enrolled Students</div>
-                  <div className={styles.kpiTrend}>&uarr; 18% <span className={styles.kpiSubtext}>+190 this month</span></div>
+                  <div className={styles.kpiMetaSub}>
+                    {totalStudentsEnrolled === 0
+                      ? 'No students enrolled'
+                      : `Across ${sections.length} ${sections.length === 1 ? 'section' : 'sections'}`}
+                  </div>
                 </div>
               </div>
 
@@ -1721,7 +1769,11 @@ function AcademicPageContent() {
                 <div className={styles.kpiMeta}>
                   <div className={styles.kpiNumber}>{departments.length}</div>
                   <div className={styles.kpiLabel}>Departments</div>
-                  <div className={styles.kpiTrend}>0% <span className={styles.kpiSubtext}>No change</span></div>
+                  <div className={styles.kpiMetaSub}>
+                    {departments.length === 0
+                      ? 'No departments yet'
+                      : `${departments.filter(d => d.is_active !== false).length} active`}
+                  </div>
                 </div>
               </div>
 
@@ -1732,7 +1784,11 @@ function AcademicPageContent() {
                 <div className={styles.kpiMeta}>
                   <div className={styles.kpiNumber}>{batches.length}</div>
                   <div className={styles.kpiLabel}>Active Batches</div>
-                  <div className={styles.kpiTrend}>&uarr; 20% <span className={styles.kpiSubtext}>+1 this month</span></div>
+                  <div className={styles.kpiMetaSub}>
+                    {batches.length === 0
+                      ? 'No batches yet'
+                      : `Across ${years.length} ${years.length === 1 ? 'academic year' : 'academic years'}`}
+                  </div>
                 </div>
               </div>
             </div>
@@ -2717,7 +2773,7 @@ function AcademicPageContent() {
             DRAWER 1: CREATE ACADEMIC YEAR (Matching Screenshot 1)
         ═══════════════════════════════════════════════════════════════════════ */}
         {showYearDrawer && (
-          <div className={styles.drawerOverlay} onClick={() => setShowYearDrawer(false)}>
+          <div className={styles.drawerOverlay} data-modal-overlay="true" role="dialog" aria-modal="true" onClick={() => setShowYearDrawer(false)}>
             <div className={styles.drawer} onClick={e => e.stopPropagation()}>
               <div className={styles.drawerHeader}>
                 <div>
@@ -2951,7 +3007,7 @@ function AcademicPageContent() {
             DRAWER 2: ADD / EDIT DEPARTMENT (Matching Screenshot 2)
         ═══════════════════════════════════════════════════════════════════════ */}
         {showDeptDrawer && (
-          <div className={styles.drawerOverlay} onClick={() => setShowDeptDrawer(false)}>
+          <div className={styles.drawerOverlay} data-modal-overlay="true" role="dialog" aria-modal="true" onClick={() => setShowDeptDrawer(false)}>
             <div className={styles.drawer} onClick={e => e.stopPropagation()}>
               <div className={styles.drawerHeader}>
                 <div>
@@ -3138,7 +3194,7 @@ function AcademicPageContent() {
             DRAWER 3: ADD / EDIT SECTION (Matching Screenshot 3)
         ═══════════════════════════════════════════════════════════════════════ */}
         {showSectionDrawer && (
-          <div className={styles.drawerOverlay} onClick={() => setShowSectionDrawer(false)}>
+          <div className={styles.drawerOverlay} data-modal-overlay="true" role="dialog" aria-modal="true" onClick={() => setShowSectionDrawer(false)}>
             <div className={styles.drawer} onClick={e => e.stopPropagation()}>
               <div className={styles.drawerHeader}>
                 <div>
@@ -3332,7 +3388,7 @@ function AcademicPageContent() {
             DRAWER 4: ADD / EDIT SUBJECT (Matching Screenshot 4)
         ═══════════════════════════════════════════════════════════════════════ */}
         {showSubjectDrawer && (
-          <div className={styles.drawerOverlay} onClick={() => setShowSubjectDrawer(false)}>
+          <div className={styles.drawerOverlay} data-modal-overlay="true" role="dialog" aria-modal="true" onClick={() => setShowSubjectDrawer(false)}>
             <div className={styles.drawer} onClick={e => e.stopPropagation()}>
               <div className={styles.drawerHeader}>
                 <div>
@@ -3560,7 +3616,7 @@ function AcademicPageContent() {
             QUICK ADD BATCH MODAL
         ═══════════════════════════════════════════════════════════════════════ */}
         {showBatchModal && (
-          <div className={styles.drawerOverlay} onClick={() => setShowBatchModal(false)}>
+          <div className={styles.drawerOverlay} data-modal-overlay="true" role="dialog" aria-modal="true" onClick={() => setShowBatchModal(false)}>
             <div className={styles.drawer} style={{ width: 440 }} onClick={e => e.stopPropagation()}>
               <div className={styles.drawerHeader}>
                 <div>
@@ -3634,7 +3690,7 @@ function AcademicPageContent() {
             EDIT ACADEMIC YEAR MODAL
         ═══════════════════════════════════════════════════════════════════════ */}
         {showEditYearModal && (
-          <div className={styles.drawerOverlay} onClick={() => setShowEditYearModal(false)}>
+          <div className={styles.drawerOverlay} data-modal-overlay="true" role="dialog" aria-modal="true" onClick={() => setShowEditYearModal(false)}>
             <div className={styles.drawer} style={{ width: 440 }} onClick={e => e.stopPropagation()}>
               <div className={styles.drawerHeader}>
                 <div>
@@ -3699,7 +3755,7 @@ function AcademicPageContent() {
             EDIT BATCH MODAL
         ═══════════════════════════════════════════════════════════════════════ */}
         {showEditBatchModal && (
-          <div className={styles.drawerOverlay} onClick={() => setShowEditBatchModal(false)}>
+          <div className={styles.drawerOverlay} data-modal-overlay="true" role="dialog" aria-modal="true" onClick={() => setShowEditBatchModal(false)}>
             <div className={styles.drawer} style={{ width: 440 }} onClick={e => e.stopPropagation()}>
               <div className={styles.drawerHeader}>
                 <div>
@@ -3761,7 +3817,7 @@ function AcademicPageContent() {
             ASSIGN SUBJECT TO MULTIPLE SECTIONS MODAL (TAB 4)
         ═══════════════════════════════════════════════════════════════════════ */}
         {showAssignSubjectModal && assignModalSubject && (
-          <div className={styles.drawerOverlay} onClick={() => setShowAssignSubjectModal(false)}>
+          <div className={styles.drawerOverlay} data-modal-overlay="true" role="dialog" aria-modal="true" onClick={() => setShowAssignSubjectModal(false)}>
             <div className={styles.drawer} style={{ width: 520 }} onClick={e => e.stopPropagation()}>
               <div className={styles.drawerHeader}>
                 <div>
@@ -3978,7 +4034,7 @@ function AcademicPageContent() {
             COPY SECTION ASSIGNMENTS MODAL (TAB 5)
         ═══════════════════════════════════════════════════════════════════════ */}
         {showCopyModal && (
-          <div className={styles.drawerOverlay} onClick={() => setShowCopyModal(false)}>
+          <div className={styles.drawerOverlay} data-modal-overlay="true" role="dialog" aria-modal="true" onClick={() => setShowCopyModal(false)}>
             <div className={styles.drawer} style={{ width: 480 }} onClick={e => e.stopPropagation()}>
               <div className={styles.drawerHeader}>
                 <div>

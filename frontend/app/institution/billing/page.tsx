@@ -77,11 +77,11 @@ export default function BillingPage() {
   });
 
   const [billingInfo, setBillingInfo] = useState<BillingContactInfo>({
-    institution_name: 'Greenwood Institute',
-    billing_email: 'billing@greenwood.edu',
-    contact_person: 'Institution Admin',
-    phone: '+91 98765 43210',
-    address: '123 Education Street, HSR Layout, Bengaluru, Karnataka 560102, India',
+    institution_name: user?.institution_name || 'Institution',
+    billing_email: user?.email || '',
+    contact_person: user?.full_name || 'Institution Admin',
+    phone: user?.phone || '+91 98765 43210',
+    address: 'Bengaluru, Karnataka, India',
   });
 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodItem[]>([]);
