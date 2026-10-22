@@ -597,9 +597,9 @@ def clone_experiment(exp_id):
     for tc in TestCase.query.filter_by(experiment_id=src.id).all():
         db.session.add(TestCase(
             experiment_id=copy.id,
-            name=tc.name, description=tc.description,
+            description=tc.description,
             input_data=tc.input_data, expected_output=tc.expected_output,
-            is_hidden=tc.is_hidden, weight=tc.weight,
+            is_hidden=tc.is_hidden, points_weight=tc.points_weight,
         ))
         copied['test_cases'] += 1
     for m in ContentModule.query.filter_by(experiment_id=src.id).all():

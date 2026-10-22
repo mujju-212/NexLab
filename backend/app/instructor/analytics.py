@@ -1982,46 +1982,76 @@ def analytics_cohort_matrix():
 
     total_enrolled = len(students)
 
-    # 3. Calculate metrics per student
+    # 3. Calculate metrics per student (Batched in 5 bulk queries instead of 5xN loop)
     mastery_dist = []
     grade_dist = []
     att_dist = []
     raw_list = []
+
+    from collections import defaultdict
+    s_ids = [s.id for s in students]
+
+    # Pre-resolve subject experiment IDs once outside loop
+    sub_exp_ids = None
+    if not (exp_filter and exp_filter != 'all') and selected_ss and selected_ss.subject_id:
+        sub_exp_ids = [e.id for e in Experiment.query.filter_by(subject_id=selected_ss.subject_id).all()]
+
+    bulk_g_query = Grade.query.filter(Grade.student_id.in_(s_ids), Grade.final_grade.isnot(None)) if s_ids else None
+    if bulk_g_query is not None:
+        if exp_filter and exp_filter != 'all':
+            bulk_g_query = bulk_g_query.filter_by(experiment_id=exp_filter)
+        elif sub_exp_ids:
+            bulk_g_query = bulk_g_query.filter(Grade.experiment_id.in_(sub_exp_ids))
+        bulk_g_rows = bulk_g_query.order_by(Grade.created_at.asc()).all()
+    else:
+        bulk_g_rows = []
+    grades_by_sid = defaultdict(list)
+    for gr in bulk_g_rows:
+        grades_by_sid[gr.student_id].append(float(gr.final_grade))
+
+    att_by_sid = defaultdict(list)
+    if s_ids:
+        for ar in SessionAttendance.query.filter(SessionAttendance.student_id.in_(s_ids)).all():
+            att_by_sid[ar.student_id].append(ar.status)
+
+    focus_by_sid = defaultdict(list)
+    if s_ids:
+        for fr in FocusScore.query.filter(FocusScore.student_id.in_(s_ids), FocusScore.focus_score.isnot(None)).all():
+            focus_by_sid[fr.student_id].append(float(fr.focus_score))
+
+    mastery_by_sid = defaultdict(list)
+    if s_ids:
+        for mr in ConceptMastery.query.filter(ConceptMastery.student_id.in_(s_ids), ConceptMastery.mastery_score.isnot(None)).all():
+            mastery_by_sid[mr.student_id].append(float(mr.mastery_score))
+
+    viol_counts_by_sid = dict(
+        db.session.query(ProctorEvent.student_id, func.count(ProctorEvent.id))
+        .filter(ProctorEvent.student_id.in_(s_ids))
+        .group_by(ProctorEvent.student_id).all()
+    ) if s_ids else {}
 
     for s in students:
         name = s.full_name or 'Student'
         parts = name.strip().split()
         initials = (parts[0][0] + (parts[1][0] if len(parts) > 1 else '')).upper()
 
-        # Real grades
-        g_query = Grade.query.filter_by(student_id=s.id).filter(Grade.final_grade.isnot(None))
-        if exp_filter and exp_filter != 'all':
-            g_query = g_query.filter_by(experiment_id=exp_filter)
-        elif selected_ss and selected_ss.subject_id:
-            sub_exp_ids = [e.id for e in Experiment.query.filter_by(subject_id=selected_ss.subject_id).all()]
-            if sub_exp_ids:
-                g_query = g_query.filter(Grade.experiment_id.in_(sub_exp_ids))
-        all_grades = [float(g.final_grade) for g in g_query.all()]
+        all_grades = grades_by_sid.get(s.id, [])
         avg_grade = statistics.mean(all_grades) if all_grades else 0.0
 
-        # Real attendance
-        att_rows = SessionAttendance.query.filter_by(student_id=s.id).all()
-        if att_rows:
-            present_count = len([a for a in att_rows if a.status in ('present', 'late', 'partial')])
-            att_rate = (present_count / len(att_rows)) * 100.0
+        att_statuses = att_by_sid.get(s.id, [])
+        if att_statuses:
+            present_count = sum(1 for st in att_statuses if st in ('present', 'late', 'partial'))
+            att_rate = (present_count / len(att_statuses)) * 100.0
         else:
             att_rate = 0.0
 
-        # Real focus score
-        focus_rows = [float(f.focus_score) for f in FocusScore.query.filter_by(student_id=s.id).all() if f.focus_score is not None]
+        focus_rows = focus_by_sid.get(s.id, [])
         avg_focus = statistics.mean(focus_rows) if focus_rows else 0.0
 
-        # Real mastery
-        m_rows = [float(m.mastery_score) for m in ConceptMastery.query.filter_by(student_id=s.id).filter(ConceptMastery.mastery_score.isnot(None)).all()]
+        m_rows = mastery_by_sid.get(s.id, [])
         avg_mastery = statistics.mean(m_rows) if m_rows else 0.0
 
-        # Real proctor violations
-        viol_count = ProctorEvent.query.filter_by(student_id=s.id).count()
+        viol_count = viol_counts_by_sid.get(s.id, 0)
 
         # Risk calculation
         risk_res = compute_student_risk({
@@ -2990,12 +3020,12 @@ def analytics_engagement_overview():
         else:
             st_focus = max(45, min(92, round(effort * 0.85 + 10)))
 
-        # Tab switches
-        st_switches = switches_by_student.get(sid, max(2, round((100 - st_focus) / 4)))
+        # Tab switches (strictly real ProctorEvent count)
+        st_switches = switches_by_student.get(sid, 0)
 
-        # Hint reliance
+        # Hint reliance (strictly real HintLog count ratio)
         hint_cnt = student_hints.get(sid, 0)
-        st_hint = min(55, max(8, round(hint_cnt * 10 or ((100 - outcome) * 0.35))))
+        st_hint = min(100, round(hint_cnt * 10)) if hint_cnt > 0 else 0
 
         # Historical trend (5 points ending in current score)
         st_trend = [
@@ -3830,7 +3860,7 @@ def analytics_rankings_overview():
         cohort_percentile_label = f"{pct_val}{suffix} %ile"
 
         score = rec['rank_score']
-        is_insufficient = (name == 'Nidhi Desai') or (score > 0 and rec['engagement'] < 45.0 and rec['effort'] < 40.0)
+        is_insufficient = (score > 0 and rec['engagement'] < 45.0 and rec['effort'] < 40.0)
 
         component_balance = None
         if not is_insufficient and score > 0:

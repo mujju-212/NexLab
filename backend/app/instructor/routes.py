@@ -77,10 +77,13 @@ def my_section_subjects():
     sections = {s.id: s for s in Section.query.filter(Section.id.in_(section_ids)).all()} if section_ids else {}
 
     batch_ids = {s.batch_id for s in sections.values() if s.batch_id}
-    from app.models.academic import Batch, AcademicYear
+    from app.models.academic import Batch, AcademicYear, Department
     batches = {b.id: b for b in Batch.query.filter(Batch.id.in_(batch_ids)).all()} if batch_ids else {}
     year_ids = {b.year_id for b in batches.values() if b.year_id}
     years = {y.id: y for y in AcademicYear.query.filter(AcademicYear.id.in_(year_ids)).all()} if year_ids else {}
+    dept_ids = ({b.department_id for b in batches.values() if getattr(b, "department_id", None)} |
+                {s.department_id for s in subjects.values() if getattr(s, "department_id", None)})
+    departments = {d.id: d for d in Department.query.filter(Department.id.in_(dept_ids)).all()} if dept_ids else {}
 
     student_counts = {}
     if section_ids:
@@ -105,19 +108,26 @@ def my_section_subjects():
         section = sections.get(ss.section_id)
         batch = batches.get(section.batch_id) if section else None
         year = years.get(batch.year_id) if batch else None
+        dept_id = (getattr(subject, "department_id", None) if subject else None) or (getattr(batch, "department_id", None) if batch else None)
+        dept = departments.get(dept_id) if dept_id else None
         result.append({
             'section_subject_id': ss.id,
             'subject_id': ss.subject_id,
             'subject_name': subject.name if subject else '',
             'subject_code': subject.code if subject else '',
+            'total_marks': getattr(subject, 'total_marks', 100) if subject else 100,
             'icon': (getattr(subject, 'icon', None) or 'datastruct') if subject else 'datastruct',
             'subject_icon': (getattr(subject, 'icon', None) or 'datastruct') if subject else 'datastruct',
             'description': subject.description if subject else '',
-            'section_id': ss.section_id,
-            'section_name': section.name if section else '',
+            'department_id': dept.id if dept else None,
+            'department_name': dept.name if dept else 'General Department',
+            'department_code': dept.code if dept else 'GEN',
+            'year_id': year.id if year else None,
+            'academic_year': year.year_label if year else 'Current Year',
             'batch_id': batch.id if batch else None,
             'batch_name': batch.name if batch else 'General Batch',
-            'academic_year': year.year_label if year else 'Current Year',
+            'section_id': ss.section_id,
+            'section_name': section.name if section else '',
             'student_count': student_counts.get(ss.section_id, 0),
             'experiment_count': exp_counts.get(ss.subject_id, 0),
         })
@@ -412,7 +422,7 @@ def instructor_dashboard():
 
 
 def _dashboard_stats(my_exp_ids, pending, my_section_ids, active_sessions,
-                     graded_pairs=None):
+                     graded_pairs=None, enrolled_sids=None):
     """KPI strip with deltas (DB6) — computed from existing timestamps.
 
     graded_pairs is passed in from the dashboard (the Grade table no longer
@@ -455,9 +465,11 @@ def _dashboard_stats(my_exp_ids, pending, my_section_ids, active_sessions,
 
     return {
         'experiment_count': len(my_exp_ids),
-        'student_count': SectionStudent.query.filter(
-            SectionStudent.section_id.in_(my_section_ids)
-        ).count() if my_section_ids else 0,
+        'student_count': len(enrolled_sids) if enrolled_sids is not None else (
+            SectionStudent.query.filter(
+                SectionStudent.section_id.in_(my_section_ids)
+            ).count() if my_section_ids else 0
+        ),
         'active_session_count': len(active_sessions),
         'pending_grading_count': len(pending),
         # Deltas (DB6)
@@ -468,7 +480,7 @@ def _dashboard_stats(my_exp_ids, pending, my_section_ids, active_sessions,
     }
 
 
-def _dashboard_activity(my_ss_ids, my_exp_ids):
+def _dashboard_activity(my_ss_ids, my_exp_ids, enrolled_sids=None):
     """
     Recent activity feed (DB3): final submissions, plagiarism raised, sessions
     ended, all-checkpoints-passed, grades saved — last 7 days, 20 rows,
@@ -480,11 +492,14 @@ def _dashboard_activity(my_ss_ids, my_exp_ids):
 
     # Final submissions (CodeAttempt.is_final_submission)
     if my_exp_ids:
-        subs = CodeAttempt.query.filter(
+        attempt_filter = [
             CodeAttempt.experiment_id.in_(my_exp_ids),
             CodeAttempt.is_final_submission == True,  # noqa: E712
             CodeAttempt.submitted_at >= week_ago,
-        ).order_by(CodeAttempt.submitted_at.desc()).limit(30).all()
+        ]
+        if enrolled_sids is not None:
+            attempt_filter.append(CodeAttempt.student_id.in_(enrolled_sids))
+        subs = CodeAttempt.query.filter(*attempt_filter).order_by(CodeAttempt.submitted_at.desc()).limit(30).all()
         # Batch lookups once (was 2 queries per submission row)
         act_students = {u.id: u for u in User.query.filter(User.id.in_({a.student_id for a in subs})).all()} if subs else {}
         act_exps = {e.id: e for e in Experiment.query.filter(Experiment.id.in_({a.experiment_id for a in subs})).all()} if subs else {}
@@ -1800,23 +1815,69 @@ def subject_grade_summary(subject_id):
         ).all()
     } if sec_ids else set()
 
-    grade_rows = (
-        db.session.query(
-            Grade.student_id,
-            Grade.experiment_id,
-            func.max(Grade.final_grade).label('best_grade')
-        )
-        .filter(Grade.experiment_id.in_(exp_ids))
-        .group_by(Grade.student_id, Grade.experiment_id)
-        .all()
+    all_grade_objs = Grade.query.filter(Grade.experiment_id.in_(exp_ids)).all() if exp_ids else []
+    latest_attempts = (
+        CodeAttempt.query.filter(
+            CodeAttempt.experiment_id.in_(exp_ids),
+            CodeAttempt.is_final_submission == True,
+        ).order_by(CodeAttempt.submitted_at.desc()).all()
     ) if exp_ids else []
 
-    # student_id → {exp_id: best_grade}
+    attempt_by_stu_exp = {}
+    for att in latest_attempts:
+        key = (att.student_id, att.experiment_id)
+        if key not in attempt_by_stu_exp:
+            attempt_by_stu_exp[key] = att
+
+    # student_id → {exp_id: best_grade} and detailed breakdown
     grade_map: dict = {}
+    detail_map: dict = {}
     student_ids: set = set(enrolled_student_ids)
-    for row in grade_rows:
-        grade_map.setdefault(row.student_id, {})[row.experiment_id] = float(row.best_grade or 0)
-        student_ids.add(row.student_id)
+    for g_obj in all_grade_objs:
+        sid = g_obj.student_id
+        eid = g_obj.experiment_id
+        if section_id_param and sid not in enrolled_student_ids:
+            continue
+        student_ids.add(sid)
+        val = float(g_obj.final_grade or 0)
+        if val >= grade_map.get(sid, {}).get(eid, -1.0):
+            grade_map.setdefault(sid, {})[eid] = val
+            att = attempt_by_stu_exp.get((sid, eid))
+            detail_map.setdefault(sid, {})[eid] = {
+                "final_grade": g_obj.final_grade,
+                "auto_grade": g_obj.auto_grade,
+                "manual_grade": g_obj.manual_grade,
+                "viva_grade": g_obj.viva_grade,
+                "quiz_grade": g_obj.quiz_grade,
+                "code_quality_grade": g_obj.code_quality_grade,
+                "manual_feedback": g_obj.manual_feedback,
+                "graded_at": g_obj.graded_at.isoformat() if g_obj.graded_at else None,
+                "submitted_at": att.submitted_at.isoformat() if att and att.submitted_at else (g_obj.graded_at.isoformat() if g_obj.graded_at else None),
+                "language": att.language if att else None,
+                "test_cases_passed": att.test_cases_passed if att else None,
+                "test_cases_total": att.test_cases_total if att else None,
+                "compile_status": att.compile_status if att else "graded",
+            }
+    for (sid, eid), att in attempt_by_stu_exp.items():
+        if section_id_param and sid not in enrolled_student_ids:
+            continue
+        student_ids.add(sid)
+        if eid not in detail_map.get(sid, {}):
+            detail_map.setdefault(sid, {})[eid] = {
+                "final_grade": None,
+                "auto_grade": round((att.test_cases_passed / att.test_cases_total) * 100, 1) if att.test_cases_total else None,
+                "manual_grade": None,
+                "viva_grade": None,
+                "quiz_grade": None,
+                "code_quality_grade": None,
+                "manual_feedback": None,
+                "graded_at": None,
+                "submitted_at": att.submitted_at.isoformat() if att.submitted_at else None,
+                "language": att.language,
+                "test_cases_passed": att.test_cases_passed,
+                "test_cases_total": att.test_cases_total,
+                "compile_status": att.compile_status,
+            }
 
     # Also query standalone published Exams for this subject
     from app.models.exam import Exam, ExamAttempt
@@ -1861,8 +1922,10 @@ def subject_grade_summary(subject_id):
         students_out.append({
             'student_id': sid,
             'full_name': u.full_name if u else sid,
+            'email': getattr(u, 'email', None) if u else None,
             'roll_number': getattr(u, 'roll_number', None) if u else None,
             'experiment_scores': exp_scores,
+            'experiment_details': detail_map.get(sid, {}),
             'subject_score': round(rollup, 2),
         })
 
@@ -1876,6 +1939,13 @@ def subject_grade_summary(subject_id):
             'delivery_mode': getattr(e, 'delivery_mode', 'lab') or 'lab',
             'weightage': e.weightage,
             'grade_scale': e.grade_scale,
+            'rubric': {
+                'test_cases': e.rubric_test_cases or 0,
+                'lab_report': e.rubric_lab_report or 0,
+                'code_quality': e.rubric_code_quality or 0,
+                'viva': e.rubric_viva or 0,
+                'quiz': e.rubric_quiz or 0,
+            },
         }
         for e in exps
     ]
@@ -1908,72 +1978,186 @@ def subject_grade_summary(subject_id):
 @instructor_bp.route('/submissions/<experiment_id>', methods=['GET'])
 @require_role('instructor', 'institution_admin')
 def list_submissions(experiment_id):
-    """Final submissions for one experiment. ?page=1&per_page=50 (cap 200).
+    """Rich final submissions + rubric + grade breakdown for one experiment."""
+    exp = Experiment.query.get(experiment_id)
+    section_id_filter = request.args.get('section_id')
+    include_unsubmitted = request.args.get('include_unsubmitted', 'true').lower() != 'false'
 
-    Perf pass: was an unbounded .all() of CodeAttempt rows — each row carries
-    the submitted code text, so a 300-student class downloaded megabytes per
-    page view. Legacy no-page callers get a 500-row window instead of no limit.
-    """
+    enrolled_filter_ids = None
+    if section_id_filter and section_id_filter != 'all':
+        enrolled_filter_ids = {
+            r[0] for r in db.session.query(SectionStudent.student_id)
+            .filter(SectionStudent.section_id == section_id_filter).all()
+        }
+    elif exp and exp.subject_id:
+        sec_ids = [ss.section_id for ss in SectionSubject.query.filter_by(subject_id=exp.subject_id).all()]
+        if sec_ids:
+            enrolled_filter_ids = {
+                r[0] for r in db.session.query(SectionStudent.student_id)
+                .filter(SectionStudent.section_id.in_(sec_ids)).all()
+            }
+
     base = CodeAttempt.query.filter_by(
         experiment_id=experiment_id, is_final_submission=True
     ).order_by(CodeAttempt.submitted_at.desc())
 
-    total = None
-    if request.args.get('page'):
-        page     = max(1, int(request.args.get('page', '1') or 1))
-        per_page = min(200, max(1, int(request.args.get('per_page', '50') or 50)))
-        paged = base.paginate(page=page, per_page=per_page, error_out=False)
-        submissions, total = paged.items, paged.total
-    else:
-        submissions = base.limit(500).all()
+    submissions = base.limit(500).all()
 
-    student_ids = [s.student_id for s in submissions]
-    students = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
+    # Keep latest final submission per student
+    latest_by_student = {}
+    for s in submissions:
+        if enrolled_filter_ids is not None and section_id_filter and section_id_filter != 'all' and s.student_id not in enrolled_filter_ids:
+            continue
+        if s.student_id not in latest_by_student:
+            latest_by_student[s.student_id] = s
+
+    # Load all Grade rows for this experiment
+    all_grades = Grade.query.filter_by(experiment_id=experiment_id).all()
+    grade_by_student = {}
+    for g_row in all_grades:
+        if enrolled_filter_ids is not None and section_id_filter and section_id_filter != 'all' and g_row.student_id not in enrolled_filter_ids:
+            continue
+        grade_by_student[g_row.student_id] = g_row
+
+    # Load all ContentModule + ContentProgress rows for this experiment
+    exp_modules = {m.id: m for m in ContentModule.query.filter_by(experiment_id=experiment_id).all()}
+    cp_rows = ContentProgress.query.filter(
+        ContentProgress.module_id.in_(list(exp_modules.keys()))
+    ).all() if exp_modules else []
+    cp_by_student = {}
+    for cp in cp_rows:
+        if enrolled_filter_ids is not None and section_id_filter and section_id_filter != 'all' and cp.student_id not in enrolled_filter_ids:
+            continue
+        mod = exp_modules.get(cp.module_id)
+        cp_by_student.setdefault(cp.student_id, []).append({
+            'module_id': cp.module_id,
+            'module_type': mod.module_type if mod else 'module',
+            'module_title': (mod.content_data or {}).get('title') or (mod.module_type.upper() if mod else 'Module'),
+            'completed': cp.completed,
+            'score': cp.score,
+            'completed_at': cp.completed_at.isoformat() if cp.completed_at else None,
+        })
+
+    all_sids = set(latest_by_student.keys()) | set(grade_by_student.keys()) | set(cp_by_student.keys())
+    if include_unsubmitted and enrolled_filter_ids:
+        all_sids |= set(enrolled_filter_ids)
+
+    users = {u.id: u for u in User.query.filter(User.id.in_(list(all_sids))).all()} if all_sids else {}
 
     result = []
-    for s in submissions:
-        d = s.to_dict()
-        u = students.get(s.student_id)
-        d['student_id'] = s.student_id
-        d['session_id'] = s.session_id
+    for sid in all_sids:
+        u = users.get(sid)
+        att = latest_by_student.get(sid)
+        g_row = grade_by_student.get(sid)
+        mods = cp_by_student.get(sid, [])
+
+        if att:
+            d = att.to_dict()
+            files_dict = att.files if isinstance(att.files, dict) else {}
+            code_text = "\n\n".join(
+                f"// ── {fname} ──\n{fbody}" for fname, fbody in files_dict.items()
+            ) if files_dict else ""
+            sub_status = 'graded' if (g_row and g_row.final_grade is not None) else 'submitted'
+        elif g_row or mods:
+            d = {
+                'id': f"grade-{g_row.id}" if g_row else f"cp-{sid}",
+                'attempt_number': 1,
+                'language': 'quiz/module',
+                'files': {},
+                'compile_status': 'graded' if g_row else 'completed',
+                'stdout': None,
+                'stderr': None,
+                'compile_output': None,
+                'test_cases_passed': None,
+                'test_cases_total': None,
+                'execution_time_ms': None,
+                'loc': None,
+                'cyclomatic_complexity': None,
+                'quality_grade': None,
+                'is_final_submission': True,
+                'submitted_at': (
+                    g_row.graded_at.isoformat() if (g_row and g_row.graded_at)
+                    else (mods[0]['completed_at'] if mods else None)
+                ),
+            }
+            code_text = ""
+            sub_status = 'graded' if (g_row and g_row.final_grade is not None) else 'submitted'
+        else:
+            d = {
+                'id': f"pending-{sid}",
+                'attempt_number': 0,
+                'language': '—',
+                'files': {},
+                'compile_status': 'not_submitted',
+                'stdout': None,
+                'stderr': None,
+                'compile_output': None,
+                'test_cases_passed': None,
+                'test_cases_total': None,
+                'execution_time_ms': None,
+                'loc': None,
+                'cyclomatic_complexity': None,
+                'quality_grade': None,
+                'is_final_submission': False,
+                'submitted_at': None,
+            }
+            code_text = ""
+            sub_status = 'not_submitted'
+
+        d['student_id'] = sid
+        d['session_id'] = (att.session_id if att else (g_row.session_id if g_row else None))
         d['full_name'] = u.full_name if u else 'Unknown'
+        d['email'] = getattr(u, 'email', None) if u else None
         d['roll_number'] = u.roll_number if u else ''
+        d['submission_status'] = sub_status
+        d['code_text'] = code_text
+        d['grade_id'] = g_row.id if g_row else None
+        d['auto_grade'] = g_row.auto_grade if g_row else (
+            round((att.test_cases_passed / att.test_cases_total) * 100, 1)
+            if (att and att.test_cases_total) else None
+        )
+        d['manual_grade'] = g_row.manual_grade if g_row else None
+        d['manual_feedback'] = g_row.manual_feedback if g_row else None
+        d['viva_grade'] = g_row.viva_grade if g_row else None
+        d['quiz_grade'] = g_row.quiz_grade if g_row else None
+        d['code_quality_grade'] = g_row.code_quality_grade if g_row else None
+        d['hint_deduction'] = g_row.hint_deduction if g_row else 0.0
+        d['final_grade'] = g_row.final_grade if g_row else None
+        d['graded_at'] = g_row.graded_at.isoformat() if (g_row and g_row.graded_at) else None
+        d['is_locked'] = bool(g_row.is_locked) if g_row else False
+        d['module_submissions'] = mods
         result.append(d)
 
-    # Merge students with Grade or ContentProgress rows so quiz/viva/reading submissions appear
-    existing_sids = set(student_ids)
-    extra_grades = Grade.query.filter_by(experiment_id=experiment_id).all()
-    extra_cp = ContentProgress.query.join(
-        ContentModule, ContentModule.id == ContentProgress.module_id
-    ).filter(
-        ContentModule.experiment_id == experiment_id,
-        ContentProgress.completed == True,  # noqa: E712
-    ).all()
-    missing_sids = ({g.student_id for g in extra_grades} | {cp.student_id for cp in extra_cp}) - existing_sids
+    # Sort: submitted/graded first by name, then not_submitted
+    result.sort(key=lambda r: (1 if r.get('submission_status') == 'not_submitted' else 0, (r.get('full_name') or '').lower()))
 
-    if missing_sids:
-        missing_users = {u.id: u for u in User.query.filter(User.id.in_(list(missing_sids))).all()}
-        for msid in missing_sids:
-            u = missing_users.get(msid)
-            g_row = next((g for g in extra_grades if g.student_id == msid), None)
-            result.append({
-                'id': f"grade-{g_row.id}" if g_row else f"cp-{msid}",
-                'student_id': msid,
-                'session_id': g_row.session_id if g_row else None,
-                'full_name': u.full_name if u else 'Unknown',
-                'roll_number': u.roll_number if u else '',
-                'compile_status': 'graded',
-                'auto_grade': g_row.auto_grade if g_row else None,
-                'final_grade': g_row.final_grade if g_row else None,
-                'submitted_at': g_row.graded_at.isoformat() if g_row and g_row.graded_at else None,
-                'is_final_submission': True,
-            })
+    exp_meta = None
+    if exp:
+        tcs = TestCase.query.filter_by(experiment_id=exp.id).all()
+        exp_meta = {
+            'id': exp.id,
+            'title': exp.title,
+            'exp_number': exp.exp_number,
+            'aim': exp.aim,
+            'weightage': exp.weightage or 100,
+            'grade_scale': exp.grade_scale or 100,
+            'rubric': {
+                'test_cases': exp.rubric_test_cases or 0,
+                'lab_report': exp.rubric_lab_report or 0,
+                'code_quality': exp.rubric_code_quality or 0,
+                'viva': exp.rubric_viva or 0,
+                'quiz': exp.rubric_quiz or 0,
+            },
+            'test_cases': [{
+                'id': tc.id,
+                'input_data': tc.input_data,
+                'expected_output': tc.expected_output,
+                'is_hidden': tc.is_hidden,
+                'points': tc.points,
+            } for tc in tcs],
+        }
 
-    if total is not None:
-        pages = max(1, (total + per_page - 1) // per_page)
-        return jsonify({'submissions': result, 'total': total + len(missing_sids),
-                        'page': page, 'pages': pages, 'per_page': per_page}), 200
-    return jsonify({'submissions': result}), 200
+    return jsonify({'submissions': result, 'experiment': exp_meta}), 200
 
 
 @instructor_bp.route('/grades', methods=['POST'])
@@ -2187,6 +2371,170 @@ def session_feedback(session_id):
             'submitted_at':        f.submitted_at.isoformat() if f.submitted_at else None,
         } for f in rows],
     }), 200
+
+@instructor_bp.route('/feedback-overview', methods=['GET'])
+@require_role('instructor', 'institution_admin')
+def feedback_overview():
+    """Hierarchical student feedback aggregation across Department, Academic Year, Batch, Section, Subject, and Session."""
+    from app.models.academic import Batch, AcademicYear, Department
+
+    assignments = _instructor_ss_query().all()
+    if not assignments and g.role == 'instructor':
+        assignments = SectionSubject.query.filter_by(institution_id=g.institution_id).all()
+    if not assignments:
+        return jsonify({
+            'total': 0,
+            'averages': {'overall_rating': None, 'experiment_clarity': None, 'session_pacing': None, 'ai_hint_helpfulness': None},
+            'sessions_summary': [],
+            'feedback': [],
+        }), 200
+
+    subject_ids = {ss.subject_id for ss in assignments if ss.subject_id}
+    section_ids = {ss.section_id for ss in assignments if ss.section_id}
+    subjects = {s.id: s for s in Subject.query.filter(Subject.id.in_(subject_ids)).all()} if subject_ids else {}
+    sections = {s.id: s for s in Section.query.filter(Section.id.in_(section_ids)).all()} if section_ids else {}
+    batch_ids = {s.batch_id for s in sections.values() if s.batch_id}
+    batches = {b.id: b for b in Batch.query.filter(Batch.id.in_(batch_ids)).all()} if batch_ids else {}
+    year_ids = {b.year_id for b in batches.values() if b.year_id}
+    years = {y.id: y for y in AcademicYear.query.filter(AcademicYear.id.in_(year_ids)).all()} if year_ids else {}
+    dept_ids = ({b.department_id for b in batches.values() if getattr(b, 'department_id', None)} |
+                {s.department_id for s in subjects.values() if getattr(s, 'department_id', None)})
+    departments = {d.id: d for d in Department.query.filter(Department.id.in_(dept_ids)).all()} if dept_ids else {}
+
+    f_dept = request.args.get('department_id')
+    f_year = request.args.get('academic_year')
+    f_batch = request.args.get('batch_id')
+    f_section = request.args.get('section_id')
+    f_subject = request.args.get('subject_id')
+    f_session = request.args.get('session_id')
+
+    matching_ss_ids = set()
+    ss_meta = {}
+    for ss in assignments:
+        subj = subjects.get(ss.subject_id)
+        sec = sections.get(ss.section_id)
+        batch = batches.get(sec.batch_id) if sec else None
+        year = years.get(batch.year_id) if batch else None
+        dept_id = (getattr(subj, 'department_id', None) if subj else None) or (getattr(batch, 'department_id', None) if batch else None)
+        dept = departments.get(dept_id) if dept_id else None
+        year_label = year.year_label if year else 'Current Year'
+
+        if f_dept and f_dept != 'all' and dept_id != f_dept and (dept.code if dept else '') != f_dept:
+            continue
+        if f_year and f_year != 'all' and year_label != f_year:
+            continue
+        if f_batch and f_batch != 'all' and (batch.id if batch else '') != f_batch:
+            continue
+        if f_section and f_section != 'all' and ss.section_id != f_section:
+            continue
+        if f_subject and f_subject != 'all' and ss.subject_id != f_subject:
+            continue
+
+        matching_ss_ids.add(ss.id)
+        ss_meta[ss.id] = {
+            'subject_id': ss.subject_id,
+            'subject_name': subj.name if subj else 'Subject',
+            'subject_code': subj.code if subj else '',
+            'section_id': ss.section_id,
+            'section_name': sec.name if sec else 'Section',
+            'batch_id': batch.id if batch else None,
+            'batch_name': batch.name if batch else 'General Batch',
+            'academic_year': year_label,
+            'department_id': dept_id,
+            'department_name': dept.name if dept else 'General Department',
+            'department_code': dept.code if dept else 'GEN',
+        }
+
+    if not matching_ss_ids:
+        return jsonify({
+            'total': 0,
+            'averages': {'overall_rating': None, 'experiment_clarity': None, 'session_pacing': None, 'ai_hint_helpfulness': None},
+            'sessions_summary': [],
+            'feedback': [],
+        }), 200
+
+    sess_q = LabSession.query.filter(
+        LabSession.institution_id == g.institution_id,
+        LabSession.section_subject_id.in_(list(matching_ss_ids))
+    )
+    if f_session and f_session != 'all':
+        sess_q = sess_q.filter(LabSession.id == f_session)
+    sessions = sess_q.order_by(LabSession.scheduled_at.desc()).all()
+    if not sessions:
+        return jsonify({
+            'total': 0,
+            'averages': {'overall_rating': None, 'experiment_clarity': None, 'session_pacing': None, 'ai_hint_helpfulness': None},
+            'sessions_summary': [],
+            'feedback': [],
+        }), 200
+
+    sess_by_id = {s.id: s for s in sessions}
+    exp_ids = {s.experiment_id for s in sessions if s.experiment_id}
+    exps = {e.id: e for e in Experiment.query.filter(Experiment.id.in_(list(exp_ids))).all()} if exp_ids else {}
+
+    fb_rows = SessionFeedback.query.filter(
+        SessionFeedback.institution_id == g.institution_id,
+        SessionFeedback.session_id.in_(list(sess_by_id.keys()))
+    ).order_by(SessionFeedback.submitted_at.desc()).all()
+
+    def _avg(items, field):
+        vals = [getattr(x, field) for x in items if getattr(x, field) is not None]
+        return round(sum(vals) / len(vals), 2) if vals else None
+
+    fb_by_session = {}
+    for fb in fb_rows:
+        fb_by_session.setdefault(fb.session_id, []).append(fb)
+
+    sessions_summary = []
+    for s in sessions:
+        s_fbs = fb_by_session.get(s.id, [])
+        exp = exps.get(s.experiment_id)
+        meta = ss_meta.get(s.section_subject_id, {})
+        sessions_summary.append({
+            'session_id': s.id,
+            'experiment_id': s.experiment_id,
+            'experiment_title': exp.title if exp else (s.title or 'Lab Session'),
+            'exp_number': exp.exp_number if exp else None,
+            'scheduled_at': s.scheduled_at.isoformat() if s.scheduled_at else None,
+            'status': s.status,
+            'response_count': len(s_fbs),
+            'overall_rating': _avg(s_fbs, 'overall_rating'),
+            'experiment_clarity': _avg(s_fbs, 'experiment_clarity'),
+            'session_pacing': _avg(s_fbs, 'session_pacing'),
+            'ai_hint_helpfulness': _avg(s_fbs, 'ai_hint_helpfulness'),
+            **meta,
+        })
+
+    feedback_list = []
+    for f in fb_rows:
+        s = sess_by_id.get(f.session_id)
+        exp = exps.get(s.experiment_id) if s else None
+        meta = ss_meta.get(s.section_subject_id, {}) if s else {}
+        feedback_list.append({
+            'id': f.id,
+            'session_id': f.session_id,
+            'experiment_title': exp.title if exp else (s.title if s else 'Lab Session'),
+            'experiment_clarity': f.experiment_clarity,
+            'session_pacing': f.session_pacing,
+            'ai_hint_helpfulness': f.ai_hint_helpfulness,
+            'overall_rating': f.overall_rating,
+            'comment': f.comment,
+            'submitted_at': f.submitted_at.isoformat() if f.submitted_at else None,
+            **meta,
+        })
+
+    return jsonify({
+        'total': len(fb_rows),
+        'averages': {
+            'overall_rating': _avg(fb_rows, 'overall_rating'),
+            'experiment_clarity': _avg(fb_rows, 'experiment_clarity'),
+            'session_pacing': _avg(fb_rows, 'session_pacing'),
+            'ai_hint_helpfulness': _avg(fb_rows, 'ai_hint_helpfulness'),
+        },
+        'sessions_summary': sessions_summary,
+        'feedback': feedback_list,
+    }), 200
+
 
 
 # ── Viva Review ────────────────────────────────────────────────────────────────
