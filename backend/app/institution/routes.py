@@ -95,30 +95,55 @@ def list_users():
     # Pre-fetch department lookup map for this institution
     depts = {d.id: d.name for d in Department.query.filter_by(institution_id=g.institution_id).all()}
 
+    now_utc = datetime.utcnow()
+    start_of_month = now_utc.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+
     # Consolidated aggregate KPI stats query (1 query instead of 4 count queries)
     counts_row = db.session.query(
         func.count(User.id),
         func.sum(case((User.role == 'student', 1), else_=0)),
         func.sum(case((User.role == 'instructor', 1), else_=0)),
-        func.sum(case((User.is_active == True, 1), else_=0))
+        func.sum(case((User.is_active == True, 1), else_=0)),
+        func.sum(case((User.created_at >= start_of_month, 1), else_=0)),
+        func.sum(case(((User.role == 'student') & (User.created_at >= start_of_month), 1), else_=0)),
+        func.sum(case(((User.role == 'instructor') & (User.created_at >= start_of_month), 1), else_=0)),
     ).filter(User.institution_id == g.institution_id).first()
 
     total_users_count = counts_row[0] or 0
     students_count = int(counts_row[1] or 0)
     instructors_count = int(counts_row[2] or 0)
     active_count = int(counts_row[3] or 0)
+    users_new_month = int(counts_row[4] or 0)
+    students_new_month = int(counts_row[5] or 0)
+    instructors_new_month = int(counts_row[6] or 0)
     active_pct = f"{int((active_count / total_users_count * 100)) if total_users_count else 100}%"
+
+    def _calc_growth(new_count, total):
+        prev = total - new_count
+        if prev > 0:
+            pct = round((new_count / prev) * 100)
+            return f"+{pct}%" if pct > 0 else "0%"
+        elif new_count > 0:
+            return "+100%"
+        return "0%"
+
+    def _calc_delta(new_count, total, singular_entity="user"):
+        if total == 0:
+            return f"No {singular_entity}s yet"
+        if new_count > 0:
+            return f"+{new_count} this month"
+        return "0 this month"
 
     stats = {
         'total_users': total_users_count,
-        'total_users_growth': '+12%',
-        'total_users_delta': '+28 this month',
+        'total_users_growth': _calc_growth(users_new_month, total_users_count),
+        'total_users_delta': _calc_delta(users_new_month, total_users_count, "user"),
         'students': students_count,
-        'students_growth': '+10%',
-        'students_delta': '+22 this month',
+        'students_growth': _calc_growth(students_new_month, students_count),
+        'students_delta': _calc_delta(students_new_month, students_count, "student"),
         'instructors': instructors_count,
-        'instructors_growth': '+29%',
-        'instructors_delta': '+6 this month',
+        'instructors_growth': _calc_growth(instructors_new_month, instructors_count),
+        'instructors_delta': _calc_delta(instructors_new_month, instructors_count, "instructor"),
         'active_accounts': active_count,
         'active_rate': f"{active_pct} active rate",
         'inactive_delta': f"{total_users_count - active_count} inactive" if total_users_count > active_count else "All verified",
@@ -359,10 +384,7 @@ def create_user():
     _write_audit(g.user_id, g.institution_id, 'create_user', 'user', user.id,
                  f"Created {user.role} {user.full_name} ({user.email})"
                  + (" (temp password generated)" if temp_password_generated else ""))
-    resp = {'user': user.to_dict()}
-    # Hand the one-time credential back only when the admin didn't choose it.
-    if temp_password_generated:
-        resp['temp_password'] = temp_password
+    resp = {'user': user.to_dict(), 'temp_password': temp_password}
     return jsonify(resp), 201
 
 
@@ -1698,7 +1720,7 @@ def institution_dashboard():
     """
     iid = g.institution_id
     inst = Institution.query.get(iid)
-    inst_name = inst.name if inst else "Greenwood Institute"
+    inst_name = inst.name if inst else "Institution"
     plan_name = (inst.plan or "pro").lower() if inst else "pro"
 
     # Core Stats
@@ -1872,22 +1894,58 @@ def institution_dashboard():
         for s, sub_name, inst_name in joined_sessions
     ]
 
+    start_of_month = now_utc.replace(day=1, hour=0, minute=0, second=0, microsecond=0)
+    students_this_month = User.query.filter(
+        User.institution_id == iid,
+        User.role == 'student',
+        User.created_at >= start_of_month
+    ).count()
+    instructors_this_month = User.query.filter(
+        User.institution_id == iid,
+        User.role == 'instructor',
+        User.created_at >= start_of_month
+    ).count()
+    batches_this_month = Batch.query.filter(
+        Batch.institution_id == iid,
+        Batch.created_at >= start_of_month
+    ).count()
+    subjects_this_month = Subject.query.filter(
+        Subject.institution_id == iid,
+        Subject.created_at >= start_of_month
+    ).count()
+
+    def _dash_stat_growth(new_count, total):
+        prev = total - new_count
+        if prev > 0:
+            pct = round((new_count / prev) * 100)
+            return f"+{pct}%" if pct > 0 else "0%"
+        elif new_count > 0:
+            return "+100%"
+        return "0%"
+
+    def _dash_stat_delta(new_count, total, singular="record"):
+        if total == 0:
+            return f"No {singular}s yet"
+        if new_count > 0:
+            return f"+{new_count} this month"
+        return "0 this month"
+
     return jsonify({
         "institution_name": inst_name,
         "plan": plan_name,
         "stats": {
             "students": total_students,
-            "students_growth": "+12%",
-            "students_delta": "+26 this month",
+            "students_growth": _dash_stat_growth(students_this_month, total_students),
+            "students_delta": _dash_stat_delta(students_this_month, total_students, "student"),
             "instructors": total_instructors,
-            "instructors_growth": "+6%",
-            "instructors_delta": "+2 this month",
+            "instructors_growth": _dash_stat_growth(instructors_this_month, total_instructors),
+            "instructors_delta": _dash_stat_delta(instructors_this_month, total_instructors, "instructor"),
             "batches": total_batches,
-            "batches_growth": "+20%",
-            "batches_delta": "+2 this month",
+            "batches_growth": _dash_stat_growth(batches_this_month, total_batches),
+            "batches_delta": _dash_stat_delta(batches_this_month, total_batches, "batch"),
             "subjects": total_subjects,
-            "subjects_growth": "+9%",
-            "subjects_delta": "+3 this month",
+            "subjects_growth": _dash_stat_growth(subjects_this_month, total_subjects),
+            "subjects_delta": _dash_stat_delta(subjects_this_month, total_subjects, "subject"),
             "active_sessions": active_sessions,
             "live_sessions": live_sessions,
         },
@@ -1924,6 +1982,8 @@ def force_logout_user(user_id):
 
     _apply_force_logout(user)
     db.session.commit()
+    from app.auth.utils import invalidate_force_logout_cache
+    invalidate_force_logout_cache(user_id)
 
     # Kick from any active SocketIO rooms
     from app.extensions import socketio
@@ -5313,7 +5373,7 @@ def get_profile():
 
     institution_dict = {
         'id': inst.id if inst else g.institution_id,
-        'name': inst.name if inst else 'Greenwood Institute',
+        'name': inst.name if inst else 'Institution',
         'code': inst.code if inst else 'INST',
         'plan': inst.plan if inst else 'pro',
         'plan_display': 'NexLab Pro' if (inst and inst.plan == 'pro') else ('Enterprise' if (inst and inst.plan == 'enterprise') else 'Free Plan'),
@@ -5450,7 +5510,7 @@ def export_user_data():
         'user_account': user.to_dict(),
         'institution': {
             'id': inst.id if inst else g.institution_id,
-            'name': inst.name if inst else 'Greenwood Institute',
+            'name': inst.name if inst else 'Institution',
             'code': inst.code if inst else 'INST',
             'plan': inst.plan if inst else 'pro',
         },

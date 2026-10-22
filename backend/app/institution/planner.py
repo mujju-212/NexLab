@@ -500,7 +500,9 @@ def _generate_sessions_for_plan(plan):
     session_num = 1
     while cur <= plan.end_date:
         if cur.weekday() in target_weekdays:
-            slot_time = datetime(cur.year, cur.month, cur.day, hour, minute)
+            # Planner start_time is local campus time (IST = UTC+5:30). Convert to UTC naive datetime for DB.
+            local_dt = datetime(cur.year, cur.month, cur.day, hour, minute)
+            slot_time = local_dt - timedelta(hours=5, minutes=30)
             for ss in ss_rows:
                 title = f"{plan.name} — Session {session_num}"
                 existing = LabSession.query.filter_by(

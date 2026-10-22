@@ -266,10 +266,13 @@ def reset_user_password(user_id):
 
     data = request.get_json() or {}
     new_password = (data.get('new_password') or '').strip()
-    if not new_password:
-        return jsonify({'error': 'new_password is required'}), 400
+    must_change = data.get('must_change_password', True)
 
-    if len(new_password) < 6:
+    if not new_password:
+        import secrets, string
+        suffix = ''.join(secrets.choice(string.digits) for _ in range(4))
+        new_password = f"NexLab#{suffix}"
+    elif len(new_password) < 6:
         return jsonify({'error': 'Password must be at least 6 characters'}), 400
 
     user.password_hash = bcrypt.hashpw(
@@ -277,8 +280,10 @@ def reset_user_password(user_id):
     ).decode()
     # Invalidate existing sessions + force a self-chosen password next login
     user.force_logout_at = datetime.utcnow()
-    user.must_change_password = True
+    user.must_change_password = bool(must_change)
     db.session.commit()
+    from app.auth.utils import invalidate_force_logout_cache
+    invalidate_force_logout_cache(user_id)
 
     write_audit(g.user_id, g.institution_id, 'reset_password', 'user', user_id,
                 f"Reset password for {user.full_name} ({user.email})")
@@ -286,6 +291,8 @@ def reset_user_password(user_id):
     return jsonify({
         'message':  f'Password reset for {user.full_name}',
         'user_id':  user_id,
+        'new_password': new_password,
+        'temp_password': new_password,
         'force_logout_applied': True,
     }), 200
 
@@ -1118,17 +1125,21 @@ def schedule_session():
     from app.models.subject import Subject
 
     data = request.get_json() or {}
-    title      = (data.get('title') or '').strip()
-    section_id = data.get('section_id')
-    subject_id = data.get('subject_id')
-    instr_id   = data.get('instructor_id')
-    sched_raw  = data.get('scheduled_at')
-    duration   = data.get('duration_minutes', 60)
+    title       = (data.get('title') or '').strip()
+    section_ids = data.get('section_ids')
+    if not section_ids:
+        sec_single = data.get('section_id')
+        section_ids = [sec_single] if sec_single else []
+    subject_id  = data.get('subject_id')
+    instr_id    = data.get('instructor_id')
+    sched_raw   = data.get('scheduled_at')
+    duration    = data.get('duration_minutes', 60)
+    room        = data.get('room') or 'Lab 1 (Main Block)'
 
     if not title:
         return jsonify({'error': 'Session title is required'}), 400
-    if not section_id or not subject_id:
-        return jsonify({'error': 'Both a section and a subject are required'}), 400
+    if not section_ids or not subject_id:
+        return jsonify({'error': 'Both section(s) and a subject are required'}), 400
     if not sched_raw:
         if bool(data.get('start_immediately')):
             scheduled_at = datetime.utcnow()
@@ -1147,88 +1158,88 @@ def schedule_session():
     except (TypeError, ValueError):
         return jsonify({'error': 'Duration must be a positive number of minutes'}), 400
 
-    # Both must belong to this institution.
-    section = Section.query.filter_by(
-        id=section_id, institution_id=g.institution_id).first()
-    if not section:
-        return jsonify({'error': 'Unknown section'}), 404
     subject = Subject.query.filter_by(
         id=subject_id, institution_id=g.institution_id).first()
     if not subject:
         return jsonify({'error': 'Unknown subject'}), 404
 
-    # Find the assignment, or create it when an instructor is supplied.
-    ss = SectionSubject.query.filter_by(
-        institution_id=g.institution_id,
-        section_id=section_id, subject_id=subject_id,
-    ).first()
-
-    if not ss:
-        if not instr_id:
-            return jsonify({
-                'error': (f'{subject.name} is not assigned to section {section.name} '
-                          f'yet. Pick an instructor to assign it now, or set up the '
-                          f'assignment on the Academics page first.')
-            }), 400
-        instr = User.query.filter_by(
-            id=instr_id, institution_id=g.institution_id).first()
-        if not instr or instr.role not in ('instructor', 'institution_admin'):
-            return jsonify({'error': 'Chosen instructor is not part of this institution'}), 400
-        ss = SectionSubject(
-            institution_id=g.institution_id,
-            section_id=section_id, subject_id=subject_id,
-            instructor_id=instr_id,
-        )
-        db.session.add(ss)
-        db.session.flush()   # assign an id without a second round trip
-
-    # ── Readiness warnings (non-blocking) ────────────────────────────────────
-    # The session is created regardless; warnings are surfaced so the admin can
-    # act before the session goes live.
+    is_immediate = bool(data.get('start_immediately'))
+    created_sessions = []
     warnings = []
 
-    enrolled_count = SectionStudent.query.filter_by(section_id=section_id).count()
-    if enrolled_count == 0:
-        warnings.append(
-            f'Section "{section.name}" has no enrolled students. '
-            f'Enrol students before the session starts or no one will see it.'
-        )
+    for sec_id in section_ids:
+        section = Section.query.filter_by(
+            id=sec_id, institution_id=g.institution_id).first()
+        if not section:
+            continue
 
-    instr_user = User.query.filter_by(id=ss.instructor_id).first()
-    if not instr_user:
-        warnings.append(
-            'The assigned instructor account no longer exists. '
-            'Reassign the instructor on the Academics page.'
-        )
-    elif not instr_user.is_active:
-        warnings.append(
-            f'Instructor "{instr_user.full_name}" is deactivated. '
-            f'Reactivate the account or reassign the subject to another instructor.'
-        )
+        ss = SectionSubject.query.filter_by(
+            institution_id=g.institution_id,
+            section_id=sec_id, subject_id=subject_id,
+        ).first()
 
-    is_immediate = bool(data.get('start_immediately'))
-    session = LabSession(
-        institution_id=g.institution_id,
-        section_subject_id=ss.id,
-        experiment_id=None,
-        title=title,
-        scheduled_at=scheduled_at,
-        duration_minutes=duration,
-        status='active' if is_immediate else 'scheduled',
-        started_at=datetime.utcnow() if is_immediate else None,
-    )
-    db.session.add(session)
+        if not ss:
+            if not instr_id:
+                return jsonify({
+                    'error': (f'{subject.name} is not assigned to section {section.name} '
+                              f'yet. Pick an instructor to assign it now, or set up the '
+                              f'assignment on the Academics page first.')
+                }), 400
+            instr = User.query.filter_by(
+                id=instr_id, institution_id=g.institution_id).first()
+            if not instr or instr.role not in ('instructor', 'institution_admin'):
+                return jsonify({'error': 'Chosen instructor is not part of this institution'}), 400
+            ss = SectionSubject(
+                institution_id=g.institution_id,
+                section_id=sec_id, subject_id=subject_id,
+                instructor_id=instr_id,
+            )
+            db.session.add(ss)
+            db.session.flush()
+
+        enrolled_count = SectionStudent.query.filter_by(section_id=sec_id).count()
+        if enrolled_count == 0:
+            warnings.append(
+                f'Section "{section.name}" has no enrolled students.'
+            )
+
+        instr_user = User.query.filter_by(id=ss.instructor_id).first() if ss.instructor_id else None
+        if not instr_user:
+            warnings.append('The assigned instructor account no longer exists.')
+        elif not instr_user.is_active:
+            warnings.append(f'Instructor "{instr_user.full_name}" is deactivated.')
+
+        session = LabSession(
+            institution_id=g.institution_id,
+            section_subject_id=ss.id,
+            experiment_id=None,
+            title=title,
+            scheduled_at=scheduled_at,
+            duration_minutes=duration,
+            status='active' if is_immediate else 'scheduled',
+            started_at=datetime.utcnow() if is_immediate else None,
+            jitsi_room_name=room,
+        )
+        db.session.add(session)
+        created_sessions.append(session)
+
+    if not created_sessions:
+        return jsonify({'error': 'No valid sections found in your institution'}), 404
+
     db.session.commit()
 
-    write_audit(g.user_id, g.institution_id, 'schedule_session', 'session',
-                session.id,
-                f"Scheduled \"{title}\" — {subject.name} / section {section.name} "
-                f"@ {scheduled_at.isoformat()}")
+    for s in created_sessions:
+        write_audit(g.user_id, g.institution_id, 'schedule_session', 'session',
+                    s.id, f"Scheduled \"{title}\" @ {scheduled_at.isoformat()}")
 
-    # Tell the instructor — admins schedule it, instructors live by it.
-    _notify_session_instructors([session], g.user_id)
+    _notify_session_instructors(created_sessions, g.user_id)
 
-    return jsonify({'session': _enrich_sessions([session])[0], 'warnings': warnings}), 201
+    enriched = _enrich_sessions(created_sessions)
+    return jsonify({
+        'session': enriched[0],
+        'sessions': enriched,
+        'warnings': warnings
+    }), 201
 
 
 @institution_ext_bp.route('/sessions/bulk-schedule', methods=['POST'])
@@ -1379,9 +1390,9 @@ def bulk_schedule_sessions():
     cursor = start_date
     while cursor <= end_date:
         if cursor.weekday() == day_of_week:
-            occurrences.append(
-                datetime(cursor.year, cursor.month, cursor.day, hour, minute)
-            )
+            # start_time is local campus time (IST = UTC+5:30). Convert to UTC naive datetime for DB.
+            local_dt = datetime(cursor.year, cursor.month, cursor.day, hour, minute)
+            occurrences.append(local_dt - timedelta(hours=5, minutes=30))
         cursor += timedelta(days=1)
 
     if not occurrences:
@@ -2074,7 +2085,9 @@ def analytics_grades():
         ).subquery()
         student_query = student_query.filter(User.id.in_(sec_student_ids))
     if batch_id:
-        student_query = student_query.filter(User.batch_id == batch_id)
+        batch_sec_ids = db.session.query(Section.id).filter(Section.batch_id == batch_id).subquery()
+        batch_stu_ids = db.session.query(SectionStudent.student_id).filter(SectionStudent.section_id.in_(batch_sec_ids)).subquery()
+        student_query = student_query.filter(User.id.in_(batch_stu_ids))
 
     student_subq = student_query.subquery()
 
@@ -2974,15 +2987,27 @@ def analytics_engagement():
     for pe in proctor_events:
         student_proctor_counts[pe.student_id] += 1
 
-    # Focus score calculation
+    # Focus score calculation (prefer real FocusScore rows; fallback to attendance/proctor heuristic)
+    from app.models.knowledge import FocusScore
+    real_focus_rows = db.session.query(FocusScore.student_id, func.avg(FocusScore.focus_score)).filter(
+        FocusScore.student_id.in_(list(all_ids)),
+        FocusScore.recorded_at >= start,
+        FocusScore.recorded_at <= end,
+        FocusScore.focus_score.isnot(None),
+    ).group_by(FocusScore.student_id).all() if all_ids else []
+    real_focus_map = {r[0]: round(float(r[1]), 1) for r in real_focus_rows if r[1] is not None}
+
     total_sess_count = max(len(sess_ids), 1)
     student_focus_scores = {}
     for sid in all_ids:
-        attended = len(student_attendance.get(sid, []))
-        pe_count = student_proctor_counts.get(sid, 0)
-        att_ratio = attended / total_sess_count if total_sess_count else 0
-        score = 82.0 + (att_ratio * 16.0) - (pe_count * 3.5)
-        student_focus_scores[sid] = round(max(35.0, min(96.0, score)), 1)
+        if sid in real_focus_map:
+            student_focus_scores[sid] = real_focus_map[sid]
+        else:
+            attended = len(student_attendance.get(sid, []))
+            pe_count = student_proctor_counts.get(sid, 0)
+            att_ratio = attended / total_sess_count if total_sess_count else 0
+            score = 82.0 + (att_ratio * 16.0) - (pe_count * 3.5) if attended > 0 else 0.0
+            student_focus_scores[sid] = round(max(0.0, min(96.0, score)), 1)
 
     final_eng_rate = engagement_rate
     final_active_count = active_count
@@ -3661,7 +3686,10 @@ def analytics_ai_usage():
         if dept_id:
             st_q = st_q.filter(User.department_id == dept_id)
         if batch_id:
-            st_q = st_q.filter(User.batch_id == batch_id)
+            from app.models.academic import Section, SectionStudent
+            b_sec_ids = [s.id for s in Section.query.filter_by(batch_id=batch_id).all()]
+            b_stu_ids = [sl.student_id for sl in SectionStudent.query.filter(SectionStudent.section_id.in_(b_sec_ids)).all()] if b_sec_ids else []
+            st_q = st_q.filter(User.id.in_(b_stu_ids))
         if sec_id:
             from app.models.academic import SectionStudent
             sec_sids = [sl.student_id for sl in SectionStudent.query.filter_by(section_id=sec_id).all()]
