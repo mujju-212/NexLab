@@ -115,3 +115,18 @@ h1, h2, h3, h4 { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sys
 @media (prefers-reduced-motion: reduce) {
   *, *::before, *::after { animation-duration: .01ms !important; transition-duration: .01ms !important; }
 }
+
+/* ── Hide floating AI Copilot launcher button when any modal or drawer is active ── */
+body:has([class*="drawerOverlay"]) [class*="copilotContainer"]:not([class*="copilotContainerOpen"]),
+body:has([class*="modalOverlay"]) [class*="copilotContainer"]:not([class*="copilotContainerOpen"]),
+body:has([class*="confirmOverlay"]) [class*="copilotContainer"]:not([class*="copilotContainerOpen"]),
+body:has([class*="drawerBackdrop"]) [class*="copilotContainer"]:not([class*="copilotContainerOpen"]),
+body:has([data-modal-overlay="true"]) [class*="copilotContainer"]:not([class*="copilotContainerOpen"]),
+body:has([role="dialog"]) [class*="copilotContainer"]:not([class*="copilotContainerOpen"]),
+body:has([aria-modal="true"]) [class*="copilotContainer"]:not([class*="copilotContainerOpen"]) {
+  display: none !important;
+  opacity: 0 !important;
+  pointer-events: none !important;
+  visibility: hidden !important;
+}
+

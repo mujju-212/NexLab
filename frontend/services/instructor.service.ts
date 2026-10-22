@@ -6,6 +6,64 @@ import Cookies from 'js-cookie';
 
 // ── Types ─────────────────────────────────────────────────────────────────────
 
+export interface FeedbackOverviewSessionRow {
+  session_id: string;
+  experiment_id: string | null;
+  experiment_title: string;
+  exp_number?: number | null;
+  scheduled_at: string | null;
+  status: string;
+  response_count: number;
+  overall_rating: number | null;
+  experiment_clarity: number | null;
+  session_pacing: number | null;
+  ai_hint_helpfulness: number | null;
+  subject_id?: string;
+  subject_name?: string;
+  subject_code?: string;
+  section_id?: string;
+  section_name?: string;
+  batch_id?: string | null;
+  batch_name?: string;
+  academic_year?: string;
+  department_id?: string | null;
+  department_name?: string;
+  department_code?: string;
+}
+
+export interface FeedbackOverviewResponse {
+  total: number;
+  averages: {
+    experiment_clarity: number | null;
+    session_pacing: number | null;
+    ai_hint_helpfulness: number | null;
+    overall_rating: number | null;
+  };
+  sessions_summary: FeedbackOverviewSessionRow[];
+  feedback: Array<{
+    id: string;
+    session_id: string;
+    experiment_title: string;
+    experiment_clarity: number | null;
+    session_pacing: number | null;
+    ai_hint_helpfulness: number | null;
+    overall_rating: number | null;
+    comment: string | null;
+    submitted_at: string | null;
+    subject_id?: string;
+    subject_name?: string;
+    subject_code?: string;
+    section_id?: string;
+    section_name?: string;
+    batch_id?: string | null;
+    batch_name?: string;
+    academic_year?: string;
+    department_id?: string | null;
+    department_name?: string;
+    department_code?: string;
+  }>;
+}
+
 export interface SessionFeedbackData {
   session_id: string;
   total: number;
@@ -346,6 +404,21 @@ export const instructorService = {
 
   // ── Session Feedback ─────────────────────────────────────────────────────
   // GET /api/instructor/sessions/<session_id>/feedback
+  // GET /api/instructor/feedback-overview
+  async getFeedbackOverview(params?: {
+    department_id?: string;
+    academic_year?: string;
+    batch_id?: string;
+    section_id?: string;
+    subject_id?: string;
+    session_id?: string;
+  }): Promise<FeedbackOverviewResponse> {
+    const { data } = await apiClient.get<FeedbackOverviewResponse>("/instructor/feedback-overview", {
+      params: params || {},
+    });
+    return data;
+  },
+
   async getSessionFeedback(sessionId: string): Promise<SessionFeedbackData> {
     const { data } = await apiClient.get<SessionFeedbackData>(`/instructor/sessions/${sessionId}/feedback`);
     return data;

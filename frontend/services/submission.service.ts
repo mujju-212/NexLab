@@ -6,9 +6,13 @@ import { apiClient } from './api-client';
 export const submissionService = {
 
   // ── Instructor: List final submissions for an experiment ─────────────────────
-  // GET /api/instructor/submissions/<experiment_id> (includes student name/roll)
-  async getSubmissions(experimentId: string) {
-    const { data } = await apiClient.get(`/instructor/submissions/${experimentId}`);
+  // GET /api/instructor/submissions/<experiment_id> (includes student name/roll, code, rubric, grade breakdown)
+  async getSubmissions(experimentId: string, sectionId?: string) {
+    const params: Record<string, string> = {};
+    if (sectionId && sectionId !== 'all') {
+      params.section_id = sectionId;
+    }
+    const { data } = await apiClient.get(`/instructor/submissions/${experimentId}`, { params });
     return data;
   },
 

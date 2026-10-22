@@ -87,7 +87,7 @@ export default function InstitutionShell({
   activePage, activeSubPage, activeSubPageLabel, children, title, subtitle,
 }: InstitutionShellProps) {
   const router = useRouter();
-  const { user, clearAuth } = useAuthStore();
+  const { user, clearAuth, setUser } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [academicOpen, setAcademicOpen] = useState(activePage === 'Academic');
@@ -96,6 +96,31 @@ export default function InstitutionShell({
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
+
+  // Auto-sync institution_name into auth storage if missing
+  useEffect(() => {
+    if (!user?.institution_name && user?.institution_id) {
+      authService.getMe().then(updatedUser => {
+        if (updatedUser?.institution_name) {
+          setUser({ ...user, ...updatedUser });
+        }
+      }).catch(() => {});
+    }
+  }, [user?.institution_name, user?.institution_id, setUser]);
+
+  const institutionDisplayName = user?.institution_name || (user?.institution_id ? `Inst. ${user.institution_id.slice(0, 8).toUpperCase()}` : 'Institution');
+
+  const institutionInitials = useMemo(() => {
+    if (user?.institution_name) {
+      const parts = user.institution_name.split(/\s+/).filter(Boolean);
+      if (parts.length >= 2) {
+        return (parts[0][0] + parts[1][0]).toUpperCase();
+      }
+      return user.institution_name.slice(0, 2).toUpperCase();
+    }
+    return 'IA';
+  }, [user?.institution_name]);
+
 
   // Sync open state when activePage changes
   useEffect(() => {
@@ -185,8 +210,8 @@ export default function InstitutionShell({
 
           {!collapsed && (
             <div className={styles.institutionBadge}>
-              <span className={styles.institutionName}>
-                {user?.institution_id ? `Inst. ${user.institution_id.slice(0, 8).toUpperCase()}` : 'Institution Admin'}
+              <span className={styles.institutionName} title={institutionDisplayName}>
+                {institutionDisplayName}
               </span>
               <span className={styles.institutionRole}>Admin Portal</span>
             </div>
@@ -538,9 +563,11 @@ export default function InstitutionShell({
               <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
               <div style={{ position: 'relative' }}>
                 <div className={styles.profileChip} onClick={() => setShowProfileMenu(p => !p)}>
-                  <div className={styles.avatarLg} style={{ background: '#7c3aed', width: 32, height: 32, fontSize: 12 }}>IA</div>
+                  <div className={styles.avatarLg} style={{ background: '#7c3aed', width: 32, height: 32, fontSize: 12 }}>
+                    {institutionInitials}
+                  </div>
                   <div className={styles.profileText}>
-                    <span className={styles.profileName}>Greenwood Institute</span>
+                    <span className={styles.profileName}>{institutionDisplayName}</span>
                     <span className={styles.profileRole}>Institution Admin</span>
                   </div>
                   <ChevronDown size={14} className={styles.profileChevron} />
@@ -548,8 +575,8 @@ export default function InstitutionShell({
                 {showProfileMenu && (
                   <div style={{ position:'absolute', top:'100%', right:0, marginTop:8, zIndex:100, background:'#fff', borderRadius:12, boxShadow:'0 8px 28px rgba(0,0,0,0.12)', border:'1px solid #f1f5f9', minWidth:220, overflow:'hidden' }}>
                     <div style={{ padding:'12px 16px', borderBottom:'1px solid #f1f5f9' }}>
-                      <p style={{ margin:0, fontSize:14, fontWeight:700, color:'#201b2e' }}>Greenwood Institute</p>
-                      <p style={{ margin:'2px 0 0', fontSize:12, color:'#9891a6' }}>{user?.email ?? 'inst.admin@nexlab.demo'}</p>
+                      <p style={{ margin:0, fontSize:14, fontWeight:700, color:'#201b2e' }}>{institutionDisplayName}</p>
+                      <p style={{ margin:'2px 0 0', fontSize:12, color:'#9891a6' }}>{user?.email ?? ''}</p>
                     </div>
                     <button onClick={() => { setShowProfileMenu(false); router.push('/institution/profile'); }}
                       style={{ display:'flex', alignItems:'center', gap:10, width:'100%', padding:'10px 16px', background:'none', border:'none', cursor:'pointer', fontSize:13, fontWeight:500, color:'#201b2e' }}>

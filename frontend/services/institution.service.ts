@@ -56,6 +56,21 @@ export interface CreateUserDto {
   phone?: string;
 }
 
+export interface CreateUserResponse {
+  user: InstitutionUser;
+  temp_password?: string;
+}
+
+export interface BulkUploadResponse {
+  created: number;
+  skipped: number;
+  skipped_emails: string[];
+  credentials?: Array<{ email: string; temp_password: string }>;
+  failed_rows?: Array<{ email: string; row: number; reason: string }>;
+  rejected_over_limit?: string[];
+  message?: string;
+}
+
 export interface UpdateUserDto {
   full_name?: string;
   first_name?: string;
@@ -2005,7 +2020,8 @@ export interface SystemHealth {
 
 export interface ScheduleSessionDto {
   title: string;
-  section_id: string;
+  section_id?: string;
+  section_ids?: string[];
   subject_id: string;
   scheduled_at: string;
   duration_minutes: number;
@@ -2056,6 +2072,7 @@ export interface SessionEnriched {
   section_id?: string;
   student_count?: number;
   batch_name?: string;
+  batch_id?: string;
   program?: string;
   academic_year_label?: string;
   department_code?: string;
@@ -2073,6 +2090,7 @@ export interface SessionEnriched {
   attendance_percent?: number;
   notes?: string;
   resources?: Array<{ name: string; type: string; size: string; url?: string }>;
+  is_recurring_projection?: boolean;
 }
 
 export interface LiveSessionsSummary {
@@ -2123,7 +2141,8 @@ export interface LiveRosterResponse {
 
 export interface CreateLiveSessionDto {
   title: string;
-  section_id: string;
+  section_id?: string;
+  section_ids?: string[];
   subject_id: string;
   instructor_id?: string;
   scheduled_at?: string;
@@ -2227,9 +2246,9 @@ export const institutionService = {
     return data;
   },
 
-  async createUser(dto: CreateUserDto): Promise<InstitutionUser> {
-    const { data } = await apiClient.post<{ user: InstitutionUser }>('/institution/users', dto);
-    return data.user;
+  async createUser(dto: CreateUserDto): Promise<CreateUserResponse> {
+    const { data } = await apiClient.post<CreateUserResponse>('/institution/users', dto);
+    return data;
   },
 
   async updateUser(userId: string, dto: UpdateUserDto): Promise<InstitutionUser> {
@@ -2249,6 +2268,14 @@ export const institutionService = {
 
   async toggleUserActive(userId: string): Promise<{ is_active: boolean }> {
     const { data } = await apiClient.patch(`/institution/users/${userId}/toggle-active`);
+    return data;
+  },
+
+  async resetUserPassword(userId: string, newPassword?: string, mustChangePassword = true): Promise<{ message: string; user_id: string; new_password?: string; temp_password?: string; force_logout_applied?: boolean }> {
+    const { data } = await apiClient.post(`/institution/users/${userId}/reset-password`, {
+      new_password: newPassword || undefined,
+      must_change_password: mustChangePassword,
+    });
     return data;
   },
 
@@ -2290,10 +2317,10 @@ export const institutionService = {
     await apiClient.post(`/institution/users/${userId}/force-logout`);
   },
 
-  async bulkUploadUsers(file: File): Promise<{ created: number; skipped: number; skipped_emails: string[] }> {
+  async bulkUploadUsers(file: File): Promise<BulkUploadResponse> {
     const form = new FormData();
     form.append('file', file);
-    const { data } = await apiClient.post('/institution/users/bulk-upload', form, {
+    const { data } = await apiClient.post<BulkUploadResponse>('/institution/users/bulk-upload', form, {
       headers: { 'Content-Type': 'multipart/form-data' },
     });
     return data;
@@ -3037,7 +3064,7 @@ export const institutionService = {
 
   // ── Recurring Timetable Planner ───────────────────────────────────────────
 
-  async getRecurringPlans(params?: Record<string, string>): Promise<{ plans: RecurringPlan[]; total: number; stats: PlannerStats }> {
+  async getRecurringPlans(params?: Record<string, string | number | boolean>): Promise<{ plans: RecurringPlan[]; total: number; stats: PlannerStats }> {
     try {
       const { data } = await apiClient.get('/institution/recurring-plans', { params });
       return data;

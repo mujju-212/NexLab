@@ -1,6 +1,7 @@
 'use client';
 
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { usePathname } from 'next/navigation';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import {
@@ -24,7 +25,6 @@ import {
   Users,
   Building2,
   BookOpen,
-  ArrowRight,
   Plus,
   ExternalLink,
   Pin,
@@ -32,14 +32,20 @@ import {
   Pencil,
   ShieldCheck,
   Clock,
+  Download,
+  Code2,
+  GraduationCap,
+  TrendingUp,
+  FlaskConical,
 } from 'lucide-react';
 import {
-  institutionService,
-  type CopilotChatSession,
-  type CopilotChatMessage,
-  type CopilotDocument,
-  type CopilotSource,
-} from '@/services/institution.service';
+  aiService,
+  type HarnessChatSession,
+  type HarnessChatMessage,
+  type HarnessDocument,
+  type HarnessGeneratedDoc,
+} from '@/services/ai.service';
+import { useAuthStore } from '@/store/auth-store';
 import styles from './copilot.module.css';
 
 /* ── Rich Action Configuration Map ── */
@@ -105,33 +111,281 @@ const ACTION_CONFIG: Record<string, ActionMeta> = {
     badge: 'Broadcast',
     icon: <Sparkles size={15} color="#9333ea" />,
   },
+  instructor_create_experiment: {
+    label: 'Create Lab Experiment',
+    badge: 'Experiment Authoring',
+    icon: <FlaskConical size={15} color="#7c3aed" />,
+  },
+  instructor_add_test_cases: {
+    label: 'Attach AI-Generated Test Cases',
+    badge: 'Test Suite',
+    icon: <Code2 size={15} color="#059669" />,
+  },
+  instructor_create_quiz_module: {
+    label: 'Create Pre-Lab Quiz Module',
+    badge: 'Assessment',
+    icon: <BookOpen size={15} color="#2563eb" />,
+  },
+  instructor_create_checkpoints: {
+    label: 'Configure SPARK Checkpoints',
+    badge: 'SPARK Pacing',
+    icon: <TrendingUp size={15} color="#7c3aed" />,
+  },
+  instructor_live_session_control: {
+    label: 'Live Session Conductor Control',
+    badge: 'Live Classroom',
+    icon: <Clock size={15} color="#ea580c" />,
+  },
+  instructor_bulk_autograde: {
+    label: 'Bulk Auto-Grade Experiment Submissions',
+    badge: 'Grading',
+    icon: <GraduationCap size={15} color="#059669" />,
+  },
+  instructor_grant_extension: {
+    label: 'Grant Student Deadline Extension',
+    badge: 'Relief',
+    icon: <Calendar size={15} color="#0891b2" />,
+  },
+  instructor_log_intervention: {
+    label: 'Record At-Risk Student Intervention',
+    badge: 'Mentoring',
+    icon: <Users size={15} color="#9333ea" />,
+  },
+  admin_create_academic_year: {
+    label: 'Create Academic Year',
+    badge: 'Academic Setup',
+    icon: <Calendar size={15} color="#7c3aed" />,
+  },
+  admin_create_batch: {
+    label: 'Create Student Batch',
+    badge: 'Academic Setup',
+    icon: <Users size={15} color="#2563eb" />,
+  },
+  admin_create_subject: {
+    label: 'Create Curriculum Subject',
+    badge: 'Catalog',
+    icon: <BookOpen size={15} color="#059669" />,
+  },
+  admin_bulk_enroll_students: {
+    label: 'Bulk Enroll Students into Section',
+    badge: 'Enrollment',
+    icon: <UserPlus size={15} color="#4f46e5" />,
+  },
+  admin_force_logout: {
+    label: 'Force Revoke Active JWT Sessions',
+    badge: 'Security',
+    icon: <ShieldCheck size={15} color="#dc2626" />,
+  },
+  platform_provision_institution: {
+    label: 'Provision New Institution Tenant',
+    badge: 'Multi-Tenant',
+    icon: <Building2 size={15} color="#7c3aed" />,
+  },
+  platform_update_tenant: {
+    label: 'Update Institution Plan & Seat Cap',
+    badge: 'Subscription',
+    icon: <Building2 size={15} color="#059669" />,
+  },
+  platform_update_config: {
+    label: 'Update Platform Configuration',
+    badge: 'Platform Governance',
+    icon: <ShieldCheck size={15} color="#dc2626" />,
+  },
 };
 
-const CHAT_SUGGESTIONS = [
-  { icon: <Calendar size={13} />, text: 'What lab sessions are scheduled today?' },
-  { icon: <Users size={13} />, text: 'Which students are at risk or have low attendance?' },
-  { icon: <Sparkles size={13} />, text: 'Who consumed the most AI tokens this week?' },
-  { icon: <BookOpen size={13} />, text: 'List departments, sections, and active instructors' },
-];
+/* ── Role-Specific Branding & Prompt Suggestions ── */
+interface RoleHarnessConfig {
+  title: string;
+  badgeText: string;
+  launcherLabel: string;
+  supportsAgentMode: boolean;
+  socraticProtected: boolean;
+  chatSubtitle: string;
+  agentSubtitle: string;
+  emptyChatTitle: string;
+  emptyChatSub: string;
+  emptyAgentTitle: string;
+  emptyAgentSub: string;
+  chatPlaceholder: string;
+  agentPlaceholder: string;
+  chatSuggestions: Array<{ icon: React.ReactNode; text: string }>;
+  agentSuggestions: Array<{ icon: React.ReactNode; text: string }>;
+}
 
-const AGENT_SUGGESTIONS = [
-  { icon: <Calendar size={13} />, text: 'Schedule a Python Lab for Section A tomorrow at 10 AM (duration 90 mins)' },
-  { icon: <UserPlus size={13} />, text: 'Create a new student named Rahul Sharma with email rahul@campus.edu' },
-  { icon: <Building2 size={13} />, text: 'Create a new section B for CSE 2nd Year batch' },
-  { icon: <Sparkles size={13} />, text: 'Draft an announcement reminding students about upcoming lab exams' },
-];
+const ROLE_CONFIGS: Record<string, RoleHarnessConfig> = {
+  student: {
+    title: 'NexLab Socratic AI',
+    badgeText: 'Socratic Tutor',
+    launcherLabel: 'Ask Socratic Tutor',
+    supportsAgentMode: false,
+    socraticProtected: true,
+    chatSubtitle: '3-Level Hints · Code & Error Help · Self-Analytics',
+    agentSubtitle: 'Study Sheet & Practice Builder',
+    emptyChatTitle: 'Your Socratic Lab Tutor & Study Companion',
+    emptyChatSub:
+      'Get progressive hints without spoiling solutions, understand compiler errors, check your grades/attendance/SPARK score, or generate study sheets.',
+    emptyAgentTitle: 'Study Sheet & Revision Generator',
+    emptyAgentSub: 'Generate downloadable study sheets, flashcards, and practice recommendations.',
+    chatPlaceholder: 'Ask for a hint on your code, explain an error, check your grades/attendance, or generate a study sheet...',
+    agentPlaceholder: 'Ask to generate a study sheet or recommend practice problems...',
+    chatSuggestions: [
+      { icon: <Code2 size={13} />, text: 'Give me a Level 1 Socratic hint for my current lab code' },
+      { icon: <Sparkles size={13} />, text: '/collection Build a 5-problem practice playlist in my account for my weakest topics' },
+      { icon: <BookOpen size={13} />, text: '/playground Create a saved Python playground workspace for Two Pointers & Sliding Window' },
+      { icon: <FileText size={13} />, text: '/studyplan Enroll me in a study plan and generate a 7-day revision sheet & flashcards' },
+    ],
+    agentSuggestions: [],
+  },
+  free_user: {
+    title: 'NexLab Coding Coach',
+    badgeText: 'Self-Learner AI',
+    launcherLabel: 'Ask AI Coach',
+    supportsAgentMode: false,
+    socraticProtected: true,
+    chatSubtitle: 'Socratic Practice Coach · Skill Gaps · Study Plans',
+    agentSubtitle: 'Study Plan Generator',
+    emptyChatTitle: 'Your Personal Socratic Coding Coach',
+    emptyChatSub:
+      'Analyze your practice submissions, diagnose weak algorithm topics, get progressive hints without spoilers, and build custom study plans.',
+    emptyAgentTitle: 'Personalized Study Plan Builder',
+    emptyAgentSub: 'Create multi-day coding roadmaps and cheat sheets.',
+    chatPlaceholder: 'Ask about your practice stats, get a Socratic hint, or generate a 7-day study plan...',
+    agentPlaceholder: 'Generate a study plan...',
+    chatSuggestions: [
+      { icon: <Sparkles size={13} />, text: '/collection Build a custom 5-problem playlist & bookmarks for my weakest topics' },
+      { icon: <Code2 size={13} />, text: '/playground Create a saved Python playground session for Dynamic Programming' },
+      { icon: <Calendar size={13} />, text: '/studyplan Enroll me in a study plan and build a 7-day coding roadmap' },
+      { icon: <TrendingUp size={13} />, text: 'Show my solved practice stats, XP, and weakest algorithm topics' },
+    ],
+    agentSuggestions: [],
+  },
+  instructor: {
+    title: 'NexLab Teaching Copilot',
+    badgeText: 'v2.0 Instructor',
+    launcherLabel: 'Teaching Copilot',
+    supportsAgentMode: true,
+    socraticProtected: false,
+    chatSubtitle: 'Section Analytics · Error Clustering · At-Risk Detection',
+    agentSubtitle: 'Experiment Authoring · Section Reports',
+    emptyChatTitle: 'Section-Scoped Teaching & Lab Intelligence',
+    emptyChatSub:
+      'Analyze grades and attendance across your assigned sections, cluster common student code errors, identify at-risk students, or export reports.',
+    emptyAgentTitle: 'Autonomous Experiment Authoring & Actions',
+    emptyAgentSub: 'Propose and create new lab experiments with starter code or export section gradebooks.',
+    chatPlaceholder: 'Ask about your assigned sections, at-risk students, common code errors, or export a section report...',
+    agentPlaceholder: 'Instruct: e.g. "Create a new Python experiment on Binary Search Trees"...',
+    chatSuggestions: [
+      { icon: <FlaskConical size={13} />, text: '/experiment Create a complete experiment on "Binary Search Tree Operations" with interactive HTML visualizer, quiz, viva, test cases & SPARK checkpoints' },
+      { icon: <BookOpen size={13} />, text: '/exam Create and publish a 45-minute mixed MCQ + Coding exam for my subject' },
+      { icon: <GraduationCap size={13} />, text: '/autograde Auto-grade and publish all student submissions for my latest experiment' },
+      { icon: <TrendingUp size={13} />, text: 'Show grade, attendance, and common submission error clusters across my sections' },
+    ],
+    agentSuggestions: [
+      { icon: <FlaskConical size={13} />, text: '/experiment Build a complete experiment on "Stack & Queue Visualizer" with interactive HTML simulation, quiz, viva, test cases & checkpoints' },
+      { icon: <Code2 size={13} />, text: 'Add an interactive HTML simulation block to my latest experiment and republish' },
+      { icon: <BookOpen size={13} />, text: '/exam Create a 45-minute Mid-Sem Exam with 3 MCQs and 1 coding question' },
+      { icon: <GraduationCap size={13} />, text: '/autograde Auto-grade all submissions for my latest experiment and grant a 3-day extension to struggling students' },
+    ],
+  },
+  institution_admin: {
+    title: 'NexLab AI Copilot',
+    badgeText: 'v2.0 Admin',
+    launcherLabel: 'Ask AI Copilot',
+    supportsAgentMode: true,
+    socraticProtected: false,
+    chatSubtitle: '7-Domain Analytics · RAG Docs · Web Search',
+    agentSubtitle: 'Autonomous Scheduling, Provisioning & Governance',
+    emptyChatTitle: 'Ask Anything Across Your Institution',
+    emptyChatSub:
+      'Instant answers on sessions, instructor timetables, 7-domain analytics (Grades, Attendance, SPARK, AI Usage), or uploaded documents.',
+    emptyAgentTitle: 'Autonomous Action Execution',
+    emptyAgentSub:
+      'Schedule lab sessions, create students/instructors, update token quotas, configure departments, and broadcast announcements.',
+    chatPlaceholder: "Ask about today's sessions, instructors, 7-domain analytics, AI tokens, or attached documents...",
+    agentPlaceholder: 'Instruct: e.g. "Schedule Python Lab for Section A tomorrow 10am" or "Create student..."',
+    chatSuggestions: [
+      { icon: <Sparkles size={13} />, text: '/setup Set up 2026-2027 CSE Department, CSE 2nd Year Batch, Sections A & B, Data Structures Lab, assign instructor, enroll students & schedule 8 weeks of sessions' },
+      { icon: <Calendar size={13} />, text: '/schedule Create a recurring Tue/Thu 10:00 AM timetable for Section A across 8 weeks' },
+      { icon: <TrendingUp size={13} />, text: 'Audit our academic catalog for unassigned subjects and show 7-domain analytics' },
+      { icon: <FileText size={13} />, text: '/report Generate a NAAC/NBA Course Outcome attainment report in CSV' },
+    ],
+    agentSuggestions: [
+      { icon: <Sparkles size={13} />, text: '/setup Execute full setup: CSE Dept, 2nd Year Batch, Sections A & B, Data Structures & OS Labs, enroll students & generate weekly sessions' },
+      { icon: <Building2 size={13} />, text: 'Create a new subject "Compiler Design Lab" (code CS304L) and assign it to Section A' },
+      { icon: <UserPlus size={13} />, text: 'Create a new instructor Dr. Vikram Nair (vikram@campus.edu) in CSE and assign to Section B' },
+      { icon: <Calendar size={13} />, text: '/schedule Schedule weekly Tue/Thu 10 AM lab sessions for Section A for the next 8 weeks' },
+    ],
+  },
+  admin: {
+    title: 'NexLab Platform Copilot',
+    badgeText: 'Super Admin',
+    launcherLabel: 'Platform Copilot',
+    supportsAgentMode: true,
+    socraticProtected: false,
+    chatSubtitle: 'Cross-Tenant Telemetry · Global AI Usage · Health',
+    agentSubtitle: 'Global PlatformConfig & Tenant Governance',
+    emptyChatTitle: 'Cross-Tenant Platform Operations',
+    emptyChatSub: 'Inspect all institutions, active users by role, global AI token burn, and platform flags.',
+    emptyAgentTitle: 'Platform Governance Actions',
+    emptyAgentSub: 'Propose and confirm updates to global PlatformConfig settings.',
+    chatPlaceholder: 'Ask about total institutions, global AI token usage, or platform settings...',
+    agentPlaceholder: 'Instruct: e.g. "Propose updating platform config ai_hints_enabled to true"...',
+    chatSuggestions: [
+      { icon: <Building2 size={13} />, text: 'Show global platform overview, user counts by role, and today’s AI token usage' },
+      { icon: <Users size={13} />, text: 'List all institutions on the platform with their plan and user count' },
+    ],
+    agentSuggestions: [
+      { icon: <ShieldCheck size={13} />, text: 'Propose updating PlatformConfig key ai_hints_enabled to true' },
+    ],
+  },
+};
 
-export default function AgentChatPanel() {
+export interface AgentChatPanelProps {
+  roleOverride?: string;
+  pageContext?: Record<string, any>;
+}
+
+export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatPanelProps = {}) {
+  const pathname = usePathname();
+  const { user } = useAuthStore();
+
+  // Resolve effective role from prop -> authStore -> URL path
+  const effectiveRole = useMemo(() => {
+    if (roleOverride) return roleOverride;
+    if (user?.role) return user.role;
+    if (pathname?.startsWith('/student')) return 'student';
+    if (pathname?.startsWith('/practice')) return 'free_user';
+    if (pathname?.startsWith('/instructor')) return 'instructor';
+    if (pathname?.startsWith('/admin')) return 'admin';
+    return 'institution_admin';
+  }, [roleOverride, user?.role, pathname]);
+
+  const roleCfg = ROLE_CONFIGS[effectiveRole] || ROLE_CONFIGS.institution_admin;
+
   const [open, setOpen] = useState(false);
   const [isExpanded, setIsExpanded] = useState(false);
   const [mode, setMode] = useState<'chat' | 'agent'>('chat');
 
+  // Ensure student / free_user stay in 'chat' mode
+  useEffect(() => {
+    if (!roleCfg.supportsAgentMode && mode !== 'chat') {
+      setMode('chat');
+    }
+  }, [roleCfg.supportsAgentMode, mode]);
+
   // Conversation Threads & Messages
-  const [sessions, setSessions] = useState<CopilotChatSession[]>([]);
+  const [sessions, setSessions] = useState<HarnessChatSession[]>([]);
   const [activeSessionId, setActiveSessionId] = useState<string | null>(null);
   const [showHistorySidebar, setShowHistorySidebar] = useState(false);
-  const [messages, setMessages] = useState<CopilotChatMessage[]>([]);
+  const [messages, setMessages] = useState<HarnessChatMessage[]>([]);
   const [loadingMessages, setLoadingMessages] = useState(false);
+
+  // Session memory per mode so Knowledge & Analytics and Agent & Action Mode don't collide
+  const activeSessionByMode = useRef<{ chat: string | null; agent: string | null }>({
+    chat: null,
+    agent: null,
+  });
+  const [historyFilter, setHistoryFilter] = useState<'all' | 'chat' | 'agent'>('all');
 
   // Composer State
   const [input, setInput] = useState('');
@@ -147,18 +401,19 @@ export default function AgentChatPanel() {
     }
     const timer = setInterval(() => {
       setThinkingPhase(p => (p + 1) % 3);
-    }, 2800);
+    }, 2600);
     return () => clearInterval(timer);
   }, [busy]);
 
   // Documents & RAG
-  const [documents, setDocuments] = useState<CopilotDocument[]>([]);
-  const [attachedDoc, setAttachedDoc] = useState<CopilotDocument | null>(null);
+  const [documents, setDocuments] = useState<HarnessDocument[]>([]);
+  const [attachedDoc, setAttachedDoc] = useState<HarnessDocument | null>(null);
   const [showDocsModal, setShowDocsModal] = useState(false);
   const [uploadingDoc, setUploadingDoc] = useState(false);
 
-  // Actions Execution
+  // Actions Execution & File Download
   const [executingActionId, setExecutingActionId] = useState<string | null>(null);
+  const [downloadingDocId, setDownloadingDocId] = useState<string | null>(null);
 
   // Rename state
   const [renamingId, setRenamingId] = useState<string | null>(null);
@@ -169,12 +424,33 @@ export default function AgentChatPanel() {
   const renameInputRef = useRef<HTMLInputElement>(null);
   const activeSessionIdRef = useRef<string | null>(null);
 
+  // Build live page_context payload from current route + optional prop
+  const livePageContext = useMemo(() => {
+    const ctx: Record<string, any> = {
+      route: pathname || '/',
+      ...(pageContext || {}),
+    };
+    if (typeof window !== 'undefined') {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get('experiment_id')) ctx.experiment_id = sp.get('experiment_id');
+      if (sp.get('session_id')) ctx.session_id = sp.get('session_id');
+      if (sp.get('section_id')) ctx.section_id = sp.get('section_id');
+    }
+    const parts = (pathname || '').split('/').filter(Boolean);
+    if (parts[0] === 'practice' && parts[1] === 'library' && parts[2]) {
+      ctx.problem_slug = parts[2];
+    } else if (parts[0] === 'student' && parts[1] === 'practice' && parts[2]) {
+      ctx.problem_slug = parts[2];
+    }
+    return ctx;
+  }, [pathname, pageContext]);
+
   // Auto-scroll on messages change
   useEffect(() => {
     scrollRef.current?.scrollTo({ top: scrollRef.current.scrollHeight, behavior: 'smooth' });
   }, [messages, busy]);
 
-  // ── Keyboard shortcut: Ctrl+K or Ctrl+/ to toggle copilot ──
+  // ── Keyboard shortcut: Ctrl+K or Ctrl+/ to toggle AI Harness ──
   useEffect(() => {
     const handler = (e: KeyboardEvent) => {
       if ((e.ctrlKey || e.metaKey) && (e.key === 'k' || e.key === 'K' || e.key === '/')) {
@@ -186,6 +462,56 @@ export default function AgentChatPanel() {
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Detect if any modal or drawer overlay is active in the page to prevent obstructing modal actions
+  const [hasActiveOverlay, setHasActiveOverlay] = useState(false);
+
+  useEffect(() => {
+    const checkOverlays = () => {
+      if (typeof document === 'undefined') return;
+      const elements = document.querySelectorAll(
+        '[class*="drawerOverlay"], [class*="modalOverlay"], [class*="confirmOverlay"], [class*="aiOverlay"], [class*="certModalOverlay"], [class*="drawerBackdrop"], [data-modal-overlay="true"], [role="dialog"], [aria-modal="true"]'
+      );
+      for (let i = 0; i < elements.length; i++) {
+        const el = elements[i];
+        if (el.closest('[class*="copilotContainer"]')) continue;
+        const style = window.getComputedStyle(el);
+        if (style.display !== 'none' && style.visibility !== 'hidden') {
+          setHasActiveOverlay(true);
+          return;
+        }
+      }
+      setHasActiveOverlay(false);
+    };
+
+    checkOverlays();
+
+    const t1 = setTimeout(checkOverlays, 60);
+    const t2 = setTimeout(checkOverlays, 200);
+
+    const observer = new MutationObserver(() => {
+      checkOverlays();
+      setTimeout(checkOverlays, 60);
+    });
+
+    observer.observe(document.body, {
+      childList: true,
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class', 'style'],
+    });
+
+    window.addEventListener('animationend', checkOverlays);
+    window.addEventListener('transitionend', checkOverlays);
+
+    return () => {
+      clearTimeout(t1);
+      clearTimeout(t2);
+      observer.disconnect();
+      window.removeEventListener('animationend', checkOverlays);
+      window.removeEventListener('transitionend', checkOverlays);
+    };
+  }, [pathname]);
+
   // Load sessions and documents when opened
   useEffect(() => {
     if (open) {
@@ -194,41 +520,45 @@ export default function AgentChatPanel() {
     }
   }, [open]);
 
-  // Focus rename input when it appears
   useEffect(() => {
     if (renamingId) renameInputRef.current?.focus();
   }, [renamingId]);
 
   const loadSessions = async (autoSelectFirst = false) => {
     try {
-      const list = await institutionService.listCopilotSessions();
+      const list = await aiService.listHarnessSessions();
       setSessions(list);
       if (autoSelectFirst && list.length > 0 && !activeSessionIdRef.current) {
-        selectSession(list[0].id);
+        const match = list.find(s => (s.mode || 'chat') === mode) || list[0];
+        selectSession(match.id);
       }
     } catch (err) {
-      console.error('Failed to load copilot sessions', err);
+      console.error('Failed to load AI harness sessions', err);
     }
   };
 
   const loadDocuments = async () => {
     try {
-      const docs = await institutionService.listCopilotDocuments();
+      const docs = await aiService.listHarnessDocuments();
       setDocuments(docs);
     } catch (err) {
-      console.error('Failed to load copilot documents', err);
+      console.error('Failed to load RAG documents', err);
     }
   };
 
-  const selectSession = async (sessionId: string) => {
+  const selectSession = async (sessionId: string, explicitMode?: 'chat' | 'agent') => {
     activeSessionIdRef.current = sessionId;
     setActiveSessionId(sessionId);
     setLoadingMessages(true);
     try {
-      const data = await institutionService.getCopilotSession(sessionId);
+      const data = await aiService.getHarnessSession(sessionId);
       setMessages(data.messages || []);
-      if (data.session?.mode) {
-        setMode(data.session.mode);
+      const sessionMode = explicitMode || (data.session?.mode as 'chat' | 'agent') || 'chat';
+      if (roleCfg.supportsAgentMode) {
+        setMode(sessionMode);
+        activeSessionByMode.current[sessionMode] = sessionId;
+      } else {
+        activeSessionByMode.current['chat'] = sessionId;
       }
     } catch (err) {
       console.error('Failed to load session messages', err);
@@ -238,17 +568,44 @@ export default function AgentChatPanel() {
   };
 
   const startNewConversation = () => {
+    activeSessionByMode.current[mode] = null;
     activeSessionIdRef.current = null;
     setActiveSessionId(null);
     setMessages([]);
     setShowHistorySidebar(false);
   };
 
+  const handleModeSwitch = async (newMode: 'chat' | 'agent') => {
+    if (newMode === mode) return;
+    // Save current active session for the outgoing mode
+    activeSessionByMode.current[mode] = activeSessionId;
+    setMode(newMode);
+
+    // Look up remembered session for incoming mode
+    const targetId = activeSessionByMode.current[newMode];
+    if (targetId && sessions.some(s => s.id === targetId)) {
+      await selectSession(targetId, newMode);
+    } else {
+      // Find the most recent session created in this mode
+      const recent = sessions.find(s => (s.mode || 'chat') === newMode);
+      if (recent) {
+        await selectSession(recent.id, newMode);
+      } else {
+        // Clean slate for new mode so the user sees tailored suggestions
+        activeSessionIdRef.current = null;
+        setActiveSessionId(null);
+        setMessages([]);
+      }
+    }
+  };
+
   const deleteSession = async (e: React.MouseEvent, sessionId: string) => {
     e.stopPropagation();
     try {
-      await institutionService.deleteCopilotSession(sessionId);
+      await aiService.deleteHarnessSession(sessionId);
       setSessions(prev => prev.filter(s => s.id !== sessionId));
+      if (activeSessionByMode.current.chat === sessionId) activeSessionByMode.current.chat = null;
+      if (activeSessionByMode.current.agent === sessionId) activeSessionByMode.current.agent = null;
       if (activeSessionIdRef.current === sessionId) {
         startNewConversation();
       }
@@ -257,22 +614,25 @@ export default function AgentChatPanel() {
     }
   };
 
-  // ── Pin / Unpin ──
-  const togglePin = async (e: React.MouseEvent, session: CopilotChatSession) => {
+  const togglePin = async (e: React.MouseEvent, session: HarnessChatSession) => {
     e.stopPropagation();
     try {
-      const updated = await institutionService.updateCopilotSession(session.id, { is_pinned: !session.is_pinned });
+      const updated = await aiService.updateHarnessSession(session.id, { is_pinned: !session.is_pinned });
       setSessions(prev =>
-        prev.map(s => (s.id === session.id ? { ...s, is_pinned: updated.is_pinned } : s))
-          .sort((a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0) || new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime())
+        prev
+          .map(s => (s.id === session.id ? { ...s, is_pinned: updated.is_pinned } : s))
+          .sort(
+            (a, b) =>
+              (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0) ||
+              new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+          )
       );
     } catch (err) {
       console.error('Failed to toggle pin', err);
     }
   };
 
-  // ── Rename thread ──
-  const startRename = (e: React.MouseEvent, session: CopilotChatSession) => {
+  const startRename = (e: React.MouseEvent, session: HarnessChatSession) => {
     e.stopPropagation();
     setRenamingId(session.id);
     setRenameText(session.title);
@@ -280,9 +640,12 @@ export default function AgentChatPanel() {
 
   const commitRename = async (sessionId: string) => {
     const trimmed = renameText.trim();
-    if (!trimmed) { setRenamingId(null); return; }
+    if (!trimmed) {
+      setRenamingId(null);
+      return;
+    }
     try {
-      const updated = await institutionService.updateCopilotSession(sessionId, { title: trimmed });
+      const updated = await aiService.updateHarnessSession(sessionId, { title: trimmed });
       setSessions(prev => prev.map(s => (s.id === sessionId ? { ...s, title: updated.title } : s)));
     } catch (err) {
       console.error('Failed to rename session', err);
@@ -294,19 +657,21 @@ export default function AgentChatPanel() {
   const handleFileUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
-    if (!file.name.toLowerCase().endsWith('.pdf')) {
-      alert('Please select a PDF document.');
+    const lower = file.name.toLowerCase();
+    const allowed = ['.pdf', '.docx', '.xlsx', '.csv', '.md', '.txt'];
+    if (!allowed.some(ext => lower.endsWith(ext))) {
+      alert(`Supported document formats: ${allowed.join(', ')}`);
       return;
     }
 
     setUploadingDoc(true);
     try {
-      const res = await institutionService.uploadCopilotDocument(file);
+      const res = await aiService.uploadHarnessDocument(file);
       setDocuments(prev => [res.document, ...prev]);
       setAttachedDoc(res.document);
       setShowDocsModal(false);
     } catch (err: any) {
-      alert(err?.response?.data?.error || 'Failed to upload and index PDF document.');
+      alert(err?.response?.data?.error || 'Failed to upload and index document.');
     } finally {
       setUploadingDoc(false);
       if (fileInputRef.current) fileInputRef.current.value = '';
@@ -315,7 +680,7 @@ export default function AgentChatPanel() {
 
   const handleDeleteDocument = async (docId: string) => {
     try {
-      await institutionService.deleteCopilotDocument(docId);
+      await aiService.deleteHarnessDocument(docId);
       setDocuments(prev => prev.filter(d => d.id !== docId));
       if (attachedDoc?.id === docId) {
         setAttachedDoc(null);
@@ -325,84 +690,101 @@ export default function AgentChatPanel() {
     }
   };
 
-  const sendMessage = useCallback(async (customPrompt?: string) => {
-    const text = (customPrompt ?? input).trim();
-    if (!text || busy) return;
-
-    setInput('');
-    const tempUserMsg: CopilotChatMessage = {
-      id: `tmp-${Date.now()}`,
-      session_id: activeSessionId || 'pending',
-      role: 'user',
-      content: text,
-      mode,
-      created_at: new Date().toISOString(),
-    };
-
-    setMessages(prev => [...prev, tempUserMsg]);
-    setBusy(true);
-
+  const handleDownloadGeneratedDoc = async (doc: HarnessGeneratedDoc) => {
+    setDownloadingDocId(doc.id);
     try {
-      const res = await institutionService.sendCopilotMessage({
-        prompt: text,
-        mode,
-        session_id: activeSessionId || undefined,
-        doc_id: attachedDoc?.id,
-        web_search: webSearch,
-      });
-
-      // Update active session id and session list
-      const targetSessionId = res.session_id || activeSessionIdRef.current;
-      if (targetSessionId) {
-        activeSessionIdRef.current = targetSessionId;
-        setActiveSessionId(targetSessionId);
-        if (res.session_title) {
-          setSessions(prev =>
-            prev.map(s =>
-              s.id === targetSessionId ? { ...s, title: res.session_title, updated_at: new Date().toISOString() } : s
-            )
-          );
-        }
-        loadSessions(false);
-      }
-
-      setMessages(prev => {
-        const withoutTemp = prev.filter(m => m.id !== tempUserMsg.id);
-        return [...withoutTemp, res.user_message, res.assistant_message];
-      });
-    } catch (err: any) {
-      const isTimeout = err?.code === 'ECONNABORTED' || err?.message?.toLowerCase().includes('timeout');
-      const errorMsg =
-        err?.response?.status === 403
-          ? 'AI Copilot is disabled in institution governance settings.'
-          : err?.response?.status === 429
-          ? 'Daily AI token limit reached. Adjust quota in Settings → AI Governance.'
-          : isTimeout
-          ? 'The AI assistant took longer than expected to process your request. If the backend is still completing the response, click this thread or refresh in a moment to view it.'
-          : err?.response?.data?.error || 'Could not communicate with the AI assistant.';
-
-      setMessages(prev => [
-        ...prev,
-        {
-          id: `err-${Date.now()}`,
-          session_id: activeSessionId || '',
-          role: 'system',
-          content: `⚠️ ${errorMsg}`,
-          mode,
-          created_at: new Date().toISOString(),
-        },
-      ]);
+      await aiService.downloadGeneratedDocument(doc.id, `${doc.title}.${doc.format}`);
+    } catch (err) {
+      console.error('Failed to download generated document', err);
     } finally {
-      setBusy(false);
+      setDownloadingDocId(null);
     }
-  }, [input, busy, activeSessionId, mode, attachedDoc, webSearch]);
+  };
 
-  const confirmAction = async (msg: CopilotChatMessage) => {
+  const sendMessage = useCallback(
+    async (customPrompt?: string) => {
+      const text = (customPrompt ?? input).trim();
+      if (!text || busy) return;
+
+      setInput('');
+      const tempUserMsg: HarnessChatMessage = {
+        id: `tmp-${Date.now()}`,
+        session_id: activeSessionId || 'pending',
+        role: 'user',
+        content: text,
+        mode,
+        created_at: new Date().toISOString(),
+      };
+
+      setMessages(prev => [...prev, tempUserMsg]);
+      setBusy(true);
+
+      try {
+        const res = await aiService.sendHarnessMessage({
+          prompt: text,
+          mode: roleCfg.supportsAgentMode ? mode : 'chat',
+          session_id: activeSessionId || undefined,
+          doc_id: attachedDoc?.id,
+          web_search: webSearch,
+          page_context: livePageContext,
+        });
+
+        const targetSessionId = res.session_id || activeSessionIdRef.current;
+        if (targetSessionId) {
+          activeSessionIdRef.current = targetSessionId;
+          setActiveSessionId(targetSessionId);
+          activeSessionByMode.current[mode] = targetSessionId;
+          if (res.session_title) {
+            setSessions(prev =>
+              prev.map(s =>
+                s.id === targetSessionId
+                  ? { ...s, title: res.session_title, updated_at: new Date().toISOString() }
+                  : s
+              )
+            );
+          }
+          loadSessions(false);
+        }
+
+        setMessages(prev => {
+          const withoutTemp = prev.filter(m => m.id !== tempUserMsg.id);
+          return [...withoutTemp, res.user_message, res.assistant_message];
+        });
+      } catch (err: any) {
+        const isTimeout = err?.code === 'ECONNABORTED' || err?.message?.toLowerCase().includes('timeout');
+        const errorMsg =
+          err?.response?.status === 403
+            ? 'AI assistance is currently disabled by institution governance policy.'
+            : err?.response?.status === 429
+            ? 'Daily AI token limit reached. Resets at midnight UTC.'
+            : isTimeout
+            ? 'The AI assistant took longer than expected. Click this thread in History in a moment to view the completed response.'
+            : err?.response?.data?.error || 'Could not communicate with the AI assistant.';
+
+        setMessages(prev => [
+          ...prev,
+          {
+            id: `err-${Date.now()}`,
+            session_id: activeSessionId || '',
+            role: 'system',
+            content: `⚠️ ${errorMsg}`,
+            mode,
+            created_at: new Date().toISOString(),
+          },
+        ]);
+      } finally {
+        setBusy(false);
+      }
+    },
+    [input, busy, activeSessionId, mode, attachedDoc, webSearch, roleCfg.supportsAgentMode, livePageContext]
+  );
+
+  const confirmAction = async (msg: HarnessChatMessage) => {
     if (!msg.pending_action) return;
     setExecutingActionId(msg.id);
 
     try {
-      const res = await institutionService.executeCopilotAction({
+      const res = await aiService.executeHarnessAction({
         action_payload: msg.pending_action,
         message_id: msg.id,
       });
@@ -433,37 +815,47 @@ export default function AgentChatPanel() {
           ? {
               ...m,
               pending_action: null,
-              content: `${m.content}\n\n*(Action proposal cancelled by admin)*`,
+              content: `${m.content}\n\n*(Action proposal dismissed)*`,
             }
           : m
       )
     );
   };
 
-  // Sort sessions: pinned first, then by updated_at
-  const sortedSessions = [...sessions].sort(
-    (a, b) => (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0)
-              || new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
-  );
+  const sortedSessions = useMemo(() => {
+    return [...sessions].sort(
+      (a, b) =>
+        (b.is_pinned ? 1 : 0) - (a.is_pinned ? 1 : 0) ||
+        new Date(b.updated_at).getTime() - new Date(a.updated_at).getTime()
+    );
+  }, [sessions]);
+
+  const filteredSessions = useMemo(() => {
+    if (historyFilter === 'all') return sortedSessions;
+    return sortedSessions.filter(s => (s.mode || 'chat') === historyFilter);
+  }, [sortedSessions, historyFilter]);
+
+  const activeSuggestions =
+    mode === 'agent' && roleCfg.supportsAgentMode ? roleCfg.agentSuggestions : roleCfg.chatSuggestions;
 
   return (
-    <div className={styles.copilotContainer}>
+    <div className={`${styles.copilotContainer} ${open ? styles.copilotContainerOpen : ''}`}>
       {/* ── Floating Launcher ── */}
-      {!open && (
+      {!open && !hasActiveOverlay && (
         <button
           onClick={() => setOpen(true)}
           className={styles.launcherBtn}
-          aria-label="Open AI Copilot"
+          aria-label="Open NexLab AI"
           title="Press Ctrl+K or Ctrl+/ to toggle"
         >
           <span className={styles.pulseDot} />
           <Sparkles size={16} strokeWidth={2.2} />
-          <span>Ask AI Copilot</span>
+          <span>{roleCfg.launcherLabel}</span>
           <span className={styles.shortcutBadge}>Ctrl+K</span>
         </button>
       )}
 
-      {/* ── Main Copilot Window ── */}
+      {/* ── Main Copilot / Harness Window ── */}
       {open && (
         <div className={`${styles.panelWindow} ${isExpanded ? styles.expandedWindow : styles.compactWindow}`}>
           {/* Header */}
@@ -474,12 +866,14 @@ export default function AgentChatPanel() {
               </div>
               <div className={styles.titleArea}>
                 <div className={styles.title}>
-                  <span>NexLab AI Copilot</span>
-                  <span className={styles.badgeEnterprise}>v2.0 Admin</span>
+                  <span>{roleCfg.title}</span>
+                  <span className={styles.badgeEnterprise}>{roleCfg.badgeText}</span>
                 </div>
                 <div className={styles.subtitle}>
-                  {mode === 'chat' ? 'System insights · RAG PDF search · Web' : 'Autonomous task execution & scheduling'}
-                  <span style={{ marginLeft: 8, opacity: 0.6, fontSize: 10, fontFamily: 'monospace' }}>Ctrl+K / Ctrl+/</span>
+                  {mode === 'chat' ? roleCfg.chatSubtitle : roleCfg.agentSubtitle}
+                  <span style={{ marginLeft: 8, opacity: 0.6, fontSize: 10, fontFamily: 'monospace' }}>
+                    Ctrl+K
+                  </span>
                 </div>
               </div>
 
@@ -494,7 +888,7 @@ export default function AgentChatPanel() {
                 <button
                   onClick={() => setShowDocsModal(true)}
                   className={`${styles.iconBtn} ${attachedDoc ? styles.activeIconBtn : ''}`}
-                  title="PDF Document Library & RAG"
+                  title="RAG Document Library (.pdf, .docx, .xlsx, .csv, .md)"
                 >
                   <FileText size={16} />
                 </button>
@@ -511,23 +905,42 @@ export default function AgentChatPanel() {
               </div>
             </div>
 
-            {/* Mode Switcher Tabs */}
-            <div className={styles.modeSwitcher}>
-              <button
-                onClick={() => setMode('chat')}
-                className={`${styles.modeTab} ${mode === 'chat' ? styles.activeModeTab : ''}`}
+            {/* Mode Switcher Tabs (or Socratic Contract Banner for Student / Free User) */}
+            {roleCfg.supportsAgentMode ? (
+              <div className={styles.modeSwitcher}>
+                <button
+                  onClick={() => handleModeSwitch('chat')}
+                  className={`${styles.modeTab} ${mode === 'chat' ? styles.activeModeTab : ''}`}
+                >
+                  <Bot size={14} />
+                  <span>Knowledge &amp; Analytics</span>
+                </button>
+                <button
+                  onClick={() => handleModeSwitch('agent')}
+                  className={`${styles.modeTab} ${mode === 'agent' ? styles.activeModeTab : ''}`}
+                >
+                  <Sparkles size={14} />
+                  <span>Agent &amp; Action Mode</span>
+                </button>
+              </div>
+            ) : (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  padding: '6px 14px',
+                  background: 'rgba(124, 58, 237, 0.08)',
+                  borderTop: '1px solid rgba(124, 58, 237, 0.14)',
+                  fontSize: 11,
+                  color: '#6d28d9',
+                  fontWeight: 600,
+                }}
               >
-                <Bot size={14} />
-                <span>Knowledge &amp; RAG Mode</span>
-              </button>
-              <button
-                onClick={() => setMode('agent')}
-                className={`${styles.modeTab} ${mode === 'agent' ? styles.activeModeTab : ''}`}
-              >
-                <Sparkles size={14} />
-                <span>Agent &amp; Action Mode</span>
-              </button>
-            </div>
+                <span>🔒 Socratic Learning Contract Active — Guided Hints &amp; Study Tools</span>
+                <span style={{ opacity: 0.75 }}>{livePageContext.route}</span>
+              </div>
+            )}
           </div>
 
           {/* Body Container */}
@@ -544,13 +957,35 @@ export default function AgentChatPanel() {
                 <button onClick={startNewConversation} className={styles.newChatBtn}>
                   <Plus size={14} /> New Conversation
                 </button>
+                {roleCfg.supportsAgentMode && (
+                  <div className={styles.sidebarFilterBar}>
+                    <button
+                      className={`${styles.sidebarFilterBtn} ${historyFilter === 'all' ? styles.sidebarFilterBtnActive : ''}`}
+                      onClick={() => setHistoryFilter('all')}
+                    >
+                      All ({sessions.length})
+                    </button>
+                    <button
+                      className={`${styles.sidebarFilterBtn} ${historyFilter === 'chat' ? styles.sidebarFilterBtnActive : ''}`}
+                      onClick={() => setHistoryFilter('chat')}
+                    >
+                      Knowledge ({sessions.filter(s => (s.mode || 'chat') === 'chat').length})
+                    </button>
+                    <button
+                      className={`${styles.sidebarFilterBtn} ${historyFilter === 'agent' ? styles.sidebarFilterBtnActive : ''}`}
+                      onClick={() => setHistoryFilter('agent')}
+                    >
+                      Agent ({sessions.filter(s => s.mode === 'agent').length})
+                    </button>
+                  </div>
+                )}
                 <div className={styles.sessionList}>
-                  {sortedSessions.length === 0 && (
+                  {filteredSessions.length === 0 && (
                     <div style={{ padding: '16px 12px', fontSize: 12, color: '#9ca3af', textAlign: 'center' }}>
-                      No previous sessions recorded.
+                      No {historyFilter === 'all' ? '' : historyFilter} sessions recorded.
                     </div>
                   )}
-                  {sortedSessions.map(s => (
+                  {filteredSessions.map(s => (
                     <div
                       key={s.id}
                       onClick={() => {
@@ -586,8 +1021,18 @@ export default function AgentChatPanel() {
                               <span>{s.title}</span>
                             </div>
                             <div className={styles.sessionMeta}>
-                              {new Date(s.updated_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })} ·{' '}
-                              {s.mode.toUpperCase()}
+                              {new Date(s.updated_at).toLocaleDateString('en-US', {
+                                month: 'short',
+                                day: 'numeric',
+                              })}{' '}
+                              ·{' '}
+                              <span
+                                className={
+                                  (s.mode || 'chat') === 'agent' ? styles.agentModeBadge : styles.chatModeBadge
+                                }
+                              >
+                                {(s.mode || 'chat') === 'agent' ? '⚡ AGENT' : '💬 KNOWLEDGE'}
+                              </span>
                             </div>
                           </>
                         )}
@@ -621,16 +1066,16 @@ export default function AgentChatPanel() {
               </div>
             )}
 
-            {/* Document Management Modal / Drawer */}
+            {/* Multi-Format Document Management Drawer */}
             {showDocsModal && (
               <div className={styles.docDrawer}>
                 <div className={styles.docDrawerHeader}>
                   <div>
                     <h3 style={{ margin: 0, fontSize: 15, fontWeight: 700, color: '#1f2937' }}>
-                      PDF Documents &amp; RAG Index
+                      Knowledge Base &amp; RAG Index
                     </h3>
                     <p style={{ margin: '2px 0 0', fontSize: 12, color: '#6b7280' }}>
-                      Upload university guidelines, syllabi, or lab manuals for semantic question answering.
+                      Upload PDFs, Word (.docx), Excel (.xlsx), CSV, or Markdown notes for grounded Q&amp;A.
                     </p>
                   </div>
                   <button onClick={() => setShowDocsModal(false)} className={styles.iconBtn}>
@@ -638,13 +1083,12 @@ export default function AgentChatPanel() {
                   </button>
                 </div>
 
-                {/* Upload Button */}
                 <div style={{ marginBottom: 14 }}>
                   <input
                     type="file"
                     ref={fileInputRef}
                     onChange={handleFileUpload}
-                    accept="application/pdf"
+                    accept=".pdf,.docx,.xlsx,.csv,.md,.txt"
                     style={{ display: 'none' }}
                   />
                   <button
@@ -655,24 +1099,23 @@ export default function AgentChatPanel() {
                   >
                     {uploadingDoc ? (
                       <>
-                        <Loader2 size={14} className="animate-spin" /> Indexing PDF...
+                        <Loader2 size={14} className="animate-spin" /> Indexing Document...
                       </>
                     ) : (
                       <>
-                        <Upload size={14} /> Upload &amp; Index New PDF
+                        <Upload size={14} /> Upload Document (.pdf, .docx, .xlsx, .csv, .md)
                       </>
                     )}
                   </button>
                 </div>
 
-                {/* Documents List */}
                 <div className={styles.docGrid}>
                   {documents.length === 0 && (
                     <div style={{ textAlign: 'center', padding: '40px 16px', color: '#9ca3af' }}>
                       <FileText size={36} style={{ margin: '0 auto 10px', opacity: 0.5 }} />
                       <p style={{ margin: 0, fontSize: 13, fontWeight: 600 }}>No documents uploaded yet</p>
                       <p style={{ margin: '4px 0 0', fontSize: 12 }}>
-                        Upload a syllabus, lab manual, or institution circular to enable RAG.
+                        Upload lab manuals, syllabi, or study notes to query them with AI.
                       </p>
                     </div>
                   )}
@@ -684,8 +1127,8 @@ export default function AgentChatPanel() {
                         <div>
                           <div style={{ fontSize: 13, fontWeight: 700, color: '#1f2937' }}>{doc.filename}</div>
                           <div style={{ fontSize: 11, color: '#6b7280' }}>
-                            {doc.page_count} pages · {doc.chunk_count} indexed chunks ·{' '}
-                            {Math.round(doc.file_size / 1024)} KB
+                            {(doc.doc_type || 'pdf').toUpperCase()} · {doc.page_count} sections ·{' '}
+                            {doc.chunk_count} chunks · {Math.round(doc.file_size / 1024)} KB
                           </div>
                         </div>
                       </div>
@@ -723,28 +1166,35 @@ export default function AgentChatPanel() {
             <div className={styles.chatCanvas}>
               <div ref={scrollRef} className={styles.messageStream}>
                 {loadingMessages && (
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, padding: 30, color: '#7c3aed' }}>
+                  <div
+                    style={{
+                      display: 'flex',
+                      alignItems: 'center',
+                      justifyContent: 'center',
+                      gap: 8,
+                      padding: 30,
+                      color: '#7c3aed',
+                    }}
+                  >
                     <Loader2 size={18} className="animate-spin" /> Loading session...
                   </div>
                 )}
 
-                {/* Empty State / Suggestions */}
+                {/* Empty State / Role-Tailored Suggestions */}
                 {!loadingMessages && messages.length === 0 && (
                   <div className={styles.emptyState}>
                     <div className={styles.emptyIconArea}>
                       {mode === 'chat' ? <Bot size={28} /> : <Sparkles size={28} />}
                     </div>
                     <h3 className={styles.emptyTitle}>
-                      {mode === 'chat' ? 'Ask Anything Across Your Institution' : 'Autonomous Action Execution'}
+                      {mode === 'chat' ? roleCfg.emptyChatTitle : roleCfg.emptyAgentTitle}
                     </h3>
                     <p className={styles.emptySubtitle}>
-                      {mode === 'chat'
-                        ? 'Instant answers on sessions, instructor timetables, student at-risk health, AI token metrics, or uploaded PDF documents.'
-                        : 'Schedule lab sessions, create students/instructors, update token quotas, configure departments, and broadcast announcements.'}
+                      {mode === 'chat' ? roleCfg.emptyChatSub : roleCfg.emptyAgentSub}
                     </p>
 
                     <div className={styles.suggestionGrid}>
-                      {(mode === 'chat' ? CHAT_SUGGESTIONS : AGENT_SUGGESTIONS).map((s, idx) => (
+                      {activeSuggestions.map((s, idx) => (
                         <button key={idx} onClick={() => sendMessage(s.text)} className={styles.suggestionChip}>
                           {s.icon}
                           <span>{s.text}</span>
@@ -778,7 +1228,7 @@ export default function AgentChatPanel() {
                       </div>
                     )}
 
-                    {/* Bubble Content — markdown for assistant, plain for user/system */}
+                    {/* Bubble Content */}
                     <div
                       className={
                         m.role === 'user'
@@ -796,71 +1246,118 @@ export default function AgentChatPanel() {
                         <div style={{ whiteSpace: 'pre-wrap' }}>{m.content}</div>
                       )}
 
-                      {/* Action Preview Card (Mode 2) */}
-                      {m.pending_action && !m.applied && (() => {
-                        const payload = m.pending_action;
-                        if (!payload) return null;
-                        const actionMeta = ACTION_CONFIG[payload.action] || {
-                          label: 'Proposed Action Confirmation',
-                          badge: 'Action',
-                          icon: <AlertCircle size={15} color="#9333ea" />,
-                        };
-
-                        const entries = Object.entries(payload).filter(([k]) => {
-                          if (['action', 'requires_confirmation', 'draft'].includes(k)) return false;
-                          if (k.endsWith('_id') && payload[k.replace('_id', '_name')]) return false;
-                          if (k === 'user_id' && payload.full_name) return false;
-                          return true;
-                        });
-
-                        return (
-                          <div className={styles.actionCard}>
-                            <div className={styles.actionCardHeader}>
-                              <div className={styles.actionHeaderTitle}>
-                                {actionMeta.icon}
-                                <span>{actionMeta.label}</span>
+                      {/* Generated Document Download Card */}
+                      {m.generated_doc && (
+                        <div
+                          style={{
+                            marginTop: 10,
+                            padding: '10px 12px',
+                            borderRadius: 10,
+                            background: 'rgba(124, 58, 237, 0.08)',
+                            border: '1px solid rgba(124, 58, 237, 0.22)',
+                            display: 'flex',
+                            alignItems: 'center',
+                            justifyContent: 'space-between',
+                            gap: 10,
+                          }}
+                        >
+                          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                            <FileText size={18} color="#7c3aed" />
+                            <div>
+                              <div style={{ fontSize: 12, fontWeight: 700, color: '#1f2937' }}>
+                                {m.generated_doc.title}.{m.generated_doc.format}
                               </div>
-                              <span className={styles.actionBadgeType}>{actionMeta.badge}</span>
-                            </div>
-
-                            <div className={styles.actionCardBody}>
-                              {entries.map(([k, v]) => {
-                                let displayVal = String(v ?? 'None');
-                                if (typeof v === 'boolean') {
-                                  displayVal = v ? 'Enabled' : 'Disabled';
-                                }
-                                return (
-                                  <div key={k} className={styles.actionKeyVal}>
-                                    <span className={styles.actionKey}>{k.replace(/_/g, ' ')}:</span>
-                                    <span className={styles.actionVal}>{displayVal}</span>
-                                  </div>
-                                );
-                              })}
-                            </div>
-
-                            <div className={styles.actionFooter}>
-                              <button onClick={() => cancelAction(m.id)} className={styles.cancelBtn}>
-                                <X size={13} /> Dismiss
-                              </button>
-                              <button
-                                onClick={() => confirmAction(m)}
-                                disabled={executingActionId === m.id}
-                                className={styles.confirmBtn}
-                              >
-                                {executingActionId === m.id ? (
-                                  <>
-                                    <Loader2 size={13} className="animate-spin" /> Executing...
-                                  </>
-                                ) : (
-                                  <>
-                                    <Check size={13} /> Confirm &amp; Apply
-                                  </>
-                                )}
-                              </button>
+                              <div style={{ fontSize: 10, color: '#6b7280' }}>
+                                AI Generated Deliverable · {m.generated_doc.format.toUpperCase()}
+                              </div>
                             </div>
                           </div>
-                        );
-                      })()}
+                          <button
+                            onClick={() => handleDownloadGeneratedDoc(m.generated_doc!)}
+                            disabled={downloadingDocId === m.generated_doc.id}
+                            className={styles.confirmBtn}
+                            style={{ padding: '5px 10px', fontSize: 11 }}
+                          >
+                            {downloadingDocId === m.generated_doc.id ? (
+                              <>
+                                <Loader2 size={12} className="animate-spin" /> Downloading...
+                              </>
+                            ) : (
+                              <>
+                                <Download size={12} /> Download
+                              </>
+                            )}
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Action Preview Card */}
+                      {m.pending_action &&
+                        !m.applied &&
+                        (() => {
+                          const payload = m.pending_action;
+                          if (!payload) return null;
+                          const actionMeta = ACTION_CONFIG[payload.action] || {
+                            label: 'Proposed Action Confirmation',
+                            badge: 'Action',
+                            icon: <AlertCircle size={15} color="#9333ea" />,
+                          };
+
+                          const entries = Object.entries(payload).filter(([k]) => {
+                            if (['action', 'requires_confirmation', 'draft'].includes(k)) return false;
+                            if (k.endsWith('_id') && payload[k.replace('_id', '_name')]) return false;
+                            if (k === 'user_id' && payload.full_name) return false;
+                            return true;
+                          });
+
+                          return (
+                            <div className={styles.actionCard}>
+                              <div className={styles.actionCardHeader}>
+                                <div className={styles.actionHeaderTitle}>
+                                  {actionMeta.icon}
+                                  <span>{actionMeta.label}</span>
+                                </div>
+                                <span className={styles.actionBadgeType}>{actionMeta.badge}</span>
+                              </div>
+
+                              <div className={styles.actionCardBody}>
+                                {entries.map(([k, v]) => {
+                                  let displayVal = String(v ?? 'None');
+                                  if (typeof v === 'boolean') {
+                                    displayVal = v ? 'Enabled' : 'Disabled';
+                                  }
+                                  return (
+                                    <div key={k} className={styles.actionKeyVal}>
+                                      <span className={styles.actionKey}>{k.replace(/_/g, ' ')}:</span>
+                                      <span className={styles.actionVal}>{displayVal}</span>
+                                    </div>
+                                  );
+                                })}
+                              </div>
+
+                              <div className={styles.actionFooter}>
+                                <button onClick={() => cancelAction(m.id)} className={styles.cancelBtn}>
+                                  <X size={13} /> Dismiss
+                                </button>
+                                <button
+                                  onClick={() => confirmAction(m)}
+                                  disabled={executingActionId === m.id}
+                                  className={styles.confirmBtn}
+                                >
+                                  {executingActionId === m.id ? (
+                                    <>
+                                      <Loader2 size={13} className="animate-spin" /> Executing...
+                                    </>
+                                  ) : (
+                                    <>
+                                      <Check size={13} /> Confirm &amp; Apply
+                                    </>
+                                  )}
+                                </button>
+                              </div>
+                            </div>
+                          );
+                        })()}
 
                       {/* Applied Status Badge */}
                       {m.applied && (
@@ -920,7 +1417,7 @@ export default function AgentChatPanel() {
                         </div>
                         <div className={styles.thinkingContent}>
                           <div className={styles.thinkingTitleRow}>
-                            <span className={styles.thinkingText}>NexLab AI Thinking</span>
+                            <span className={styles.thinkingText}>{roleCfg.title} Thinking</span>
                             <div className={styles.thinkingWave}>
                               <span className={styles.waveDot} />
                               <span className={styles.waveDot} />
@@ -928,17 +1425,11 @@ export default function AgentChatPanel() {
                             </div>
                           </div>
                           <span className={styles.thinkingSub}>
-                            {mode === 'chat'
-                              ? thinkingPhase === 0
-                                ? 'Analyzing query & institutional context...'
-                                : thinkingPhase === 1
-                                ? 'Querying database & directory statistics...'
-                                : 'Synthesizing response & formatting...'
-                              : thinkingPhase === 0
-                              ? 'Analyzing action intent & parameters...'
+                            {thinkingPhase === 0
+                              ? 'Inspecting live workspace & role context...'
                               : thinkingPhase === 1
-                              ? 'Validating permissions & database schema...'
-                              : 'Generating structured proposal card...'}
+                              ? 'Running role-scoped tools & database queries...'
+                              : 'Synthesizing grounded response...'}
                           </span>
                         </div>
                       </div>
@@ -952,7 +1443,6 @@ export default function AgentChatPanel() {
               <div className={styles.composerArea}>
                 <div className={styles.composerTopBar}>
                   <div className={styles.pillToggleGroup}>
-                    {/* Web Search Toggle */}
                     <button
                       onClick={() => setWebSearch(!webSearch)}
                       className={`${styles.pillToggle} ${webSearch ? styles.pillToggleActive : ''}`}
@@ -962,7 +1452,6 @@ export default function AgentChatPanel() {
                       <span>{webSearch ? 'Web: Active' : 'Web Search'}</span>
                     </button>
 
-                    {/* PDF Attachment Indicator */}
                     {attachedDoc ? (
                       <div className={styles.pdfChip}>
                         <FileText size={11} />
@@ -978,10 +1467,10 @@ export default function AgentChatPanel() {
                       <button
                         onClick={() => setShowDocsModal(true)}
                         className={styles.pillToggle}
-                        title="Attach PDF for RAG"
+                        title="Attach Document for RAG (.pdf, .docx, .xlsx, .csv, .md)"
                       >
                         <FileText size={12} />
-                        <span>Attach PDF</span>
+                        <span>Attach Doc</span>
                       </button>
                     )}
                   </div>
@@ -1007,17 +1496,18 @@ export default function AgentChatPanel() {
                         sendMessage();
                       }
                     }}
-                    placeholder={
-                      mode === 'chat'
-                        ? "Ask about today’s sessions, instructors, at-risk students, AI tokens, or attached PDF..."
-                        : 'Instruct: e.g. "Schedule Python Lab for Section A tomorrow 10am" or "Create student..."'
-                    }
+                    placeholder={mode === 'chat' ? roleCfg.chatPlaceholder : roleCfg.agentPlaceholder}
                     disabled={busy}
                     rows={1}
                     className={styles.composerTextarea}
                   />
 
-                  <button type="submit" disabled={busy || !input.trim()} className={styles.sendBtn} aria-label="Send">
+                  <button
+                    type="submit"
+                    disabled={busy || !input.trim()}
+                    className={styles.sendBtn}
+                    aria-label="Send"
+                  >
                     <Send size={16} />
                   </button>
                 </form>

@@ -64,16 +64,17 @@ export function ShellNotifications({ buttonClass, dotClass }: { buttonClass?: st
 
   const refresh = refreshFull;
 
-  // Initial load + 30s badge poll (lightweight unreadCount if closed)
+  // Initial load + 120s badge poll (lightweight unreadCount if closed, real-time socket delivers instant events)
   useEffect(() => {
     refreshUnread();
     const t = setInterval(() => {
+      if (typeof document !== 'undefined' && (document.visibilityState === 'hidden' || document.hidden)) return;
       if (open) {
         refreshFull();
       } else {
         refreshUnread();
       }
-    }, 30_000);
+    }, 120_000);
     return () => clearInterval(t);
   }, [open, refreshUnread, refreshFull]);
 

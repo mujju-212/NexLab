@@ -12,6 +12,7 @@ import {
 import Image from 'next/image';
 import styles from './StudentShell.module.css';
 import { ShellNotifications, ShellSearchBox, type SearchHit } from './shell-widgets';
+import AgentChatPanel from './AgentChatPanel';
 import { studentService } from '@/services/student.service';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
@@ -273,6 +274,8 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
           {children}
         </main>
       </div>
+
+      <AgentChatPanel roleOverride="student" pageContext={{ page_title: title || activePage }} />
     </div>
   );
 }

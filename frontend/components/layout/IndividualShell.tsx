@@ -8,6 +8,7 @@ import {
 import Image from 'next/image';
 import styles from './IndividualShell.module.css';
 import { ShellNotifications, ShellSearchBox, type SearchHit } from './shell-widgets';
+import AgentChatPanel from './AgentChatPanel';
 import { practiceExtraService } from '@/services/practice-extra.service';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
@@ -196,6 +197,8 @@ export default function IndividualShell({ activePage, children, title, subtitle,
           {children}
         </main>
       </div>
+
+      <AgentChatPanel roleOverride="free_user" pageContext={{ page_title: title || activePage }} />
     </div>
   );
 }

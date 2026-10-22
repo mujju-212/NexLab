@@ -10,6 +10,7 @@ import {
 import Image from 'next/image';
 import styles from './AdminShell.module.css';
 import { ShellNotifications, ShellSearchBox, type SearchHit } from './shell-widgets';
+import AgentChatPanel from './AgentChatPanel';
 import { adminService } from '@/services/admin.service';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
@@ -168,6 +169,8 @@ export default function AdminShell({ activePage, children, title, subtitle }: Ad
           {children}
         </main>
       </div>
+
+      <AgentChatPanel roleOverride="admin" pageContext={{ page_title: title || activePage }} />
     </div>
   );
 }
