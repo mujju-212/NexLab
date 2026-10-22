@@ -60,7 +60,7 @@ def sync_student_experiment_grade(
         student_id=student_id,
         experiment_id=experiment_id,
         is_final_submission=True,
-    ).order_by(CodeAttempt.test_cases_passed.desc(), CodeAttempt.created_at.desc()).all()
+    ).order_by(CodeAttempt.test_cases_passed.desc(), CodeAttempt.submitted_at.desc()).all()
 
     if attempts:
         best_attempt = attempts[0]
@@ -118,7 +118,7 @@ def sync_student_experiment_grade(
         grade.viva_grade = round(sum(v_scores) / len(viva_modules), 2)
     else:
         # Fallback to VivaSession if any live viva was conducted
-        from app.models.viva import VivaSession
+        from app.models.grading import VivaSession
         vs = VivaSession.query.filter_by(
             student_id=student_id,
             experiment_id=experiment_id,
@@ -126,14 +126,13 @@ def sync_student_experiment_grade(
         if vs and vs.total_score is not None:
             grade.viva_grade = round(float(vs.total_score), 2)
 
-    # 4. HintLog deduction (capped at 15.0%)
-    hint_sum = db.session.query(
-        db.func.coalesce(db.func.sum(HintLog.deduction_pct), 0.0)
-    ).filter_by(
+    # 4. HintLog deduction (capped at 15.0%) — HintLog records 1 row per hint used
+    hint_count = HintLog.query.filter_by(
         student_id=student_id,
         experiment_id=experiment_id,
-    ).scalar() or 0.0
-    grade.hint_deduction = min(15.0, float(hint_sum))
+    ).count()
+    hint_schedule = {0: 0.0, 1: 3.0, 2: 7.0, 3: 12.0}
+    grade.hint_deduction = min(15.0, float(hint_schedule.get(hint_count, 15.0 if hint_count > 3 else 0.0)))
 
     # 5. Manual overrides
     if manual_grade is not None:

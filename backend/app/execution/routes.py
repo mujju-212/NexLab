@@ -234,7 +234,8 @@ def run_code():
                 newly_verified = []
                 for cp in checkpoints:
                     mapped = set(cp.test_case_ids or [])
-                    if mapped and mapped.issubset(passed_ids):
+                    is_cp_verified = (mapped.issubset(passed_ids) if mapped else (tc_total > 0 and tc_passed == tc_total))
+                    if is_cp_verified:
                         prog = CheckpointProgress.query.filter_by(
                             session_id=session_id, student_id=g.user_id, checkpoint_id=cp.id).first()
                         if not prog:
@@ -274,30 +275,12 @@ def run_code():
                 else:
                     grade_val = float(quality_score) if quality_score is not None else (100.0 if result.get('status') == 'success' else 0.0)
 
-                from app.models.grading import Grade
-                gr = Grade.query.filter_by(
+                from app.services.grading_service import sync_student_experiment_grade
+                sync_student_experiment_grade(
                     student_id=g.user_id,
                     experiment_id=experiment_id,
-                    session_id=session_id
-                ).first()
-                if not gr:
-                    gr = Grade(
-                        student_id=g.user_id,
-                        experiment_id=experiment_id,
-                        session_id=session_id,
-                        auto_grade=grade_val,
-                        final_grade=grade_val,
-                        status='graded',
-                        graded_at=datetime.utcnow()
-                    )
-                    db.session.add(gr)
-                else:
-                    gr.auto_grade = max(gr.auto_grade or 0.0, grade_val)
-                    if gr.manual_grade is None:
-                        gr.final_grade = gr.auto_grade
-                    gr.status = 'graded'
-                    gr.graded_at = datetime.utcnow()
-                db.session.commit()
+                    session_id=session_id,
+                )
 
                 # Update Concept Mastery
                 from app.models.experiment import Experiment

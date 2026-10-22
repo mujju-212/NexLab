@@ -161,6 +161,7 @@ def _save_local(pdf_bytes: bytes, institution_id, student_id, subject_id) -> str
     """Dev fallback: save PDF or printable HTML to local backend/lab_records/ folder, return relative path"""
     import pathlib
     out_dir = pathlib.Path(__file__).parent.parent.parent / 'lab_records'
+    out_dir.mkdir(parents=True, exist_ok=True)
     if isinstance(pdf_bytes, str):
         pdf_bytes = pdf_bytes.encode('utf-8')
     is_pdf = pdf_bytes.startswith(b'%PDF')
