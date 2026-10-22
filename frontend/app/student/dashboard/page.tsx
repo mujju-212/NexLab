@@ -114,7 +114,10 @@ export default function StudentDashboardPage() {
 
   useEffect(() => {
     fetchData();
-    const t = setInterval(fetchData, 25_000);
+    const t = setInterval(() => {
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      fetchData();
+    }, 25_000);
     return () => clearInterval(t);
   }, [fetchData]);
 

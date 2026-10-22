@@ -455,7 +455,7 @@ export default function PreLabDetailPage() {
 
   const safeMd = useMemo(() => {
     if (!active || active.type !== 'markdown') return '';
-    return renderMarkdown(String((active.content_data as { md?: string })?.md || ''));
+    return renderMarkdown(String((active.content_data as any)?.md || (active.content_data as any)?.text || (active.content_data as any)?.content || ''));
   }, [active]);
 
   // Copy code helper

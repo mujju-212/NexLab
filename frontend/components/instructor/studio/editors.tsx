@@ -89,7 +89,7 @@ function AiChip({
 
 // ── Markdown ────────────────────────────────────────────────────────────────
 export function MarkdownEditor({ data, onData, experimentId }: EditorProps) {
-  const md = asString(data.md);
+  const md = asString(data.md || data.text || data.content);
 
   const generate = async () => {
     if (!experimentId) throw new Error('no-exp');
@@ -99,7 +99,8 @@ export function MarkdownEditor({ data, onData, experimentId }: EditorProps) {
     const generated = res.notes?.markdown?.trim();
     if (!generated) throw new Error('empty');
     // Append to existing notes if any, so a manual draft is never clobbered.
-    onData({ ...data, md: md.trim() ? `${md.trim()}\n\n${generated}` : generated });
+    const nextVal = md.trim() ? `${md.trim()}\n\n${generated}` : generated;
+    onData({ ...data, md: nextVal, text: nextVal });
   };
 
   return (
@@ -116,7 +117,7 @@ export function MarkdownEditor({ data, onData, experimentId }: EditorProps) {
           <textarea
             className={s.codeArea} style={{ fontFamily: 'inherit', whiteSpace: 'pre-wrap' }}
             value={md} placeholder="# Heading&#10;&#10;Write **notes**, `code`, lists, [links](https://…)…"
-            onChange={e => onData({ ...data, md: e.target.value })}
+            onChange={e => onData({ ...data, md: e.target.value, text: e.target.value })}
           />
         </div>
         <div className={s.splitPane}>

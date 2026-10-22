@@ -1,19 +1,48 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useQuery } from '@tanstack/react-query';
 import {
   ClipboardList, Flame, Megaphone, CalendarClock, Loader2, Plus,
   CheckCircle2, AlertTriangle, X, TrendingUp, Trash2, Send, StickyNote,
-  Sparkles,
+  Users, Building2, Calendar, Layers, BookOpen, Search, Eye, ShieldCheck,
+  Award, ArrowUpRight
 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import {
   experienceService,
   type InterventionRow, type MasteryHeatmap, type ExtensionRow,
 } from '@/services/experience.service';
+import { sessionService } from '@/services/session.service';
+import { analyticsService } from '@/services/analytics.service';
+import { Student360Drawer } from '@/components/analytics';
 import styles from '../shared.module.css';
 
-type Tab = 'interventions' | 'heatmap' | 'announcements' | 'extensions' | 'insights' | 'notes';
+type Tab = 'roster' | 'interventions' | 'extensions' | 'announcements' | 'heatmap' | 'insights' | 'notes';
+
+interface SectionSubjectItem {
+  section_subject_id: string;
+  subject_id: string;
+  subject_name: string;
+  subject_code: string;
+  department_id?: string | null;
+  department_name?: string;
+  department_code?: string;
+  academic_year?: string;
+  batch_id?: string | null;
+  batch_name?: string;
+  section_id: string;
+  section_name: string;
+  student_count: number;
+  experiment_count: number;
+}
+
+interface RosterStudent {
+  student_id: string;
+  full_name: string;
+  roll_number: string | null;
+  email?: string | null;
+}
 
 const ACTION_LABELS: Record<string, string> = {
   talked_to_student: 'Talked to student',
@@ -40,17 +69,139 @@ function cellColor(v: number | null, threshold: number) {
   return { background: '#16a34a', color: '#fff' };
 }
 
-interface RosterStudent {
-  student_id: string;
-  full_name: string;
-  roll_number: string | null;
-}
-
 export default function ManagementPage() {
-  const [tab, setTab] = useState<Tab>('interventions');
+  const [tab, setTab] = useState<Tab>('roster');
   const [toast, setToast] = useState<string | null>(null);
   const [roster, setRoster] = useState<RosterStudent[]>([]);
+  const [selectedStudent360, setSelectedStudent360] = useState<string | null>(null);
+  const [preselectedActionStudentId, setPreselectedActionStudentId] = useState<string>('');
+
+  // ── 5-Level Cascading Academic Hierarchy State ───────────────────────────────
+  const [selectedDept, setSelectedDept] = useState<string>('all');
+  const [selectedYear, setSelectedYear] = useState<string>('all');
+  const [selectedBatch, setSelectedBatch] = useState<string>('all');
+  const [selectedSection, setSelectedSection] = useState<string>('all');
+  const [selectedSubject, setSelectedSubject] = useState<string>('all');
+  const [searchQuery, setSearchQuery] = useState<string>('');
+  const [riskFilter, setRiskFilter] = useState<'all' | 'at_risk' | 'top' | 'on_track'>('all');
+
   const toast3 = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3200); };
+
+  // Fetch assigned section-subjects
+  const { data: ssData } = useQuery({
+    queryKey: ['instructor', 'section-subjects'],
+    queryFn: () => sessionService.getSectionSubjects(),
+    staleTime: 60 * 1000,
+  });
+
+  const sectionSubjects: SectionSubjectItem[] = useMemo(
+    () => (ssData?.section_subjects as SectionSubjectItem[]) ?? [],
+    [ssData]
+  );
+
+  // Unique Departments
+  const departments = useMemo(() => {
+    const map = new Map<string, string>();
+    sectionSubjects.forEach(ss => {
+      const code = ss.department_code || ss.department_name;
+      if (code) map.set(code, ss.department_name || code);
+    });
+    return Array.from(map.entries()).map(([code, name]) => ({ code, name }));
+  }, [sectionSubjects]);
+
+  // Unique Academic Years
+  const academicYears = useMemo(() => {
+    const set = new Set<string>();
+    sectionSubjects.forEach(ss => {
+      if (selectedDept !== 'all' && (ss.department_code || ss.department_name) !== selectedDept) return;
+      if (ss.academic_year) set.add(ss.academic_year);
+    });
+    return Array.from(set);
+  }, [sectionSubjects, selectedDept]);
+
+  // Unique Batches
+  const availableBatches = useMemo(() => {
+    const map = new Map<string, string>();
+    sectionSubjects.forEach(ss => {
+      if (selectedDept !== 'all' && (ss.department_code || ss.department_name) !== selectedDept) return;
+      if (selectedYear !== 'all' && ss.academic_year !== selectedYear) return;
+      if (ss.batch_id && ss.batch_name) map.set(ss.batch_id, ss.batch_name);
+    });
+    return Array.from(map.entries()).map(([id, name]) => ({ id, name }));
+  }, [sectionSubjects, selectedDept, selectedYear]);
+
+  // Filtered Sections
+  const availableSections = useMemo(() => {
+    return sectionSubjects.filter(ss => {
+      if (selectedDept !== 'all' && (ss.department_code || ss.department_name) !== selectedDept) return false;
+      if (selectedYear !== 'all' && ss.academic_year !== selectedYear) return false;
+      if (selectedBatch !== 'all' && ss.batch_id !== selectedBatch) return false;
+      return true;
+    }).reduce((acc, curr) => {
+      if (!acc.some(s => s.section_id === curr.section_id)) {
+        acc.push({
+          section_id: curr.section_id,
+          section_name: curr.section_name,
+          batch_name: curr.batch_name,
+        });
+      }
+      return acc;
+    }, [] as Array<{ section_id: string; section_name: string; batch_name?: string }>);
+  }, [sectionSubjects, selectedDept, selectedYear, selectedBatch]);
+
+  // Filtered Subjects
+  const availableSubjects = useMemo(() => {
+    return sectionSubjects.filter(ss => {
+      if (selectedDept !== 'all' && (ss.department_code || ss.department_name) !== selectedDept) return false;
+      if (selectedYear !== 'all' && ss.academic_year !== selectedYear) return false;
+      if (selectedBatch !== 'all' && ss.batch_id !== selectedBatch) return false;
+      if (selectedSection !== 'all' && ss.section_id !== selectedSection) return false;
+      return true;
+    }).reduce((acc, curr) => {
+      if (!acc.some(s => s.subject_id === curr.subject_id)) {
+        acc.push({
+          subject_id: curr.subject_id,
+          subject_name: curr.subject_name,
+          subject_code: curr.subject_code,
+        });
+      }
+      return acc;
+    }, [] as Array<{ subject_id: string; subject_name: string; subject_code: string }>);
+  }, [sectionSubjects, selectedDept, selectedYear, selectedBatch, selectedSection]);
+
+  // Matching SectionSubject IDs
+  const matchingSectionSubjects = useMemo(() => {
+    return sectionSubjects.filter(ss => {
+      if (selectedDept !== 'all' && (ss.department_code || ss.department_name) !== selectedDept) return false;
+      if (selectedYear !== 'all' && ss.academic_year !== selectedYear) return false;
+      if (selectedBatch !== 'all' && ss.batch_id !== selectedBatch) return false;
+      if (selectedSection !== 'all' && ss.section_id !== selectedSection) return false;
+      if (selectedSubject !== 'all' && ss.subject_id !== selectedSubject) return false;
+      return true;
+    });
+  }, [sectionSubjects, selectedDept, selectedYear, selectedBatch, selectedSection, selectedSubject]);
+
+  const activeSsId = matchingSectionSubjects.length === 1 ? matchingSectionSubjects[0].section_subject_id : '';
+  const activeSectionName = useMemo(() => {
+    if (selectedSection === 'all') return undefined;
+    return availableSections.find(s => s.section_id === selectedSection)?.section_name;
+  }, [selectedSection, availableSections]);
+  const activeSubjectName = useMemo(() => {
+    if (selectedSubject === 'all') return undefined;
+    return availableSubjects.find(s => s.subject_id === selectedSubject)?.subject_name;
+  }, [selectedSubject, availableSubjects]);
+
+  // Fetch Rich Cohort Matrix for Class Roster & Student 360
+  const { data: cohortData, isLoading: loadingCohort } = useQuery({
+    queryKey: ['instructor', 'class-management-cohort', activeSsId, activeSectionName, activeSubjectName],
+    queryFn: () => analyticsService.getCohortMatrix({
+      section_subject_id: activeSsId || undefined,
+      section: activeSectionName,
+      subject: activeSubjectName,
+      days: 90,
+    }),
+    staleTime: 30 * 1000,
+  });
 
   useEffect(() => {
     experienceService.analyticsRoster()
@@ -58,77 +209,519 @@ export default function ManagementPage() {
       .catch(() => {});
   }, []);
 
-  return (
-    <InstructorShell activePage="Management" title="Student Management"
-      subtitle="Interventions, mastery heat-map, announcements, deadline relief, insights and notes.">
-      {toast && <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 300, background: '#111827', color: '#fff', padding: '12px 20px', borderRadius: 12, fontSize: 14, fontWeight: 600 }}>{toast}</div>}
+  const cohortStudents = useMemo(() => {
+    const raw = cohortData?.students ?? [];
+    return raw.filter((st: any) => {
+      const band = st.status_band || st.risk_band || 'ok';
+      if (riskFilter === 'at_risk' && band !== 'at_risk' && band !== 'critical' && band !== 'high') return false;
+      if (riskFilter === 'top' && band !== 'top' && band !== 'excelling' && band !== 'ok') return false;
+      if (riskFilter === 'on_track' && band !== 'on_track' && band !== 'steady' && band !== 'watch') return false;
+      if (searchQuery.trim()) {
+        const q = searchQuery.toLowerCase();
+        return (
+          st.student_name.toLowerCase().includes(q) ||
+          (st.roll_number || '').toLowerCase().includes(q) ||
+          (st.email || '').toLowerCase().includes(q)
+        );
+      }
+      return true;
+    });
+  }, [cohortData?.students, riskFilter, searchQuery]);
 
+  const triggerStudentAction = (studentId: string, targetTab: Tab) => {
+    setPreselectedActionStudentId(studentId);
+    setTab(targetTab);
+  };
+
+  return (
+    <InstructorShell
+      activePage="Management"
+      title="Class & Student 360° Management"
+      subtitle="Manage your assigned batches and sections, inspect student 360° telemetry, broadcast section notices, and grant deadline relief."
+    >
+      {toast && (
+        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 400, background: '#0f172a', color: '#fff', padding: '12px 20px', borderRadius: 12, fontSize: 13.5, fontWeight: 600 }}>
+          {toast}
+        </div>
+      )}
+
+      {/* ═══ 5-LEVEL CASCADING HIERARCHY FILTER BAR ═══ */}
+      <div style={{
+        background: '#ffffff',
+        border: '1px solid #e2e8f0',
+        borderRadius: 16,
+        padding: '16px 20px',
+        marginBottom: 18,
+        boxShadow: '0 4px 16px rgba(15,23,42,0.03)',
+      }}>
+        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 12, alignItems: 'center' }}>
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 5, textTransform: 'uppercase' }}>
+              <Building2 size={12} color="#7c3aed" /> Department
+            </label>
+            <select
+              className={styles.select}
+              style={{ width: '100%' }}
+              value={selectedDept}
+              onChange={e => {
+                setSelectedDept(e.target.value);
+                setSelectedYear('all');
+                setSelectedBatch('all');
+                setSelectedSection('all');
+              }}
+            >
+              <option value="all">All Departments</option>
+              {departments.map(d => (
+                <option key={d.code} value={d.code}>{d.name} ({d.code})</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 5, textTransform: 'uppercase' }}>
+              <Calendar size={12} color="#7c3aed" /> Academic Year
+            </label>
+            <select
+              className={styles.select}
+              style={{ width: '100%' }}
+              value={selectedYear}
+              onChange={e => {
+                setSelectedYear(e.target.value);
+                setSelectedBatch('all');
+                setSelectedSection('all');
+              }}
+            >
+              <option value="all">All Academic Years</option>
+              {academicYears.map(yr => (
+                <option key={yr} value={yr}>{yr}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 5, textTransform: 'uppercase' }}>
+              <Layers size={12} color="#7c3aed" /> Batch
+            </label>
+            <select
+              className={styles.select}
+              style={{ width: '100%' }}
+              value={selectedBatch}
+              onChange={e => {
+                setSelectedBatch(e.target.value);
+                setSelectedSection('all');
+              }}
+            >
+              <option value="all">All Batches ({availableBatches.length})</option>
+              {availableBatches.map(b => (
+                <option key={b.id} value={b.id}>{b.name}</option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 5, textTransform: 'uppercase' }}>
+              <Users size={12} color="#7c3aed" /> Section
+            </label>
+            <select
+              className={styles.select}
+              style={{ width: '100%' }}
+              value={selectedSection}
+              onChange={e => setSelectedSection(e.target.value)}
+            >
+              <option value="all">All Sections ({availableSections.length})</option>
+              {availableSections.map(s => (
+                <option key={s.section_id} value={s.section_id}>
+                  Section {s.section_name} {s.batch_name ? `(${s.batch_name})` : ''}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 5, textTransform: 'uppercase' }}>
+              <BookOpen size={12} color="#7c3aed" /> Subject
+            </label>
+            <select
+              className={styles.select}
+              style={{ width: '100%' }}
+              value={selectedSubject}
+              onChange={e => setSelectedSubject(e.target.value)}
+            >
+              <option value="all">All Assigned Subjects ({availableSubjects.length})</option>
+              {availableSubjects.map(s => (
+                <option key={s.subject_id} value={s.subject_id}>
+                  {s.subject_name} ({s.subject_code})
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+      </div>
+
+      {/* ═══ NAVIGATION TABS ═══ */}
       <div className={styles.tabRow} style={{ marginBottom: 18, flexWrap: 'wrap' }}>
         {([
-          { id: 'interventions' as Tab, label: 'Interventions', Icon: ClipboardList },
-          { id: 'heatmap' as Tab, label: 'Mastery Heat-map', Icon: Flame },
-          { id: 'insights' as Tab, label: 'Insights', Icon: TrendingUp },
-          { id: 'announcements' as Tab, label: 'Announce', Icon: Megaphone },
-          { id: 'extensions' as Tab, label: 'Extensions', Icon: CalendarClock },
-          { id: 'notes' as Tab, label: 'Private Notes', Icon: StickyNote },
+          { id: 'roster' as Tab,        label: 'Class Roster & Student 360°', Icon: Users },
+          { id: 'interventions' as Tab, label: 'Interventions',               Icon: ClipboardList },
+          { id: 'extensions' as Tab,    label: 'Deadline Extensions',         Icon: CalendarClock },
+          { id: 'announcements' as Tab, label: 'Class Announcements',         Icon: Megaphone },
+          { id: 'heatmap' as Tab,       label: 'Mastery Heatmap',             Icon: Flame },
+          { id: 'insights' as Tab,      label: 'Early Warning & Hints',       Icon: TrendingUp },
+          { id: 'notes' as Tab,         label: 'Private Faculty Notes',       Icon: StickyNote },
         ]).map(t => (
-          <button key={t.id} className={`${styles.tabChip} ${tab === t.id ? styles.tabChipActive : ''}`}
-            onClick={() => setTab(t.id)}>
+          <button
+            key={t.id}
+            className={`${styles.tabChip} ${tab === t.id ? styles.tabChipActive : ''}`}
+            onClick={() => setTab(t.id)}
+          >
             <t.Icon size={13} /> {t.label}
           </button>
         ))}
       </div>
 
-      {tab === 'interventions' && <InterventionsTab toast3={toast3} roster={roster} />}
+      {/* ═══ TAB 1: CLASS ROSTER & STUDENT 360° DIRECTORY ═══ */}
+      {tab === 'roster' && (
+        <>
+          {/* Assigned Section-Subject Cards Strip */}
+          {matchingSectionSubjects.length > 0 && (
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(260px, 1fr))', gap: 12, marginBottom: 18 }}>
+              {matchingSectionSubjects.map(ss => {
+                const isSelected = selectedSection === ss.section_id && selectedSubject === ss.subject_id;
+                return (
+                  <div
+                    key={ss.section_subject_id}
+                    onClick={() => {
+                      if (isSelected) {
+                        setSelectedSection('all');
+                        setSelectedSubject('all');
+                      } else {
+                        setSelectedSection(ss.section_id);
+                        setSelectedSubject(ss.subject_id);
+                      }
+                    }}
+                    style={{
+                      background: isSelected ? 'linear-gradient(135deg, #f5f3ff, #ede9fe)' : '#ffffff',
+                      border: isSelected ? '1.5px solid #7c3aed' : '1px solid #e2e8f0',
+                      borderRadius: 14,
+                      padding: '14px 16px',
+                      cursor: 'pointer',
+                      transition: 'all 0.15s ease',
+                    }}
+                  >
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                      <span className={`${styles.pill} ${styles.pillBlue}`} style={{ fontSize: 10.5 }}>
+                        {ss.department_code || 'CSE'} · {ss.academic_year || 'Current'}
+                      </span>
+                      <span style={{ fontSize: 11.5, fontWeight: 700, color: '#7c3aed' }}>
+                        Section {ss.section_name}
+                      </span>
+                    </div>
+                    <div style={{ fontSize: 14.5, fontWeight: 800, color: '#0f172a', marginBottom: 2 }}>
+                      {ss.subject_name} ({ss.subject_code})
+                    </div>
+                    <div style={{ fontSize: 12, color: '#64748b', display: 'flex', justifyContent: 'space-between', marginTop: 6 }}>
+                      <span><strong>{ss.student_count}</strong> Students ({ss.batch_name || 'Batch'})</span>
+                      <span><strong>{ss.experiment_count}</strong> Experiments</span>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+
+          {/* Cohort KPI Row */}
+          <div className={styles.kpiRow}>
+            <div className={styles.kpiCard}>
+              <p className={styles.kpiLabel}>Enrolled Students</p>
+              <p className={styles.kpiValue} style={{ color: '#4f46e5' }}>
+                {cohortData?.kpis?.students_in_scope?.value ?? (cohortData?.kpis as any)?.total_students ?? roster.length}
+              </p>
+              <p className={styles.kpiSub}>Click any student for 360° telemetry</p>
+            </div>
+            <div className={styles.kpiCard}>
+              <p className={styles.kpiLabel}>Class Average Score</p>
+              <p className={styles.kpiValue} style={{ color: '#059669' }}>
+                {cohortData?.kpis?.avg_grade?.value ?? ((cohortData?.kpis as any)?.avg_score != null ? `${(cohortData?.kpis as any).avg_score.toFixed(1)}%` : '—')}
+              </p>
+              <p className={styles.kpiSub}>Weighted across completed labs</p>
+            </div>
+            <div className={styles.kpiCard}>
+              <p className={styles.kpiLabel}>At-Risk Students</p>
+              <p className={styles.kpiValue} style={{ color: '#dc2626' }}>
+                {cohortData?.kpis?.high_critical_risk?.value ?? (cohortData?.kpis as any)?.at_risk_count ?? 0}
+              </p>
+              <p className={styles.kpiSub}>Requires intervention or relief</p>
+            </div>
+            <div className={styles.kpiCard}>
+              <p className={styles.kpiLabel}>Top Performers</p>
+              <p className={styles.kpiValue} style={{ color: '#7c3aed' }}>
+                {(cohortData?.kpis as any)?.top_performers_count ?? cohortStudents.filter((s: any) => s.risk_band === 'ok' || s.mastery_pct >= 80).length}
+              </p>
+              <p className={styles.kpiSub}>Avg mastery ≥ 80%</p>
+            </div>
+          </div>
+
+          {/* Student Roster & 360 Table */}
+          <div className={styles.sectionCard}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                <div style={{ position: 'relative' }}>
+                  <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+                  <input
+                    type="text"
+                    className={styles.input}
+                    placeholder="Search student name, roll, email..."
+                    style={{ paddingLeft: 30, maxWidth: 260, height: 36, fontSize: 13 }}
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <div className={styles.tabRow} style={{ gap: 6 }}>
+                  {([
+                    { id: 'all', label: 'All Students' },
+                    { id: 'at_risk', label: 'At-Risk' },
+                    { id: 'on_track', label: 'On Track' },
+                    { id: 'top', label: 'Excelling' },
+                  ] as const).map(f => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      className={`${styles.tabChip} ${riskFilter === f.id ? styles.tabChipActive : ''}`}
+                      onClick={() => setRiskFilter(f.id)}
+                      style={{ fontSize: 12, padding: '5px 10px' }}
+                    >
+                      {f.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+              <span className={styles.sectionSub}>
+                Showing {cohortStudents.length} students · Click any row to open <strong>Student 360° Diagnostic Drawer</strong>
+              </span>
+            </div>
+
+            {loadingCohort ? (
+              <div style={{ padding: 28, textAlign: 'center', color: '#64748b' }}>
+                <Loader2 size={20} className="animate-spin" style={{ margin: '0 auto 8px' }} />
+                Loading class student roster & 360° metrics…
+              </div>
+            ) : cohortStudents.length === 0 ? (
+              <p className={styles.sectionSub} style={{ padding: 20, textAlign: 'center' }}>
+                No students match the selected class filters.
+              </p>
+            ) : (
+              <div style={{ overflowX: 'auto' }}>
+                <table className={styles.table}>
+                  <thead>
+                    <tr>
+                      <th>Student & Roll No.</th>
+                      <th>Section & Batch</th>
+                      <th>Status Band</th>
+                      <th>Avg Score</th>
+                      <th>Labs Completed</th>
+                      <th>Attendance</th>
+                      <th>Mastery & Focus</th>
+                      <th style={{ textAlign: 'right' }}>360° & Quick Actions</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {cohortStudents.map((st: any) => {
+                      const band = st.status_band || st.risk_band || 'ok';
+                      const isRisk = band === 'at_risk' || band === 'critical' || band === 'high';
+                      const isTop = band === 'top' || band === 'excelling' || band === 'ok' || (st.mastery_pct ?? st.mastery_score ?? 0) >= 80;
+                      const avgScore = st.avg_score ?? st.grade_avg ?? 0;
+                      const completedExps = st.completed_experiments ?? st.completion?.completed ?? 0;
+                      const totalExps = st.total_experiments ?? st.completion?.total ?? 0;
+                      const masteryScore = st.mastery_score ?? st.mastery_pct ?? 0;
+                      return (
+                        <tr
+                          key={st.student_id}
+                          style={{ cursor: 'pointer' }}
+                          onClick={() => setSelectedStudent360(st.student_id)}
+                        >
+                          <td>
+                            <div className={styles.tdStrong} style={{ color: '#4f46e5', display: 'flex', alignItems: 'center', gap: 6 }}>
+                              {st.student_name} <ArrowUpRight size={13} color="#7c3aed" />
+                            </div>
+                            <div style={{ fontSize: 11.5, color: '#64748b' }}>
+                              {st.roll_number || 'No Roll'} {st.email ? `· ${st.email}` : ''}
+                            </div>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: 12.5, fontWeight: 600, color: '#1e293b' }}>
+                              {st.section_name ? `Section ${st.section_name}` : activeSectionName ? `Section ${activeSectionName}` : 'Assigned Section'}
+                            </div>
+                            <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                              {st.subject_name || activeSubjectName || 'All Assigned Subjects'}
+                            </div>
+                          </td>
+                          <td>
+                            <span className={`${styles.pill} ${
+                              isRisk ? styles.pillRed : isTop ? styles.pillGreen : styles.pillBlue
+                            }`}>
+                              {isRisk ? '⚠️ At-Risk' : isTop ? '⭐ Excelling' : '✓ On Track'}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ fontWeight: 800, fontSize: 14, color: avgScore >= 70 ? '#059669' : avgScore >= 45 ? '#d97706' : '#dc2626' }}>
+                              {avgScore != null ? `${typeof avgScore === 'number' ? avgScore.toFixed(1) : avgScore}%` : '—'}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: '#334155' }}>
+                              {completedExps} / {totalExps}
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ fontSize: 13, fontWeight: 600, color: (st.attendance_rate ?? 100) < 75 ? '#dc2626' : '#059669' }}>
+                              {st.attendance_rate != null ? `${Math.round(st.attendance_rate)}%` : '—'}
+                            </span>
+                          </td>
+                          <td>
+                            <div style={{ fontSize: 11.5, color: '#475569' }}>
+                              Mastery: <strong>{masteryScore != null ? `${Math.round(masteryScore)}%` : '—'}</strong>
+                              {' · '}
+                              Focus: <strong>{st.focus_score != null ? `${Math.round(st.focus_score)}%` : '—'}</strong>
+                            </div>
+                          </td>
+                          <td style={{ textAlign: 'right' }} onClick={ev => ev.stopPropagation()}>
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                              <button
+                                type="button"
+                                className={styles.primaryBtn}
+                                style={{ padding: '5px 10px', fontSize: 11.5 }}
+                                onClick={() => setSelectedStudent360(st.student_id)}
+                              >
+                                <Eye size={12} /> 360° View
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.ghostBtn}
+                                style={{ padding: '5px 8px', fontSize: 11.5 }}
+                                onClick={() => triggerStudentAction(st.student_id, 'extensions')}
+                                title="Grant deadline extension"
+                              >
+                                <CalendarClock size={12} /> Extend
+                              </button>
+                              <button
+                                type="button"
+                                className={styles.ghostBtn}
+                                style={{ padding: '5px 8px', fontSize: 11.5 }}
+                                onClick={() => triggerStudentAction(st.student_id, 'interventions')}
+                                title="Log intervention"
+                              >
+                                <ClipboardList size={12} /> Intervene
+                              </button>
+                            </div>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table>
+              </div>
+            )}
+          </div>
+        </>
+      )}
+
+      {tab === 'interventions' && (
+        <InterventionsTab
+          toast3={toast3}
+          roster={roster}
+          preselectedStudentId={preselectedActionStudentId}
+          onInspectStudent={sid => setSelectedStudent360(sid)}
+        />
+      )}
       {tab === 'heatmap' && <HeatmapTab />}
       {tab === 'insights' && <InsightsTab toast3={toast3} />}
       {tab === 'announcements' && <AnnouncementsTab toast3={toast3} />}
-      {tab === 'extensions' && <ExtensionsTab toast3={toast3} roster={roster} />}
-      {tab === 'notes' && <NotesTab toast3={toast3} roster={roster} />}
+      {tab === 'extensions' && (
+        <ExtensionsTab
+          toast3={toast3}
+          roster={roster}
+          preselectedStudentId={preselectedActionStudentId}
+        />
+      )}
+      {tab === 'notes' && (
+        <NotesTab
+          toast3={toast3}
+          roster={roster}
+          preselectedStudentId={preselectedActionStudentId}
+        />
+      )}
+
+      {/* Global Slide-Over Student 360° Diagnostic Drawer */}
+      <Student360Drawer
+        studentId={selectedStudent360}
+        isOpen={Boolean(selectedStudent360)}
+        onClose={() => setSelectedStudent360(null)}
+      />
     </InstructorShell>
   );
 }
 
 // ═══════════════════════ F1 — Interventions ═══════════════════════
 
-function InterventionsTab({ toast3, roster }: { toast3: (m: string) => void; roster: RosterStudent[] }) {
+function InterventionsTab({
+  toast3,
+  roster,
+  preselectedStudentId,
+  onInspectStudent,
+}: {
+  toast3: (m: string) => void;
+  roster: RosterStudent[];
+  preselectedStudentId?: string;
+  onInspectStudent: (sid: string) => void;
+}) {
   const [rows, setRows] = useState<InterventionRow[]>([]);
-  const [students, setStudents] = useState<string[]>([]);
   const [statusFilter, setStatusFilter] = useState<'open' | 'resolved' | 'all'>('open');
   const [loading, setLoading] = useState(true);
 
-  // create form
-  const [showForm, setShowForm] = useState(false);
-  const [studentId, setStudentId] = useState('');
+  const [showForm, setShowForm] = useState(Boolean(preselectedStudentId));
+  const [studentId, setStudentId] = useState(preselectedStudentId || '');
   const [actionType, setActionType] = useState('talked_to_student');
   const [note, setNote] = useState('');
   const [followUp, setFollowUp] = useState('');
   const [saving, setSaving] = useState(false);
 
-  // outcome form
   const [outcomeFor, setOutcomeFor] = useState<InterventionRow | null>(null);
   const [outcome, setOutcome] = useState('improved');
   const [outcomeNote, setOutcomeNote] = useState('');
-
-  const studentName = useCallback((id: string) => {
-    const r = rows.find(x => x.student_id === id);
-    return r?.student_name ?? 'Student';
-  }, [rows]);
 
   const load = useCallback(async (f: 'open' | 'resolved' | 'all') => {
     setLoading(true);
     try {
       const res = await experienceService.listInterventions(f === 'all' ? undefined : f);
       setRows(res.interventions);
-      if (res.my_students?.length) setStudents(res.my_students);
     } catch { toast3('Could not load interventions.'); }
     finally { setLoading(false); }
   }, [toast3]);
 
   useEffect(() => { load(statusFilter); }, [statusFilter, load]);
 
-  // Student names come from rows; for the create dropdown use the names list
-  // from the API (my_students) mapped against any row, else raw names.
+  useEffect(() => {
+    if (preselectedStudentId) {
+      setStudentId(preselectedStudentId);
+      setShowForm(true);
+    }
+  }, [preselectedStudentId]);
+
+  const studentOptions = useMemo(() => {
+    const seen = new Map<string, string>();
+    roster.forEach(r => seen.set(r.student_id, `${r.full_name} (${r.roll_number || 'No Roll'})`));
+    rows.forEach(r => {
+      if (!seen.has(r.student_id)) seen.set(r.student_id, r.student_name ?? 'Student');
+    });
+    return Array.from(seen.entries());
+  }, [rows, roster]);
+
+  useEffect(() => {
+    if (!studentId && studentOptions.length > 0) {
+      setStudentId(studentOptions[0][0]);
+    }
+  }, [studentOptions, studentId]);
+
   const create = async () => {
     if (!studentId) { toast3('Pick a student.'); return; }
     setSaving(true);
@@ -157,22 +750,6 @@ function InterventionsTab({ toast3, roster }: { toast3: (m: string) => void; ros
     } catch { toast3('Failed to save outcome.'); }
   };
 
-  // Build student id options from roster or known rows
-  const studentOptions = useMemo(() => {
-    const seen = new Map<string, string>();
-    roster.forEach(r => seen.set(r.student_id, `${r.full_name} (${r.roll_number || 'No Roll'})`));
-    rows.forEach(r => {
-      if (!seen.has(r.student_id)) seen.set(r.student_id, r.student_name ?? 'Student');
-    });
-    return Array.from(seen.entries());
-  }, [rows, roster]);
-
-  useEffect(() => {
-    if (!studentId && studentOptions.length > 0) {
-      setStudentId(studentOptions[0][0]);
-    }
-  }, [studentOptions, studentId]);
-
   return (
     <>
       <div className={styles.actionRow}>
@@ -191,42 +768,34 @@ function InterventionsTab({ toast3, roster }: { toast3: (m: string) => void; ros
 
       {showForm && (
         <div className={styles.sectionCard} style={{ marginBottom: 16 }}>
-          <p className={styles.sectionTitle} style={{ marginBottom: 12 }}>New intervention</p>
-          {studentOptions.length === 0 ? (
-            <p style={{ fontSize: 13, color: '#b45309' }}>
-              No enrolled students found.
-            </p>
-          ) : (
-            <>
-              <div className={styles.gridTwo}>
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Student</label>
-                  <select className={styles.select} value={studentId} onChange={e => setStudentId(e.target.value)}>
-                    {studentOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
-                  </select>
-                </div>
-                <div className={styles.formGroup}>
-                  <label className={styles.formLabel}>Action</label>
-                  <select className={styles.select} value={actionType} onChange={e => setActionType(e.target.value)}>
-                    {Object.entries(ACTION_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
-                  </select>
-                </div>
-              </div>
-              <div className={styles.formGroup}>
-                <label className={styles.formLabel}>Notes</label>
-                <textarea className={styles.textarea} value={note} onChange={e => setNote(e.target.value)}
-                  placeholder="What was discussed / done…" />
-              </div>
-              <div className={styles.formGroup}>
-                <label className={styles.formLabel}>Follow-up date (optional)</label>
-                <input className={styles.input} type="datetime-local" value={followUp}
-                  onChange={e => setFollowUp(e.target.value)} />
-              </div>
-              <button className={styles.primaryBtn} onClick={create} disabled={saving}>
-                {saving ? 'Saving…' : 'Record'}
-              </button>
-            </>
-          )}
+          <p className={styles.sectionTitle} style={{ marginBottom: 12 }}>New Faculty Intervention</p>
+          <div className={styles.gridTwo}>
+            <div className={styles.formGroup}>
+              <label className={styles.formLabel}>Student</label>
+              <select className={styles.select} value={studentId} onChange={e => setStudentId(e.target.value)}>
+                {studentOptions.map(([id, name]) => <option key={id} value={id}>{name}</option>)}
+              </select>
+            </div>
+            <div className={styles.formGroup}>
+              <label className={styles.formLabel}>Action Taken</label>
+              <select className={styles.select} value={actionType} onChange={e => setActionType(e.target.value)}>
+                {Object.entries(ACTION_LABELS).map(([v, l]) => <option key={v} value={v}>{l}</option>)}
+              </select>
+            </div>
+          </div>
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel}>Notes</label>
+            <textarea className={styles.textarea} value={note} onChange={e => setNote(e.target.value)}
+              placeholder="What was discussed or arranged with the student…" />
+          </div>
+          <div className={styles.formGroup}>
+            <label className={styles.formLabel}>Follow-up Date (optional)</label>
+            <input className={styles.input} type="datetime-local" value={followUp}
+              onChange={e => setFollowUp(e.target.value)} />
+          </div>
+          <button className={styles.primaryBtn} onClick={create} disabled={saving}>
+            {saving ? 'Saving…' : 'Save Intervention'}
+          </button>
         </div>
       )}
 
@@ -234,13 +803,13 @@ function InterventionsTab({ toast3, roster }: { toast3: (m: string) => void; ros
         {loading ? (
           <Loader2 size={18} className="animate-spin" style={{ margin: '20px auto', display: 'block' }} />
         ) : rows.length === 0 ? (
-          <p className={styles.sectionSub}>No {statusFilter !== 'all' ? statusFilter : ''} interventions.</p>
+          <p className={styles.sectionSub}>No {statusFilter !== 'all' ? statusFilter : ''} interventions recorded.</p>
         ) : (
           <div className={styles.list}>
             {rows.map(r => (
               <div key={r.id} className={styles.listRow}>
                 <div className={styles.rowBody}>
-                  <p className={styles.rowTitle}>
+                  <p className={styles.rowTitle} style={{ cursor: 'pointer', color: '#4f46e5' }} onClick={() => onInspectStudent(r.student_id)}>
                     {r.student_name} — {ACTION_LABELS[r.action_type] ?? r.action_type}
                   </p>
                   {r.note && <p className={styles.rowMeta}>{r.note}</p>}
@@ -254,6 +823,9 @@ function InterventionsTab({ toast3, roster }: { toast3: (m: string) => void; ros
                     color: OUTCOME_COLORS[r.outcome], borderColor: OUTCOME_COLORS[r.outcome],
                     border: `1.5px solid ${OUTCOME_COLORS[r.outcome]}55`,
                   }}>{r.outcome}</span>
+                  <button className={styles.ghostBtn} onClick={() => onInspectStudent(r.student_id)}>
+                    <Eye size={13} /> 360°
+                  </button>
                   {r.outcome === 'open' && (
                     <button className={styles.ghostBtn}
                       onClick={() => { setOutcomeFor(r); setOutcome('improved'); setOutcomeNote(''); }}>
@@ -349,9 +921,8 @@ function InsightsTab({ toast3 }: { toast3: (m: string) => void }) {
         </button>
       </div>
 
-      {/* Early warning */}
       <div className={styles.sectionCard} style={{ marginBottom: 16 }}>
-        <p className={styles.sectionTitle} style={{ marginBottom: 10 }}>Early warning — trend-based, before thresholds trigger</p>
+        <p className={styles.sectionTitle} style={{ marginBottom: 10 }}>Early Warning — Trend-Based Risk Detection</p>
         {warnings.length === 0 ? (
           <p className={styles.sectionSub}>No students currently trending at risk for this section.</p>
         ) : (
@@ -362,7 +933,7 @@ function InsightsTab({ toast3 }: { toast3: (m: string) => void }) {
                   <p className={styles.rowTitle}>{w.full_name} <span style={{ fontSize: 12, color: '#9891a6' }}>({w.roll_number ?? '—'})</span></p>
                   <p className={styles.rowMeta}>{w.reasons.join(' · ')}</p>
                 </div>
-                <span className={`${styles.pill} ${w.level === 'high' ? styles.pillGreen === styles.pillGreen ? styles.redBadge ?? '' : '' : styles.amberBadge}`}
+                <span className={styles.pill}
                   style={{
                     color: w.level === 'high' ? '#dc2626' : '#d97706',
                     border: `1.5px solid ${w.level === 'high' ? '#dc262655' : '#d9770655'}`,
@@ -375,37 +946,32 @@ function InsightsTab({ toast3 }: { toast3: (m: string) => void }) {
         )}
       </div>
 
-      {/* Hint effectiveness */}
       {hint && (
         <div className={styles.sectionCard} style={{ marginBottom: 16 }}>
-          <p className={styles.sectionTitle} style={{ marginBottom: 10 }}>Hint effectiveness — “{hint.title}”</p>
+          <p className={styles.sectionTitle} style={{ marginBottom: 10 }}>Hint Effectiveness — “{hint.title}”</p>
           <div className={styles.kpiRow}>
             <div className={styles.kpiCard}>
-              <p className={styles.kpiLabel}>Hint users</p>
+              <p className={styles.kpiLabel}>Hint Users</p>
               <p className={styles.kpiValue}>{hint.hint_users}</p>
               <p className={styles.kpiSub}>Pass rate {hint.pass_rate_hint_users ?? '—'}%</p>
             </div>
             <div className={styles.kpiCard}>
-              <p className={styles.kpiLabel}>No-hint students</p>
+              <p className={styles.kpiLabel}>No-Hint Students</p>
               <p className={styles.kpiValue}>{hint.non_hint_users}</p>
               <p className={styles.kpiSub}>Pass rate {hint.pass_rate_non_users ?? '—'}%</p>
             </div>
             <div className={styles.kpiCard}>
-              <p className={styles.kpiLabel}>Avg hints (passed)</p>
+              <p className={styles.kpiLabel}>Avg Hints (Passed)</p>
               <p className={styles.kpiValue}>{hint.avg_hints_passed}</p>
               <p className={styles.kpiSub}>vs {hint.avg_hints_failed} for failed</p>
             </div>
           </div>
-          {hint.top_users.length > 0 && (
-            <p className={styles.sectionSub}>Top hint users: {hint.top_users.slice(0, 5).map(u => `${u.name} (${u.hints})`).join(', ')}</p>
-          )}
         </div>
       )}
 
-      {/* Error analysis */}
       {errors && (
         <div className={styles.sectionCard}>
-          <p className={styles.sectionTitle} style={{ marginBottom: 10 }}>Common errors — “{errors.title}”</p>
+          <p className={styles.sectionTitle} style={{ marginBottom: 10 }}>Common Compiler & Runtime Errors — “{errors.title}”</p>
           <p className={styles.sectionSub} style={{ marginBottom: 10 }}>
             {errors.error_attempts}/{errors.total_attempts} attempts hit errors ({errors.error_rate_pct}%)
           </p>
@@ -431,17 +997,24 @@ function InsightsTab({ toast3 }: { toast3: (m: string) => void }) {
 
 // ═══════════════════════ T3-14 — Private notes ═══════════════════════
 
-function NotesTab({ toast3, roster }: { toast3: (m: string) => void; roster: RosterStudent[] }) {
-  const [studentId, setStudentId] = useState('');
+function NotesTab({
+  toast3,
+  roster,
+  preselectedStudentId,
+}: {
+  toast3: (m: string) => void;
+  roster: RosterStudent[];
+  preselectedStudentId?: string;
+}) {
+  const [studentId, setStudentId] = useState(preselectedStudentId || '');
   const [note, setNote] = useState('');
   const [rows, setRows] = useState<import('@/services/experience.service').TeacherNoteRow[]>([]);
   const [loading, setLoading] = useState(false);
 
   useEffect(() => {
-    if (!studentId && roster.length > 0) {
-      setStudentId(roster[0].student_id);
-    }
-  }, [roster, studentId]);
+    if (preselectedStudentId) setStudentId(preselectedStudentId);
+    else if (!studentId && roster.length > 0) setStudentId(roster[0].student_id);
+  }, [roster, studentId, preselectedStudentId]);
 
   const load = useCallback(async (id: string) => {
     if (!id) { setRows([]); return; }
@@ -460,7 +1033,7 @@ function NotesTab({ toast3, roster }: { toast3: (m: string) => void; roster: Ros
     try {
       await experienceService.addNote(studentId.trim(), note.trim());
       setNote('');
-      toast3('Note saved.');
+      toast3('Private note saved.');
       load(studentId.trim());
     } catch (e: unknown) {
       toast3((e as { response?: { data?: { error?: string } } })?.response?.data?.error ?? 'Save failed.');
@@ -474,32 +1047,27 @@ function NotesTab({ toast3, roster }: { toast3: (m: string) => void; roster: Ros
 
   return (
     <div className={styles.sectionCard}>
-      <p className={styles.sectionTitle} style={{ marginBottom: 4 }}>Private notes</p>
+      <p className={styles.sectionTitle} style={{ marginBottom: 4 }}>Private Faculty Notes</p>
       <p className={styles.sectionSub} style={{ marginBottom: 12 }}>
-        Only you can see these — visible to no other teacher, admin or student.
+        Only you can view these confidential observations on a student.
       </p>
       <div className={styles.formGroup}>
         <label className={styles.formLabel}>Student</label>
-        {roster.length > 0 ? (
-          <select className={styles.select} value={studentId} onChange={e => setStudentId(e.target.value)}>
-            {roster.map(s => (
-              <option key={s.student_id} value={s.student_id}>
-                {s.full_name} ({s.roll_number || 'No Roll'})
-              </option>
-            ))}
-          </select>
-        ) : (
-          <input className={styles.input} value={studentId} onChange={e => setStudentId(e.target.value)}
-            placeholder="Student ID (from Students page)" />
-        )}
+        <select className={styles.select} value={studentId} onChange={e => setStudentId(e.target.value)}>
+          {roster.map(s => (
+            <option key={s.student_id} value={s.student_id}>
+              {s.full_name} ({s.roll_number || 'No Roll'})
+            </option>
+          ))}
+        </select>
       </div>
       <div className={styles.formGroup}>
-        <label className={styles.formLabel}>Note</label>
+        <label className={styles.formLabel}>Observation Note</label>
         <textarea className={styles.textarea} rows={3} value={note} onChange={e => setNote(e.target.value)}
-          placeholder="Observations, promises, context…" />
+          placeholder="Record mentoring context, Viva observations, or follow-up items…" />
       </div>
       <button className={styles.primaryBtn} onClick={add} style={{ marginBottom: 14 }}>
-        <Plus size={13} /> Add Note
+        <Plus size={13} /> Save Private Note
       </button>
 
       {loading ? (
@@ -544,7 +1112,7 @@ function HeatmapTab() {
     <div className={styles.sectionCard}>
       <div className={styles.sectionHeader}>
         <div>
-          <h2 className={styles.sectionTitle}>Class mastery — students × concepts</h2>
+          <h2 className={styles.sectionTitle}>Class Mastery Heatmap — Students × Concepts</h2>
           <p className={styles.sectionSub}>
             Concepts ordered weakest-first. Red = below threshold, amber = close, green = solid.
           </p>
@@ -563,7 +1131,6 @@ function HeatmapTab() {
         <p className={styles.sectionSub}>No mastery data yet — it builds up as students complete experiments.</p>
       ) : (
         <>
-          {/* Teach-next strip */}
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
             {data.concept_avgs.slice(0, 5).map(c => (
               <span key={c.concept} style={{
@@ -589,7 +1156,7 @@ function HeatmapTab() {
                 </tr>
               </thead>
               <tbody>
-                {data.students.map((s, i) => {
+                {data.students.map((s) => {
                   const rowVals = data.values.find(v => v.student_id === s.student_id)?.values ?? [];
                   return (
                     <tr key={s.student_id}>
@@ -611,9 +1178,6 @@ function HeatmapTab() {
               </tbody>
             </table>
           </div>
-          <p style={{ margin: '10px 0 0', fontSize: 12, color: '#9891a6' }}>
-            {data.weak_flags.length} weak cell(s) below {data.threshold} — hover any cell for details.
-          </p>
         </>
       )}
     </div>
@@ -628,21 +1192,20 @@ function AnnouncementsTab({ toast3 }: { toast3: (m: string) => void }) {
   const [target, setTarget] = useState('');
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
-  const [priority, setPriority] = useState<'normal' | 'important' | 'urgent'>('normal');
   const [sending, setSending] = useState(false);
-  const [loading, setLoading] = useState(false);
 
   const loadNotices = () => {
-    setLoading(true);
     experienceService.listInstructorAnnouncements()
       .then(res => setInstructorNotices(res.announcements))
-      .catch(() => {})
-      .finally(() => setLoading(false));
+      .catch(() => {});
   };
 
   useEffect(() => {
     experienceService.announcementRecipients()
-      .then(r => setRecipients(r.recipients))
+      .then(r => {
+        setRecipients(r.recipients);
+        if (r.recipients[0]) setTarget(r.recipients[0].section_subject_id);
+      })
       .catch(() => {});
     loadNotices();
   }, []);
@@ -676,14 +1239,13 @@ function AnnouncementsTab({ toast3 }: { toast3: (m: string) => void }) {
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
-      {/* Compose Card */}
       <div className={styles.sectionCard}>
-        <p className={styles.sectionTitle} style={{ marginBottom: 4 }}>Announce to one of your sections</p>
+        <p className={styles.sectionTitle} style={{ marginBottom: 4 }}>Broadcast to Assigned Section</p>
         <p className={styles.sectionSub} style={{ marginBottom: 14 }}>
-          Reaches only students enrolled in the selected class — narrower than admin announcements by design.
+          Notifies all students enrolled in the selected Section & Subject.
         </p>
         <div className={styles.formGroup}>
-          <label className={styles.formLabel}>Class</label>
+          <label className={styles.formLabel}>Target Class (Subject × Section)</label>
           <select className={styles.select} value={target} onChange={e => setTarget(e.target.value)}>
             <option value="">Select class…</option>
             {recipients.map(r => (
@@ -694,9 +1256,9 @@ function AnnouncementsTab({ toast3 }: { toast3: (m: string) => void }) {
           </select>
         </div>
         <div className={styles.formGroup}>
-          <label className={styles.formLabel}>Title</label>
+          <label className={styles.formLabel}>Announcement Title</label>
           <input className={styles.input} value={title} onChange={e => setTitle(e.target.value)}
-            placeholder="Lab moved to Thursday" maxLength={200} />
+            placeholder="e.g. Lab 4 Pre-Lab Quiz & Preparation Notes" maxLength={200} />
         </div>
         <div className={styles.formGroup}>
           <label className={styles.formLabel}>Message</label>
@@ -708,21 +1270,15 @@ function AnnouncementsTab({ toast3 }: { toast3: (m: string) => void }) {
         </button>
       </div>
 
-      {/* Institutional & Section Announcements Feed */}
       <div className={styles.sectionCard}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
           <div>
-            <p className={styles.sectionTitle} style={{ margin: 0 }}>Campus Notices & Broadcasts</p>
+            <p className={styles.sectionTitle} style={{ margin: 0 }}>Campus Notices & Broadcast History</p>
             <p className={styles.sectionSub} style={{ margin: '2px 0 0' }}>
-              Institutional announcements and messages sent to faculty.
+              Institutional announcements and section notices.
             </p>
           </div>
-          <button
-            className={styles.ghostBtn}
-            onClick={loadNotices}
-            title="Refresh"
-            style={{ padding: '6px 10px', fontSize: 12 }}
-          >
+          <button className={styles.ghostBtn} onClick={loadNotices} style={{ padding: '6px 10px', fontSize: 12 }}>
             Refresh
           </button>
         </div>
@@ -736,32 +1292,18 @@ function AnnouncementsTab({ toast3 }: { toast3: (m: string) => void }) {
                 <div className={styles.rowBody}>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                     <p className={styles.rowTitle}>{a.title}</p>
-                    {a.priority !== 'normal' && (
-                      <span style={{ fontSize: 10.5, fontWeight: 700, padding: '2px 6px', borderRadius: 4, background: a.priority === 'urgent' ? '#fee2e2' : '#fef3c7', color: a.priority === 'urgent' ? '#dc2626' : '#d97706' }}>
-                        {a.priority}
-                      </span>
-                    )}
                     <span style={{ fontSize: 11, color: '#9891a6' }}>• {a.author_name || 'Admin'}</span>
                   </div>
                   <p className={styles.rowMeta} style={{ margin: '4px 0', fontSize: 12.5, color: '#4b5563' }}>{a.message}</p>
                   <p className={styles.rowSub} style={{ fontSize: 11, color: '#9ca3af' }}>
                     {new Date(a.sent_at || a.created_at).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' })}
-                    {a.reach_count > 0 && ` · Reached: ${a.reach_count} users · Views: ${a.views_count}`}
                   </p>
                 </div>
                 <div className={styles.rowSide} style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <button
-                    className={styles.ghostBtn}
-                    onClick={() => toggleLike(a.id)}
-                    style={{ fontSize: 11, color: a.is_liked ? '#dc2626' : '#6b7280' }}
-                  >
+                  <button className={styles.ghostBtn} onClick={() => toggleLike(a.id)} style={{ fontSize: 11, color: a.is_liked ? '#dc2626' : '#6b7280' }}>
                     ❤️ {a.likes_count || 0}
                   </button>
-                  <button
-                    className={styles.ghostBtn}
-                    onClick={() => markRead(a.id)}
-                    style={{ fontSize: 11, color: a.is_read ? '#059669' : '#6b7280' }}
-                  >
+                  <button className={styles.ghostBtn} onClick={() => markRead(a.id)} style={{ fontSize: 11, color: a.is_read ? '#059669' : '#6b7280' }}>
                     {a.is_read ? '✓ Read' : 'Mark Read'}
                   </button>
                 </div>
@@ -774,17 +1316,23 @@ function AnnouncementsTab({ toast3 }: { toast3: (m: string) => void }) {
   );
 }
 
-
 // ═══════════════════════ F4 — Extensions ═══════════════════════
 
-function ExtensionsTab({ toast3, roster }: { toast3: (m: string) => void; roster: RosterStudent[] }) {
+function ExtensionsTab({
+  toast3,
+  roster,
+  preselectedStudentId,
+}: {
+  toast3: (m: string) => void;
+  roster: RosterStudent[];
+  preselectedStudentId?: string;
+}) {
   const [experiments, setExperiments] = useState<Array<{ id: string; title: string }>>([]);
   const [expId, setExpId] = useState('');
   const [rows, setRows] = useState<ExtensionRow[]>([]);
   const [loading, setLoading] = useState(false);
 
-  // grant form
-  const [studentId, setStudentId] = useState('');
+  const [studentId, setStudentId] = useState(preselectedStudentId || '');
   const [until, setUntil] = useState('');
   const [reason, setReason] = useState('');
   const [excused, setExcused] = useState(false);
@@ -801,10 +1349,9 @@ function ExtensionsTab({ toast3, roster }: { toast3: (m: string) => void; roster
   }, []);
 
   useEffect(() => {
-    if (!studentId && roster.length > 0) {
-      setStudentId(roster[0].student_id);
-    }
-  }, [roster, studentId]);
+    if (preselectedStudentId) setStudentId(preselectedStudentId);
+    else if (!studentId && roster.length > 0) setStudentId(roster[0].student_id);
+  }, [roster, studentId, preselectedStudentId]);
 
   const load = useCallback(async (id: string) => {
     if (!id) { setRows([]); return; }
@@ -845,9 +1392,9 @@ function ExtensionsTab({ toast3, roster }: { toast3: (m: string) => void; roster
   return (
     <>
       <div className={styles.sectionCard} style={{ marginBottom: 16 }}>
-        <p className={styles.sectionTitle} style={{ marginBottom: 4 }}>Grant deadline relief</p>
+        <p className={styles.sectionTitle} style={{ marginBottom: 4 }}>Grant Individual Deadline Relief</p>
         <p className={styles.sectionSub} style={{ marginBottom: 12 }}>
-          Re-opens the gate/catch-up window for one student on one experiment. Excused absences drop out of attendance-sensitive rollups. The student is notified automatically.
+          Extends the submission window for a specific student on an experiment and notifies them automatically.
         </p>
         <div className={styles.gridTwo}>
           <div className={styles.formGroup}>
@@ -859,35 +1406,30 @@ function ExtensionsTab({ toast3, roster }: { toast3: (m: string) => void; roster
           </div>
           <div className={styles.formGroup}>
             <label className={styles.formLabel}>Student</label>
-            {roster.length > 0 ? (
-              <select className={styles.select} value={studentId} onChange={e => setStudentId(e.target.value)}>
-                {roster.map(s => (
-                  <option key={s.student_id} value={s.student_id}>
-                    {s.full_name} ({s.roll_number || 'No Roll'})
-                  </option>
-                ))}
-              </select>
-            ) : (
-              <input className={styles.input} value={studentId} onChange={e => setStudentId(e.target.value)}
-                placeholder="Student ID (from Students page)" />
-            )}
+            <select className={styles.select} value={studentId} onChange={e => setStudentId(e.target.value)}>
+              {roster.map(s => (
+                <option key={s.student_id} value={s.student_id}>
+                  {s.full_name} ({s.roll_number || 'No Roll'})
+                </option>
+              ))}
+            </select>
           </div>
         </div>
         <div className={styles.gridTwo}>
           <div className={styles.formGroup}>
-            <label className={styles.formLabel}>Extended until</label>
+            <label className={styles.formLabel}>Extended Until</label>
             <input className={styles.input} type="datetime-local" value={until}
               onChange={e => setUntil(e.target.value)} />
           </div>
           <div className={styles.formGroup}>
             <label className={styles.formLabel}>Reason</label>
             <input className={styles.input} value={reason} onChange={e => setReason(e.target.value)}
-              placeholder="Medical leave…" />
+              placeholder="Medical leave / approved absence…" />
           </div>
         </div>
         <label style={{ display: 'flex', alignItems: 'center', gap: 7, fontSize: 13, fontWeight: 600, color: '#374151', cursor: 'pointer', marginBottom: 12 }}>
           <input type="checkbox" checked={excused} onChange={e => setExcused(e.target.checked)} />
-          <AlertTriangle size={13} /> Also excuse missed sessions for this experiment
+          <AlertTriangle size={13} /> Excuse missed live session attendance for this experiment
         </label>
         <button className={styles.primaryBtn} onClick={grant} disabled={granting || !expId}>
           <CalendarClock size={13} /> {granting ? 'Granting…' : 'Grant Extension'}
@@ -895,7 +1437,7 @@ function ExtensionsTab({ toast3, roster }: { toast3: (m: string) => void; roster
       </div>
 
       <div className={styles.sectionCard}>
-        <p className={styles.sectionTitle} style={{ marginBottom: 10 }}>Active extensions</p>
+        <p className={styles.sectionTitle} style={{ marginBottom: 10 }}>Active Extensions</p>
         {loading ? (
           <Loader2 size={18} className="animate-spin" style={{ margin: '12px auto', display: 'block' }} />
         ) : rows.length === 0 ? (

@@ -467,7 +467,7 @@ function ExperimentWorkbench({
 
   const safeMd = useMemo(() => {
     if (!activeModule || activeModule.type !== 'markdown') return '';
-    return renderMarkdown(String((activeModule.content_data as any)?.md || ''));
+    return renderMarkdown(String((activeModule.content_data as any)?.md || (activeModule.content_data as any)?.text || (activeModule.content_data as any)?.content || ''));
   }, [activeModule]);
 
   const safeHtml = useMemo(() => {
@@ -1395,7 +1395,7 @@ export default function LiveLabRoomPage() {
   // ── Real behavioral signal collection + emission every 30 s ────────────────
   useEffect(() => {
     const isInRoom = joinStep === 'room' || joinStep === 'video' || joinStep === 'workspace';
-    if (!isConnected || !gate?.focus_ml_enabled || !isInRoom) return;
+    if (!isConnected || gate?.focus_ml_enabled === false || !isInRoom) return;
 
     const sig = signalsRef.current;
 
@@ -1558,24 +1558,7 @@ export default function LiveLabRoomPage() {
       .finally(() => setGateLoading(false));
   }, [sessionId]);
 
-  // Fallback loader if gate.session loads but modules are empty
-  useEffect(() => {
-    if (!gate?.session?.experiment_id) return;
-    if (expDetail && expModules.length > 0) return;
-    setExpLoading(true);
-    studentService.getPreLabContent(gate.session.experiment_id)
-      .then(prelab => {
-        if (prelab?.experiment) {
-          setExpDetail(prelab.experiment);
-          if (prelab.experiment.subject_name) setSessionSubjectName(prelab.experiment.subject_name);
-          if (prelab.experiment.title) setSessionTitleText(prelab.experiment.title);
-        }
-        if (prelab?.modules) setExpModules(prelab.modules);
-        if (prelab?.pages) setExpPages(prelab.pages);
-      })
-      .catch(() => {})
-      .finally(() => setExpLoading(false));
-  }, [gate?.session?.experiment_id, expDetail, expModules.length]);
+  // Note: pre-lab content is loaded once inside the gate-check effect above.
 
   // ── Screen capture and real-time streaming are handled inside StudentLiveConference ──
   // The screen share track publishes to LiveKit for real-time 30 FPS instructor view,
@@ -2504,8 +2487,8 @@ function StudentLiveConference({
           const cap = new ImageCapture(track);
           const bitmap = await (cap as unknown as { grabFrame(): Promise<ImageBitmap> }).grabFrame();
           const canvas = document.createElement('canvas');
-          const W = Math.min(bitmap.width || 1280, 1280);
-          const H = Math.min(bitmap.height || 720, 720);
+          const W = Math.min(bitmap.width || 640, 640);
+          const H = Math.min(bitmap.height || 360, 360);
           canvas.width = W;
           canvas.height = H;
           canvas.getContext('2d')!.drawImage(bitmap, 0, 0, W, H);
@@ -2518,15 +2501,15 @@ function StudentLiveConference({
               }
             };
             reader.readAsDataURL(blob);
-          }, 'image/jpeg', 0.75);
+          }, 'image/jpeg', 0.55);
         } else {
           const video = document.createElement('video');
           video.srcObject = new MediaStream([track]);
           video.muted = true;
           await video.play().catch(() => {});
           const canvas = document.createElement('canvas');
-          const vW = Math.min(video.videoWidth || 1280, 1280);
-          const vH = Math.min(video.videoHeight || 720, 720);
+          const vW = Math.min(video.videoWidth || 640, 640);
+          const vH = Math.min(video.videoHeight || 360, 360);
           canvas.width = vW;
           canvas.height = vH;
           canvas.getContext('2d')!.drawImage(video, 0, 0, vW, vH);
@@ -2541,7 +2524,7 @@ function StudentLiveConference({
               }
             };
             reader.readAsDataURL(blob);
-          }, 'image/jpeg', 0.75);
+          }, 'image/jpeg', 0.55);
         }
       } catch {}
     };

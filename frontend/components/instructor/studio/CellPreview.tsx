@@ -710,7 +710,7 @@ function renderBody(type: string, d: Record<string, unknown>, block?: ContentBlo
   switch (type) {
     case 'markdown':
       return <div className={s.preview} style={{ minHeight: 0, border: 'none', padding: 0 }}
-        dangerouslySetInnerHTML={{ __html: renderMarkdown(asString(d.md)) }} />;
+        dangerouslySetInnerHTML={{ __html: renderMarkdown(asString(d.md || d.text || d.content)) }} />;
 
     case 'text': {
       const html = asString(d.html);

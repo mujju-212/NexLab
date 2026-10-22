@@ -379,76 +379,9 @@ export default function ExperimentsPage() {
       if (subjectExperiments.length > 0) return subjectExperiments;
       const filtered = allExperiments.filter(e => e.subject_id === selectedSubject.subject_id);
       if (filtered.length > 0) return filtered;
+      return [];
     }
-    if (!selectedSubject && allExperiments.length > 0) return allExperiments;
-
-    // High quality presets matching visual snapshot reference
-    return [
-      {
-        id: 'exp-ds-1',
-        exp_number: 1,
-        title: 'Stack Implementation using Arrays',
-        aim: 'Implement a fixed-size stack (push/pop/peek) using arrays and analyze time complexity.',
-        difficulty_level: 1,
-        concept_tags: ['arrays', 'stacks', 'basic'],
-        allowed_languages: ['C++', 'Python'],
-        enable_viva: true,
-        enable_lockdown: true,
-        is_published: true,
-        subject_id: 'ds-101',
-        used_in_sessions: 8,
-        rating: 4.8,
-        ratings_count: 42,
-      },
-      {
-        id: 'exp-ds-2',
-        exp_number: 2,
-        title: 'Linked List Traversal',
-        aim: 'Traverse a singly linked list and print its values. Explore insertion, deletion, and search operations.',
-        difficulty_level: 2,
-        concept_tags: ['linked-list', 'pointers', 'traversal', 'intermediate'],
-        allowed_languages: ['C++', 'Java'],
-        enable_viva: true,
-        enable_lockdown: true,
-        is_published: true,
-        subject_id: 'ds-101',
-        used_in_sessions: 6,
-        rating: 4.6,
-        ratings_count: 28,
-      },
-      {
-        id: 'exp-ds-3',
-        exp_number: 3,
-        title: 'Binary Tree Implementation',
-        aim: 'Build a binary tree, perform traversals (inorder, preorder, postorder) and visualize the structure.',
-        difficulty_level: 3,
-        concept_tags: ['trees', 'recursion', 'traversal', 'advanced'],
-        allowed_languages: ['Python', 'C++'],
-        enable_viva: true,
-        enable_lockdown: true,
-        is_published: false,
-        subject_id: 'ds-101',
-        used_in_sessions: 0,
-        rating: 0,
-        ratings_count: 0,
-      },
-      {
-        id: 'exp-ds-4',
-        exp_number: 4,
-        title: 'Queue using Linked List',
-        aim: 'Implement a queue using a linked list. Perform enqueue, dequeue, and front operations.',
-        difficulty_level: 1,
-        concept_tags: ['queue', 'linked-list', 'basic'],
-        allowed_languages: ['Python', 'C++'],
-        enable_viva: true,
-        enable_lockdown: false,
-        is_published: true,
-        subject_id: 'ds-101',
-        used_in_sessions: 4,
-        rating: 4.7,
-        ratings_count: 31,
-      },
-    ];
+    return allExperiments;
   }, [selectedSubject, subjectExperiments, allExperiments]);
 
   // Live Filtered & Sorted Experiments
@@ -475,56 +408,27 @@ export default function ExperimentsPage() {
     });
   }, [baseExperimentsList, searchQuery, diffFilter, statusFilter, tagFilter, subjectDropdownFilter, selectedSubject, sortOrder]);
 
-  // Display subjects list
+  // Display subjects list — grouped & deduplicated by subject_id so each academic subject appears once
   const displaySubjects = useMemo(() => {
-    if (subjects.length > 0) return subjects;
-    return [
-      {
-        id: 'ds-101',
-        subject_id: 'ds-101',
-        subject_name: 'Data Structures',
-        subject_code: 'CS201',
-        description: 'Explore fundamental data structures through hands-on experiments and visualizations.',
-        experiment_count: 4,
-        student_count: 120,
-      },
-      {
-        id: 'py-102',
-        subject_id: 'py-102',
-        subject_name: 'Python Programming',
-        subject_code: 'CS102',
-        description: 'Learn core Python concepts through interactive coding experiments.',
-        experiment_count: 2,
-        student_count: 85,
-      },
-      {
-        id: 'algo-103',
-        subject_id: 'algo-103',
-        subject_name: 'Algorithms',
-        subject_code: 'CS301',
-        description: 'Analyze and implement classic algorithms with performance visualization.',
-        experiment_count: 2,
-        student_count: 95,
-      },
-      {
-        id: 'db-104',
-        subject_id: 'db-104',
-        subject_name: 'Database Systems',
-        subject_code: 'CS204',
-        description: 'Work with databases, SQL queries, and real-world data scenarios.',
-        experiment_count: 2,
-        student_count: 110,
-      },
-    ];
+    if (subjects.length > 0) {
+      const map = new Map<string, SectionSubject>();
+      subjects.forEach((s) => {
+        const key = s.subject_id || s.id;
+        if (!map.has(key)) {
+          map.set(key, { ...s, student_count: s.student_count || 0 });
+        } else {
+          const existing = map.get(key)!;
+          existing.student_count = (existing.student_count || 0) + (s.student_count || 0);
+        }
+      });
+      return Array.from(map.values());
+    }
+    return [];
   }, [subjects]);
 
   // Unique Dropdown Subjects Map
   const uniqueDropdownSubjects = useMemo(() => {
-    const map = new Map<string, SectionSubject>();
-    displaySubjects.forEach(s => {
-      if (!map.has(s.subject_id)) map.set(s.subject_id, s);
-    });
-    return Array.from(map.values());
+    return displaySubjects;
   }, [displaySubjects]);
 
   // Calculated Dynamic Subject Analytics
@@ -722,7 +626,15 @@ export default function ExperimentsPage() {
 
             {/* View 1: Subjects Grid/List */}
             {activeTab === 'subjects' && (
-              viewMode === 'grid' ? (
+              displaySubjects.length === 0 ? (
+                <div style={{ textAlign: 'center', padding: '60px 20px', background: '#fff', borderRadius: 16, border: '1px solid #e2e8f0', margin: '20px 0' }}>
+                  <BookOpen size={44} strokeWidth={1.5} style={{ margin: '0 auto 12px', color: '#94a3b8' }} />
+                  <h3 style={{ fontSize: 16, fontWeight: 700, color: '#1e293b', marginBottom: 6 }}>No Subjects Assigned Yet</h3>
+                  <p style={{ fontSize: 13, color: '#64748b', maxWidth: 440, margin: '0 auto' }}>
+                    You have not been assigned to any subjects or sections yet. Contact your institution administrator to assign your teaching subjects.
+                  </p>
+                </div>
+              ) : viewMode === 'grid' ? (
                 <div className={styles.subjectsGrid}>
                   {displaySubjects.map((sub, idx) => {
                     const iconDef = getSubjectIconDef(sub.icon || sub.subject_icon, sub.subject_code, sub.subject_name);
@@ -1247,7 +1159,7 @@ export default function ExperimentsPage() {
                           }}
                           onMouseEnter={(e) => (e.currentTarget.style.boxShadow = '0 4px 16px rgba(124,58,237,0.1)')}
                           onMouseLeave={(e) => (e.currentTarget.style.boxShadow = 'none')}
-                          onClick={() => router.push(`/instructor/exams/${exam.id}`)}
+                          onClick={() => router.push(`/instructor/exams/${exam.id}/edit`)}
                         >
                           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>

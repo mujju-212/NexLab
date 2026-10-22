@@ -365,37 +365,7 @@ function AnalyticsDashboard() {
       }
     });
 
-    if (unique.length > 0) return unique;
-
-    // Guaranteed fallback matching user specifications:
-    if (selectedSectionFilter === 'Section A') {
-      return [
-        { id: 'ds', name: 'Data Structures', ss_id: '' },
-        { id: 'py', name: 'Python Programming', ss_id: '' },
-        { id: 'net', name: 'Computer Networks', ss_id: '' },
-        { id: 'os', name: 'Operating Systems', ss_id: '' },
-        { id: 'db', name: 'Database Management', ss_id: '' },
-        { id: 'oop', name: 'Object Oriented Programming', ss_id: '' },
-      ];
-    } else if (selectedSectionFilter === 'Section B') {
-      return [
-        { id: 'ds', name: 'Data Structures', ss_id: '' },
-        { id: 'algo', name: 'Algorithms', ss_id: '' },
-        { id: 'ml', name: 'Machine Learning', ss_id: '' },
-        { id: 'dbms', name: 'Database Systems', ss_id: '' },
-        { id: 'os', name: 'Operating Systems', ss_id: '' },
-        { id: 'py', name: 'Python Programming', ss_id: '' },
-      ];
-    }
-
-    return [
-      { id: 'ds', name: 'Data Structures', ss_id: '' },
-      { id: 'py', name: 'Python Programming', ss_id: '' },
-      { id: 'net', name: 'Computer Networks', ss_id: '' },
-      { id: 'algo', name: 'Algorithms', ss_id: '' },
-      { id: 'ml', name: 'Machine Learning', ss_id: '' },
-      { id: 'dbms', name: 'Database Systems', ss_id: '' },
-    ];
+    return unique;
   }, [sections, selectedSectionFilter]);
 
   // Handler for Level 3: Section Change

@@ -1,6 +1,6 @@
 'use client';
 
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { useQuery } from '@tanstack/react-query';
@@ -145,9 +145,11 @@ export default function InstructorDashboard() {
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [weekOffset, setWeekOffset] = useState<number>(0);
 
-  if (error) {
-    console.error('Failed to load instructor dashboard:', error);
-  }
+  useEffect(() => {
+    if (error) {
+      console.error('Failed to load instructor dashboard:', error);
+    }
+  }, [error]);
 
   // Time-of-day greeting
   const greeting = useMemo(() => {
