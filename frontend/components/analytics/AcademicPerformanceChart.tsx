@@ -16,43 +16,53 @@ import type { SectionComparison } from '@/services/institution.service';
 
 interface AcademicPerformanceChartProps {
   sections?: SectionComparison[];
-  baselineMean?: number;
+  baselineMean?: number | null;
 }
 
 export function AcademicPerformanceChart({
   sections = [],
-  baselineMean = 70.0,
+  baselineMean,
 }: AcademicPerformanceChartProps) {
   const [metric, setMetric] = useState<'grade' | 'attendance' | 'focus' | 'risk'>('grade');
 
-  const chartData = (sections && sections.length > 0)
-    ? sections.slice(0, 8).map(sec => {
-        let secVal = 0;
-        let campusVal = baselineMean;
+  const pick = (sec: SectionComparison): number | null => {
+    if (metric === 'grade') return sec.avg_grade ?? null;
+    if (metric === 'attendance') return sec.attendance_rate ?? null;
+    if (metric === 'focus') return sec.focus_avg ?? null;
+    return sec.risk_score ?? null;
+  };
 
-        if (metric === 'grade') {
-          secVal = Math.round(sec.avg_grade ?? 0);
-          campusVal = Math.round(baselineMean);
-        } else if (metric === 'attendance') {
-          secVal = Math.round(sec.attendance_rate ?? 0);
-          campusVal = Math.round(baselineMean);
-        } else if (metric === 'focus') {
-          secVal = Math.round(sec.focus_avg ?? 0);
-          campusVal = Math.round(baselineMean);
-        } else if (metric === 'risk') {
-          secVal = Math.round(sec.risk_score ?? 0);
-          campusVal = Math.round(baselineMean);
-        }
+  // Sections with no students (or no measured value for this metric) are not
+  // plotted at all — they used to appear as a 0 bar beside real data.
+  const rows = (sections || [])
+    .filter(sec => (sec.enrolled ?? 0) > 0 && pick(sec) !== null)
+    .slice(0, 8)
+    .map(sec => ({
+    name: (sec.section_name || '').replace(/Section\s*/i, '').slice(0, 14) || '—',
+    fullName: sec.section_name,
+    value: pick(sec),
+    enrolled: sec.enrolled ?? 0,
+  }));
 
-        return {
-          name: sec.section_name.replace(/Section\s*/i, '').slice(0, 14),
-          fullName: sec.section_name,
-          sectionAverage: secVal,
-          campusMean: campusVal,
-          enrolled: sec.enrolled ?? 0,
-        };
-      })
-    : [];
+  // The campus comparison is the mean of the sections actually plotted, for the
+  // *selected* metric. It used to be the grade baseline for every metric, and
+  // it collapsed to 0 whenever the campus average was unavailable — drawing a
+  // zero-height bar next to real ones.
+  const realValues = rows.map(r => r.value).filter((v): v is number => typeof v === 'number');
+  const campusMean =
+    typeof baselineMean === 'number' && metric === 'grade'
+      ? baselineMean
+      : realValues.length
+        ? realValues.reduce((a, b) => a + b, 0) / realValues.length
+        : null;
+
+  const chartData = rows.map(r => ({
+    name: r.name,
+    fullName: r.fullName,
+    sectionAverage: r.value === null ? null : Math.round(r.value),
+    campusMean: campusMean === null ? null : Math.round(campusMean),
+    enrolled: r.enrolled,
+  }));
 
   return (
     <div

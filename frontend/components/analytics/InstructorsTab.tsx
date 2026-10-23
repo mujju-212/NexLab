@@ -61,17 +61,19 @@ interface InstructorsTabProps {
 
 // Generate smooth cubic bezier SVG path from array of numeric points
 function generateSmoothWavePath(points: number[], width = 280, height = 48, closed = true): string {
-  if (!points || points.length === 0) return '';
-  const min = Math.min(...points);
-  const max = Math.max(...points);
+  const clean = (points || []).filter((p: any) => typeof p === 'number' && Number.isFinite(p));
+  if (clean.length < 2) return '';  // one point is not a line
+  const min = Math.min(...clean);
+  const max = Math.max(...clean);
   const range = max - min || 1;
 
-  const pts = points.map((p, i) => {
-    const x = (i / (points.length - 1)) * width;
+  const pts = clean.map((p, i) => {
+    const x = (i / ((points.length) - 1)) * width;
     const y = height - ((p - min) / range) * (height - 12) - 6;
     return { x, y };
   });
 
+  if (!pts || pts.length === 0) return '';  // nothing measured -> no path
   let d = `M ${pts[0].x} ${pts[0].y}`;
   for (let i = 0; i < pts.length - 1; i++) {
     const p0 = pts[i];
@@ -106,7 +108,7 @@ function renderTrendSparkline(points: number[] | undefined, status: string = 'Go
   const height = 16;
 
   const pts = points.map((p, i) => {
-    const x = (i / (points.length - 1)) * width;
+    const x = (i / ((points.length) - 1)) * width;
     const y = height - ((p - min) / range) * (height - 4) - 2;
     return `${x},${y}`;
   });
@@ -170,26 +172,36 @@ export default function InstructorsTab({
   const [actionMenuId, setActionMenuId] = useState<string | null>(null);
 
   // Safe KPI extract
+  // Missing metrics stay null so the cards print an em dash instead of 0.
   const kpis = data?.kpis || {
-    total_instructors: 0,
-    total_instructors_delta_pct: 0,
+    total_instructors: null,
+    total_instructors_delta_pct: null,
     total_instructors_sparkline: [],
-    avg_student_performance: 0,
-    avg_student_performance_delta_pct: 0,
+    avg_student_performance: null,
+    avg_student_performance_delta_pct: null,
     avg_student_performance_sparkline: [],
-    avg_attendance_rate: 0,
-    avg_attendance_rate_delta_pct: 0,
+    avg_attendance_rate: null,
+    avg_attendance_rate_delta_pct: null,
     avg_attendance_rate_sparkline: [],
-    teaching_workload: 0,
-    teaching_workload_delta_pct: 0,
+    teaching_workload: null,
+    teaching_workload_delta_pct: null,
     teaching_workload_sparkline: [],
-    student_feedback: 0,
-    student_feedback_delta_pct: 0,
+    student_feedback: null,
+    student_feedback_delta_pct: null,
     student_feedback_responses: 0,
     student_feedback_sparkline: [],
-  };
+  } as any;
 
-  const institutionAvg = data?.grade_benchmark?.institution_avg ?? 0;
+  const institutionAvg = data?.grade_benchmark?.institution_avg ?? null;
+
+  // A delta pill with no comparable period is a lie: render it only when a real
+  // number exists.
+  // Returns undefined when there is nothing to compare, so the caller can skip
+  // the pill entirely (an empty pill still reads as a value).
+  const deltaPill = (val: any, up = true) =>
+    typeof val === 'number'
+      ? `${up ? '↑' : '↓'} ${Math.abs(val).toFixed(1)}%`
+      : null;
 
   // Filter benchmark data by selected department
   const benchmarkData = useMemo(() => {
@@ -365,22 +377,24 @@ export default function InstructorsTab({
               <span style={{ fontSize: '1.9rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>
                 {kpis.total_instructors}
               </span>
-              <span
-                style={{
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  color: '#059669',
-                  background: '#ecfdf5',
-                  border: '1px solid #a7f3d0',
-                  padding: '2px 6px',
-                  borderRadius: 9999,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 2,
-                }}
-              >
-                ↑ {kpis.total_instructors_delta_pct}%
-              </span>
+                      {typeof kpis.total_instructors_delta_pct === 'number' && (
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    color: '#059669',
+                    background: '#ecfdf5',
+                    border: '1px solid #a7f3d0',
+                    padding: '2px 6px',
+                    borderRadius: 9999,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 2,
+                  }}
+                >
+                  {deltaPill(kpis.total_instructors_delta_pct)}
+                </span>
+)}
             </div>
 
             <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginTop: 3 }}>
@@ -458,23 +472,25 @@ export default function InstructorsTab({
               <span style={{ fontSize: '1.05rem', fontWeight: 600, color: '#64748b' }}>
                 / 100
               </span>
-              <span
-                style={{
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  color: '#059669',
-                  background: '#ecfdf5',
-                  border: '1px solid #a7f3d0',
-                  padding: '2px 6px',
-                  borderRadius: 9999,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 2,
-                  marginLeft: 2,
-                }}
-              >
-                ↑ {kpis.avg_student_performance_delta_pct}%
-              </span>
+                      {typeof kpis.avg_student_performance_delta_pct === 'number' && (
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    color: '#059669',
+                    background: '#ecfdf5',
+                    border: '1px solid #a7f3d0',
+                    padding: '2px 6px',
+                    borderRadius: 9999,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    marginLeft: 2,
+                  }}
+                >
+                  {deltaPill(kpis.avg_student_performance_delta_pct)}
+                </span>
+)}
             </div>
 
             <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginTop: 3 }}>
@@ -631,24 +647,26 @@ export default function InstructorsTab({
 
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
               <span style={{ fontSize: '1.9rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>
-                {kpis.teaching_workload}
+                {kpis.teaching_workload ?? '—'}
               </span>
-              <span
-                style={{
-                  fontSize: '0.72rem',
-                  fontWeight: 600,
-                  color: '#64748b',
-                  background: '#f1f5f9',
-                  border: '1px solid #e2e8f0',
-                  padding: '2px 6px',
-                  borderRadius: 9999,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 2,
-                }}
-              >
-                ↓ {kpis.teaching_workload_delta_pct.toFixed(1)}%
-              </span>
+                      {typeof kpis.teaching_workload_delta_pct === 'number' && (
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 600,
+                    color: '#64748b',
+                    background: '#f1f5f9',
+                    border: '1px solid #e2e8f0',
+                    padding: '2px 6px',
+                    borderRadius: 9999,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 2,
+                  }}
+                >
+                  {deltaPill(kpis.teaching_workload_delta_pct, false)}
+                </span>
+)}
             </div>
 
             <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginTop: 3 }}>
@@ -721,32 +739,38 @@ export default function InstructorsTab({
 
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
               <span style={{ fontSize: '1.9rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>
-                {kpis.student_feedback}
+                {kpis.student_feedback ?? '—'}
               </span>
-              <span style={{ fontSize: '1.05rem', fontWeight: 600, color: '#64748b' }}>
-                / 5
-              </span>
-              <span
-                style={{
-                  fontSize: '0.72rem',
-                  fontWeight: 700,
-                  color: '#059669',
-                  background: '#ecfdf5',
-                  border: '1px solid #a7f3d0',
-                  padding: '2px 6px',
-                  borderRadius: 9999,
-                  display: 'inline-flex',
-                  alignItems: 'center',
-                  gap: 2,
-                  marginLeft: 2,
-                }}
-              >
-                ↑ {kpis.student_feedback_delta_pct}%
-              </span>
+              {kpis.student_feedback != null && (
+                <span style={{ fontSize: '1.05rem', fontWeight: 600, color: '#64748b' }}>
+                  / 5
+                </span>
+              )}
+                      {typeof kpis.student_feedback_delta_pct === 'number' && (
+                <span
+                  style={{
+                    fontSize: '0.72rem',
+                    fontWeight: 700,
+                    color: '#059669',
+                    background: '#ecfdf5',
+                    border: '1px solid #a7f3d0',
+                    padding: '2px 6px',
+                    borderRadius: 9999,
+                    display: 'inline-flex',
+                    alignItems: 'center',
+                    gap: 2,
+                    marginLeft: 2,
+                  }}
+                >
+                  ↑ {kpis.student_feedback_delta_pct.toFixed(1)}%
+                </span>
+              )}
             </div>
 
             <div style={{ fontSize: '0.725rem', color: '#94a3b8', marginTop: 3 }}>
-              Average rating (from {kpis.student_feedback_responses?.toLocaleString() || '1,245'} responses)
+              {kpis.student_feedback_responses > 0
+                ? `Average rating (from ${kpis.student_feedback_responses.toLocaleString()} responses)`
+                : 'No feedback submitted yet'}
             </div>
           </div>
 
@@ -1644,7 +1668,7 @@ export default function InstructorsTab({
                                 : '#dc2626',
                           }}
                         >
-                          {(ins.avg_final_grade ?? 0).toFixed(1)}%
+                          {ins.avg_final_grade == null ? '—' : `${ins.avg_final_grade.toFixed(1)}%`}
                         </span>
                       </td>
 
@@ -2103,21 +2127,21 @@ export default function InstructorsTab({
                 <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #f1f5f9' }}>
                   <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Sections</div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
-                    {viewInstructor.sections_count || 2}
+                    {viewInstructor.sections_count || 0}
                   </div>
                 </div>
 
                 <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #f1f5f9' }}>
                   <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Enrolled Students</div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
-                    {viewInstructor.students_count || 90}
+                    {viewInstructor.students_count || 0}
                   </div>
                 </div>
 
                 <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #f1f5f9' }}>
                   <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Sessions Run</div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', marginTop: 2 }}>
-                    {viewInstructor.sessions_run || 10}
+                    {viewInstructor.sessions_run || 0}
                   </div>
                 </div>
               </div>

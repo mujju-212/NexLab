@@ -7,22 +7,22 @@ interface BenchmarkComparisonCardsProps {
   topPerforming?: Array<{
     rank: number;
     section: string;
-    avg_grade: number;
-    z_score: number;
-    percentile: string;
+    avg_grade: number | null;
+    z_score: number | null;
+    percentile: string | null;
   }>;
   needsAttention?: Array<{
     rank: number;
     section: string;
-    avg_grade: number;
-    z_score: number;
-    percentile: string;
+    avg_grade: number | null;
+    z_score: number | null;
+    percentile: string | null;
   }>;
   departments?: Array<{
     department: string;
     students: number;
-    avg_grade: number;
-    z_score: number;
+    avg_grade: number | null;
+    z_score: number | null;
   }>;
 }
 
@@ -107,10 +107,14 @@ export function BenchmarkComparisonCards({
                   <td style={{ padding: '9px 4px', color: '#94a3b8', fontWeight: 600 }}>{item.rank}</td>
                   <td style={{ padding: '9px 10px', fontWeight: 700, color: '#1e293b' }}>{item.section}</td>
                   <td style={{ padding: '9px 10px', fontWeight: 600, color: '#334155' }}>
-                    {(item.avg_grade ?? 0).toFixed(1)}
+                    {item.avg_grade == null ? '—' : item.avg_grade.toFixed(1)}
                   </td>
                   <td style={{ padding: '9px 10px', fontWeight: 700, color: '#10b981' }}>
-                    {item.z_score >= 0 ? `+${item.z_score.toFixed(2)}` : item.z_score.toFixed(2)}
+                    {item.z_score == null
+                      ? '—'
+                      : item.z_score >= 0
+                      ? `+${item.z_score.toFixed(2)}`
+                      : item.z_score.toFixed(2)}
                   </td>
                   <td style={{ padding: '9px 4px', textAlign: 'right' }}>
                     <span
@@ -199,10 +203,14 @@ export function BenchmarkComparisonCards({
                   <td style={{ padding: '9px 4px', color: '#94a3b8', fontWeight: 600 }}>{item.rank}</td>
                   <td style={{ padding: '9px 10px', fontWeight: 700, color: '#1e293b' }}>{item.section}</td>
                   <td style={{ padding: '9px 10px', fontWeight: 600, color: '#334155' }}>
-                    {(item.avg_grade ?? 0).toFixed(1)}
+                    {item.avg_grade == null ? '—' : item.avg_grade.toFixed(1)}
                   </td>
                   <td style={{ padding: '9px 10px', fontWeight: 700, color: '#ef4444' }}>
-                    {item.z_score >= 0 ? `+${item.z_score.toFixed(2)}` : item.z_score.toFixed(2)}
+                    {item.z_score == null
+                      ? '—'
+                      : item.z_score >= 0
+                      ? `+${item.z_score.toFixed(2)}`
+                      : item.z_score.toFixed(2)}
                   </td>
                   <td style={{ padding: '9px 4px', textAlign: 'right' }}>
                     <span
@@ -296,7 +304,7 @@ export function BenchmarkComparisonCards({
                       {item.students}
                     </td>
                     <td style={{ padding: '9px 10px', fontWeight: 600, color: '#334155' }}>
-                      {(item.avg_grade ?? 0).toFixed(1)}
+                      {item.avg_grade == null ? '—' : item.avg_grade.toFixed(1)}
                     </td>
                     <td style={{ padding: '9px 4px', textAlign: 'right', fontWeight: 700, color: isPositive ? '#10b981' : '#ef4444' }}>
                       {isPositive ? `+${(item.z_score ?? 0).toFixed(2)}` : (item.z_score ?? 0).toFixed(2)}

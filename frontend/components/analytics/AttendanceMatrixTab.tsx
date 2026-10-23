@@ -52,17 +52,19 @@ interface AttendanceMatrixTabProps {
 
 // Generate smooth cubic bezier SVG path from array of numeric points
 function generateSmoothWavePath(points: number[], width = 280, height = 54, closed = true): string {
-  if (!points || points.length === 0) return '';
-  const min = Math.min(...points);
-  const max = Math.max(...points);
+  const clean = (points || []).filter((p: any) => typeof p === 'number' && Number.isFinite(p));
+  if (clean.length < 2) return '';  // one point is not a line
+  const min = Math.min(...clean);
+  const max = Math.max(...clean);
   const range = max - min || 1;
 
-  const pts = points.map((p, i) => {
-    const x = (i / (points.length - 1)) * width;
+  const pts = clean.map((p, i) => {
+    const x = (i / ((points.length) - 1)) * width;
     const y = height - ((p - min) / range) * (height - 14) - 7;
     return { x, y };
   });
 
+  if (!pts || pts.length === 0) return '';  // nothing measured -> no path
   let d = `M ${pts[0].x} ${pts[0].y}`;
   for (let i = 0; i < pts.length - 1; i++) {
     const p0 = pts[i];
@@ -214,8 +216,10 @@ export default function AttendanceMatrixTab({
 
   // Heatmap highlights and schedule insights
   const heatmapStats = useMemo(() => {
-    let peak = { label: 'Tue 10AM', rate: 0 };
-    let lowest = { label: 'Fri 4PM', rate: 100 };
+    // No real cells yet => no invented "peak slot" labels.
+    let peak = { label: '—', rate: 0 };
+    let lowest = { label: '—', rate: 0 };
+    let seenAny = false;
     let amSum = 0, amCount = 0;
     let pmSum = 0, pmCount = 0;
 
@@ -223,11 +227,19 @@ export default function AttendanceMatrixTab({
       hoursList.forEach((hour, hIdx) => {
         const cell = heatmapMatrix[`${day}-${hour}`];
         if (cell) {
-          if (cell.rate > peak.rate) {
+          if (!seenAny) {
+            // seed peak/lowest from the first real cell so we never compare
+            // against invented defaults
+            seenAny = true;
             peak = { label: `${day} ${hour}`, rate: cell.rate };
-          }
-          if (cell.rate < lowest.rate) {
             lowest = { label: `${day} ${hour}`, rate: cell.rate };
+          } else {
+            if (cell.rate > peak.rate) {
+              peak = { label: `${day} ${hour}`, rate: cell.rate };
+            }
+            if (cell.rate < lowest.rate) {
+              lowest = { label: `${day} ${hour}`, rate: cell.rate };
+            }
           }
           if (hIdx < 5) { // 8AM - 12PM
             amSum += cell.rate;
@@ -244,10 +256,10 @@ export default function AttendanceMatrixTab({
     const pmAvg = pmCount ? Math.round(pmSum / pmCount) : 0;
 
     return {
-      peak: peak.rate > 0 ? peak : { label: 'Tue 10AM', rate: 88 },
-      lowest: lowest.rate < 100 ? lowest : { label: 'Sat 4PM', rate: 18 },
-      morningAvg: amAvg || 76,
-      afternoonAvg: pmAvg || 64,
+      peak,
+      lowest,
+      morningAvg: amAvg,
+      afternoonAvg: pmAvg,
     };
   }, [heatmapMatrix]);
 
@@ -377,7 +389,7 @@ export default function AttendanceMatrixTab({
 
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 10 }}>
               <span style={{ fontSize: '1.875rem', fontWeight: 800, color: '#0f172a', letterSpacing: '-0.02em' }}>
-                {avgRate.toFixed(1)}%
+                {avgRate == null ? '—' : `${avgRate.toFixed(1)}%`}
               </span>
               <span
                 style={{
@@ -392,7 +404,7 @@ export default function AttendanceMatrixTab({
                   borderRadius: 6,
                 }}
               >
-                ↑ {deltas.attendance.toFixed(1)}%
+                ↑ {deltas.attendance == null ? '—' : `${deltas.attendance.toFixed(1)}%`}
               </span>
             </div>
             <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
@@ -481,7 +493,7 @@ export default function AttendanceMatrixTab({
                   borderRadius: 6,
                 }}
               >
-                ↑ {deltas.present.toFixed(1)}%
+                ↑ {deltas.present == null ? '—' : `${deltas.present.toFixed(1)}%`}
               </span>
             </div>
             <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
@@ -570,7 +582,7 @@ export default function AttendanceMatrixTab({
                   borderRadius: 6,
                 }}
               >
-                ↑ {deltas.absent.toFixed(1)}%
+                ↑ {deltas.absent == null ? '—' : `${deltas.absent.toFixed(1)}%`}
               </span>
             </div>
             <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
@@ -659,7 +671,7 @@ export default function AttendanceMatrixTab({
                   borderRadius: 6,
                 }}
               >
-                {deltas.sessions >= 0 ? `0.0%` : `${deltas.sessions.toFixed(1)}%`}
+                {deltas.sessions >= 0 ? `0.0%` : `${deltas.sessions == null ? '—' : `${deltas.sessions.toFixed(1)}%`}`}
               </span>
             </div>
             <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
@@ -1051,7 +1063,7 @@ export default function AttendanceMatrixTab({
                     color: '#0f172a',
                   }}
                 >
-                  {dept.rate.toFixed(1)}%
+                  {dept.rate == null ? '—' : `${dept.rate.toFixed(1)}%`}
                 </div>
               </div>
             ))}
@@ -1663,7 +1675,7 @@ export default function AttendanceMatrixTab({
                             fontWeight: 700,
                           }}
                         >
-                          {st.attendance_rate.toFixed(1)}%
+                          {st.attendance_rate == null ? '—' : `${st.attendance_rate.toFixed(1)}%`}
                         </span>
                       </td>
 

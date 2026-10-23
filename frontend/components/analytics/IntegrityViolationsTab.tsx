@@ -161,10 +161,10 @@ export function IntegrityViolationsTab({
   // 3. Chart 2: Violations by Severity
   const rawBySev = data.by_severity || {};
   const severityData = useMemo(() => {
-    const highVal = (rawBySev['high'] || 0) + (rawBySev['critical'] || 0) || 68;
-    const medVal = rawBySev['medium'] || 36;
-    const lowVal = rawBySev['low'] || 18;
-    const infoVal = rawBySev['info'] || 6;
+    const highVal = (rawBySev['high'] || 0) + (rawBySev['critical'] || 0);
+    const medVal = rawBySev['medium'] || 0;
+    const lowVal = rawBySev['low'] || 0;
+    const infoVal = rawBySev['info'] || 0;
     const sevTotal = highVal + medVal + lowVal + infoVal || 1;
 
     return [
@@ -363,7 +363,7 @@ export function IntegrityViolationsTab({
             Lower is better (fewer violations)
           </div>
 
-          {renderSparkline(sparkPoints.integrity || [88, 89, 90, 91, 91.5, 92, 92.4], '#7c3aed', 'integrity')}
+          {renderSparkline(sparkPoints.integrity || [], '#7c3aed', 'integrity')}
         </div>
 
         {/* Card 2: Total Violations Observed */}
@@ -432,7 +432,7 @@ export function IntegrityViolationsTab({
             Across {studentsAffected} students · {sessionsAffected} sessions
           </div>
 
-          {renderSparkline(sparkPoints.violations || [14, 18, 16, 22, 25, 27, 28], '#ef4444', 'violations')}
+          {renderSparkline(sparkPoints.violations || [], '#ef4444', 'violations')}
         </div>
 
         {/* Card 3: High Risk Flagged Students */}
@@ -501,7 +501,7 @@ export function IntegrityViolationsTab({
             Students with repeated or severe violations
           </div>
 
-          {renderSparkline(sparkPoints.high_risk || [15, 17, 18, 20, 21, 22, 23], '#f97316', 'highrisk')}
+          {renderSparkline(sparkPoints.high_risk || [], '#f97316', 'highrisk')}
         </div>
 
         {/* Card 4: Repeat Offenders */}
@@ -570,7 +570,7 @@ export function IntegrityViolationsTab({
             Students with 3+ violations
           </div>
 
-          {renderSparkline(sparkPoints.repeat_offenders || [4, 5, 5, 6, 7, 7, 8], '#3b82f6', 'repeat')}
+          {renderSparkline(sparkPoints.repeat_offenders || [], '#3b82f6', 'repeat')}
         </div>
       </div>
 

@@ -21,11 +21,14 @@ interface SectionDistributionDonutProps {
 }
 
 export function SectionDistributionDonut({ distribution }: SectionDistributionDonutProps) {
-  const total = distribution?.total ?? 27;
-  const above = distribution?.above_average?.count ?? 9;
-  const onPar = distribution?.on_par?.count ?? 11;
-  const below = distribution?.below_average?.count ?? 5;
-  const sigBelow = distribution?.significantly_below?.count ?? 2;
+  // Real counts only. These used to default to a made-up 27-section split.
+  const total = distribution?.total ?? 0;
+  const above = distribution?.above_average?.count ?? 0;
+  const onPar = distribution?.on_par?.count ?? 0;
+  const below = distribution?.below_average?.count ?? 0;
+  const sigBelow = distribution?.significantly_below?.count ?? 0;
+  const unmeasured = (distribution as any)?.unmeasured ?? 0;
+  const empty = total === 0;
 
   const data = [
     {
@@ -148,10 +151,23 @@ export function SectionDistributionDonut({ distribution }: SectionDistributionDo
                 marginTop: 2,
               }}
             >
-              Sections
+              {empty ? 'Measured' : 'Sections'}
             </div>
           </div>
 
+          {empty ? (
+            <div
+              style={{
+                position: 'absolute', inset: 0, borderRadius: '50%', border: '22px solid #f1f5f9',
+                display: 'flex', flexDirection: 'column', alignItems: 'center',
+                justifyContent: 'center', textAlign: 'center', padding: 28,
+              }}
+            >
+              <span style={{ fontSize: '0.75rem', color: '#94a3b8', fontWeight: 600, lineHeight: 1.35 }}>
+                Not benchmarkable yet — a cohort needs at least two measured sections.
+              </span>
+            </div>
+          ) : (
           <ResponsiveContainer width="100%" height="100%">
             <PieChart>
               <Pie
@@ -183,6 +199,7 @@ export function SectionDistributionDonut({ distribution }: SectionDistributionDo
               />
             </PieChart>
           </ResponsiveContainer>
+          )}
         </div>
 
         {/* Breakdown List */}

@@ -70,17 +70,19 @@ interface GradesMarksTabProps {
 
 // Generate smooth cubic bezier SVG path from array of numeric points
 function generateSmoothWavePath(points: number[], width = 280, height = 50, closed = true): string {
-  if (!points || points.length === 0) return '';
-  const min = Math.min(...points);
-  const max = Math.max(...points);
+  const clean = (points || []).filter((p: any) => typeof p === 'number' && Number.isFinite(p));
+  if (clean.length < 2) return '';  // one point is not a line
+  const min = Math.min(...clean);
+  const max = Math.max(...clean);
   const range = max - min || 1;
 
-  const pts = points.map((p, i) => {
-    const x = (i / (points.length - 1)) * width;
+  const pts = clean.map((p, i) => {
+    const x = (i / ((points.length) - 1)) * width;
     const y = height - ((p - min) / range) * (height - 12) - 6;
     return { x, y };
   });
 
+  if (!pts || pts.length === 0) return '';  // nothing measured -> no path
   let d = `M ${pts[0].x} ${pts[0].y}`;
   for (let i = 0; i < pts.length - 1; i++) {
     const p0 = pts[i];
@@ -1530,7 +1532,7 @@ export default function GradesMarksTab({
                           fontWeight: 700,
                         }}
                       >
-                        {s.avg_grade_gpa.toFixed(2)}
+                        {s.avg_grade_gpa == null ? '—' : s.avg_grade_gpa.toFixed(2)}
                       </span>
                     </td>
                     <td style={{ padding: '12px 10px' }}>
@@ -1545,7 +1547,7 @@ export default function GradesMarksTab({
                           fontWeight: 700,
                         }}
                       >
-                        {s.pass_rate.toFixed(1)}%
+                        {s.pass_rate == null ? '—' : `${s.pass_rate.toFixed(1)}%`}
                       </span>
                     </td>
                     <td style={{ padding: '12px 10px' }}>
@@ -1651,7 +1653,7 @@ export default function GradesMarksTab({
                           fontWeight: 700,
                         }}
                       >
-                        {s.avg_grade_gpa.toFixed(2)}
+                        {s.avg_grade_gpa == null ? '—' : s.avg_grade_gpa.toFixed(2)}
                       </span>
                     </td>
                     <td style={{ padding: '12px 10px' }}>
@@ -1666,7 +1668,7 @@ export default function GradesMarksTab({
                           fontWeight: 700,
                         }}
                       >
-                        {s.pass_rate.toFixed(1)}%
+                        {s.pass_rate == null ? '—' : `${s.pass_rate.toFixed(1)}%`}
                       </span>
                     </td>
                     <td style={{ padding: '12px 10px' }}>

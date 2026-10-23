@@ -6,9 +6,9 @@ import styles from './analytics.module.css';
 
 interface KpiCardProps {
   label: string;
-  value: string | number;
+  value: string | number | null;
   delta?: {
-    value: number; // e.g. 4.2 or -12.8
+    value: number | null; // null = no comparable period
     unit?: string;  // e.g. "%" or "pts"
     label?: string; // e.g. "1,864 in previous period"
     isPositiveGood?: boolean; // default true (false for e.g. risk or drop-off)
@@ -31,22 +31,23 @@ export function KpiCard({
   sparklinePoints,
 }: KpiCardProps) {
   const uid = useId().replace(/:/g, '');
+  const hasDelta = !!delta && typeof delta.value === 'number';
+  const dv = hasDelta ? (delta!.value as number) : 0;
   const isPositiveGood = delta?.isPositiveGood ?? true;
-  const isUp = delta ? delta.value > 0 : false;
-  const isDown = delta ? delta.value < 0 : false;
-  const isNeutral = delta ? delta.value === 0 : false;
+  const isUp = hasDelta && dv > 0;
+  const isDown = hasDelta && dv < 0;
+  const isNeutral = hasDelta && dv === 0;
 
-  const isGood = delta ? (isPositiveGood ? isUp : isDown) : false;
-  const isBad = delta ? (isPositiveGood ? isDown : isUp) : false;
+  const isGood = hasDelta ? (isPositiveGood ? isUp : isDown) : false;
+  const isBad = hasDelta ? (isPositiveGood ? isDown : isUp) : false;
 
-  // Default wave path depending on variant / delta
-  const isUpTrend = delta ? delta.value >= 0 : true;
-  const wavePoints = sparklinePoints || (isUpTrend
-    ? [28, 26, 22, 24, 18, 20, 14, 16, 10, 8]
-    : [10, 12, 16, 14, 20, 18, 24, 22, 26, 28]);
+  // Real wave only. A hard-coded 10-point "trend" fallback used to live here,
+  // drawing a decorative slope for every metric with no history at all.
+  const wavePoints = (sparklinePoints || []).filter((p) => typeof p === 'number' && Number.isFinite(p));
+  const hasWave = wavePoints.length >= 2;
 
   // Construct SVG smooth cubic path across 200 units width
-  const step = 200 / (wavePoints.length - 1);
+  const step = hasWave ? 200 / (wavePoints.length - 1) : 0;
   const pathD = wavePoints.reduce((acc, pt, idx) => {
     if (idx === 0) return `M 0,${pt}`;
     const prevX = (idx - 1) * step;
@@ -58,7 +59,7 @@ export function KpiCard({
     return `${acc} C ${c1X},${prevY} ${c2X},${currY} ${currX},${currY}`;
   }, '');
 
-  const areaD = `${pathD} L 200,40 L 0,40 Z`;
+  const areaD = hasWave ? `${pathD} L 200,40 L 0,40 Z` : '';
 
   return (
     <div
@@ -119,9 +120,9 @@ export function KpiCard({
             letterSpacing: '-0.03em',
           }}
         >
-          {value}
+          {value ?? '—'}
         </div>
-        {delta && (
+        {hasDelta && (
           <span
             style={{
               display: 'inline-flex',
@@ -140,8 +141,8 @@ export function KpiCard({
             {isDown && <ArrowDown size={11} strokeWidth={3} />}
             {isNeutral && <Minus size={11} strokeWidth={3} />}
             <span>
-              {Math.abs(delta.value)}
-              {delta.unit ?? '%'}
+              {Math.abs(dv)}
+              {delta!.unit ?? '%'}
             </span>
           </span>
         )}
@@ -162,7 +163,8 @@ export function KpiCard({
         </div>
       )}
 
-      {/* Soft Wave Sparkline SVG at the bottom */}
+      {/* Soft Wave Sparkline SVG at the bottom — only with real history */}
+      {hasWave && (
       <svg
         viewBox="0 0 200 40"
         preserveAspectRatio="none"
@@ -186,6 +188,7 @@ export function KpiCard({
         <path d={areaD} fill={`url(#spark-${uid})`} />
         <path d={pathD} fill="none" stroke={accentColor} strokeWidth="2.2" strokeLinecap="round" opacity={0.85} />
       </svg>
+      )}
     </div>
   );
 }

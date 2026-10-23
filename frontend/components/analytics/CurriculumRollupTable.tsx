@@ -147,7 +147,7 @@ export function CurriculumRollupTable({
     return (
       <svg width={width} height={height} style={{ overflow: 'visible' }}>
         <path
-          d={`M ${pathPoints}`}
+          d={pathPoints ? `M ${pathPoints}` : undefined}
           fill="none"
           stroke={strokeColor}
           strokeWidth="2"

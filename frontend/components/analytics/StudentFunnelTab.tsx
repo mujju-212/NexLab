@@ -40,6 +40,7 @@ import {
 } from 'recharts';
 import type { FunnelReport } from '@/services/institution.service';
 import { exportCSV } from '@/lib/analytics-utils';
+import DeltaPill from '@/components/analytics/DeltaPill';
 import styles from './analytics.module.css';
 
 interface StudentFunnelTabProps {
@@ -75,7 +76,7 @@ export function StudentFunnelTab({
   const kpis = data.kpis || {
     total_enrolled: {
       count: data.total_enrolled || 0,
-      delta: 0,
+      delta: null,
       is_positive: true,
       note: 'vs previous period',
       sparkline: [],
@@ -83,7 +84,7 @@ export function StudentFunnelTab({
     started: {
       count: data.stages?.[1]?.count ?? 0,
       pct: data.stages?.[1]?.pct ?? 0,
-      delta: 0,
+      delta: null,
       is_positive: true,
       note: 'of enrolled',
       sparkline: [],
@@ -91,7 +92,7 @@ export function StudentFunnelTab({
     attempted: {
       count: data.stages?.[2]?.count ?? 0,
       pct: data.stages?.[2]?.pct ?? 0,
-      delta: 0,
+      delta: null,
       is_positive: false,
       note: 'of enrolled',
       sparkline: [],
@@ -99,7 +100,7 @@ export function StudentFunnelTab({
     completed: {
       count: data.stages?.[3]?.count ?? 0,
       pct: data.stages?.[3]?.pct ?? 0,
-      delta: 0,
+      delta: null,
       is_positive: true,
       note: 'of enrolled',
       sparkline: [],
@@ -107,7 +108,7 @@ export function StudentFunnelTab({
     mastered: {
       count: data.stages?.[4]?.count ?? 0,
       pct: data.stages?.[4]?.pct ?? 0,
-      delta: 0,
+      delta: null,
       is_positive: true,
       note: 'of enrolled',
       sparkline: [],
@@ -268,10 +269,10 @@ export function StudentFunnelTab({
               <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', flex: 1, marginLeft: 8 }}>
                 Total Enrolled
               </span>
-              <span className={styles.kpiDeltaPill} style={{ background: '#f0fdf4', color: '#16a34a' }}>
-                <ArrowUpRight size={11} strokeWidth={2.5} />
-                <span>+{kpis.total_enrolled.delta}%</span>
-              </span>
+              <DeltaPill
+                delta={typeof kpis.total_enrolled.delta === 'number' ? kpis.total_enrolled.delta : null}
+                suffix="%"
+              />
             </div>
 
             <div style={{ marginTop: 2 }}>
@@ -311,10 +312,10 @@ export function StudentFunnelTab({
               <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', flex: 1, marginLeft: 8 }}>
                 Started Learning
               </span>
-              <span className={styles.kpiDeltaPill} style={{ background: '#f0fdf4', color: '#16a34a' }}>
-                <ArrowUpRight size={11} strokeWidth={2.5} />
-                <span>+{kpis.started.delta}%</span>
-              </span>
+              <DeltaPill
+                delta={typeof kpis.started.delta === 'number' ? kpis.started.delta : null}
+                suffix="%"
+              />
             </div>
 
             <div style={{ marginTop: 2 }}>
@@ -353,10 +354,10 @@ export function StudentFunnelTab({
               <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', flex: 1, marginLeft: 8 }}>
                 Attempted Labs
               </span>
-              <span className={styles.kpiDeltaPill} style={{ background: '#fef2f2', color: '#dc2626' }}>
-                <ArrowDownRight size={11} strokeWidth={2.5} />
-                <span>-{kpis.attempted.delta}%</span>
-              </span>
+              <DeltaPill
+                delta={typeof kpis.attempted.delta === 'number' ? kpis.attempted.delta : null}
+                suffix="%"
+              />
             </div>
 
             <div style={{ marginTop: 2 }}>
@@ -395,10 +396,10 @@ export function StudentFunnelTab({
               <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', flex: 1, marginLeft: 8 }}>
                 Completed Labs
               </span>
-              <span className={styles.kpiDeltaPill} style={{ background: '#f0fdf4', color: '#16a34a' }}>
-                <ArrowUpRight size={11} strokeWidth={2.5} />
-                <span>+{kpis.completed.delta}%</span>
-              </span>
+              <DeltaPill
+                delta={typeof kpis.completed.delta === 'number' ? kpis.completed.delta : null}
+                suffix="%"
+              />
             </div>
 
             <div style={{ marginTop: 2 }}>
@@ -437,10 +438,10 @@ export function StudentFunnelTab({
               <span style={{ fontSize: '0.8rem', fontWeight: 700, color: '#374151', flex: 1, marginLeft: 8 }}>
                 Achieved Mastery
               </span>
-              <span className={styles.kpiDeltaPill} style={{ background: '#f0fdf4', color: '#16a34a' }}>
-                <ArrowUpRight size={11} strokeWidth={2.5} />
-                <span>+{kpis.mastered.delta}%</span>
-              </span>
+              <DeltaPill
+                delta={typeof kpis.mastered.delta === 'number' ? kpis.mastered.delta : null}
+                suffix="%"
+              />
             </div>
 
             <div style={{ marginTop: 2 }}>

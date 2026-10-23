@@ -56,17 +56,19 @@ interface AIUsageTelemetryTabProps {
 
 // Generate smooth cubic bezier SVG path from array of numeric points
 function generateSmoothWavePath(points: number[], width = 280, height = 54, closed = true): string {
-  if (!points || points.length === 0) return '';
-  const min = Math.min(...points);
-  const max = Math.max(...points);
+  const clean = (points || []).filter((p: any) => typeof p === 'number' && Number.isFinite(p));
+  if (clean.length < 2) return '';  // one point is not a line
+  const min = Math.min(...clean);
+  const max = Math.max(...clean);
   const range = max - min || 1;
 
-  const pts = points.map((p, i) => {
-    const x = (i / (points.length - 1)) * width;
+  const pts = clean.map((p, i) => {
+    const x = (i / ((points.length) - 1)) * width;
     const y = height - ((p - min) / range) * (height - 14) - 7;
     return { x, y };
   });
 
+  if (!pts || pts.length === 0) return '';  // nothing measured -> no path
   let d = `M ${pts[0].x} ${pts[0].y}`;
   for (let i = 0; i < pts.length - 1; i++) {
     const p0 = pts[i];
@@ -323,7 +325,7 @@ export default function AIUsageTelemetryTab({
                   borderRadius: 6,
                 }}
               >
-                ↑ {deltas.queries.toFixed(1)}%
+                ↑ {deltas.queries == null ? '—' : `${deltas.queries.toFixed(1)}%`}
               </span>
             </div>
             <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
@@ -412,7 +414,7 @@ export default function AIUsageTelemetryTab({
                   borderRadius: 6,
                 }}
               >
-                ↑ {deltas.tokens.toFixed(1)}%
+                ↑ {deltas.tokens == null ? '—' : `${deltas.tokens.toFixed(1)}%`}
               </span>
             </div>
             <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
@@ -501,7 +503,7 @@ export default function AIUsageTelemetryTab({
                   borderRadius: 6,
                 }}
               >
-                ↑ {deltas.consumers.toFixed(1)}%
+                ↑ {deltas.consumers == null ? '—' : `${deltas.consumers.toFixed(1)}%`}
               </span>
             </div>
             <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
@@ -590,7 +592,7 @@ export default function AIUsageTelemetryTab({
                   borderRadius: 6,
                 }}
               >
-                ↑ {deltas.high_reliance.toFixed(1)}%
+                ↑ {deltas.high_reliance == null ? '—' : `${deltas.high_reliance.toFixed(1)}%`}
               </span>
             </div>
             <p style={{ margin: '4px 0 0 0', fontSize: '0.75rem', color: '#94a3b8' }}>
@@ -819,7 +821,7 @@ export default function AIUsageTelemetryTab({
                         textAlign: 'right',
                       }}
                     >
-                      {feat.pct.toFixed(1)}%
+                      {feat.pct == null ? '—' : `${feat.pct.toFixed(1)}%`}
                     </span>
                   </div>
                 </div>
@@ -1147,7 +1149,7 @@ export default function AIUsageTelemetryTab({
                         flexShrink: 0,
                       }}
                     >
-                      {s.reliance_pct.toFixed(1)}%
+                      {s.reliance_pct == null ? '—' : `${s.reliance_pct.toFixed(1)}%`}
                     </span>
                   </div>
                 );
@@ -1628,7 +1630,7 @@ export default function AIUsageTelemetryTab({
                               fontWeight: 700,
                             }}
                           >
-                            {st.reliance_rate.toFixed(1)}%
+                            {st.reliance_rate == null ? '—' : `${st.reliance_rate.toFixed(1)}%`}
                           </span>
                         </td>
 
@@ -1656,11 +1658,11 @@ export default function AIUsageTelemetryTab({
                                 </linearGradient>
                               </defs>
                               <path
-                                d={generateSmoothWavePath(st.sparkline || [90, 88, 86, 84, 82], 52, 18, true)}
+                                d={generateSmoothWavePath(st.sparkline || [], 52, 18, true)}
                                 fill={`url(#aiTrendGrad-${st.student_id})`}
                               />
                               <path
-                                d={generateSmoothWavePath(st.sparkline || [90, 88, 86, 84, 82], 52, 18, false)}
+                                d={generateSmoothWavePath(st.sparkline || [], 52, 18, false)}
                                 fill="none"
                                 stroke="#ef4444"
                                 strokeWidth="1.5"

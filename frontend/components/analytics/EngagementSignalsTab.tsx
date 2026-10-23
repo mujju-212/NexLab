@@ -53,17 +53,19 @@ interface EngagementSignalsTabProps {
 
 // Generate smooth cubic bezier SVG path from array of numeric points
 function generateSmoothWavePath(points: number[], width = 280, height = 48, closed = true): string {
-  if (!points || points.length === 0) return '';
-  const min = Math.min(...points);
-  const max = Math.max(...points);
+  const clean = (points || []).filter((p: any) => typeof p === 'number' && Number.isFinite(p));
+  if (clean.length < 2) return '';  // one point is not a line
+  const min = Math.min(...clean);
+  const max = Math.max(...clean);
   const range = max - min || 1;
 
-  const pts = points.map((p, i) => {
-    const x = (i / (points.length - 1)) * width;
+  const pts = clean.map((p, i) => {
+    const x = (i / ((points.length) - 1)) * width;
     const y = height - ((p - min) / range) * (height - 14) - 6;
     return { x, y };
   });
 
+  if (!pts || pts.length === 0) return '';  // nothing measured -> no path
   let d = `M ${pts[0].x} ${pts[0].y}`;
   for (let i = 0; i < pts.length - 1; i++) {
     const p0 = pts[i];
@@ -137,16 +139,16 @@ export default function EngagementSignalsTab({
     return {
       engagement_rate: data.kpis?.engagement_rate ?? data.engagement_rate ?? 0.0,
       engagement_rate_delta: data.kpis?.engagement_rate_delta_pct ?? 0.0,
-      engagement_sparkline: data.kpis?.engagement_rate_sparkline ?? [0, 0, 0, 0, 0, 0, 0],
+      engagement_sparkline: data.kpis?.engagement_rate_sparkline ?? [],
       active_students: data.kpis?.active_students ?? data.active_students ?? 0,
       active_students_delta: data.kpis?.active_students_delta_pct ?? 0.0,
-      active_sparkline: data.kpis?.active_students_sparkline ?? [0, 0, 0, 0, 0, 0, 0],
+      active_sparkline: data.kpis?.active_students_sparkline ?? [],
       dormant_students: data.kpis?.dormant_students ?? data.dormant_students ?? 0,
       dormant_students_delta: data.kpis?.dormant_students_delta_pct ?? 0.0,
-      dormant_sparkline: data.kpis?.dormant_students_sparkline ?? [0, 0, 0, 0, 0, 0, 0],
+      dormant_sparkline: data.kpis?.dormant_students_sparkline ?? [],
       avg_focus_score: data.kpis?.avg_focus_score ?? 0.0,
       avg_focus_score_delta: data.kpis?.avg_focus_score_delta_pct ?? 0.0,
-      focus_sparkline: data.kpis?.avg_focus_score_sparkline ?? [0, 0, 0, 0, 0, 0, 0],
+      focus_sparkline: data.kpis?.avg_focus_score_sparkline ?? [],
     };
   }, [data]);
 
