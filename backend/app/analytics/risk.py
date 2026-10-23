@@ -41,6 +41,21 @@ def compute_student_risk(
 
     grade_v = metric_value(student_metrics.get('grade_avg'))
     att_v = metric_value(student_metrics.get('attendance_rate'))
+
+    # One lab session is an observation, not an attendance *rate*. Until there
+    # are enough sessions to mean something, attendance is reported but kept out
+    # of the composite — otherwise a single missed lab (0% of 1) pushed a 94%
+    # student into the "high risk" band while a 37% student who turned up
+    # dropped to "ok".
+    MIN_ATT_SESSIONS = 3
+    att_sample = student_metrics.get('attendance_sessions')
+    if att_sample is None:
+        _att_box = student_metrics.get('attendance_rate')
+        if isinstance(_att_box, dict):
+            att_sample = _att_box.get('sample_size')
+    attendance_is_thin = bool(att_sample is not None and att_sample < MIN_ATT_SESSIONS)
+    if attendance_is_thin:
+        att_v = None
     mastery_v = metric_value(student_metrics.get('mastery_avg'))
     focus_v = metric_value(student_metrics.get('focus_avg'))
 
@@ -92,9 +107,12 @@ def compute_student_risk(
             'coverage': 0.0,
             'factors_used': [],
             'factors_missing': composite['missing'],
+            'attendance_sessions': None if att_sample is None else int(att_sample),
+            'attendance_thin': attendance_is_thin,
         }
 
     risk_score = round(max(0.0, min(100.0, composite['score'])), 1)
+
 
     crit_threshold = float(bands.get('critical', DEFAULT_RISK_BANDS['critical']))
     high_threshold = float(bands.get('high', DEFAULT_RISK_BANDS['high']))
@@ -156,6 +174,11 @@ def compute_student_risk(
         'coverage': composite['coverage'],
         'factors_used': composite['available'],
         'factors_missing': composite['missing'],
+        # Evidence metadata: how many sessions the attendance rate is based on,
+        # and whether it was too thin to enter the score. Kept out of
+        # `components` so the drawer's per-factor breakdown stays factor-only.
+        'attendance_sessions': None if att_sample is None else int(att_sample),
+        'attendance_thin': attendance_is_thin,
     }
 
 

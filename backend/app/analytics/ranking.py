@@ -58,7 +58,14 @@ def score_students(student_ids, institution_id, all_metrics, users_map):
         m = all_metrics.get(sid, {})
 
         mastery = metric_value(m.get('mastery_avg'))
-        att_rate = metric_value(m.get('attendance_rate'))
+        grade = metric_value(m.get('grade_avg'))
+        att_box = m.get('attendance_rate')
+        att_rate = metric_value(att_box)
+        # One session attended or missed is an observation, not an engagement
+        # rate. With a single-session sample, a 94% student who missed one lab
+        # scored engagement 0 and fell below a 37% student in the class rank.
+        if isinstance(att_box, dict) and 0 < (att_box.get('sample_size') or 0) < 3:
+            att_rate = None
         focus = metric_value(m.get('focus_avg'))
         if att_rate is not None and focus is not None:
             engagement = att_rate * 0.4 + focus * 0.6
@@ -74,8 +81,16 @@ def score_students(student_ids, institution_id, all_metrics, users_map):
         efficiency = metric_value(m.get('efficiency'))
         consistency = metric_value(m.get('consistency'))
 
+        # Mastery and grade measure the same construct (academic performance);
+        # they differ only in instrumentation. Mastery is the preferred signal,
+        # and grade stands in for its 0.30 weight when knowledge tracing has no
+        # data yet. Without this, the composite had NO academic term at all and
+        # a student failing every lab at 37% but with tightly clustered marks
+        # outranked one averaging 82% on consistency alone.
+        academic = mastery if mastery is not None else grade
+
         composite = weighted_composite(
-            {'mastery': mastery, 'engagement': engagement, 'effort': effort,
+            {'mastery': academic, 'engagement': engagement, 'effort': effort,
              'efficiency': efficiency, 'consistency': consistency},
             RANK_WEIGHTS,
         )
@@ -88,6 +103,8 @@ def score_students(student_ids, institution_id, all_metrics, users_map):
             'roll_number': getattr(u, 'roll_number', None) if u else None,
             'avatar_url': getattr(u, 'profile_pic_url', None) if u else None,
             'mastery_score': None if mastery is None else round(mastery, 1),
+            'grade_score': None if grade is None else round(grade, 1),
+            'academic_basis': 'mastery' if mastery is not None else ('grade' if grade is not None else None),
             'engagement_score': None if engagement is None else round(engagement, 1),
             'effort_score': None if effort is None else round(effort, 1),
             'efficiency_score': None if efficiency is None else round(efficiency, 1),
@@ -428,6 +445,10 @@ def get_student_all_ranks(student_id: str, institution_id: Optional[str]) -> Dic
                     'effort': st_sec['effort_score'],
                     'efficiency': st_sec['efficiency_score'],
                     'consistency': st_sec['consistency_score'],
+                    # Which signal filled the academic slot (mastery when
+                    # knowledge tracing has data, otherwise grade).
+                    'academic_basis': st_sec.get('academic_basis'),
+                    'grade': st_sec.get('grade_score'),
                 },
             }
 

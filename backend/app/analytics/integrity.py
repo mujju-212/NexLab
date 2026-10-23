@@ -207,10 +207,11 @@ def get_integrity_review_queue(
     queue = []
     for sid in flagged_students:
         report = compute_integrity_confidence(student_id=sid, institution_id=institution_id)
-        if report['review_recommended'] or report['integrity_confidence'] < 85.0:
+        conf = report.get('integrity_confidence')
+        if report['review_recommended'] or (conf is not None and conf < 85.0):
             queue.append(report)
 
     # Sort ascending by confidence (lowest confidence / most suspicious first)
-    queue.sort(key=lambda x: x['integrity_confidence'])
+    queue.sort(key=lambda x: (x['integrity_confidence'] is None, x['integrity_confidence'] or 0))
 
     return queue[:limit]

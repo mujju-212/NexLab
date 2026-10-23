@@ -21,6 +21,7 @@ from app.models.submission import CodeAttempt
 from app.models.grading import Grade, HintLog
 from app.models.knowledge import ConceptMastery, StudentRanking, FocusScore, ConceptPrereq, ExperimentConcept
 from app.models.academic import SectionSubject, SectionStudent, Section
+from app.models.subject import Subject
 from app.models.feedback import PlagiarismFlag
 from app.models.proctor_event import ProctorEvent
 from app.models.ai_usage import AIUsageLog, AIPolicy
@@ -2123,6 +2124,70 @@ def analytics_cohort_matrix():
     if ss_filter and ss_filter in my_ss_ids:
         selected_ss = SectionSubject.query.get(ss_filter)
 
+    # 1b. Did the caller ask for something we could not resolve?
+    # `_resolve_active_scope` used to keep the unfiltered scope when a filter
+    # matched nothing, so picking Section B (a class this instructor does not
+    # teach) silently returned Section A's roster — a filter that lies. An
+    # explicit filter that matches nothing must return nothing.
+    sec_arg = (request.args.get('section') or request.args.get('section_name') or '').strip()
+    sub_arg = (request.args.get('subject') or request.args.get('subject_name') or '').strip()
+    _ALL = ('', 'all', 'all sections', 'all my sections', 'all subjects', 'undefined', 'null')
+
+    def _is_filter(v):
+        return bool(v) and v.strip().lower() not in _ALL
+
+    # Strict resolution: intersect the caller's filters with what this
+    # instructor actually teaches, one level at a time, so that a value that
+    # matches nothing produces an empty scope instead of "everything".
+    strict_ids = list(my_ss_ids)
+    filter_requested = False
+    filter_unmatched = False
+
+    if _is_filter(ss_filter):
+        filter_requested = True
+        strict_ids = [ss_filter] if ss_filter in my_ss_ids else []
+
+    if _is_filter(sec_arg) and strict_ids:
+        from app.models.academic import Section as _Sec
+        filter_requested = True
+        sec_letter = sec_arg.replace('Section', '').strip()
+        sec_ids = {
+            x.id for x in _Sec.query.filter(
+                (func.lower(_Sec.name) == sec_arg.lower())
+                | (func.lower(_Sec.name) == sec_letter.lower())
+                | (_Sec.id == sec_arg)
+            ).all()
+        }
+        strict_ids = [
+            i for i in strict_ids
+            if SectionSubject.query.get(i) and SectionSubject.query.get(i).section_id in sec_ids
+        ]
+
+    if _is_filter(sub_arg) and strict_ids:
+        from app.models.subject import Subject as _Sub
+        filter_requested = True
+        sub_ids = {
+            x.id for x in _Sub.query.filter(
+                (func.lower(_Sub.name).like(f'%{sub_arg.lower()}%')) | (_Sub.id == sub_arg)
+            ).all()
+        }
+        strict_ids = [
+            i for i in strict_ids
+            if SectionSubject.query.get(i) and SectionSubject.query.get(i).subject_id in sub_ids
+        ]
+
+    if _is_filter(exp_filter):
+        filter_requested = True
+        if exp_filter not in my_exp_ids:
+            filter_unmatched = True
+
+    if filter_requested:
+        if strict_ids:
+            active_ss_ids = strict_ids
+        else:
+            filter_unmatched = True
+            active_ss_ids = []
+
     # 2. Get real students in scope
     sec_subjs = SectionSubject.query.filter(SectionSubject.id.in_(active_ss_ids)).all()
     section_ids = list({ss.section_id for ss in sec_subjs if ss.section_id})
@@ -2130,8 +2195,10 @@ def analytics_cohort_matrix():
     student_ids = list({sr.student_id for sr in st_records})
     students = User.query.filter(User.id.in_(student_ids), User.is_active.is_(True)).all() if student_ids else []
 
-    if not students:
-        students = User.query.filter_by(institution_id=g.institution_id, role='student', is_active=True).all()
+    # No unfiltered institution-wide fallback: a class view must never list
+    # students who are not enrolled in one of this instructor's sections.
+    if filter_unmatched:
+        students = []
 
     total_enrolled = len(students)
 
@@ -2198,6 +2265,23 @@ def analytics_cohort_matrix():
         .group_by(ProctorEvent.student_id).all()
     ) if s_ids else {}
 
+    # Section / batch per student, resolved once (not per row).
+    from app.models.academic import Section as _Section, Batch as _Batch
+    _links = SectionStudent.query.filter(
+        SectionStudent.student_id.in_(s_ids)).all() if s_ids else []
+    _sec_ids = {l.section_id for l in _links if l.section_id}
+    _secs = {x.id: x for x in _Section.query.filter(_Section.id.in_(_sec_ids)).all()} if _sec_ids else {}
+    _bids = {x.batch_id for x in _secs.values() if x.batch_id}
+    _batches = {b.id: b for b in _Batch.query.filter(_Batch.id.in_(_bids)).all()} if _bids else {}
+    sec_by_sid = {l.student_id: _secs.get(l.section_id) for l in _links}
+    from app.models.subject import Subject as _Subject
+    _subject_name = None
+    if selected_ss and selected_ss.subject_id:
+        _subj_row = _Subject.query.get(selected_ss.subject_id)
+        _subject_name = _subj_row.name if _subj_row else None
+    batch_by_sec = {sid_: _batches.get(sec.batch_id) and _batches[sec.batch_id].name
+                    for sid_, sec in [(k, v) for k, v in sec_by_sid.items() if v]}
+
     for s in students:
         name = s.full_name or 'Student'
         parts = name.strip().split()
@@ -2241,7 +2325,10 @@ def analytics_cohort_matrix():
         risk_res = compute_student_risk({
             'mastery_avg': {'value': avg_mastery},
             'grade_avg': {'value': avg_grade},
-            'attendance_rate': {'value': att_rate},
+            # sample_size lets the risk engine decide whether one lab session
+            # is evidence or just an observation.
+            'attendance_rate': {'value': att_rate, 'sample_size': len(att_statuses)},
+            'attendance_sessions': len(att_statuses),
             'focus_avg': {'value': avg_focus},
             'consistency': {'value': consistency_v},
             'submission_recency_days': {'value': recency_v},
@@ -2272,9 +2359,16 @@ def analytics_cohort_matrix():
         grade_dist.append(avg_grade)
         att_dist.append(att_rate)
 
+        # The roster's "Section & Batch" column used to print the *filter*
+        # value (or "Assigned Section") because the payload carried no section
+        # of its own — every row looked like the same class.
+        _sec = sec_by_sid.get(s.id)
         raw_list.append({
             'student_id': s.id,
             'student_name': name,
+            'section_name': _sec.name if _sec else None,
+            'batch_name': batch_by_sec.get(_sec.id) if _sec else None,
+            'subject_name': _subject_name,
             'roll_number': s.roll_number or '—',
             'email': s.email,
             'initials': initials,
@@ -2284,6 +2378,7 @@ def analytics_cohort_matrix():
             'mastery_pct': None if avg_mastery is None else round(avg_mastery),
             'grade_avg': None if avg_grade is None else round(avg_grade),
             'attendance_rate': None if att_rate is None else round(att_rate),
+            'attendance_sessions': len(att_statuses),
             'focus_score': None if avg_focus is None else round(avg_focus),
             'violations_count': viol_count,
             'trend': trend,

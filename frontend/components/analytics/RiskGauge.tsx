@@ -24,6 +24,25 @@ export function RiskGauge({
   subtitle = 'Composite weighted health index (0–100)',
   size = 200,
 }: RiskGaugeProps) {
+  // A risk score of `null` means "not enough measured factors" — rendering it as
+  // 0 would read as "completely healthy", which is a different claim.
+  if (score == null || Number.isNaN(Number(score))) {
+    return (
+      <div className={styles.card} style={{ textAlign: 'center' }}>
+        <div className={styles.cardHeader} style={{ justifyContent: 'center' }}>
+          <div>
+            <h3 className={styles.cardTitle}>{title}</h3>
+            {subtitle && <p className={styles.cardSubtitle}>{subtitle}</p>}
+          </div>
+        </div>
+        <div style={{ padding: '34px 12px', color: '#94a3b8' }}>
+          <div style={{ fontSize: '2rem', fontWeight: 800, color: '#cbd5e1' }}>—</div>
+          <div style={{ fontSize: '0.78rem', marginTop: 6 }}>Not enough measured factors to score risk.</div>
+        </div>
+      </div>
+    );
+  }
+
   const boundedScore = Math.max(0, Math.min(100, Math.round(score)));
   const color = riskColor(boundedScore);
   const bandInfo = riskBandLabel(band || (boundedScore >= 70 ? 'critical' : boundedScore >= 50 ? 'high' : boundedScore >= 30 ? 'watch' : 'ok'));

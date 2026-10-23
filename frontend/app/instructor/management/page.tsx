@@ -6,7 +6,7 @@ import {
   ClipboardList, Flame, Megaphone, CalendarClock, Loader2, Plus,
   CheckCircle2, AlertTriangle, X, TrendingUp, Trash2, Send, StickyNote,
   Users, Building2, Calendar, Layers, BookOpen, Search, Eye, ShieldCheck,
-  Award, ArrowUpRight
+  Award, ArrowUpRight, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import {
@@ -44,6 +44,9 @@ interface RosterStudent {
   email?: string | null;
 }
 
+// One vocabulary for every surface that can log an intervention. The Student 360
+// drawer posts its own set (1_on_1_review, counseling, …); without labels those
+// rows rendered as raw slugs ("1_ON_1_REVIEW") in this very list.
 const ACTION_LABELS: Record<string, string> = {
   talked_to_student: 'Talked to student',
   extended_deadline: 'Extended deadline',
@@ -52,6 +55,11 @@ const ACTION_LABELS: Record<string, string> = {
   tutoring: 'Arranged tutoring',
   resources_shared: 'Shared resources',
   other: 'Other',
+  '1_on_1_review': '1:1 diagnostic review',
+  practice_assignment: 'Remedial practice assigned',
+  peer_tutoring: 'Peer tutor / TA pairing',
+  counseling: 'Academic counseling',
+  deadline_extension: 'Targeted deadline extension',
 };
 
 const OUTCOME_COLORS: Record<string, string> = {
@@ -107,6 +115,11 @@ export default function ManagementPage() {
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [riskFilter, setRiskFilter] = useState<'all' | 'at_risk' | 'attention' | 'top' | 'on_track'>('all');
+
+  // Roster pagination — a class of 60 rendered as one 60-row table is unreadable
+  // and the page used to do exactly that.
+  const [page, setPage] = useState<number>(1);
+  const [pageSize, setPageSize] = useState<number>(10);
 
   const toast3 = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3200); };
 
@@ -204,6 +217,9 @@ export default function ManagementPage() {
     });
   }, [sectionSubjects, selectedDept, selectedYear, selectedBatch, selectedSection, selectedSubject]);
 
+  // A selection that matches none of this instructor's classes must render an
+  // empty state, not the unfiltered class.
+  const noClassMatch = sectionSubjects.length > 0 && matchingSectionSubjects.length === 0;
   const activeSsId = matchingSectionSubjects.length === 1 ? matchingSectionSubjects[0].section_subject_id : '';
   const activeSectionName = useMemo(() => {
     if (selectedSection !== 'all') return availableSections.find(s => s.section_id === selectedSection)?.section_name;
@@ -228,6 +244,7 @@ export default function ManagementPage() {
       days: 90,
     }),
     staleTime: 30 * 1000,
+    enabled: !noClassMatch,
   });
 
   useEffect(() => {
@@ -237,23 +254,45 @@ export default function ManagementPage() {
   }, []);
 
   const cohortStudents = useMemo(() => {
-    const raw = cohortData?.students ?? [];
+    const raw = noClassMatch ? [] : cohortData?.students ?? [];
     return raw.filter((st: any) => {
       if (riskFilter === 'at_risk' && !isAtRisk(st)) return false;
       if (riskFilter === 'attention' && !needsAttention(st)) return false;
       if (riskFilter === 'top' && !isExcelling(st)) return false;
       if (riskFilter === 'on_track' && (isAtRisk(st) || needsAttention(st))) return false;
-      if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
+      const q = searchQuery.trim().toLowerCase();
+      if (q) {
+        // Missing name/roll/email used to throw on `.toLowerCase()` of null.
         return (
-          st.student_name.toLowerCase().includes(q) ||
-          (st.roll_number || '').toLowerCase().includes(q) ||
-          (st.email || '').toLowerCase().includes(q)
+          String(st.student_name ?? '').toLowerCase().includes(q) ||
+          String(st.roll_number ?? '').toLowerCase().includes(q) ||
+          String(st.email ?? '').toLowerCase().includes(q)
         );
       }
       return true;
     });
-  }, [cohortData?.students, riskFilter, searchQuery]);
+  }, [cohortData?.students, riskFilter, searchQuery, noClassMatch]);
+
+  // Pagination derived state. Filters narrow the list, so any filter change
+  // must send the reader back to page 1 (otherwise page 4 of a 1-page result
+  // renders an empty table).
+  const totalFiltered = cohortStudents.length;
+  const totalPages = Math.max(1, Math.ceil(totalFiltered / pageSize));
+  const safePage = Math.min(page, totalPages);
+  const pageStart = (safePage - 1) * pageSize;
+  const pagedStudents = useMemo(
+    () => cohortStudents.slice(pageStart, pageStart + pageSize),
+    [cohortStudents, pageStart, pageSize]
+  );
+
+  useEffect(() => {
+    setPage(1);
+  }, [riskFilter, searchQuery, pageSize, selectedDept, selectedYear, selectedBatch, selectedSection, selectedSubject]);
+
+  // Keep the cursor inside the page range as filters shrink the result set.
+  useEffect(() => {
+    if (page > totalPages) setPage(totalPages);
+  }, [page, totalPages]);
 
   const triggerStudentAction = (studentId: string, targetTab: Tab) => {
     setPreselectedActionStudentId(studentId);
@@ -532,7 +571,10 @@ export default function ManagementPage() {
                 </div>
               </div>
               <span className={styles.sectionSub}>
-                Showing {cohortStudents.length} students · Click any row to open <strong>Student 360° Diagnostic Drawer</strong>
+                {noClassMatch || totalFiltered === 0
+                  ? 'No students in this scope'
+                  : `Showing ${pageStart + 1}–${Math.min(pageStart + pageSize, totalFiltered)} of ${totalFiltered}${totalFiltered < (cohortData?.students?.length ?? 0) ? ` (filtered from ${cohortData?.students?.length})` : ''}`}
+                {' · '}Click any row to open the <strong>Student 360° Diagnostic Drawer</strong>
               </span>
             </div>
 
@@ -543,7 +585,11 @@ export default function ManagementPage() {
               </div>
             ) : cohortStudents.length === 0 ? (
               <p className={styles.sectionSub} style={{ padding: 20, textAlign: 'center' }}>
-                No students match the selected class filters.
+                {noClassMatch
+                  ? 'That department / year / batch / section / subject combination matches none of your classes.'
+                  : searchQuery.trim()
+                    ? `No student matches “${searchQuery.trim()}”${riskFilter !== 'all' ? ' in this risk filter' : ''}.`
+                    : 'No students are enrolled in this class yet.'}
               </p>
             ) : (
               <div style={{ overflowX: 'auto' }}>
@@ -561,11 +607,12 @@ export default function ManagementPage() {
                     </tr>
                   </thead>
                   <tbody>
-                    {cohortStudents.map((st: any) => {
+                    {pagedStudents.map((st: any) => {
                       const isRisk = isAtRisk(st);
                       const watch = needsAttention(st);
                       const isTop = isExcelling(st);
-                      const avgScore = st.avg_score ?? st.grade_avg ?? 0;
+                      // `?? 0` rendered "0.0%" for a student with no grades at all.
+                      const avgScore = st.avg_score ?? st.grade_avg ?? null;
                       const completedExps = st.completed_experiments ?? st.completion?.completed ?? 0;
                       const totalExps = st.total_experiments ?? st.completion?.total ?? 0;
                       // `?? 0` here used to render "Mastery 0%" for every student
@@ -612,8 +659,22 @@ export default function ManagementPage() {
                             </span>
                           </td>
                           <td>
-                            <span style={{ fontSize: 13, fontWeight: 600, color: (st.attendance_rate ?? 100) < 75 ? '#dc2626' : '#059669' }}>
+                            <span
+                              style={{
+                                fontSize: 13,
+                                fontWeight: 600,
+                                // Unmeasured attendance used to be coloured green.
+                                color: st.attendance_rate == null ? '#94a3b8' : st.attendance_rate < 75 ? '#dc2626' : '#059669',
+                              }}
+                            >
                               {st.attendance_rate != null ? `${Math.round(st.attendance_rate)}%` : '—'}
+                              {/* The denominator matters: 0% of 1 lab is not the same
+                                  signal as 0% of 14. */}
+                              {st.attendance_sessions ? (
+                                <span style={{ fontSize: 10.5, fontWeight: 500, color: '#94a3b8', marginLeft: 4 }}>
+                                  /{st.attendance_sessions} lab{st.attendance_sessions > 1 ? 's' : ''}
+                                </span>
+                              ) : null}
                             </span>
                           </td>
                           <td>
@@ -624,7 +685,7 @@ export default function ManagementPage() {
                             </div>
                           </td>
                           <td style={{ textAlign: 'right' }} onClick={ev => ev.stopPropagation()}>
-                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'wrap' }}>
+                            <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end', flexWrap: 'nowrap' }}>
                               <button
                                 type="button"
                                 className={styles.primaryBtn}
@@ -658,6 +719,92 @@ export default function ManagementPage() {
                     })}
                   </tbody>
                 </table>
+              </div>
+            )}
+
+            {/* Pagination — the roster used to render every student in one table. */}
+            {!loadingCohort && totalFiltered > 0 && (
+              <div
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  justifyContent: 'space-between',
+                  gap: 12,
+                  flexWrap: 'wrap',
+                  padding: '12px 16px 2px',
+                  borderTop: '1px solid #eef2f7',
+                  marginTop: 10,
+                }}
+              >
+                <span style={{ fontSize: 12.5, color: '#64748b' }}>
+                  Showing <strong style={{ color: '#334155' }}>{pageStart + 1}–{Math.min(pageStart + pageSize, totalFiltered)}</strong> of{' '}
+                  <strong style={{ color: '#334155' }}>{totalFiltered}</strong> students
+                </span>
+
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
+                  <label style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: 12.5, color: '#64748b' }}>
+                    Rows
+                    <select
+                      className={styles.select}
+                      style={{ width: 'auto', padding: '4px 8px', fontSize: 12.5 }}
+                      value={pageSize}
+                      onChange={e => setPageSize(Number(e.target.value))}
+                    >
+                      {[10, 25, 50, 100].map(n => (
+                        <option key={n} value={n}>{n}</option>
+                      ))}
+                    </select>
+                  </label>
+
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
+                    <button
+                      type="button"
+                      className={styles.ghostBtn}
+                      style={{ padding: '4px 9px', fontSize: 12 }}
+                      disabled={safePage <= 1}
+                      onClick={() => setPage(Math.max(1, safePage - 1))}
+                      title="Previous page"
+                    >
+                      <ChevronLeft size={13} /> Prev
+                    </button>
+
+                    {Array.from({ length: totalPages }, (_, i) => i + 1)
+                      .filter(n => n === 1 || n === totalPages || Math.abs(n - safePage) <= 1)
+                      .reduce<Array<number | 'gap'>>((acc, n) => {
+                        if (acc.length && typeof acc[acc.length - 1] === 'number' && n - (acc[acc.length - 1] as number) > 1) {
+                          acc.push('gap');
+                        }
+                        acc.push(n);
+                        return acc;
+                      }, [])
+                      .map((n, idx) =>
+                        n === 'gap' ? (
+                          <span key={`gap-${idx}`} style={{ fontSize: 12, color: '#94a3b8', padding: '0 2px' }}>…</span>
+                        ) : (
+                          <button
+                            key={n}
+                            type="button"
+                            className={n === safePage ? styles.primaryBtn : styles.ghostBtn}
+                            style={{ padding: '4px 9px', fontSize: 12, minWidth: 30 }}
+                            onClick={() => setPage(n)}
+                          >
+                            {n}
+                          </button>
+                        )
+                      )}
+
+                    <button
+                      type="button"
+                      className={styles.ghostBtn}
+                      style={{ padding: '4px 9px', fontSize: 12 }}
+                      disabled={safePage >= totalPages}
+                      onClick={() => setPage(Math.min(totalPages, safePage + 1))}
+                      title="Next page"
+                    >
+                      Next <ChevronRight size={13} />
+                    </button>
+                  </div>
+                </div>
               </div>
             )}
           </div>

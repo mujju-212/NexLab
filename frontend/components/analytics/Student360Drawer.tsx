@@ -369,7 +369,10 @@ export function Student360Drawer({
                   }}
                 >
                   <Award size={16} style={{ color: '#7c3aed' }} />
-                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#5b21b6' }}>Cohort Standings:</span>
+                  <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#5b21b6' }}>
+                    Cohort Standings
+                    <span style={{ fontWeight: 500, color: '#7c3aed' }}> (composite: mastery · engagement · effort · efficiency · consistency)</span>:
+                  </span>
                   {Object.entries(ranks).map(([scope, r]) => (
                     <span
                       key={scope}
@@ -383,7 +386,8 @@ export function Student360Drawer({
                         fontWeight: 600,
                       }}
                     >
-                      <strong style={{ textTransform: 'capitalize' }}>{scope}:</strong> #{r.position} of {r.cohort_size} ({Math.round(r.percentile)}th %ile)
+                      <strong style={{ textTransform: 'capitalize' }}>{scope}:</strong> #{r.position} of {r.cohort_size}{' '}
+                      {r.percentile == null ? '(n/a)' : `(${Math.round(r.percentile)}th %ile)`}
                     </span>
                   ))}
                 </div>
@@ -425,7 +429,16 @@ export function Student360Drawer({
                     <RiskBreakdownBar
                       title="Risk Penalty Attribution"
                       subtitle="Specific factor weights causing risk inflation"
-                      components={Object.entries(risk.components).map(([k, v]: [string, any]) => {
+                      components={Object.entries(risk.components)
+                        // A factor with no sample is not "0 / healthy" — it was
+                        // never measured, so it must not appear in the breakdown.
+                        .filter(([k, v]: [string, any]) => {
+                          if (['attendance_sample', 'attendance_thin'].includes(k)) return false;
+                          if (v == null) return false;
+                          if (typeof v === 'object' && (v.value ?? null) == null) return false;
+                          return true;
+                        })
+                        .map(([k, v]: [string, any]) => {
                         const val = typeof v === 'number' ? v : (v?.value ?? 0);
                         const penalty = typeof v === 'object' && v?.penalty !== undefined 
                           ? v.penalty 
