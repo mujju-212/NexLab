@@ -25,6 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import { studentAnalyticsService, type AcademicDashboardResponse } from '@/services/student-analytics.service';
+import DeltaPill from '@/components/analytics/DeltaPill';
 import styles from './AcademicDashboard.module.css';
 
 interface AcademicTabProps {
@@ -108,86 +109,55 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
     staleTime: 60 * 1000,
   });
 
-  // Fallback defaults matching exact screenshot mockup
+  // Honest empty state: every number is 0 until the API returns real values.
   const kpis = dashboardData?.kpi_metrics || {
-    overall_score: 78,
-    overall_delta: 6,
-    sparkline_overall: [68, 70, 72, 71, 74, 75, 78],
-    subjects_enrolled: 5,
-    subjects_on_track: 3,
-    subjects_ring_pct: 60,
-    experiments_completed: 18,
-    experiments_total: 24,
-    experiments_completion_pct: 75,
-    attendance_rate: 92,
+    overall_score: 0,
+    overall_delta: 0,
+    sparkline_overall: [],
+    subjects_enrolled: 0,
+    subjects_on_track: 0,
+    subjects_ring_pct: 0,
+    experiments_completed: 0,
+    experiments_total: 0,
+    experiments_completion_pct: 0,
+    attendance_rate: 0,
     attendance_period: 'This month',
-    attendance_mini_bars: [70, 100, 100, 60, 100, 100, 90, 100, 95],
-    academic_rank: '#42 / 480',
-    rank_position: 42,
-    rank_cohort: 480,
-    rank_delta: '+5',
-    rank_percentile_text: 'Top 9% in Institute',
-    sparkline_rank: [48, 47, 45, 46, 44, 43, 42],
+    attendance_mini_bars: [],
+    academic_rank: '—',
+    rank_position: 0,
+    rank_cohort: 0,
+    rank_delta: '0',
+    rank_percentile_text: '—',
+    sparkline_rank: [],
   };
 
   const performanceTrend = dashboardData?.performance_trend || {
-    weeks: ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10', 'W11', 'W12'],
-    overall: [58, 62, 65, 68, 66, 70, 74, 78, 76, 75, 77, 80],
-    subjects: [
-      { code: 'DSA', name: 'DSA', color: '#2563eb', data: [60, 64, 68, 72, 70, 75, 79, 82, 80, 81, 83, 85] },
-      { code: 'DBMS', name: 'DBMS', color: '#0d9488', data: [56, 59, 63, 66, 68, 70, 73, 75, 74, 76, 78, 80] },
-      { code: 'CN', name: 'CN', color: '#f59e0b', data: [52, 54, 58, 61, 63, 65, 66, 68, 67, 69, 70, 72] },
-      { code: 'OS', name: 'OS', color: '#ef4444', data: [48, 52, 56, 59, 63, 67, 70, 72, 71, 73, 74, 76] },
-      { code: 'SE', name: 'SE', color: '#d946ef', data: [45, 48, 52, 56, 59, 63, 66, 70, 68, 69, 70, 71] },
-    ],
+    weeks: [],
+    overall: [],
+    subjects: [],
   };
 
-  const subjectPerformance = dashboardData?.subject_performance || [
-    { code: 'DSA', name: 'DSA', full_name: 'Data Structures & Algorithms', avg_grade: 82, completed: 20, total: 24, completion_pct: 83, trend_pct: 83, sparkline: [72, 75, 78, 80, 81, 82], color: '#2563eb', bg: '#eff6ff', badge_bg: '#dbeafe', text_color: '#1d4ed8' },
-    { code: 'DBMS', name: 'DBMS', full_name: 'Database Management Systems', avg_grade: 78, completed: 18, total: 24, completion_pct: 75, trend_pct: 75, sparkline: [68, 70, 72, 75, 76, 78], color: '#0d9488', bg: '#f0fdfa', badge_bg: '#ccfbf1', text_color: '#0f766e' },
-    { code: 'CN', name: 'Computer Networks', full_name: 'Computer Networks', avg_grade: 72, completed: 16, total: 24, completion_pct: 67, trend_pct: 67, sparkline: [62, 64, 66, 68, 70, 72], color: '#f59e0b', bg: '#fffbeb', badge_bg: '#fef3c7', text_color: '#b45309' },
-    { code: 'OS', name: 'Operating Systems', full_name: 'Operating Systems', avg_grade: 76, completed: 18, total: 24, completion_pct: 75, trend_pct: 75, sparkline: [65, 68, 70, 72, 74, 76], color: '#ef4444', bg: '#fef2f2', badge_bg: '#fee2e2', text_color: '#b91c1c' },
-    { code: 'SE', name: 'Software Engineering', full_name: 'Software Engineering', avg_grade: 69, completed: 14, total: 24, completion_pct: 58, trend_pct: 58, sparkline: [58, 60, 62, 65, 67, 69], color: '#d946ef', bg: '#fdf4ff', badge_bg: '#fae8ff', text_color: '#a21caf' },
-  ];
+  const subjectPerformance = dashboardData?.subject_performance || [];
 
-  const conceptMastery = dashboardData?.concept_mastery || [
-    { concept: 'Arrays & Lists', subject: 'DSA', mastery: 92, color: '#0d9488' },
-    { concept: 'Tree Algorithms', subject: 'DSA', mastery: 85, color: '#10b981' },
-    { concept: 'SQL & Relational Algebra', subject: 'DBMS', mastery: 78, color: '#10b981' },
-    { concept: 'Computer Networks Basics', subject: 'CN', mastery: 72, color: '#f59e0b' },
-    { concept: 'Process Scheduling', subject: 'OS', mastery: 68, color: '#f59e0b' },
-    { concept: 'Software Design Principles', subject: 'SE', mastery: 64, color: '#f97316' },
-    { concept: 'Normalization', subject: 'DBMS', mastery: 60, color: '#f97316' },
-    { concept: 'Dynamic Programming', subject: 'DSA', mastery: 56, color: '#ef4444' },
-  ];
+  const conceptMastery = dashboardData?.concept_mastery || [];
 
   const attendanceDonut = dashboardData?.attendance_breakdown || {
-    rate: 92,
-    present: 22,
-    absent: 1,
-    excused: 1,
-    total: 24,
+    rate: 0,
+    present: 0,
+    absent: 0,
+    excused: 0,
+    total: 0,
     period_label: 'This Month',
   };
 
   const riskGuidance = dashboardData?.risk_and_guidance || {
-    status: 'On Track',
-    status_color: 'green',
-    subtitle: 'No major risk indicators. Keep your current momentum!',
-    items: [
-      { id: 'g1', title: 'Good progress in DSA', description: 'Keep practicing advanced problems', type: 'success' as const, icon: 'shield-check' },
-      { id: 'g2', title: 'Improve Software Engineering', description: 'Lagging behind in experiment completion', type: 'warning' as const, icon: 'alert-triangle' },
-      { id: 'g3', title: 'Be consistent in submissions', description: '2 late submissions this month', type: 'info' as const, icon: 'clock' },
-    ],
+    status: 'No Data',
+    status_color: 'grey',
+    subtitle: 'Not enough activity recorded yet to assess risk.',
+    items: [] as Array<{ id: string; title: string; description: string; type: 'success' | 'warning' | 'info'; icon: string }>,
   };
 
-  const recentGrades = dashboardData?.recent_grades || [
-    { id: 'exp-8', exp_title: 'Exp 8: Trees', subject: 'DSA', auto: '22/25', manual: '18/20', viva: '9/10', final: '87%', final_num: 87, status: 'Graded', status_type: 'graded' as const, date: 'Oct 14' },
-    { id: 'exp-7', exp_title: 'Exp 7: SQL Queries', subject: 'DBMS', auto: '20/25', manual: '16/20', viva: '8/10', final: '78%', final_num: 78, status: 'Graded', status_type: 'graded' as const, date: 'Oct 12' },
-    { id: 'exp-6', exp_title: 'Exp 6: Routing Basics', subject: 'CN', auto: '18/25', manual: '15/20', viva: '7/10', final: '72%', final_num: 72, status: 'Graded', status_type: 'graded' as const, date: 'Oct 10' },
-    { id: 'exp-5', exp_title: 'Exp 5: Process Scheduling', subject: 'OS', auto: '17/25', manual: '15/20', viva: '8/10', final: '76%', final_num: 76, status: 'Graded', status_type: 'graded' as const, date: 'Oct 08' },
-    { id: 'exp-4', exp_title: 'Exp 4: UML Modeling', subject: 'SE', auto: '19/25', manual: '14/20', viva: '6/10', final: '69%', final_num: 69, status: 'Needs Review', status_type: 'review' as const, date: 'Oct 05' },
-  ];
+  const recentGrades = dashboardData?.recent_grades || [];
 
   const completionProgress = dashboardData?.completion_progress || subjectPerformance;
 
@@ -474,7 +444,10 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
 
           {/* Subject Curves */}
           {visibleSubjects.map((s, sIdx) => {
-            const pts = s.data.map((val, idx) => `${getX(idx)},${getY(val)}`);
+            const pts = s.data
+              .map((val, idx) => (val === null || val === undefined ? null : `${getX(idx)},${getY(val)}`))
+              .filter(Boolean) as string[];
+            if (pts.length < 2) return null;
             const pathD = `M ${pts.join(' L ')}`;
             return (
               <g key={`subject-curve-${s.code}-${sIdx}`}>
@@ -487,8 +460,8 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
                   strokeLinejoin="round"
                   opacity={activeLegendFilter && activeLegendFilter !== s.code ? 0.2 : 0.85}
                 />
-                {/* Dots on each week */}
-                {s.data.map((val, idx) => (
+                {/* Dots on each week — empty weeks draw nothing */}
+                {s.data.map((val, idx) => (val === null || val === undefined ? null : (
                   <circle
                     key={`dot-${s.code}-${sIdx}-${idx}`}
                     cx={getX(idx)}
@@ -498,7 +471,7 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
                     stroke="#ffffff"
                     strokeWidth="1.5"
                   />
-                ))}
+                )))}
               </g>
             );
           })}
@@ -507,14 +480,22 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
           {showOverall && (
             <g>
               <path
-                d={`M ${overallSeries.map((val, idx) => `${getX(idx)},${getY(val)}`).join(' L ')}`}
-                fill="none"
+                d={
+                  overallSeries
+                    .map((val, idx) => (val === null || val === undefined ? null : { idx, val }))
+                    .filter(Boolean)
+                    .map((pt: any, i: number, arr: any[]) =>
+                      `${i === 0 ? 'M' : 'L'} ${getX(pt.idx)} ${getY(pt.val)}`
+                    )
+                    .join(' ')
+                }
+                fill={overallSeries.some((v) => v !== null && v !== undefined) ? 'none' : 'none'}
                 stroke="#7c3aed"
                 strokeWidth="3.2"
                 strokeLinecap="round"
                 strokeLinejoin="round"
               />
-              {overallSeries.map((val, idx) => (
+              {overallSeries.map((val, idx) => (val === null || val === undefined ? null : (
                 <circle
                   key={`overall-${idx}`}
                   cx={getX(idx)}
@@ -524,7 +505,7 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
                   stroke="#ffffff"
                   strokeWidth="2"
                 />
-              ))}
+              )))}
             </g>
           )}
 
@@ -748,10 +729,15 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
             <div>
               <p className={styles.kpiTitle}>Overall Academic Score</p>
               <div className={styles.kpiValueRow}>
-                <span className={styles.kpiValue}>{kpis.overall_score}%</span>
-                <span className={styles.kpiBadge}>
-                  <ArrowUp size={10} /> +{kpis.overall_delta}%
+                <span className={styles.kpiValue}>
+                  {kpis.overall_score === null || kpis.overall_score === undefined
+                    ? '—'
+                    : `${kpis.overall_score}%`}
                 </span>
+                <DeltaPill
+                  delta={typeof kpis.overall_delta === 'number' ? kpis.overall_delta : null}
+                  suffix="%"
+                />
               </div>
             </div>
           </div>
@@ -874,13 +860,14 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
             <div>
               <p className={styles.kpiTitle}>Academic Rank</p>
               <div className={styles.kpiValueRow}>
-                <span className={styles.kpiValue}>#{kpis.rank_position}</span>
-                <span style={{ fontSize: '0.9rem', color: '#94a3b8', fontWeight: 600 }}>
-                  / {kpis.rank_cohort}
+                <span className={styles.kpiValue}>
+                  {kpis.rank_position ? `#${kpis.rank_position}` : '—'}
                 </span>
-                <span className={styles.kpiBadge}>
-                  <ArrowUp size={10} /> {kpis.rank_delta}
-                </span>
+                {kpis.rank_position ? (
+                  <span style={{ fontSize: '0.9rem', color: '#94a3b8', fontWeight: 600 }}>
+                    / {kpis.rank_cohort}
+                  </span>
+                ) : null}
               </div>
             </div>
           </div>
@@ -1044,10 +1031,13 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
                     <span
                       className={styles.gradeCell}
                       style={{
-                        color: subj.avg_grade >= 75 ? '#15803d' : subj.avg_grade >= 60 ? '#b45309' : '#b91c1c',
+                        color:
+                          subj.avg_grade === null || subj.avg_grade === undefined
+                            ? '#94a3b8'
+                            : subj.avg_grade >= 75 ? '#15803d' : subj.avg_grade >= 60 ? '#b45309' : '#b91c1c',
                       }}
                     >
-                      {subj.avg_grade}%
+                      {subj.avg_grade === null || subj.avg_grade === undefined ? '—' : `${subj.avg_grade}%`}
                     </span>
                   </td>
                   <td>
@@ -1058,8 +1048,19 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
                   <td>
                     <div className={styles.trendCell}>
                       {renderSparkline(subj.sparkline, subj.color, 44, 16, false)}
-                      <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#15803d' }}>
-                        ↗{subj.trend_pct}%
+                      <span
+                        style={{
+                          fontSize: '0.75rem',
+                          fontWeight: 700,
+                          color:
+                            subj.trend_pct === null || subj.trend_pct === undefined
+                              ? '#94a3b8'
+                              : subj.trend_pct >= 0 ? '#15803d' : '#b91c1c',
+                        }}
+                      >
+                        {subj.trend_pct === null || subj.trend_pct === undefined
+                          ? '—'
+                          : `${subj.trend_pct >= 0 ? '↗' : '↘'}${Math.abs(subj.trend_pct)}%`}
                       </span>
                     </div>
                   </td>

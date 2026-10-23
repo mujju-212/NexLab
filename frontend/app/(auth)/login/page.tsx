@@ -6,6 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import styles from './page.module.css';
 import { authService } from '@/services/auth.service';
+import { apiClient } from '@/services/api-client';
 import { useAuthStore } from '@/store/auth-store';
 import type { BackendRole } from '@/services/auth.service';
 import {
@@ -98,13 +99,61 @@ export default function LoginPageClient() {
       const targetRoute = ROLE_ROUTES[data.user.role] ?? '/practice/dashboard';
       router.push(targetRoute);
     } catch (err: unknown) {
-      const msg =
-        (err as { response?: { data?: { error?: string } } })?.response?.data?.error ??
-        'Login failed. Please verify your credentials and try again.';
+      // Distinguish "your password is wrong" from "the server/tunnel is not
+      // reachable". A 530/502/503 used to be reported as bad credentials, which
+      // sends people hunting for a password problem that does not exist.
+      const e = err as {
+        response?: { status?: number; data?: { error?: string } };
+        code?: string;
+        message?: string;
+      };
+      const status = e?.response?.status;
+      const serverMsg = e?.response?.data?.error;
+      let msg: string;
+      if (status === undefined || e?.code === 'ERR_NETWORK' || e?.code === 'ECONNABORTED') {
+        msg =
+          'Cannot reach the NexLab server. It may be restarting — wait a few seconds and try again.';
+      } else if (status >= 500) {
+        msg = `The server is temporarily unavailable (HTTP ${status}). This is not a password problem — please retry shortly.`;
+      } else if (status === 429) {
+        msg = serverMsg ?? 'Too many login attempts. Please wait a minute and try again.';
+      } else if (status === 401 || status === 403) {
+        msg = serverMsg ?? 'Login failed. Please verify your credentials and try again.';
+      } else {
+        msg = serverMsg ?? `Login failed (HTTP ${status}). Please try again.`;
+      }
       setError(msg);
     } finally {
       setLoading(false);
     }
+  };
+
+  // Real platform counters for the hero stats bar (no invented marketing figures).
+  const [platformStats, setPlatformStats] = React.useState<{
+    active_students: number | null;
+    experiments: number | null;
+    institutions: number | null;
+  } | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .get('/platform/public-stats')
+      .then((r) => {
+        if (!cancelled) setPlatformStats(r.data);
+      })
+      .catch(() => {
+        if (!cancelled) setPlatformStats(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const statValue = (n: number | null | undefined) => {
+    if (n === null || n === undefined) return '—';
+    if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K+`;
+    return `${n}`;
   };
 
   return (
@@ -245,17 +294,17 @@ export default function LoginPageClient() {
           {/* 5. Bottom Metrics Stats Bar */}
           <div className={styles.statsRow}>
             <div className={styles.statItem}>
-              <span className={styles.statValue}>10K+</span>
+              <span className={styles.statValue}>{statValue(platformStats?.active_students)}</span>
               <span className={styles.statLabel}>Active Students</span>
             </div>
             <div className={styles.statDivider} />
             <div className={styles.statItem}>
-              <span className={styles.statValue}>200+</span>
+              <span className={styles.statValue}>{statValue(platformStats?.experiments)}</span>
               <span className={styles.statLabel}>Experiments</span>
             </div>
             <div className={styles.statDivider} />
             <div className={styles.statItem}>
-              <span className={styles.statValue}>50+</span>
+              <span className={styles.statValue}>{statValue(platformStats?.institutions)}</span>
               <span className={styles.statLabel}>Institutions</span>
             </div>
             <div className={styles.statDivider} />
@@ -277,7 +326,7 @@ export default function LoginPageClient() {
           </div>
 
           {/* Login Form */}
-          <form className={styles.loginForm} onSubmit={handleSubmit} noValidate>
+          <form className={styles.loginForm} onSubmit={handleSubmit} method="post" action="/login" noValidate>
             {/* Email Field */}
             <div className={styles.formGroup}>
               <label className={styles.inputLabel} htmlFor="login-email">Email</label>

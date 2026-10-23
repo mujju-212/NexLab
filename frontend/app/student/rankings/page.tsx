@@ -75,6 +75,19 @@ function getAvatarColor(name: string) {
   return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
 }
 
+function percentileText(percentile: number | null | undefined, cohort: number, position?: number | null): string {
+  // No invented percentile: a cohort of one has no ranking distribution.
+  if (cohort < 5 || percentile === null || percentile === undefined) {
+    return cohort < 2 ? 'Only student in cohort' : position ? `#${position}` : '—';
+  }
+  return `Top ${Math.max(1, 100 - Math.round(percentile))}%`;
+}
+
+function cohortText(cohort: number): string {
+  if (!cohort) return '—';
+  return `of ${cohort} ${cohort === 1 ? 'student' : 'students'}`;
+}
+
 function getInitials(name: string) {
   if (!name) return 'ST';
   const parts = name.trim().split(/\s+/);
@@ -300,7 +313,7 @@ export default function StudentRankingsPage() {
               const sub = subjectMap.get(r.section_subject_id);
               const subjectName = r.subject_name || sub?.subject_name || 'Enrolled Subject';
               const subjectCode = r.subject_code || sub?.subject_code || 'CS';
-              const cohort = r.cohort_size || 29;
+              const cohort = r.cohort_size || 0;
               const isSelected = selectedSubjectId === r.section_subject_id;
 
               return (
@@ -322,18 +335,22 @@ export default function StudentRankingsPage() {
                       <span className={styles.standingRankNumber}>
                         {r.rank_position != null ? `#${r.rank_position}` : '—'}
                       </span>
-                      <span className={styles.standingRankCohort}>of {cohort} students</span>
+                      <span className={styles.standingRankCohort}>{cohortText(cohort)}</span>
                     </div>
                   </div>
 
                   <div className={styles.standingScoreBox}>
                     <span className={styles.standingScoreLabel}>Holistic Composite Score</span>
-                    <span className={styles.standingScoreValue}>{r.rank_score} pts</span>
+                    <span className={styles.standingScoreValue}>
+                      {r.rank_score === null || r.rank_score === undefined ? '—' : `${r.rank_score} pts`}
+                    </span>
                   </div>
 
                   <div className={styles.componentsGrid}>
                     {COMPONENT_META.map((c) => {
-                      const val = r.components ? r.components[c.key] ?? 0 : 0;
+                      // A missing factor is unmeasured -> no bar, em dash
+                      const raw = r.components ? (r.components as any)[c.key] : null;
+                      const val = typeof raw === 'number' ? raw : null;
                       return (
                         <div key={c.key} className={styles.componentRow}>
                           <span className={styles.componentName}>
@@ -342,10 +359,10 @@ export default function StudentRankingsPage() {
                           <div className={styles.componentBar}>
                             <div
                               className={styles.componentFill}
-                              style={{ width: `${Math.min(val, 100)}%`, background: c.color }}
+                              style={{ width: `${val === null ? 0 : Math.min(val, 100)}%`, background: c.color, opacity: val === null ? 0 : 1 }}
                             />
                           </div>
-                          <span className={styles.componentVal}>{val}</span>
+                          <span className={styles.componentVal}>{val === null ? '—' : val}</span>
                         </div>
                       );
                     })}
@@ -370,7 +387,9 @@ export default function StudentRankingsPage() {
                       </button>
                     )}
                     <span style={{ fontSize: '11px', color: '#94a3b8' }}>
-                      Top {r.rank_position ? Math.max(1, Math.round((r.rank_position / cohort) * 100)) : '—'}%
+                      {r.rank_position && cohort >= 5
+                        ? `Top ${Math.max(1, Math.round((r.rank_position / cohort) * 100))}%`
+                        : cohort >= 2 ? 'Cohort too small for a percentile' : 'Only student in cohort'}
                     </span>
                   </div>
                 </div>
@@ -491,7 +510,7 @@ export default function StudentRankingsPage() {
                           color: student.isFirst ? '#b45309' : '#64748b',
                         }}
                       >
-                        Top {Math.max(1, 100 - Math.round(student.percentile || 95))}% · #{student.position}
+                        {percentileText(student.percentile, cohortSize, student.position)} · #{student.position}
                       </span>
                     </div>
                   ))}
@@ -558,7 +577,7 @@ export default function StudentRankingsPage() {
                               </td>
                               <td className={styles.scoreTd}>{item.rank_score}</td>
                               <td style={{ fontWeight: 600, color: '#475569' }}>
-                                Top {Math.max(1, 100 - Math.round(item.percentile || 90))}%
+                                {percentileText(item.percentile, cohortSize, item.position)}
                               </td>
                               <td>
                                 <div className={styles.progressBar} title={`Mastery: ${item.mastery}`}>
@@ -653,8 +672,8 @@ export default function StudentRankingsPage() {
                 <div>
                   <p className={styles.stickyTitle}>Your Position in Current Scope</p>
                   <p className={styles.stickySub}>
-                    Rank #{currentUserEntry.position} of {cohortSize} students ·{' '}
-                    Top {Math.max(1, 100 - Math.round(currentUserEntry.percentile || 90))}%
+                    Rank #{currentUserEntry.position} of {cohortSize} {cohortSize === 1 ? 'student' : 'students'} ·{' '}
+                    {percentileText(currentUserEntry.percentile, cohortSize, currentUserEntry.position)}
                     {scope === 'subject' && ` · ${activeSubjectName}`}
                   </p>
                 </div>

@@ -128,10 +128,15 @@ export default function AnalyticsPage() {
           <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 140, padding: '8px 0' }}>
             {sessionsTrend.map(t => (
               <div key={t.date} title={`${t.date}: ${t.sessions} sessions`}
-                style={{ flex: 1, minWidth: 10, height: `${Math.max(4, (t.sessions / maxSessions) * 100)}%`, background: 'linear-gradient(180deg,#9333ea,#7c3aed)', borderRadius: '5px 5px 2px 2px' }} />
+                style={{ flex: 1, minWidth: 10, maxWidth: 46, height: `${Math.max(4, (t.sessions / maxSessions) * 100)}%`, background: 'linear-gradient(180deg,#9333ea,#7c3aed)', borderRadius: '5px 5px 2px 2px' }} />
             ))}
           </div>
-          {sessionsTrend.length > 0 && (
+          {sessionsTrend.length === 1 && (
+            <p style={{ fontSize: 11, color: '#9891a6', marginTop: 6 }}>
+              Only one day of session data in this window — a trend needs at least two.
+            </p>
+          )}
+          {sessionsTrend.length > 1 && (
             <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 11, color: '#9891a6', fontFamily: 'JetBrains Mono,monospace' }}>
               <span>{sessionsTrend[0].date}</span>
               <span>{sessionsTrend[sessionsTrend.length - 1].date}</span>

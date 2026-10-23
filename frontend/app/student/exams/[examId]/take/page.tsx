@@ -9,7 +9,7 @@ import {
 import StudentShell from '@/components/layout/StudentShell';
 import styles from '../../exams.module.css';
 import {
-  examService, type Exam, type ExamQuestion, type ExamAttempt,
+  examService, type Exam, type ExamQuestion, type ExamAttempt, type ProctorConfig,
 } from '@/services/exam.service';
 import { useServerCountdown } from '@/lib/countdown';
 
@@ -20,6 +20,9 @@ export default function TakeExamPage({ params }: { params: Promise<{ examId: str
   const [examId, setExamId] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [proctor, setProctor] = useState<ProctorConfig | null>(null);
+  const [violationCount, setViolationCount] = useState(0);
+  const [violationNotice, setViolationNotice] = useState<string | null>(null);
 
   const [attempt, setAttempt] = useState<ExamAttempt | null>(null);
   const [exam, setExam] = useState<Exam | null>(null);
@@ -78,6 +81,8 @@ export default function TakeExamPage({ params }: { params: Promise<{ examId: str
         setAnswers(init);
         setExpiresAt(res.expires_at);
         setServerNow(res.server_now);
+        setProctor(res.proctor ?? null);
+        setViolationCount(res.violations?.total ?? 0);
       } catch (e) {
         if (!cancelled) {
           const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error;
@@ -108,7 +113,15 @@ export default function TakeExamPage({ params }: { params: Promise<{ examId: str
     const t = setTimeout(() => {
       examService.saveAttempt(examId!, attempt.id, answersRef.current)
         .then(() => { setSaveState('saved'); dirtyRef.current = false; })
-        .catch(() => setSaveState('idle'));
+        .catch((err: unknown) => {
+          const res = (err as { response?: { status?: number; data?: { error?: string } } })?.response;
+          setSaveState('idle');
+          // 403 = the attempt clock has run out. Say so instead of letting the
+          // student keep typing into a form that is no longer being saved.
+          if (res?.status === 403) {
+            setError(res.data?.error || 'Time is up for this attempt.');
+          }
+        });
     }, 1200);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -132,9 +145,76 @@ export default function TakeExamPage({ params }: { params: Promise<{ examId: str
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [attempt, examId, router]);
 
+  // ── Proctoring: report focus/lockdown violations while the exam is live ──
+  // The server decides what counts; this only reports what it asked to watch.
+  useEffect(() => {
+    if (!proctor || !attempt || !examId) return;
+    if (!proctor.focus_enabled && !proctor.lockdown_enabled) return;
+    if (submitting || submittedRef.current) return;
+
+    const report = (eventType: string, detail?: string) => {
+      if (submittedRef.current) return;
+      examService.recordViolation(examId, attempt.id, eventType, detail)
+        .then(res => {
+          setViolationCount(res.violations.total);
+          const remaining = res.remaining_before_auto_submit;
+          setViolationNotice(
+            res.auto_submitted
+              ? 'Too many proctoring violations — your exam has been submitted automatically.'
+              : remaining != null && remaining <= 2
+                ? `Proctoring warning: ${res.violations.total} violation(s) recorded. ${remaining} more and your exam is submitted automatically.`
+                : `${res.violations.total} proctoring violation(s) recorded. Your instructor can see these.`,
+          );
+          if (res.auto_submitted) {
+            submittedRef.current = true;
+            router.replace(`/student/exams/${examId}/result`);
+          }
+        })
+        .catch(() => { /* never block the exam on a reporting failure */ });
+    };
+
+    const onVisibility = () => { if (document.hidden) report('tab_switch', 'tab hidden during exam'); };
+    const onBlur = () => report('focus_lost', 'window lost focus');
+    const onFullscreen = () => {
+      if (!document.fullscreenElement) report('fullscreen_exit', 'left fullscreen');
+    };
+    const onCopy = (e: ClipboardEvent) => {
+      if (!proctor.lockdown_enabled) return;
+      e.preventDefault();
+      report('copy', 'copy attempted');
+    };
+    const onPaste = (e: ClipboardEvent) => {
+      if (!proctor.lockdown_enabled) return;
+      e.preventDefault();
+      report('paste', 'paste attempted');
+    };
+    const onContextMenu = (e: MouseEvent) => {
+      if (!proctor.lockdown_enabled) return;
+      e.preventDefault();
+      report('context_menu', 'right-click attempted');
+    };
+
+    document.addEventListener('visibilitychange', onVisibility);
+    window.addEventListener('blur', onBlur);
+    document.addEventListener('fullscreenchange', onFullscreen);
+    document.addEventListener('copy', onCopy);
+    document.addEventListener('paste', onPaste);
+    document.addEventListener('contextmenu', onContextMenu);
+
+    return () => {
+      document.removeEventListener('visibilitychange', onVisibility);
+      window.removeEventListener('blur', onBlur);
+      document.removeEventListener('fullscreenchange', onFullscreen);
+      document.removeEventListener('copy', onCopy);
+      document.removeEventListener('paste', onPaste);
+      document.removeEventListener('contextmenu', onContextMenu);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [proctor, attempt, examId, submitting, router]);
+
   // ── Auto-submit when the countdown hits zero ─────────────────────────────
   useEffect(() => {
-    if (cd.expired && attempt && expiresAt && !submittedRef.current && !submitting) {
+    if (cd.ready && cd.expired && attempt && expiresAt && !submittedRef.current && !submitting) {
       doSubmit();
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -198,6 +278,35 @@ export default function TakeExamPage({ params }: { params: Promise<{ examId: str
   return (
     <StudentShell activePage="Exams" title={exam?.title || 'Exam'} subtitle="Answer every question — your work auto-saves">
       {error && <div className={styles.errorBox}>⚠️ {error}</div>}
+
+      {/* Proctoring: the student is told, in advance and as it happens. */}
+      {proctor && (proctor.focus_enabled || proctor.lockdown_enabled) && (
+        <div
+          style={{
+            display: 'flex', alignItems: 'center', gap: 10, marginBottom: 12,
+            padding: '10px 14px', borderRadius: 10,
+            background: violationCount > 0 ? '#fef2f2' : '#f5f3ff',
+            border: `1px solid ${violationCount > 0 ? '#fecaca' : '#ddd6fe'}`,
+            color: violationCount > 0 ? '#991b1b' : '#5b21b6',
+            fontSize: 13, fontWeight: 500,
+          }}
+        >
+          <span style={{ fontSize: 16 }}>{violationCount > 0 ? '⚠️' : '👁️'}</span>
+          <span>
+            {violationNotice
+              ?? `This exam is proctored${proctor.focus_enabled ? ' — leaving this tab or losing focus is recorded' : ''}${proctor.lockdown_enabled ? '; copy, paste and right-click are blocked' : ''}.`}
+            {proctor.max_violations > 0 && violationCount === 0 && (
+              <strong> Auto-submit after {proctor.max_violations} violations.</strong>
+            )}
+          </span>
+          {violationCount > 0 && (
+            <strong style={{ marginLeft: 'auto', whiteSpace: 'nowrap' }}>
+              {violationCount} violation{violationCount === 1 ? '' : 's'}
+              {proctor.max_violations > 0 ? ` / ${proctor.max_violations}` : ''}
+            </strong>
+          )}
+        </div>
+      )}
 
       {/* Header: progress + live countdown + submit */}
       <div className={styles.takeHeader}>

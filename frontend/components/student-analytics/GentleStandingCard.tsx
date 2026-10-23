@@ -17,12 +17,9 @@ export const GentleStandingCard: React.FC<GentleStandingCardProps> = ({
   integrity,
 }) => {
   const band = standing?.standing_band || 'ok';
-  const label = standing?.status_label || 'On Track & Thriving';
-  const reason = standing?.primary_reason || 'Consistent academic performance and positive engagement recorded.';
-  const suggestions = standing?.suggestions || [
-    'Continue maintaining strong lab attendance and timely submissions.',
-    'Explore advanced practice challenges to prepare for competitive matches.',
-  ];
+  const label = standing?.status_label || '—';
+  const reason = standing?.primary_reason || 'No standing assessment recorded yet.';
+  const suggestions = standing?.suggestions || [];
 
   return (
     <div className={styles.card}>

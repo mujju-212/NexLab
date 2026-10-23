@@ -29,7 +29,8 @@ import {
   VideoOff, MessageSquare, Tv, FlaskConical, PlayCircle, Code2,
   HelpCircle, Hand, MonitorOff, PhoneOff, Minimize2,
   RotateCcw, ChevronLeft, ChevronRight, ClipboardCheck,
-  FileText, FileCode, ImageIcon, Globe, Link2, Download, ExternalLink, Mic2
+  FileText, FileCode, ImageIcon, Globe, Link2, Download, ExternalLink, Mic2,
+  RefreshCw, Wifi, WifiOff, ShieldQuestion
 } from 'lucide-react';
 import styles from '../page.module.css';
 // LiveKit hooks & components for real-time conference
@@ -1121,7 +1122,19 @@ export default function LiveLabRoomPage() {
   // attendance  → user acknowledges their presence
   // permissions → browser camera/mic/screen prompts
   // video       → LiveKit room visible
-  const [joinStep,      setJoinStep]      = useState<JoinStep>('room');
+  // A proctored lab is entered deliberately: attendance -> permissions -> room.
+  // Skipped only if this tab already completed the flow for this session, so a
+  // reconnect does not force the student through it again.
+  const [joinStep,      setJoinStep]      = useState<JoinStep>(() => {
+    if (typeof window === 'undefined') return 'attendance';
+    return window.sessionStorage.getItem(`vl:joined:${sessionId}`) ? 'room' : 'attendance';
+  });
+  // Why the compulsory screen-share gate is showing, if it is.
+  const [sharePrompt,   setSharePrompt]   = useState<'instructor' | 'reshare' | 'required' | null>(null);
+  // Set when the backend announces the end of the session.
+  const [sessionEnded,  setSessionEnded]  = useState(false);
+  // Live copy of the session's Focus ML switch, refreshed by the poll above.
+  const [focusMlLive,   setFocusMlLive]   = useState<boolean | null>(null);
   const [camGranted,    setCamGranted]    = useState(false);
   const [micGranted,    setMicGranted]    = useState(false);
   const [screenGranted, setScreenGranted] = useState(false);
@@ -1322,12 +1335,24 @@ export default function LiveLabRoomPage() {
 
   // ── Socket — heartbeat, screenshot, focus + ALL conductor listeners ────────
   const { isConnected, emitHeartbeat, emitScreenshot, emitBehavioralSignals,
-          emitTabSwitch, emitFullscreenExit, emitLockdownViolation, emitCheckpointPassed } = useSocket({
+          emitTabSwitch, emitFullscreenExit, emitLockdownViolation, emitCheckpointPassed,
+          emitScreenShareStopped } = useSocket({
     sessionId,
     enabled: !!gate,
+    // The instructor ended the session: stop capturing the student's screen the
+    // moment it is over (privacy), and drop the "LIVE" state in the header.
+    onSessionEnded: useCallback(() => {
+      setSessionEnded(true);
+      setSharePrompt(null);
+    }, []),
     onModeChanged: useCallback((d: ModeChangedPayload) => {
       setMode(d.mode);
       setModeRules(d.rules);
+      // "ended" is an end whether or not the dedicated event arrives.
+      if (d.mode === 'ended') {
+        setSessionEnded(true);
+        setSharePrompt(null);
+      }
     }, []),
     onProctorPolicy: useCallback((d: ProctorPolicyPayload) => setProctorPolicy(d.policy), []),
     onInstructorMessage: useCallback((d: { message: string; from: string; timestamp: string }) =>
@@ -1350,6 +1375,40 @@ export default function LiveLabRoomPage() {
     }, []),
     onPageLaunched: useCallback((d: PageLaunchedPayload) => setLaunchedPage(d), []),
     onQuizLaunched: useCallback((d: QuizLaunchedPayload) => setLaunchedQuiz(d), []),
+    // Screen sharing is compulsory in a proctored live lab. These two events were
+    // emitted by the server but never listened to, so an instructor asking to see a
+    // student's screen (or the server demanding a reshare) did nothing at all.
+    // Catch-up path: the server sends the full state on join/reconnect, so a
+    // broadcast, a force-submit or an end-of-session that happened while this
+    // student was away is applied instead of being lost.
+    onSessionState: useCallback((d: any) => {
+      if (!d) return;
+      if (d.mode) { setMode(d.mode); if (d.rules) setModeRules(d.rules); }
+      if (d.proctor_policy) setProctorPolicy(d.proctor_policy);
+      if (d.ended) setSessionEnded(true);
+      if (d.force_submit && d.force_submit.reason) {
+        setForcedSubmit({
+          reason: d.force_submit.reason,
+          timestamp: d.force_submit.timestamp || '',
+        } as ForceSubmitPayload);
+      }
+      if (Array.isArray(d.chat) && d.chat.length) {
+        setChatLog(d.chat.filter((m: { id?: string }) => !!m.id));
+      }
+      // Broadcasts are the class-wide messages (no direct recipient).
+      const lastFromInstructor = Array.isArray(d.chat)
+        ? [...d.chat].reverse().find((m: { from_id?: string; to_id?: string | null }) => !m.to_id)
+        : null;
+      if (lastFromInstructor) {
+        setBroadcastMsg({ text: lastFromInstructor.text, ts: lastFromInstructor.created_at || '' });
+      }
+    }, []),
+    onScreenShareRequest: useCallback(() => {
+      setSharePrompt('instructor');
+    }, []),
+    onReshareRequest: useCallback(() => {
+      setSharePrompt('reshare');
+    }, []),
     // D13 chat — instructor replies + own-message echo land here with robust deduplication
     onChatMessage: useCallback((d: ChatMessagePayload) => {
       setChatLog(prev => {
@@ -1518,6 +1577,38 @@ export default function LiveLabRoomPage() {
   const selfReportCheckpoint = useCallback((checkpointNumber: number, passed: number) => {
     emitCheckpointPassed(checkpointNumber, passed);
   }, [emitCheckpointPassed]);
+
+  // Remember that this tab has been through the pre-join flow.
+  useEffect(() => {
+    if (joinStep === 'room' && typeof window !== 'undefined') {
+      window.sessionStorage.setItem(`vl:joined:${sessionId}`, '1');
+    }
+  }, [joinStep, sessionId]);
+
+  // ── Belt-and-braces session status poll ───────────────────────────────────
+  // Sockets are fire-and-forget: if this browser was reconnecting at the moment
+  // the instructor ended the lab, the event is simply gone and the student would
+  // keep a LIVE badge and a shared screen indefinitely. A cheap poll of the
+  // authoritative session status makes that impossible.
+  useEffect(() => {
+    if (!gate) return;
+    let cancelled = false;
+    const tick = async () => {
+      try {
+        const g = await studentService.checkGate(sessionId) as GateResult;
+        if (cancelled || !g) return;
+        if (g.session_status === 'ended' || g.session_status === 'cancelled') {
+          setSessionEnded(true);
+          setSharePrompt(null);
+        }
+        if (typeof g.focus_ml_enabled === 'boolean') setFocusMlLive(g.focus_ml_enabled);
+      } catch {
+        // a failed poll must never disturb the session
+      }
+    };
+    const t = setInterval(tick, 20000);
+    return () => { cancelled = true; clearInterval(t); };
+  }, [gate, sessionId]);
 
   // ── Gate check on mount ────────────────────────────────────────────────────
   useEffect(() => {
@@ -1938,7 +2029,7 @@ export default function LiveLabRoomPage() {
 
                 <h2 className={styles.permTitle}>We need your permission</h2>
                 <p className={styles.permDesc}>
-                  To ensure a smooth live lab experience, we need access to your camera and microphone.
+                  To ensure a smooth live lab experience, we need access to your camera and microphone — and your screen, which is required and stays on for the whole proctored session.
                   You can revoke these permissions anytime from your browser settings.
                 </p>
 
@@ -1950,6 +2041,10 @@ export default function LiveLabRoomPage() {
                   <div className={styles.permMiniPill}>
                     <span className={styles.permMiniPillIcon}><Mic size={14} /></span>
                     <span>Speak &amp; ask questions</span>
+                  </div>
+                  <div className={styles.permMiniPill}>
+                    <span className={styles.permMiniPillIcon}><Monitor size={14} /></span>
+                    <span>Share your screen — required</span>
                   </div>
                 </div>
               </div>
@@ -2070,7 +2165,7 @@ export default function LiveLabRoomPage() {
   // ── 3. Redesigned Live Session Room (Live Class & Experiment Views) ────────
   const livekitToken = gate.livekit_token;
   const livekitUrl   = gate.livekit_url || process.env.NEXT_PUBLIC_LIVEKIT_URL || '';
-  const instructorName = (gate?.session as unknown as { instructor_name?: string })?.instructor_name || 'Dr. Priya Sharma';
+  const instructorName = (gate?.session as unknown as { instructor_name?: string })?.instructor_name || 'Instructor';
 
   return (
     <StudentShell activePage="Live Coding Lab">
@@ -2111,10 +2206,24 @@ export default function LiveLabRoomPage() {
           </div>
 
           <div className={styles.roomHeaderRight}>
-            <div className={styles.livePillRed}>
-              <span className={styles.liveDotAnimated} />
-              <span>LIVE</span>
-            </div>
+            {!isConnected && !sessionEnded && (
+              <div title="The live connection dropped — reconnecting. Anything the instructor sent meanwhile is restored automatically."
+                style={{ display: 'flex', alignItems: 'center', gap: 6, padding: '5px 11px', borderRadius: 999,
+                         background: '#fef3c7', color: '#92400e', fontSize: 12, fontWeight: 700,
+                         border: '1px solid #fcd34d' }}>
+                <RefreshCw size={12} /> Reconnecting…
+              </div>
+            )}
+            {sessionEnded ? (
+              <div className={styles.livePillRed} style={{ background: '#e5e7eb', color: '#374151' }}>
+                <span>ENDED</span>
+              </div>
+            ) : (
+              <div className={styles.livePillRed}>
+                <span className={styles.liveDotAnimated} />
+                <span>LIVE</span>
+              </div>
+            )}
             <div className={styles.roomTimer}>
               <Clock size={14} color="#7c3aed" />
               <span>{formatTimer(sessionTimer)}</span>
@@ -2148,6 +2257,20 @@ export default function LiveLabRoomPage() {
         </div>
 
         {/* ── Broadcast and Conductor Notices ── */}
+        {sessionEnded && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px',
+                        borderRadius: 10, background: 'rgba(107,114,128,.1)',
+                        border: '1px solid rgba(107,114,128,.28)', fontSize: 13.5 }}>
+            <CheckCircle2 size={15} color="#4b5563" />
+            <span style={{ flex: 1 }}>
+              <b>The instructor ended this session.</b> Your screen has stopped being shared and
+              your work is saved. You can close this page.
+            </span>
+            <button className={styles.checkBtn} onClick={() => router.push('/student/live-lab')}>
+              Back to Live Lab
+            </button>
+          </div>
+        )}
         {broadcastMsg && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: 'rgba(124,58,237,.1)', border: '1px solid rgba(124,58,237,.25)', fontSize: 13.5 }}>
             <Bell size={15} color="#7c3aed" />
@@ -2158,7 +2281,7 @@ export default function LiveLabRoomPage() {
         {forcedSubmit && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', fontSize: 13.5 }}>
             <FileDown size={15} color="#ef4444" />
-            <span style={{ flex: 1 }}><b>Session ended by instructor.</b> {forcedSubmit.reason} — your code was auto-submitted.</span>
+            <span style={{ flex: 1 }}>{forcedSubmit.reason || 'Session ended by instructor — your code was auto-submitted.'}</span>
             <button
               className={styles.checkBtn}
               style={{ background: '#7c3aed', color: '#ffffff', fontWeight: 600, border: 'none' }}
@@ -2216,6 +2339,15 @@ export default function LiveLabRoomPage() {
                 language={language}
                 setLanguage={setLanguage}
                 mediaSignal={mediaSignal}
+                sharePrompt={sharePrompt}
+                onShareFailed={() => setSharePrompt('required')}
+                sessionEnded={sessionEnded}
+                onShareLost={() => {
+                  setSharePrompt('reshare');
+                  // Tells the backend: high-severity proctor event + alert to the
+                  // instructor + an automatic reshare prompt back to this student.
+                  emitScreenShareStopped();
+                }}
               />
             </LiveKitRoom>
           ) : (
@@ -2283,6 +2415,14 @@ export default function LiveLabRoomPage() {
 // ══════════════════════════════════════════════════════════════════════════════
 
 interface StudentConferenceProps {
+  /** Why the compulsory screen-share overlay is showing, if it is. */
+  sharePrompt?: 'instructor' | 'reshare' | 'required' | null;
+  /** Called when the browser refused the screen-share request. */
+  onShareFailed?: () => void;
+  /** The live screen track ended (browser "Stop sharing"), not a refusal. */
+  onShareLost?: () => void;
+  /** The session is over — stop capturing, stop gating. */
+  sessionEnded?: boolean;
   user: any;
   session: any;
   sessionId: string;
@@ -2336,6 +2476,10 @@ function StudentLiveConference({
   language,
   setLanguage,
   mediaSignal,
+  sharePrompt,
+  onShareFailed,
+  onShareLost,
+  sessionEnded = false,
 }: StudentConferenceProps) {
   const { localParticipant, isMicrophoneEnabled, isCameraEnabled, isScreenShareEnabled } = useLocalParticipant();
   const remoteParticipants = useRemoteParticipants();
@@ -2449,12 +2593,90 @@ function StudentLiveConference({
     }
   }, []);
 
-  // Prompt screen share on entry
-  useEffect(() => {
-    if (!isScreenShareEnabled) {
-      localParticipant.setScreenShareEnabled(true).catch(() => {});
+  // Screen sharing is COMPULSORY in a proctored live lab (the instructor's whole
+  // monitoring surface — live spotlight + the 30s frames — depends on it).
+  // The old version auto-requested once and swallowed the failure with an empty
+  // catch, so a student who declined simply carried on invisible.
+  // LiveKit's own isScreenShareEnabled flag can stay true after the browser ends
+  // the capture, so we keep our own flag for the underlying track.
+  const [shareEnded, setShareEnded] = useState(false);
+
+  const requestShare = useCallback(async () => {
+    // Some browsers refuse a screen capture that also asks for system/tab audio
+    // (NotReadableError) even though video capture alone works fine. Since we
+    // only need the picture, retry video-only before telling the student we failed.
+    setShareEnded(false);
+    let pub = null;
+    try {
+      pub = await localParticipant.setScreenShareEnabled(true);
+    } catch {
+      try {
+        pub = await localParticipant.setScreenShareEnabled(true, { audio: false });
+      } catch {
+        onShareFailed?.();
+        return;
+      }
     }
+    const t = (pub as { videoTrack?: { mediaStreamTrack?: MediaStreamTrack } } | undefined)
+      ?.videoTrack?.mediaStreamTrack;
+    if (t) watchScreenTrack(t);
+  }, [localParticipant, onShareFailed]);
+
+  // Session over: release the screen capture. Keeping it on after the lab ends
+  // would leave the instructor able to watch a student's screen for no reason.
+  useEffect(() => {
+    if (sessionEnded && isScreenShareEnabled) {
+      localParticipant.setScreenShareEnabled(false).catch(() => {});
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [sessionEnded]);
+
+  // Ask once on entry — compulsory, so a refusal is surfaced, never swallowed.
+  useEffect(() => {
+    if (!isScreenShareEnabled) requestShare();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  // Deliberately no auto-retry when the share drops: browsers only grant a
+  // screen capture from a user gesture, so an automatic re-request just fails
+  // silently. The gate below asks the student to press the button instead.
+
+  // Detect the share actually ending. A capture track does not fire 'ended' when
+  // the browser's own "Stop sharing" bar is used (per spec, stop() only flips
+  // readyState), so we poll the track LiveKit actually published. Without this a
+  // student could stop sharing silently: no gate, no proctor event, and nothing
+  // telling the instructor.
+  const watchedRef = useRef<MediaStreamTrack | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const watchScreenTrack = useCallback((t: MediaStreamTrack) => {
+    if (watchedRef.current === t) return;
+    watchedRef.current = t;
+    if (pollRef.current) clearInterval(pollRef.current);
+    let fired = false;
+    const lost = () => {
+      if (fired) return;
+      fired = true;
+      setShareEnded(true);
+      // Tell the room the feed is over. Without this the publication stays
+      // "alive" and every subscriber keeps a frozen last frame, so the
+      // instructor's viewer would still claim the screen is live.
+      localParticipant.setScreenShareEnabled(false).catch(() => {});
+      onShareLost?.();
+    };
+    t.addEventListener('ended', lost);
+    pollRef.current = setInterval(() => {
+      if (t.readyState === 'ended') lost();
+    }, 1500);
+  }, [onShareLost, localParticipant]);
+
+  useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
+
+  // Also watch whatever publication currently exists (e.g. after a re-render).
+  useEffect(() => {
+    const pub = localParticipant.getTrackPublication(Track.Source.ScreenShare);
+    const t = pub?.videoTrack?.mediaStreamTrack;
+    if (t) watchScreenTrack(t);
+  }, [localParticipant, isScreenShareEnabled, watchScreenTrack]);
 
   // Find instructor participant
   const instructor = useMemo(() => {
@@ -2466,6 +2688,48 @@ function StudentLiveConference({
       ) || remoteParticipants[0]
     );
   }, [remoteParticipants]);
+
+  // Compulsory screen share: while it is off, a blocking overlay covers the room.
+  // The instructor cannot monitor a student who is not sharing, so there is no
+  // "continue anyway" — only a retry button.
+  const sharingLive = isScreenShareEnabled && !shareEnded;
+  const shareGate = !sharingLive && !sessionEnded ? (
+    <div style={{
+      position: 'fixed', inset: 0, zIndex: 100000,
+      background: 'rgba(15,10,30,.92)', backdropFilter: 'blur(3px)',
+      display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 24,
+    }}>
+      <div style={{ maxWidth: 460, background: '#fff', borderRadius: 16, padding: 26, textAlign: 'center' }}>
+        <div style={{ width: 52, height: 52, borderRadius: '50%', background: '#ede9fe',
+                      display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '0 auto 14px' }}>
+          <Monitor size={24} color="#7c3aed" />
+        </div>
+        <h3 style={{ margin: '0 0 8px', fontSize: 17, fontWeight: 800, color: '#0f172a' }}>
+          Screen sharing is required
+        </h3>
+        <p style={{ margin: '0 0 6px', fontSize: 13, lineHeight: 1.55, color: '#475569' }}>
+          {sharePrompt === 'instructor'
+            ? 'Your instructor asked to view your screen. Share it to stay in this session.'
+            : sharePrompt === 'reshare'
+              ? 'Your screen share stopped. A proctored lab needs it on for the whole session.'
+              : 'This is a proctored live lab. Your screen must be shared so your instructor can review your work.'}
+        </p>
+        <p style={{ margin: '0 0 18px', fontSize: 12, color: '#94a3b8' }}>
+          Only your instructor can see it, and only while this session is live.
+        </p>
+        <button
+          type="button"
+          onClick={requestShare}
+          style={{ width: '100%', padding: '11px 16px', borderRadius: 10, border: 'none',
+                   background: '#7c3aed', color: '#fff', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}>
+          Share my screen
+        </button>
+        <p style={{ margin: '12px 0 0', fontSize: 11.5, color: '#94a3b8' }}>
+          If the picker does not appear, allow screen sharing for this site in your browser and try again.
+        </p>
+      </div>
+    </div>
+  ) : null;
 
   const instScreenPub = instructor?.getTrackPublication(Track.Source.ScreenShare);
   const instCamPub = instructor?.getTrackPublication(Track.Source.Camera);
@@ -2566,12 +2830,30 @@ function StudentLiveConference({
     }
   };
 
-  const instInitials = initials(instructorName || 'Dr. Priya Sharma');
+  const instInitials = initials(instructorName || 'Instructor');
   const userInitials = initials(user?.full_name || 'You');
 
   return (
     <div className={styles.liveClassGridContainer}>
       <RoomAudioRenderer />
+      {/* Always-on confirmation that the screen is being captured. Screen sharing is
+          compulsory, so there is deliberately no way to switch it off from here —
+          the browser's own Stop-sharing control is the only exit, and that trips
+          the gate. */}
+      {sharingLive && (
+        <div style={{
+          position: 'fixed', bottom: 18, left: 18, zIndex: 9000,
+          display: 'flex', alignItems: 'center', gap: 8, padding: '8px 13px', borderRadius: 999,
+          background: 'rgba(17,24,39,.9)', color: '#fff', fontSize: 12, fontWeight: 600,
+          boxShadow: '0 6px 20px rgba(0,0,0,.25)', backdropFilter: 'blur(6px)',
+        }}>
+          <span style={{ width: 8, height: 8, borderRadius: 4, background: '#4ade80',
+                         boxShadow: '0 0 0 3px rgba(74,222,128,.25)' }} />
+          Your screen is being shared
+          <span style={{ fontWeight: 400, opacity: .65 }}>· instructor only</span>
+        </div>
+      )}
+      {shareGate}
 
       {/* Main Content Area */}
       <div className={styles.mainContentFlexCol}>
@@ -2643,7 +2925,7 @@ function StudentLiveConference({
                       {instInitials}
                     </div>
                     <h3 className={styles.stagePlaceholderTitle}>
-                      {instructorName} is conducting the live session
+                      {sessionEnded ? 'This session has ended' : `${instructorName} is conducting the live session`}
                     </h3>
                     <p className={styles.stagePlaceholderSub}>
                       Listening to instructor audio · Watching for screen share & demo
@@ -2811,18 +3093,19 @@ function StudentLiveConference({
                     <span>{isCameraEnabled ? 'Stop Video' : 'Start Video'}</span>
                   </button>
 
-                  <button
+                  {/* Screen sharing is compulsory in a proctored lab, so this is a
+                      status chip, not a control. Offering "Stop Share" here
+                      contradicted the gate and only produced a violation. */}
+                  <div
                     className={`${styles.ctrlCircleBtn} ${isScreenShareEnabled ? styles.ctrlActive : ''}`}
-                    onClick={async () => {
-                      try {
-                        await localParticipant.setScreenShareEnabled(!isScreenShareEnabled);
-                      } catch {}
-                    }}
-                    title={isScreenShareEnabled ? 'Stop Sharing' : 'Share Screen'}
+                    title={isScreenShareEnabled
+                      ? 'Your screen is being shared with the instructor for the whole session'
+                      : 'Screen sharing is required — use the prompt to resume it'}
+                    style={{ cursor: 'default' }}
                   >
-                    {isScreenShareEnabled ? <MonitorOff size={15} /> : <Monitor size={15} />}
-                    <span>{isScreenShareEnabled ? 'Stop Share' : 'Share Screen'}</span>
-                  </button>
+                    {isScreenShareEnabled ? <Monitor size={15} /> : <MonitorOff size={15} />}
+                    <span>{isScreenShareEnabled ? 'Sharing' : 'Not sharing'}</span>
+                  </div>
 
                   <button
                     className={`${styles.ctrlCircleBtn} ${handRaised ? styles.ctrlActive : ''}`}
@@ -3386,7 +3669,7 @@ function StudentLiveConferenceStandalone({
     }
   };
 
-  const instInitials = initials(instructorName || 'Dr. Priya Sharma');
+  const instInitials = initials(instructorName || 'Instructor');
   const userInitials = initials(user?.full_name || 'You');
 
   return (
@@ -3574,7 +3857,7 @@ function StudentLiveConferenceStandalone({
                     title={sharing ? 'Stop Sharing' : 'Share Screen'}
                   >
                     {sharing ? <MonitorOff size={15} /> : <Monitor size={15} />}
-                    <span>{sharing ? 'Stop Share' : 'Share Screen'}</span>
+                    <span>{sharing ? 'Sharing' : 'Share Screen'}</span>
                   </button>
 
                   <button

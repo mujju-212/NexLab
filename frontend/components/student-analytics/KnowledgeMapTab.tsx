@@ -589,7 +589,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
               </span>
             </div>
             <div className={styles.kpiMiniBars}>
-              {(kpi.mastery_bars || [8, 11, 14, 16, 18]).map((h, i) => (
+              {(kpi.mastery_bars || []).map((h, i) => (
                 <div
                   key={i}
                   className={styles.kpiMiniBar}
@@ -1406,13 +1406,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
           </div>
 
           <div className={styles.rankedList}>
-            {(dashboardData?.top_strengths || [
-              { rank: 1, name: 'Arrays & Lists (DSA)', concept_name: 'Arrays', score: 92 },
-              { rank: 2, name: 'SQL Basics (DBMS)', concept_name: 'SQL Basics', score: 88 },
-              { rank: 3, name: 'Linked Lists (DSA)', concept_name: 'Linked Lists', score: 84 },
-              { rank: 4, name: 'OSI Model (CN)', concept_name: 'OSI Model', score: 82 },
-              { rank: 5, name: 'Searching (Algorithms)', concept_name: 'Searching', score: 80 },
-            ]).map((item) => (
+            {(dashboardData?.top_strengths || []).map((item) => (
               <div
                 key={item.rank}
                 className={styles.rankedRowItem}
@@ -1458,13 +1452,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
           </div>
 
           <div className={styles.rankedList}>
-            {(dashboardData?.focus_next || [
-              { rank: 1, name: 'Dynamic Programming', concept_name: 'Dynamic Programming', score: 42 },
-              { rank: 2, name: 'Graph Algorithms', concept_name: 'Graph Algorithms', score: 48 },
-              { rank: 3, name: 'Query Optimization', concept_name: 'Query Optimization', score: 53 },
-              { rank: 4, name: 'Scheduling (OS)', concept_name: 'Processes', score: 46 },
-              { rank: 5, name: 'Normalization (DBMS)', concept_name: 'Normalization', score: 58 },
-            ]).map((item) => (
+            {(dashboardData?.focus_next || []).map((item) => (
               <div
                 key={item.rank}
                 className={styles.rankedRowItem}
@@ -1509,40 +1497,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
           </div>
 
           <div className={styles.unlocksList}>
-            {(dashboardData?.learning_path_unlocks || [
-              {
-                id: 'unlock-1',
-                title: 'Complete 3 more DP problems',
-                current_display: '2 / 5',
-                progress_pct: 40,
-                icon: 'lock',
-                color: 'gold',
-              },
-              {
-                id: 'unlock-2',
-                title: 'Improve Graph Algorithms mastery to 60%',
-                current_display: '48% / 60%',
-                progress_pct: 80,
-                icon: 'shield',
-                color: 'purple',
-              },
-              {
-                id: 'unlock-3',
-                title: 'Finish DBMS Experiment 4',
-                current_display: '0 / 1',
-                progress_pct: 0,
-                icon: 'book',
-                color: 'blue',
-              },
-              {
-                id: 'unlock-4',
-                title: 'Reach 1,600 rating to unlock Advanced Contest',
-                current_display: '1,540 / 1,600',
-                progress_pct: 96,
-                icon: 'trophy',
-                color: 'amber',
-              },
-            ]).map((un) => {
+            {(dashboardData?.learning_path_unlocks || []).map((un) => {
               const iconBg =
                 un.color === 'gold'
                   ? '#fef9c3'
@@ -1785,44 +1740,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {(dashboardData?.learning_path_unlocks || [
-                {
-                  id: 'unlock-1',
-                  title: 'Complete 3 more DP problems',
-                  current_display: '2 / 5',
-                  progress_pct: 40,
-                  icon: 'lock',
-                  color: 'gold',
-                  reward: 'Unlocks Dynamic Programming Mastery Badge & Advanced DP Sheet',
-                },
-                {
-                  id: 'unlock-2',
-                  title: 'Improve Graph Algorithms mastery to 60%',
-                  current_display: '48% / 60%',
-                  progress_pct: 80,
-                  icon: 'shield',
-                  color: 'purple',
-                  reward: 'Unlocks Dijkstra & Floyd-Warshall Interactive Visualizer',
-                },
-                {
-                  id: 'unlock-3',
-                  title: 'Finish DBMS Experiment 4',
-                  current_display: '0 / 1',
-                  progress_pct: 0,
-                  icon: 'book',
-                  color: 'blue',
-                  reward: 'Unlocks SQL Indexing & Query Planner Sandbox',
-                },
-                {
-                  id: 'unlock-4',
-                  title: 'Reach 1,600 rating to unlock Advanced Contest',
-                  current_display: '1,540 / 1,600',
-                  progress_pct: 96,
-                  icon: 'trophy',
-                  color: 'amber',
-                  reward: 'Unlocks Division 1 Weekly Competitive Contests',
-                },
-              ]).map((un: any) => (
+              {(dashboardData?.learning_path_unlocks || []).map((un: any) => (
                 <div
                   key={un.id}
                   style={{

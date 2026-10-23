@@ -143,6 +143,12 @@ interface UseSocketOptions {
   onPollUpdate?:       (data: { poll_id: string; results: number[]; responses_count: number }) => void;
   onPollClosed?:       (data: { id: string; results: number[]; responses_count: number }) => void;
   onMediaControl?:     (data: MediaControlPayload) => void;
+  /** Instructor asked to view this student's screen (consent prompt). */
+  onScreenShareRequest?: (data: { session_id?: string; instructor_name?: string }) => void;
+  /** Sharing was stopped during a proctored session — the student must resume. */
+  onReshareRequest?:     (data: { message?: string }) => void;
+  /** Full session state sent on join/reconnect — the client's catch-up path. */
+  onSessionState?:       (data: any) => void;
   onError?:            (msg: string) => void;
 }
 
@@ -186,6 +192,9 @@ export function useSocket({
   onPollUpdate,
   onPollClosed,
   onMediaControl,
+  onScreenShareRequest,
+  onReshareRequest,
+  onSessionState,
   onError,
 }: UseSocketOptions) {
   const socketRef    = useRef<Socket | null>(null);
@@ -194,6 +203,9 @@ export function useSocket({
   // ── Stable callback refs — updated every render, never cause re-registration ─
   // The socket listener calls the ref's current value; the ref always holds the
   // latest callback without the socket needing to be re-created.
+  const cbScreenShareReq    = useRef(onScreenShareRequest);
+  const cbReshareReq        = useRef(onReshareRequest);
+  const cbSessionState      = useRef(onSessionState);
   const cbJoined            = useRef(onJoined);
   const cbStudentJoined     = useRef(onStudentJoined);
   const cbStudentLeft       = useRef(onStudentLeft);
@@ -243,13 +255,16 @@ export function useSocket({
   cbPollUpdate.current        = onPollUpdate;
   cbPollClosed.current        = onPollClosed;
   cbMediaControl.current      = onMediaControl;
+  cbScreenShareReq.current    = onScreenShareRequest;
+  cbReshareReq.current        = onReshareRequest;
+  cbSessionState.current      = onSessionState;
   cbError.current             = onError;
 
   useEffect(() => {
     if (!sessionId || !enabled) return;
 
     const token      = Cookies.get('access_token');
-    const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || 'http://localhost:5000';
+    const SOCKET_URL = process.env.NEXT_PUBLIC_SOCKET_URL || (typeof window !== 'undefined' ? window.location.origin : 'http://localhost:5000');
 
     const socket = io(SOCKET_URL, {
       auth:       { token },
@@ -290,6 +305,13 @@ export function useSocket({
     socket.on('checkpoint_update',         (d) => cbDirectCheckpoint.current?.(d));
     socket.on('chat_message',              (d) => cbChatMessage.current?.(d));
     socket.on('proctor_policy_updated',    (d) => cbProctorPolicy.current?.(d));
+    // The backend has always emitted these two; nothing listened, so an
+    // instructor asking to see a student's screen produced no prompt at all.
+    socket.on('screenshare_request',       (d) => cbScreenShareReq.current?.(d));
+    socket.on('reshare_screen_request',    (d) => cbReshareReq.current?.(d));
+    // Sent by the server on every join/join-again: whatever was pushed while we
+    // were not in the room is recovered from here instead of being lost.
+    socket.on('session_state',             (d) => cbSessionState.current?.(d));
     // Page / quiz launch: Conductor emits conductor_* to instructor room and
     // student_* to student room — listen to both so either side works.
     socket.on('conductor_page_launched',   (d) => cbPageLaunched.current?.(d));

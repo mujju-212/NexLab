@@ -49,21 +49,14 @@ export default function DashboardCharts({ data, stats }: {
             </span>
           </div>
           <div className={styles.legendCallout}>
-            Sep 2026: {stats?.students ?? 245} Students · {stats?.instructors ?? 18} Instructors
+            Current: {stats?.students ?? 0} Students · {stats?.instructors ?? 0} Instructors
           </div>
         </div>
 
         <div className={styles.chartArea}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
-              data={data?.growth_chart || [
-                { month: 'Apr', students: 110, instructors: 12 },
-                { month: 'May', students: 130, instructors: 14 },
-                { month: 'Jun', students: 145, instructors: 16 },
-                { month: 'Jul', students: 160, instructors: 18 },
-                { month: 'Aug', students: 180, instructors: 19 },
-                { month: 'Sep', students: 245, instructors: 22 },
-              ]}
+              data={data?.growth_chart || []}
               margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
               barGap={4}
             >
@@ -118,15 +111,7 @@ export default function DashboardCharts({ data, stats }: {
         <div className={styles.chartArea}>
           <ResponsiveContainer width="100%" height="100%">
             <BarChart
-              data={data?.session_activity || [
-                { day: 'Mon', scheduled: 12, completed: 5, live: 2 },
-                { day: 'Tue', scheduled: 9, completed: 4, live: 2 },
-                { day: 'Wed', scheduled: 13, completed: 6, live: 3 },
-                { day: 'Thu', scheduled: 16, completed: 7, live: 5 },
-                { day: 'Fri', scheduled: 10, completed: 4, live: 2 },
-                { day: 'Sat', scheduled: 11, completed: 4, live: 4 },
-                { day: 'Sun', scheduled: 11, completed: 4, live: 2 },
-              ]}
+              data={data?.session_activity || []}
               margin={{ top: 10, right: 10, left: -20, bottom: 0 }}
               barGap={2}
             >

@@ -1175,7 +1175,7 @@ export default function UsersPage() {
                         <span className={styles.roleBadgeInstructor} style={{ fontSize: 11, padding: '2px 8px' }}>Instructor</span>
                       )}
                       <span style={{ fontFamily: 'JetBrains Mono, monospace', color: '#64748b', fontSize: 12 }}>
-                        {selectedUser.roll_number || selectedUser.staff_id || 'NDU2024012'}
+                        {selectedUser.roll_number || selectedUser.staff_id || '—'}
                       </span>
                     </div>
                   </div>

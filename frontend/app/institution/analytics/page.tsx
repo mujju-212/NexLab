@@ -1400,7 +1400,7 @@ function AnalyticsContent() {
               >
                 <AcademicPerformanceChart
                   sections={sectionCompQuery.data}
-                  baselineMean={overviewQuery.data.campus_avg_grade ?? outcomesOverviewQuery.data?.summary?.campus_avg_grade ?? 0}
+                  baselineMean={overviewQuery.data.campus_avg_grade ?? outcomesOverviewQuery.data?.summary?.campus_avg_grade ?? null}
                 />
                 <RiskDistributionCard
                   totalStudents={overviewQuery.data.students?.total ?? 0}
@@ -1611,7 +1611,11 @@ function AnalyticsContent() {
                 />
                 <KpiCard
                   label="Average Z-Score"
-                  value={`${(benchmarkQuery.data.kpis?.avg_z_score ?? 0) > 0 ? '+' : ''}${benchmarkQuery.data.kpis?.avg_z_score != null ? benchmarkQuery.data.kpis.avg_z_score.toFixed(2) : '0.00'}`}
+                  value={
+                    benchmarkQuery.data.kpis?.avg_z_score == null
+                      ? '—'
+                      : `${benchmarkQuery.data.kpis.avg_z_score > 0 ? '+' : ''}${benchmarkQuery.data.kpis.avg_z_score.toFixed(2)}`
+                  }
                   delta={
                     benchmarkQuery.data.kpis?.z_score_delta != null
                       ? {

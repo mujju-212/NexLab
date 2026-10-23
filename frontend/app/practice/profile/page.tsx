@@ -814,11 +814,11 @@ export default function ProfilePage() {
                 </div>
                 <div className={styles.standingStatItem}>
                   <h4>Global Rank</h4>
-                  <p>#{analytics?.standing?.global_rank || 42}</p>
+                  <p>{analytics?.standing?.global_rank ? `#${analytics.standing.global_rank}` : '—'}</p>
                 </div>
                 <div className={styles.standingStatItem}>
                   <h4>Active Streak</h4>
-                  <p>{analytics?.standing?.streak_days || 6} days</p>
+                  <p>{analytics?.standing?.streak_days ?? 0} days</p>
                 </div>
               </div>
             </div>

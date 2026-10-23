@@ -2269,7 +2269,7 @@ function AcademicPageContent() {
                             <div className={styles.popoverItemText}>
                               <span className={styles.popoverItemTitle}>Section {s.name}</span>
                               <span className={styles.popoverItemMeta}>
-                                {s.students_count || 0} students &bull; Max {s.max_students || 60}
+                                {s.students_count || 0} students &bull; Max {s.max_students ?? 0}
                               </span>
                             </div>
                             {s.id === enrollSectionId && <Check size={14} className={styles.popoverCheck} />}
@@ -2399,7 +2399,7 @@ function AcademicPageContent() {
                                   </div>
                                 </div>
                               </td>
-                              <td style={{ fontSize: 12, fontWeight: 600 }}>{s.roll_number || 'NDU2024012'}</td>
+                              <td style={{ fontSize: 12, fontWeight: 600 }}>{s.roll_number || '—'}</td>
                               <td>
                                 <span className={isEnrolled ? styles.statusActive : styles.statusInactive}>
                                   <span className={isEnrolled ? styles.dotGreen : styles.dotGray} />

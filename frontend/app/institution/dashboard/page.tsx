@@ -251,13 +251,7 @@ export default function InstitutionDashboardPage() {
             </div>
 
             <div className={styles.systemStatusList}>
-              {(data?.system_status || [
-                { name: 'Platform Services', status: 'Operational', healthy: true },
-                { name: 'Database', status: 'Operational', healthy: true },
-                { name: 'Live Session Servers', status: 'Operational', healthy: true },
-                { name: 'Code Execution', status: 'Operational', healthy: true },
-                { name: 'AI Services', status: 'Operational', healthy: true },
-              ]).map(item => (
+              {(data?.system_status || []).map(item => (
                 <div key={item.name} className={styles.systemStatusRow}>
                   <div className={styles.systemStatusLeft}>
                     <CheckCircle2 size={16} className={styles.statusCheckIcon} />

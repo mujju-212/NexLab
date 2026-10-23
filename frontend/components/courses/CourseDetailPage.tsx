@@ -477,9 +477,9 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
                             ))}
                           </div>
                           <div className={styles.problemStatsRow}>
-                            <span>{ex.acceptance_rate || 70}% acceptance</span>
+                            <span>{ex.acceptance_rate ?? 0}% acceptance</span>
                             <span className={styles.problemStatSep}>•</span>
-                            <span>{ex.solves_display || `${ex.solves_count || 1200} solves`}</span>
+                            <span>{ex.solves_display || `${ex.solves_count ?? 0} solves`}</span>
                           </div>
                         </div>
                       </div>

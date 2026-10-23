@@ -399,8 +399,10 @@ export interface StudentSubjectGradeSummary {
   earned_score: number;
   total_possible_score: number;
   items: Array<{
-    experiment_id: string;
-    exp_number: number;
+    experiment_id: string | null;
+    exam_id?: string | null;
+    kind?: 'lab' | 'exam';
+    exp_number: number | null;
     title: string;
     delivery_mode: 'lab' | 'exam' | 'practice';
     weightage: number;

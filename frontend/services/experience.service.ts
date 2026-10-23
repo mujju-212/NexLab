@@ -149,6 +149,14 @@ export interface LiveState {
     lockdown_fullscreen: boolean; block_copy_paste: boolean; block_tab_switch: boolean;
     plagiarism_scan: boolean; focus_ml: boolean; webcam_required: boolean;
   };
+  /** True only when the behavioural focus pipeline is actually collecting. */
+  focus_ml_enabled?: boolean;
+  /** Newest-first proctor events for the live console. */
+  proctor_feed?: {
+    id: string; student_id: string; student_name: string;
+    event_type: string; severity: 'high' | 'medium' | 'low';
+    payload: Record<string, unknown>; recorded_at: string | null;
+  }[];
 }
 
 export interface ChatMessage {
@@ -421,19 +429,11 @@ export const experienceService = {
     return data;
   },
 
-  async analyticsConceptHeatmap(params?: Record<string, unknown>) {
-    const { data } = await apiClient.get<{
-      concepts: string[];
-      students: Array<{
-        student_id: string;
-        full_name: string;
-        roll_number: string | null;
-        scores: Record<string, number>;
-      }>;
-      matrix: Record<string, Record<string, number>>;
-    }>('/instructor/analytics/concept-heatmap', { params });
-    return data;
-  },
+  // NOTE: analyticsConceptHeatmap() was removed — it called
+  // GET /instructor/analytics/concept-heatmap, a route that was never
+  // implemented, and nothing referenced it. Concept mastery is served by
+  // getMasteryOverview() -> /instructor/analytics/mastery-overview, which
+  // returns the real heatmap columns/rows rendered in MasteryTab.
 
   /** Lightweight roster for the trajectory picker — avoids the heavy integrity endpoint */
   async analyticsRoster() {

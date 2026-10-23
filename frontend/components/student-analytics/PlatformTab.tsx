@@ -114,13 +114,13 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
     staleTime: 60 * 1000,
   });
 
-  // ── Fallback defaults matching exact screenshot mockup ─────────────────────
+  // Profile comes from the API; blank until it answers (no invented identity).
   const profile = dashboardData?.student_profile || {
-    id: 'student-aditi',
-    name: 'Aditi Rao',
-    department_year: 'CSE-A • 2nd Year',
-    avatar_url: '/avatars/aditi.jpg',
-    quote: 'Solve today, grow tomorrow.',
+    id: '',
+    name: '',
+    department_year: '',
+    avatar_url: '',
+    quote: '',
   };
 
   useEffect(() => {
@@ -153,72 +153,56 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
   }, [displayName]);
 
   const standing = dashboardData?.standing || {
-    rating: 1540,
-    rating_delta: 120,
-    sparkline_rating: [1380, 1400, 1420, 1450, 1470, 1500, 1540],
-    global_rank: 1284,
-    global_percentile: 93,
-    top_percent: 7,
-    level: 6,
-    level_name: 'Skilled',
-    current_xp: 2350,
-    next_level_xp: 3500,
-    streak_days: 12,
+    rating: 0,
+    rating_delta: 0,
+    sparkline_rating: [],
+    global_rank: 0,
+    global_percentile: 0,
+    top_percent: 0,
+    level: 0,
+    level_name: '—',
+    current_xp: 0,
+    next_level_xp: 0,
+    streak_days: 0,
     week_dots: [
-      { day: 'S', active: true },
-      { day: 'M', active: true },
-      { day: 'T', active: true },
-      { day: 'W', active: true },
-      { day: 'T', active: true },
-      { day: 'F', active: true },
+      { day: 'S', active: false },
+      { day: 'M', active: false },
+      { day: 'T', active: false },
+      { day: 'W', active: false },
+      { day: 'T', active: false },
+      { day: 'F', active: false },
       { day: 'S', active: false },
     ],
   };
 
-  const badges = dashboardData?.badges || [
-    { id: 'b1', title: '100 Solves', subtext: 'Bronze', type: 'count', color: '#f59e0b', bg: '#fef3c7', badge_text: '100' },
-    { id: 'b2', title: '7-Day Streak', subtext: 'Consistency', type: 'streak', color: '#3b82f6', bg: '#eff6ff', badge_text: '⚡' },
-    { id: 'b3', title: 'Arrays Master', subtext: 'Data Structures', type: 'topic', color: '#8b5cf6', bg: '#f5f3ff', badge_text: '📚' },
-    { id: 'b4', title: 'Problem Solver', subtext: 'Milestone', type: 'solver', color: '#10b981', bg: '#ecfdf5', badge_text: '🛡️' },
-  ];
+  // Badge catalogue comes from the backend (locked/unlocked), never invented.
+  const badges = dashboardData?.badges || [];
 
   const kpis = dashboardData?.kpi_metrics || {
     problems_solved: {
-      value: 142,
-      delta: '+28',
-      breakdown: { easy: 90, medium: 42, hard: 10 },
-      bars: [30, 45, 60, 50, 75, 85, 100],
+      value: 0,
+      delta: '0',
+      breakdown: { easy: 0, medium: 0, hard: 0 },
+      bars: [],
     },
-    acceptance_rate: {
-      value: 78,
-      delta: '+5%',
-      sparkline: [68, 70, 72, 71, 74, 76, 78],
-    },
-    avg_time: {
-      value: '12 min',
-      delta: '-18%',
-      sparkline: [18, 16, 17, 15, 14, 13, 12],
-    },
-    hints_used: {
-      value: 18,
-      delta: '-40%',
-      bars: [8, 12, 10, 6, 7, 5, 4],
-    },
+    acceptance_rate: { value: 0, delta: '0%', sparkline: [] },
+    avg_time: { value: '—', delta: '—', sparkline: [] },
+    hints_used: { value: 0, delta: '0', bars: [] },
   };
 
   const activityTrend = dashboardData?.activity_trend || {
-    weeks: ['W1', 'W2', 'W3', 'W4', 'W5', 'W6', 'W7', 'W8', 'W9', 'W10', 'W11', 'W12'],
-    problems_series: [8, 11, 14, 12, 15, 18, 20, 22, 25, 27, 30, 34],
-    xp_series: [250, 380, 550, 480, 680, 850, 980, 1150, 1350, 1500, 1750, 1980],
-    max_problems: 40,
-    max_xp: 2000,
+    weeks: [],
+    problems_series: [],
+    xp_series: [],
+    max_problems: 0,
+    max_xp: 0,
   };
 
   const difficultyDist = dashboardData?.difficulty_distribution || {
-    total: 142,
-    easy: { count: 90, pct: 63, color: '#10b981' },
-    medium: { count: 42, pct: 30, color: '#f59e0b' },
-    hard: { count: 10, pct: 7, color: '#ef4444' },
+    total: 0,
+    easy: { count: 0, pct: 0, color: '#10b981' },
+    medium: { count: 0, pct: 0, color: '#f59e0b' },
+    hard: { count: 0, pct: 0, color: '#ef4444' },
   };
 
   const topicPerf = dashboardData?.topic_performance || {
@@ -242,103 +226,16 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
     };
   }, [activityTrend, activityTrendWindow]);
 
-  const recentSubmissions = dashboardData?.recent_submissions || [
-    {
-      id: 'sub-1',
-      problem: 'Two Sum',
-      difficulty: 'Easy',
-      result: 'Accepted',
-      is_accepted: true,
-      time: '12 ms',
-      xp: '+10',
-      date: 'Oct 18, 2026',
-    },
-    {
-      id: 'sub-2',
-      problem: 'Binary Tree Traversal',
-      difficulty: 'Medium',
-      result: 'Accepted',
-      is_accepted: true,
-      time: '68 ms',
-      xp: '+25',
-      date: 'Oct 17, 2026',
-    },
-    {
-      id: 'sub-3',
-      problem: 'Longest Increasing Subsequence',
-      difficulty: 'Hard',
-      result: 'Wrong Answer',
-      is_accepted: false,
-      time: '—',
-      xp: '0',
-      date: 'Oct 16, 2026',
-    },
-    {
-      id: 'sub-4',
-      problem: 'Valid Parentheses',
-      difficulty: 'Easy',
-      result: 'Accepted',
-      is_accepted: true,
-      time: '20 ms',
-      xp: '+10',
-      date: 'Oct 15, 2026',
-    },
-    {
-      id: 'sub-5',
-      problem: 'Dijkstra’s Algorithm',
-      difficulty: 'Medium',
-      result: 'Accepted',
-      is_accepted: true,
-      time: '120 ms',
-      xp: '+25',
-      date: 'Oct 14, 2026',
-    },
-  ];
+  const recentSubmissions = dashboardData?.recent_submissions || [];
 
-  const nextUnlocks = dashboardData?.next_unlocks || [
-    {
-      id: 'unl-1',
-      title: 'Solve 15 more Medium problems',
-      current: 3,
-      target: 15,
-      pct: 20,
-      reward: 'Unlock Hard difficulty',
-      color: '#f59e0b',
-      icon_bg: '#fef3c7',
-    },
-    {
-      id: 'unl-2',
-      title: 'Reach 1,800 rating',
-      current: 1540,
-      target: 1800,
-      pct: 85,
-      reward: 'Unlock Advanced Contests',
-      color: '#7c3aed',
-      icon_bg: '#f5f3ff',
-    },
-    {
-      id: 'unl-3',
-      title: 'Maintain a 30-day streak',
-      current: 12,
-      target: 30,
-      pct: 40,
-      reward: 'Unlock Streak Badge',
-      color: '#0284c7',
-      icon_bg: '#e0f2fe',
-    },
-  ];
+  const nextUnlocks = dashboardData?.next_unlocks || [];
 
   const leaderboardEntries = useMemo(() => {
     if (dashboardData?.leaderboard?.entries?.length) {
       return dashboardData.leaderboard.entries;
     }
-    return [
-      { rank: 1, name: 'Aryan Mehta', initials: 'AM', rating: 2340, avatar_color: '#3b82f6', is_current_user: false },
-      { rank: 2, name: 'Riya Sharma', initials: 'RS', rating: 2210, avatar_color: '#ec4899', is_current_user: false },
-      { rank: 3, name: 'Karan Nair', initials: 'KN', rating: 1980, avatar_color: '#8b5cf6', is_current_user: false },
-      { rank: 4, name: 'You (Aditi Rao)', initials: 'AR', rating: 1540, avatar_color: '#7c3aed', is_current_user: true },
-      { rank: 5, name: 'Sneha Patel', initials: 'SP', rating: 1520, avatar_color: '#10b981', is_current_user: false },
-    ];
+    // No leaderboard rows from the API => show none (the UI renders an empty state).
+    return [];
   }, [dashboardData]);
 
   // Filter options
@@ -385,6 +282,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
       const y = height - ((val - min) / range) * (height - 4) - 2;
       return `${x},${y}`;
     });
+    if (!points || points.length < 2) return null;
     const pathD = `M ${points.join(' L ')}`;
     const areaD = `${pathD} L ${width},${height} L 0,${height} Z`;
 
@@ -427,7 +325,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
   const ringOffset = ringCircumference - (levelPct / 100) * ringCircumference;
 
   // Donut chart calculations for Difficulty Distribution
-  const totalSolved = difficultyDist.total || 142;
+  const totalSolved = difficultyDist.total || 0;
   const easyPct = difficultyDist.easy.pct;
   const medPct = difficultyDist.medium.pct;
   const hardPct = difficultyDist.hard.pct;
@@ -1528,7 +1426,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
                   <span style={{ fontWeight: 700, fontSize: '0.8rem', color: '#64748b' }}>250 Solves</span>
                   <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Silver Milestone</span>
                   <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '9999px', marginTop: '4px' }}>
-                    142/250 (56%)
+                    {kpis.problems_solved.value}/250 ({Math.min(100, Math.round((kpis.problems_solved.value / 250) * 100))}%)
                   </span>
                 </div>
                 <div className={styles.modalBadgeCard} style={{ opacity: 0.7, background: '#fafafa' }}>
@@ -1538,7 +1436,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
                   <span style={{ fontWeight: 700, fontSize: '0.8rem', color: '#64748b' }}>30-Day Streak</span>
                   <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Master of Habits</span>
                   <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '9999px', marginTop: '4px' }}>
-                    12/30 (40%)
+                    {standing.streak_days}/30 ({Math.min(100, Math.round((standing.streak_days / 30) * 100))}%)
                   </span>
                 </div>
                 <div className={styles.modalBadgeCard} style={{ opacity: 0.7, background: '#fafafa' }}>
@@ -1548,7 +1446,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
                   <span style={{ fontWeight: 700, fontSize: '0.8rem', color: '#64748b' }}>Contest Master</span>
                   <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Rating 1,800+</span>
                   <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '9999px', marginTop: '4px' }}>
-                    1,540/1,800
+                    {Math.round(standing.rating).toLocaleString()}/1,800
                   </span>
                 </div>
               </div>

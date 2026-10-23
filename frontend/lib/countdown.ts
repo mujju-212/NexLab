@@ -19,8 +19,14 @@ export function formatHMS(ms: number): string {
 export interface Countdown {
   remainingMs: number;
   label: string;       // mm:ss or hh:mm:ss
-  expired: boolean;    // remaining <= 0
+  /** True only once a valid target exists AND the time is up. A missing or
+   *  not-yet-loaded target is NOT "expired" — treating it as such caused the
+   *  exam page to auto-submit the moment it mounted, before `expires_at`
+   *  had arrived from the server. */
+  expired: boolean;
   warn: boolean;       // 0 < remaining < 5 min
+  /** A usable target has been supplied. */
+  ready: boolean;
 }
 
 /**
@@ -55,9 +61,14 @@ export function useServerCountdown(
   };
 
   const [remainingMs, setRemainingMs] = useState<number>(() => compute());
+  // Which target we have actually measured. Until the effect below has run for
+  // a target, `remainingMs` is meaningless (it starts at 0) — reporting
+  // "expired" in that window made the exam page auto-submit on mount.
+  const [armedFor, setArmedFor] = useState<string | null>(null);
 
   useEffect(() => {
     setRemainingMs(compute());
+    setArmedFor(targetIso ?? null);
     if (!targetIso) return;
     const timer = setInterval(() => {
       const r = compute();
@@ -68,10 +79,15 @@ export function useServerCountdown(
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [targetIso, serverNowIso]);
 
+  const ready = !!targetIso
+    && armedFor === targetIso
+    && !Number.isNaN(new Date(targetIso).getTime());
+
   return {
     remainingMs,
     label: formatHMS(remainingMs),
-    expired: remainingMs <= 0,
+    expired: ready && remainingMs <= 0,
     warn: remainingMs > 0 && remainingMs < 5 * 60 * 1000,
+    ready,
   };
 }

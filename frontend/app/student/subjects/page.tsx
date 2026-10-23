@@ -853,10 +853,10 @@ export default function StudentSubjectsPage() {
                         </thead>
                         <tbody>
                           {gradeSummary.items.map(item => (
-                            <tr key={item.experiment_id} style={{ borderBottom: '1px solid #f1f5f9' }}>
+                            <tr key={item.experiment_id || item.exam_id || item.title} style={{ borderBottom: '1px solid #f1f5f9' }}>
                               <td style={{ padding: '12px 14px' }}>
                                 <div style={{ fontWeight: 600, color: '#0f172a' }}>
-                                  #{item.exp_number} {item.title}
+                                  {item.exp_number != null ? `#${item.exp_number} ` : ''}{item.title}
                                 </div>
                                 <span style={{ fontSize: 11, color: '#94a3b8' }}>
                                   Weight: {item.weightage} pts (Scale: {item.grade_scale})

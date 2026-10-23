@@ -24,8 +24,15 @@ export const submissionService = {
     student_id: string;
     experiment_id: string;
     session_id?: string;
+    components?: Partial<Record<'test_cases' | 'lab_report' | 'code_quality' | 'viva' | 'quiz', number>>;
+    // Explicit "this component has been graded" ticks. An unticked component is
+    // excluded from the mark entirely instead of counting as a zero.
+    assessed?: Partial<Record<'test_cases' | 'lab_report' | 'code_quality' | 'viva' | 'quiz', boolean>>;
     manual_grade?: number | null;
     manual_feedback?: string;
+    // A grade the student has already viewed is locked server-side; an instructor
+    // correction must opt in explicitly (and is recorded as was_overridden).
+    force?: boolean;
   }) {
     const { data } = await apiClient.post('/instructor/grades', payload);
     return data;

@@ -44,6 +44,9 @@ export interface Exam {
   max_attempts: number;
   pass_threshold: number;
   shuffle_questions: boolean;
+  proctor_focus_enabled?: boolean;
+  proctor_lockdown_enabled?: boolean;
+  max_violations?: number;
   is_published: boolean;
   window_state: WindowState;
   question_count: number;
@@ -97,6 +100,17 @@ export interface StudentExamItem {
   has_in_progress: boolean;
 }
 
+export interface ProctorConfig {
+  focus_enabled: boolean;
+  lockdown_enabled: boolean;
+  max_violations: number;
+}
+
+export interface ViolationSummary {
+  total: number;
+  by_type: Record<string, number>;
+}
+
 export interface StartExamResponse {
   attempt: ExamAttempt;
   exam: Exam;
@@ -105,6 +119,8 @@ export interface StartExamResponse {
   expires_at: string;
   server_now: string;
   resumed: boolean;
+  proctor?: ProctorConfig;
+  violations?: ViolationSummary;
 }
 
 export interface ExamResultReviewItem {
@@ -131,6 +147,44 @@ export interface ExamResult {
   review: ExamResultReviewItem[];
 }
 
+export interface InstructorAnswerRow {
+  question_id: string;
+  prompt: string;
+  question_type: string | null;
+  options: string[];
+  student_answer: string | number | null;
+  student_answer_text: string | number | null;
+  correct_answer: string | number | null;
+  correct_answer_text: string | number | null;
+  is_correct: boolean | null;
+  earned: number | null;
+  points: number | null;
+  test_results?: Array<{ index: number; passed: boolean; hidden: boolean }> | null;
+}
+
+export interface ProctorViolationRow {
+  event_type: string;
+  severity: string | null;
+  payload: Record<string, unknown>;
+  recorded_at: string | null;
+}
+
+export interface InstructorStudentRow {
+  student_id: string;
+  student_name: string;
+  student_email: string;
+  attempts_count: number;
+  attempts_used: number;
+  best_score: number | null;
+  best_attempt_id: string | null;
+  best_passed: boolean;
+  latest_status: AttemptStatus;
+  latest_submitted_at: string | null;
+  violation_count: number;
+  best_violations: number;
+  attempts: InstructorAttemptRow[];
+}
+
 export interface InstructorAttemptRow {
   attempt_id: string;
   student_id: string;
@@ -141,6 +195,10 @@ export interface InstructorAttemptRow {
   total_points: number;
   max_points: number;
   passed: boolean;
+  answers?: InstructorAnswerRow[];
+  answered_count?: number;
+  violations?: ProctorViolationRow[];
+  violation_count?: number;
   started_at: string | null;
   submitted_at: string | null;
 }
@@ -156,6 +214,9 @@ export interface ExamCreatePayload {
   max_attempts?: number;
   pass_threshold?: number;
   shuffle_questions?: boolean;
+  proctor_focus_enabled?: boolean;
+  proctor_lockdown_enabled?: boolean;
+  max_violations?: number;
 }
 
 export type ExamUpdatePayload = Partial<ExamCreatePayload> & { is_published?: boolean };
@@ -258,6 +319,14 @@ export const examService = {
     return data.attempts;
   },
 
+  /** One row per student (best score), each expandable to its attempts. */
+  async getStudentResults(examId: string): Promise<InstructorStudentRow[]> {
+    const { data } = await apiClient.get<{ students: InstructorStudentRow[] }>(
+      `/instructor/exams/${examId}/attempts`
+    );
+    return data.students ?? [];
+  },
+
   // ══ Student ═════════════════════════════════════════════════════════════
   async listMyExams(): Promise<{ exams: StudentExamItem[]; server_now: string }> {
     const { data } = await apiClient.get<{ exams: StudentExamItem[]; server_now: string }>('/student/exams');
@@ -279,6 +348,28 @@ export const examService = {
 
   async saveAttempt(examId: string, attemptId: string, answers: Record<string, unknown>): Promise<void> {
     await apiClient.post(`/student/exams/${examId}/attempt/${attemptId}/save`, { answers });
+  },
+
+  // ── Proctoring (timed exams) ─────────────────────────────────────────────
+  // POST /api/student/exams/<exam_id>/attempt/<attempt_id>/violation
+  async recordViolation(
+    examId: string,
+    attemptId: string,
+    eventType: string,
+    detail?: string,
+    questionId?: string,
+  ): Promise<{
+    recorded: boolean;
+    violations: ViolationSummary;
+    max_violations: number;
+    remaining_before_auto_submit: number | null;
+    auto_submitted: boolean;
+  }> {
+    const { data } = await apiClient.post(
+      `/student/exams/${examId}/attempt/${attemptId}/violation`,
+      { event_type: eventType, detail, question_id: questionId, client_ts: new Date().toISOString() },
+    );
+    return data;
   },
 
   async submitAttempt(examId: string, attemptId: string, answers: Record<string, unknown>): Promise<{

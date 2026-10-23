@@ -6,6 +6,7 @@ import Image from 'next/image';
 import Link from 'next/link';
 import styles from './register.module.css';
 import { authService, type RegisterDto } from '@/services/auth.service';
+import { apiClient } from '@/services/api-client';
 import { useAuthStore } from '@/store/auth-store';
 import {
   Code2,
@@ -231,6 +232,35 @@ function RegisterPageInner() {
     }
   };
 
+
+  // Real platform counters for the hero stats bar (no invented marketing figures).
+  const [platformStats, setPlatformStats] = React.useState<{
+    active_students: number | null;
+    experiments: number | null;
+    institutions: number | null;
+  } | null>(null);
+
+  React.useEffect(() => {
+    let cancelled = false;
+    apiClient
+      .get('/platform/public-stats')
+      .then((r) => {
+        if (!cancelled) setPlatformStats(r.data);
+      })
+      .catch(() => {
+        if (!cancelled) setPlatformStats(null);
+      });
+    return () => {
+      cancelled = true;
+    };
+  }, []);
+
+  const statValue = (n: number | null | undefined) => {
+    if (n === null || n === undefined) return '—';
+    if (n >= 1000) return `${(n / 1000).toFixed(n >= 10000 ? 0 : 1)}K+`;
+    return `${n}`;
+  };
+
   return (
     <div className={styles.stage}>
       {/* Background ambient lighting */}
@@ -371,17 +401,17 @@ function RegisterPageInner() {
           {/* 5. Bottom Metrics Stats Bar */}
           <div className={styles.statsRow}>
             <div className={styles.statItem}>
-              <span className={styles.statValue}>10K+</span>
+              <span className={styles.statValue}>{statValue(platformStats?.active_students)}</span>
               <span className={styles.statLabel}>Active Students</span>
             </div>
             <div className={styles.statDivider} />
             <div className={styles.statItem}>
-              <span className={styles.statValue}>200+</span>
+              <span className={styles.statValue}>{statValue(platformStats?.experiments)}</span>
               <span className={styles.statLabel}>Experiments</span>
             </div>
             <div className={styles.statDivider} />
             <div className={styles.statItem}>
-              <span className={styles.statValue}>50+</span>
+              <span className={styles.statValue}>{statValue(platformStats?.institutions)}</span>
               <span className={styles.statLabel}>Institutions</span>
             </div>
             <div className={styles.statDivider} />

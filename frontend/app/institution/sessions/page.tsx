@@ -1172,7 +1172,7 @@ function SessionsPageContent() {
     const todayKey = dayKey(calSelectedDate);
     const todaySessions = filteredCalSessions.filter(s => dayKey(new Date(s.scheduled_at)) === todayKey);
     const uniqueInstructors = new Set(todaySessions.map(s => s.instructor_id || s.instructor_name).filter(Boolean)).size;
-    const totalStudents = todaySessions.reduce((acc, s) => acc + (s.students_total_count || s.student_count || 38), 0);
+    const totalStudents = todaySessions.reduce((acc, s) => acc + (s.students_total_count || s.student_count || 0), 0);
 
     // Check conflict overlaps
     let conflicts = 0;
@@ -1193,9 +1193,9 @@ function SessionsPageContent() {
     }
 
     return {
-      totalSessions: todaySessions.length || 4,
-      instructors: uniqueInstructors || 3,
-      totalStudents: totalStudents || 152,
+      totalSessions: todaySessions.length,
+      instructors: uniqueInstructors,
+      totalStudents,
       conflicts,
     };
   }, [filteredCalSessions, calSelectedDate]);
@@ -1339,9 +1339,9 @@ function SessionsPageContent() {
       );
       if (data && data.sessions) {
         setHistorySessions(data.sessions);
-        setHistoryTotal(data.total || 128);
+        setHistoryTotal(data.total || 0);
         setHistoryPage(data.page || 1);
-        setHistoryPages(data.pages || 18);
+        setHistoryPages(data.pages || 0);
         if (data.stats) setHistoryStats(data.stats);
         if (data.sessions.length > 0) {
           setHistorySelectedSession(prev => prev ? (data.sessions.find((x: any) => x.id === prev.id) || data.sessions[0]) : data.sessions[0]);
@@ -1368,8 +1368,8 @@ function SessionsPageContent() {
       Subject: s.subject_code || s.subject_name || '',
       Section: s.section_name || '',
       Instructor: s.instructor_name || '',
-      DurationMinutes: s.duration_minutes || 120,
-      Attendance: `${s.attendance_attended || 0}/${s.attendance_total || 30}`,
+      DurationMinutes: s.duration_minutes || 0,
+      Attendance: `${s.attendance_attended || 0}/${s.attendance_total || 0}`,
       AttendancePercent: `${s.attendance_percent || 0}%`,
       Status: s.status,
       Room: s.room || '',
@@ -2214,7 +2214,9 @@ function SessionsPageContent() {
                 </div>
                 <div className={liveStyles.kpiContent}>
                   <span className={liveStyles.kpiValue}>
-                    {liveSummary?.total_duration_today_hours != null ? `${liveSummary.total_duration_today_hours} hrs` : '4.5 hrs'}
+                    {liveSummary?.total_duration_today_hours != null
+                      ? `${liveSummary.total_duration_today_hours} hrs`
+                      : '—'}
                   </span>
                   <span className={liveStyles.kpiLabel}>Total Live Duration</span>
                   <span className={liveStyles.kpiSubtext}>Today</span>

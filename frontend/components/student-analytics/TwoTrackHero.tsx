@@ -61,10 +61,12 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
 
   // Institution Rank
   const instRank = academic?.ranks?.institution;
-  const rankPos = instRank?.position ?? academic?.ranks?.section?.position ?? 1;
-  const cohortSize = instRank?.cohort_size ?? academic?.ranks?.section?.cohort_size ?? 1;
-  const rankPercentile = instRank?.percentile ?? 95;
-  const topPct = Math.max(1, 100 - rankPercentile);
+  // No invented #1 and no invented 95th percentile: an unranked student simply
+  // shows no rank and no percentile claim.
+  const rankPos = instRank?.position ?? academic?.ranks?.section?.position ?? null;
+  const cohortSize = instRank?.cohort_size ?? academic?.ranks?.section?.cohort_size ?? null;
+  const rankPercentile = instRank?.percentile ?? academic?.ranks?.section?.percentile ?? null;
+  const topPct = rankPercentile == null ? null : Math.max(1, 100 - Math.round(rankPercentile));
 
   const initials = studentName
     ? studentName
@@ -143,8 +145,10 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
             {/* Rank */}
             <div>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: '0.4rem' }}>
-                <div className={styles.bigStat}>#{rankPos}</div>
-                <div style={{ fontSize: '0.85rem', color: '#64748b' }}>/ {cohortSize}</div>
+                <div className={styles.bigStat}>{rankPos ? `#${rankPos}` : '—'}</div>
+                <div style={{ fontSize: '0.85rem', color: '#64748b' }}>
+                  {rankPos && cohortSize ? `/ ${cohortSize}` : ''}
+                </div>
               </div>
               <div className={styles.statLabel}>
                 Institution Rank (top {topPct}%)
@@ -176,13 +180,26 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
 
           <div className={styles.pillsRow}>
             <span className={styles.metaBadge}>
-              <ArrowUp size={11} color="#15803d" /> Top {topPct}% in Institution
+              <ArrowUp size={11} color="#15803d" />{' '}
+              {topPct != null && (cohortSize ?? 0) >= 5
+                ? `Top ${topPct}% in Institution`
+                : (cohortSize ?? 0) < 2
+                ? 'Only student in cohort'
+                : 'Cohort too small for a percentile'}
             </span>
             <span className={styles.metaBadge}>
-              Attendance: <strong>{academic?.attendance?.attendance_rate ?? 100}%</strong>
+              Attendance:{' '}
+              <strong>
+                {academic?.attendance?.attendance_rate == null
+                  ? '—'
+                  : `${academic.attendance.attendance_rate}%`}
+              </strong>
             </span>
             <span className={styles.metaBadge}>
-              Mastery Score: <strong>{academic?.mastery?.scope_avg ?? 0}%</strong>
+              Mastery Score:{' '}
+              <strong>
+                {academic?.mastery?.scope_avg == null ? '—' : `${academic.mastery.scope_avg}%`}
+              </strong>
             </span>
           </div>
         </div>
@@ -203,11 +220,13 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
             {/* Rating & Global Standing */}
             <div>
               <div className={styles.bigStat} style={{ color: '#047857' }}>
-                {platform?.rating ? Math.round(platform.rating).toLocaleString() : '0'}
+                {platform?.rating ? Math.round(platform.rating).toLocaleString() : '—'}
               </div>
               <div className={styles.statLabel}>
                 Rating · Global #{platform?.global_rank ?? '—'} (top{' '}
-                {platform?.global_percentile != null ? Math.max(1, 100 - Math.round(platform.global_percentile)) : '10'}%)
+                {platform?.global_percentile != null
+                  ? `${Math.max(1, 100 - Math.round(platform.global_percentile))}%`
+                  : '—'})
               </div>
             </div>
 
