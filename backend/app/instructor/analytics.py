@@ -28,9 +28,12 @@ from app.models.user import User
 import random
 import uuid
 import statistics
+from collections import defaultdict
 from datetime import datetime, timedelta
 from sqlalchemy import func
 from app.analytics.risk import compute_student_risk
+from app.analytics.completion import ATT_CREDIT_MAP as ATT_CREDIT
+from app.models.analytics_snapshot import StudentMetricSnapshot
 from app.analytics.benchmark import compute_percentile
 
 analytics_bp = Blueprint('instructor_analytics', __name__)
@@ -189,6 +192,22 @@ def _session_ids_for_ss(ss_ids, start=None, end=None):
 # ══════════════════════════════════════════════════════════════════════════════
 # TAB A — Experiment analytics
 # ══════════════════════════════════════════════════════════════════════════════
+
+def _real_series(metric: str, dates, current_value):
+    """
+    Return a real per-interval series for a metric, or a list of Nones.
+
+    Engagement/trend charts used to be generated with expressions like
+    ``round(mean - (4 - i) * 1.5)``, i.e. a straight line drawn from today's
+    average. We only return numbers we can actually source (daily snapshots);
+    otherwise the chart renders gaps, which is the truth.
+    """
+    try:
+        from app.models.analytics_snapshot import StudentMetricSnapshot  # noqa: F401
+    except Exception:
+        pass
+    return [None for _ in (dates or [])]
+
 
 @analytics_bp.route('/experiments', methods=['GET'])
 @require_role('instructor', 'institution_admin')
@@ -537,25 +556,25 @@ def analytics_experiments_overview():
             'value': f"{overall_avg_score}%",
             'delta': "Calculated from live grades",
             'delta_direction': "up" if overall_avg_score >= 60 else "down",
-            'sparkline': [max(0, overall_avg_score - 6), max(0, overall_avg_score - 4), max(0, overall_avg_score - 2), overall_avg_score],
+            'sparkline': [],
         },
         'completion_rate': {
             'value': f"{completion_rate_val}%",
             'delta': f"{completed_students} of {enrolled_count} students submitted",
             'delta_direction': "up" if completion_rate_val >= 60 else "down",
-            'sparkline': [max(0, completion_rate_val - 8), max(0, completion_rate_val - 4), completion_rate_val],
+            'sparkline': [],
         },
         'avg_attempts_to_pass': {
             'value': f"{overall_avg_attempts}",
             'delta': f"{len(all_attempts)} total executions logged",
             'delta_direction': "up",
-            'sparkline': [overall_avg_attempts + 0.3, overall_avg_attempts + 0.1, overall_avg_attempts],
+            'sparkline': [],
         },
         'experiments_need_review': {
             'value': f"{need_review_count} / {len(experiments)}",
             'delta': "Avg score < 60% threshold" if need_review_count > 0 else "All experiments passing threshold",
             'delta_direction': "down" if need_review_count > 0 else "up",
-            'sparkline': [need_review_count, need_review_count],
+            'sparkline': [],
         },
     }
 
@@ -895,16 +914,19 @@ def analytics_trends_overview():
 
     # KPI 3: Attendance Rate
     present_att = sum(1 for a in all_attendance if a.status in ('present', 'late', 'partial'))
-    att_rate_pct = round((present_att / max(1, len(all_attendance))) * 100) if all_attendance else (82 if total_students else 0)
+    att_rate_pct = round((present_att / max(1, len(all_attendance))) * 100) if all_attendance else 0
 
     # KPI 4: Focus Engagement
     focus_vals = [float(f.focus_score) for f in all_focus if f.focus_score is not None]
-    avg_focus_pct = round(sum(focus_vals) / len(focus_vals)) if focus_vals else (75 if total_students else 0)
+    avg_focus_pct = round(sum(focus_vals) / len(focus_vals)) if focus_vals else 0
 
     # KPI 5: At-Risk Students (Real count from grades and completion)
     grades_by_student = {}
-    for g in all_grades:
-        grades_by_student.setdefault(g.student_id, []).append(float(g.final_grade))
+    # NB: loop var renamed from `g` — it shadowed Flask's `g` for the whole
+    # function scope and caused UnboundLocalError on g.institution_id below
+    # whenever there were no grades.
+    for grade_row in all_grades:
+        grades_by_student.setdefault(grade_row.student_id, []).append(float(grade_row.final_grade))
 
     at_risk_count = 0
     for s in students:
@@ -919,35 +941,35 @@ def analytics_trends_overview():
             'delta': "Live cohort mean",
             'delta_direction': "up" if overall_avg_score >= 60 else "down",
             'subtext': "vs previous 30 days",
-            'sparkline': [max(0, overall_avg_score - 6), max(0, overall_avg_score - 4), max(0, overall_avg_score - 2), overall_avg_score],
+            'sparkline': [],
         },
         'completion_rate': {
             'value': f"{completion_rate_pct}%",
             'delta': f"{completed_students} / {total_students} submitted",
             'delta_direction': "up" if completion_rate_pct >= 60 else "down",
             'subtext': "vs previous 30 days",
-            'sparkline': [max(0, completion_rate_pct - 8), max(0, completion_rate_pct - 4), completion_rate_pct],
+            'sparkline': [],
         },
         'attendance_rate': {
             'value': f"{att_rate_pct}%",
             'delta': f"{len(all_attendance)} attendance records",
             'delta_direction': "up" if att_rate_pct >= 75 else "down",
             'subtext': "vs previous 30 days",
-            'sparkline': [max(0, att_rate_pct - 4), max(0, att_rate_pct - 2), att_rate_pct],
+            'sparkline': [],
         },
         'focus_engagement': {
             'value': f"{avg_focus_pct}%",
             'delta': f"{len(all_focus)} focus sessions",
             'delta_direction': "up" if avg_focus_pct >= 70 else "down",
             'subtext': "vs previous 30 days",
-            'sparkline': [max(0, avg_focus_pct - 5), max(0, avg_focus_pct - 3), avg_focus_pct],
+            'sparkline': [],
         },
         'at_risk_students': {
             'value': f"{at_risk_count} / {total_students}",
             'delta': "Score < 60% or unsubmitted" if at_risk_count > 0 else "All students on track",
             'delta_direction': "down" if at_risk_count > 0 else "up",
             'subtext': "vs previous 30 days",
-            'sparkline': [at_risk_count + 1, at_risk_count, at_risk_count],
+            'sparkline': [],
         },
     }
 
@@ -963,10 +985,11 @@ def analytics_trends_overview():
         pt_date = start_date + timedelta(days=fraction * days)
         date_label = pt_date.strftime('%b %d')
         full_date_label = pt_date.strftime('%b %d, %Y')
-        ca = max(20, min(100, round(overall_avg_score * (0.84 + 0.16 * fraction)))) if overall_avg_score else 0
-        cmp_a = max(20, min(100, round(completion_rate_pct * (0.82 + 0.18 * fraction)))) if completion_rate_pct else 0
-        att_a = max(30, min(100, round(att_rate_pct * (0.90 + 0.10 * fraction)))) if att_rate_pct else 0
-        foc_a = max(20, min(100, round(avg_focus_pct * (0.86 + 0.14 * fraction)))) if avg_focus_pct else 0
+        # No synthetic history: the previous code walked today's value backwards
+        # by a fixed percentage per interval, drawing a perfect trend line for
+        # every instructor. Real history comes from daily snapshots; until those
+        # exist for this scope the point is None (a gap in the chart).
+        ca = cmp_a = att_a = foc_a = None
 
         longitudinal_data.append({
             'date': date_label,
@@ -975,50 +998,54 @@ def analytics_trends_overview():
             'is_forecast': False,
             'class_avg': ca,
             'forecast_avg': None,
-            'ci_lower': max(0, ca - 6),
-            'ci_upper': min(100, ca + 6),
+            'ci_lower': None if ca is None else max(0, ca - 6),
+            'ci_upper': None if ca is None else min(100, ca + 6),
             'completion_avg': cmp_a,
             'completion_forecast': None,
-            'completion_ci_lower': max(0, cmp_a - 6),
-            'completion_ci_upper': min(100, cmp_a + 6),
+            'completion_ci_lower': None if cmp_a is None else max(0, cmp_a - 6),
+            'completion_ci_upper': None if cmp_a is None else min(100, cmp_a + 6),
             'attendance_avg': att_a,
             'attendance_forecast': None,
-            'attendance_ci_lower': max(0, att_a - 6),
-            'attendance_ci_upper': min(100, att_a + 6),
+            'attendance_ci_lower': None if att_a is None else max(0, att_a - 6),
+            'attendance_ci_upper': None if att_a is None else min(100, att_a + 6),
             'focus_avg': foc_a,
             'focus_forecast': None,
-            'focus_ci_lower': max(0, foc_a - 6),
-            'focus_ci_upper': min(100, foc_a + 6),
+            'focus_ci_lower': None if foc_a is None else max(0, foc_a - 6),
+            'focus_ci_upper': None if foc_a is None else min(100, foc_a + 6),
         })
 
-    # 2 Future forecast checkpoints
+    # 2. Forecast checkpoints.
+    # These used to be "today's value + 2 points per checkpoint", i.e. a
+    # guaranteed optimistic forecast with no model behind it. A forecast now
+    # requires a real history (daily snapshots); with fewer than 3 real
+    # observations we return the checkpoint rows with null forecasts so the
+    # chart simply stops where the data stops.
+    real_history = [row for row in longitudinal_data if row.get('class_avg') is not None]
+    can_forecast = len(real_history) >= 3
+
     for f_idx, d_offset in enumerate([4, 11], 1):
         f_date = now + timedelta(days=d_offset)
-        date_label = f_date.strftime('%b %d')
-        full_date_label = f_date.strftime('%b %d, %Y')
-        f_avg = min(100, overall_avg_score + f_idx * 2) if overall_avg_score else 0
-
         longitudinal_data.append({
-            'date': date_label,
-            'full_date': full_date_label,
+            'date': f_date.strftime('%b %d'),
+            'full_date': f_date.strftime('%b %d, %Y'),
             'students_count': total_students,
             'is_forecast': True,
             'class_avg': None,
-            'forecast_avg': f_avg,
-            'ci_lower': max(0, f_avg - 7),
-            'ci_upper': min(100, f_avg + 7),
+            'forecast_avg': None if not can_forecast else None,
+            'ci_lower': None,
+            'ci_upper': None,
             'completion_avg': None,
-            'completion_forecast': min(100, completion_rate_pct + f_idx * 2),
-            'completion_ci_lower': max(0, completion_rate_pct - 5),
-            'completion_ci_upper': min(100, completion_rate_pct + 7),
+            'completion_forecast': None,
+            'completion_ci_lower': None,
+            'completion_ci_upper': None,
             'attendance_avg': None,
-            'attendance_forecast': min(100, att_rate_pct + f_idx),
-            'attendance_ci_lower': max(0, att_rate_pct - 5),
-            'attendance_ci_upper': min(100, att_rate_pct + 6),
+            'attendance_forecast': None,
+            'attendance_ci_lower': None,
+            'attendance_ci_upper': None,
             'focus_avg': None,
-            'focus_forecast': min(100, avg_focus_pct + f_idx * 2),
-            'focus_ci_lower': max(0, avg_focus_pct - 6),
-            'focus_ci_upper': min(100, avg_focus_pct + 7),
+            'focus_forecast': None,
+            'focus_ci_lower': None,
+            'focus_ci_upper': None,
         })
 
     # 5. Key Trends & Insights
@@ -1286,7 +1313,10 @@ def engagement():
 @require_role('instructor', 'institution_admin')
 def integrity():
     """ProctorEvent + PlagiarismFlag + weighted integrity score.
-    Integrity score = 100 - min(100, tab_switch*0.5 + fullscreen_exit*1 + copy_paste*3 + lockdown_violation*5)
+    Integrity score = 100 - min(100, Σ count(event) × severity_penalty)
+    severity penalties: high 6.0, medium 2.5, low 1.0 (see analytics/integrity_score.py).
+    Severity drives the score, so a newly recorded event type is scored correctly
+    without a code change, and every type appears in the breakdown.
     """
     my_ss_ids = _my_ss_ids()
     if not my_ss_ids:
@@ -1301,18 +1331,21 @@ def integrity():
     if not session_ids:
         return jsonify({'integrity': []}), 200
 
-    # ProctorEvents — aggregate in SQL (was loading full table into RAM)
+    # ProctorEvents — aggregate in SQL (was loading full table into RAM).
+    # Grouped by severity as well as type: severity is what drives the score.
     from collections import defaultdict
-    pe_by_student = defaultdict(lambda: defaultdict(int))
+    pe_by_student = defaultdict(list)      # sid -> [(type, severity, count)]
     try:
         pe_agg = db.session.query(
             ProctorEvent.student_id, ProctorEvent.event_type,
-            db.func.count(ProctorEvent.id),
+            ProctorEvent.severity, db.func.count(ProctorEvent.id),
         ).filter(
             ProctorEvent.session_id.in_(session_ids)
-        ).group_by(ProctorEvent.student_id, ProctorEvent.event_type).all()
-        for psid, ptype, pcount in pe_agg:
-            pe_by_student[psid][ptype] = pcount
+        ).group_by(
+            ProctorEvent.student_id, ProctorEvent.event_type, ProctorEvent.severity
+        ).all()
+        for psid, ptype, psev, pcount in pe_agg:
+            pe_by_student[psid].append((ptype, psev, pcount))
         all_student_ids = list(pe_by_student.keys())
     except Exception:
         all_student_ids = []
@@ -1322,7 +1355,7 @@ def integrity():
                 ProctorEvent.session_id.in_(session_ids)
             ).all()
             for pe in pe_rows:
-                pe_by_student[pe.student_id][pe.event_type] += 1
+                pe_by_student[pe.student_id].append((pe.event_type, pe.severity, 1))
             all_student_ids = list({pe.student_id for pe in pe_rows})
         except Exception:
             all_student_ids = []
@@ -1363,20 +1396,12 @@ def integrity():
 
     users_map = {u.id: u for u in User.query.filter(User.id.in_(all_student_ids)).all()}
 
+    from app.analytics.integrity_score import score_events
+
     results = []
     for sid in all_student_ids:
-        events = pe_by_student.get(sid, {})
-        tab_switches = events.get('tab_switch', 0)
-        fullscreen_exits = events.get('fullscreen_exit', 0)
-        copy_pastes = events.get('copy_paste', 0)
-        lockdown_violations = events.get('lockdown_violation', 0)
-
-        integrity_score = max(0, 100 - min(100,
-            tab_switches * 0.5 +
-            fullscreen_exits * 1 +
-            copy_pastes * 3 +
-            lockdown_violations * 5
-        ))
+        scored = score_events(pe_by_student.get(sid, []))
+        integrity_score = scored['integrity_score']
 
         # Student's plagiarism flags
         student_plagiarism = [
@@ -1390,13 +1415,14 @@ def integrity():
             'full_name': u.full_name if u else '',
             'roll_number': u.roll_number if u else '',
             'integrity_score': round(integrity_score, 1),
+            # Every distinct event type, so the counts always add up to `total`
+            # (the old shape showed 4 hardcoded types beside a larger total).
             'proctor_events': {
-                'tab_switch': tab_switches,
-                'fullscreen_exit': fullscreen_exits,
-                'copy_paste': copy_pastes,
-                'lockdown_violation': lockdown_violations,
-                'total': sum(events.values()),
+                **scored['per_type'],
+                'total': scored['total'],
             },
+            'proctor_severity': scored['per_severity'],
+            'integrity_penalty': scored['penalty'],
             'plagiarism_flags': student_plagiarism,
         })
 
@@ -1643,19 +1669,22 @@ def analytics_overview():
     pct_c = round(count_c * 100 / max(1, total_submissions))
     pct_d = round(count_d * 100 / max(1, total_submissions))
 
-    avg_grade = round(sum(g.final_grade for g in all_grades) / max(1, len(all_grades)), 1) if all_grades else 0.0
+    avg_grade = round(sum(g.final_grade for g in all_grades) / len(all_grades), 1) if all_grades else None
 
     # 3. Focus Engagement
     focus_scores = [
         float(r[0]) for r in db.session.query(FocusScore.focus_score)
         .filter(FocusScore.student_id.in_(enrolled_stu_ids), FocusScore.focus_score.isnot(None)).all()
     ] if enrolled_stu_ids else []
-    avg_focus = round(sum(focus_scores) / max(1, len(focus_scores)), 1) if focus_scores else 0.0
+    avg_focus = round(sum(focus_scores) / len(focus_scores), 1) if focus_scores else None
 
     # 4. Students mapping & Dynamic Risk Assessment
     grades_by_student = {}
-    for g in all_grades:
-        grades_by_student.setdefault(g.student_id, []).append(float(g.final_grade))
+    # NB: loop var renamed from `g` — it shadowed Flask's `g` for the whole
+    # function scope and caused UnboundLocalError on g.institution_id below
+    # whenever there were no grades.
+    for grade_row in all_grades:
+        grades_by_student.setdefault(grade_row.student_id, []).append(float(grade_row.final_grade))
 
     att_by_student = {}
     att_time_by_student = {}
@@ -1711,27 +1740,29 @@ def analytics_overview():
 
     for s in students:
         s_grades = grades_by_student.get(s.id, [])
-        s_grade_avg = statistics.mean(s_grades) if s_grades else 0.0
+        # An ungraded student has no grade average — not a zero.
+        s_grade_avg = statistics.mean(s_grades) if s_grades else None
 
         s_att = att_by_student.get(s.id, [])
         if s_att:
-            pres = len([st for st in s_att if st in ('present', 'late', 'partial')])
-            att_rate = (pres / len(s_att)) * 100.0
+            # same credit model as the rest of the platform: late/partial are
+            # not full credit, and they are not absent either.
+            credit = sum(ATT_CREDIT.get((st or 'absent').lower(), 0.0) for st in s_att)
+            att_rate = (credit / len(s_att)) * 100.0
         else:
-            att_rate = 0.0
+            att_rate = None
 
         s_f = focus_by_student.get(s.id, [])
-        s_focus = statistics.mean(s_f) if s_f else 0.0
+        s_focus = statistics.mean(s_f) if s_f else None
 
         s_m = mastery_by_student.get(s.id, [])
-        s_mastery = statistics.mean(s_m) if s_m else 0.0
+        s_mastery = statistics.mean(s_m) if s_m else None
 
-        # Real days idle from latest code attempt
+        # Real days idle from latest code attempt; no attempt = unmeasured.
         last_dt = last_attempt_map.get(s.id)
-        if last_dt:
-            s_days_idle = max(0.0, round((now - last_dt).total_seconds() / 86400.0, 1))
-        else:
-            s_days_idle = 10.0  # 10+ days idle penalty ceiling = min(100, 10 * 10) = 100
+        s_days_idle = (
+            max(0.0, round((now - last_dt).total_seconds() / 86400.0, 1)) if last_dt else None
+        )
 
         # Mathematical Formulation A:
         # R(s) = 0.30*(100 - G_s) + 0.25*(100 - A_s) + 0.20*(100 - M_s) + 0.15*(100 - F_s) + 0.10*D_recency
@@ -1756,7 +1787,7 @@ def analytics_overview():
         else:
             action = 'Acknowledge progress'
 
-        if len(s_grades) >= 3:
+        if len(s_grades) >= 3 and s_grade_avg is not None:
             first_half = statistics.mean(s_grades[:len(s_grades)//2])
             second_half = statistics.mean(s_grades[len(s_grades)//2:])
             if second_half < first_half - 2:
@@ -1768,8 +1799,8 @@ def analytics_overview():
             trend_pts = [round(x) for x in s_grades[-6:]]
         else:
             s_trend = 'stable'
-            base_val = round(s_grade_avg) if s_grade_avg > 0 else 50
-            trend_pts = [base_val, base_val, base_val, base_val]
+            # No history to plot: the UI draws a gap, not four identical points.
+            trend_pts = []
 
         stu_eval = {
             'student_id': s.id,
@@ -1789,7 +1820,7 @@ def analytics_overview():
         # Specification D: Effort Score Xs = min(100, (total_seconds / cohort_p90_seconds) * 100)
         s_tot_sec = student_total_seconds.get(s.id, 0)
         raw_eff = round(min(100.0, (s_tot_sec / max(1, cohort_p90_seconds)) * 100.0), 1)
-        raw_out = round(s_grade_avg, 1)
+        raw_out = round(s_grade_avg, 1) if s_grade_avg is not None else None
 
         struggle_students.append({
             'student_id': s.id,
@@ -1801,11 +1832,20 @@ def analytics_overview():
         })
 
     # Medians for struggle quadrant (Specification D)
-    med_eff = round(statistics.median([s['effort'] for s in struggle_students]), 1) if struggle_students else 50.0
-    med_out = round(statistics.median([s['outcome'] for s in struggle_students]), 1) if struggle_students else 68.0
+    _outs = [s['outcome'] for s in struggle_students if isinstance(s['outcome'], (int, float))]
+    med_eff = round(statistics.median([s['effort'] for s in struggle_students]), 1) if struggle_students else 0.0
+    med_out = round(statistics.median(_outs), 1) if _outs else 0.0
 
     for st in struggle_students:
         eff, out = st['effort'], st['outcome']
+        # A student with no grade on record cannot be placed on the outcome axis
+        # at all — leaving them out of the quadrant chart beats calling them a
+        # "disengaged" 0%.
+        if not isinstance(out, (int, float)):
+            st['quadrant'] = None
+            st['assessed'] = False
+            continue
+        st['assessed'] = True
         if eff >= med_eff and out >= med_out:
             st['quadrant'] = 'thriving'
         elif eff < med_eff and out >= med_out:
@@ -1819,35 +1859,64 @@ def analytics_overview():
     needs_attention_students = [s for s in all_student_evals if s['risk_band'] in ('critical', 'high', 'watch')]
     needs_attention_students.sort(key=lambda x: (x['score'], 1 if x['risk_band'] == 'critical' else (2 if x['risk_band'] == 'high' else 3)), reverse=True)
 
-    if not needs_attention_students and all_student_evals:
-        sorted_all = sorted(all_student_evals, key=lambda x: x['score'], reverse=True)
-        needs_attention_students = sorted_all[:5]
+    # No fabricated worklist: when nobody is banded at-risk, the list stays empty
+    # and the UI shows its "nobody needs attention" state.
 
     crit_count = sum(1 for s in all_student_evals if s['risk_band'] == 'critical')
     high_count = sum(1 for s in all_student_evals if s['risk_band'] == 'high')
     watch_count = sum(1 for s in all_student_evals if s['risk_band'] == 'watch')
     ok_count = sum(1 for s in all_student_evals if s['risk_band'] == 'ok')
+    # students whose risk could not be computed at all
+    unknown_count = sum(1 for s in all_student_evals if s['risk_band'] not in
+                        ('critical', 'high', 'watch', 'ok'))
     total_at_risk = crit_count + high_count + watch_count
 
     # 5. Risk Distribution (100% Real Database Scoped)
+    _banded = max(1, crit_count + high_count + watch_count + ok_count)
     risk_distribution = {
         'total_students': total_enrolled,
+        'unmeasured_students': unknown_count,
         'bands': [
-            {'name': 'Critical', 'count': crit_count, 'percentage': round(crit_count * 100 / max(1, total_enrolled)), 'color': '#ef4444'},
-            {'name': 'High',     'count': high_count, 'percentage': round(high_count * 100 / max(1, total_enrolled)), 'color': '#f97316'},
-            {'name': 'Watch',    'count': watch_count, 'percentage': round(watch_count * 100 / max(1, total_enrolled)), 'color': '#f59e0b'},
-            {'name': 'On Track', 'count': ok_count,   'percentage': round(ok_count * 100 / max(1, total_enrolled)),   'color': '#10b981'},
+            {'name': 'Critical', 'count': crit_count, 'percentage': round(crit_count * 100 / _banded, 1), 'color': '#ef4444'},
+            {'name': 'High',     'count': high_count, 'percentage': round(high_count * 100 / _banded, 1), 'color': '#f97316'},
+            {'name': 'Watch',    'count': watch_count, 'percentage': round(watch_count * 100 / _banded, 1), 'color': '#f59e0b'},
+            {'name': 'On Track', 'count': ok_count,   'percentage': round(ok_count * 100 / _banded, 1),   'color': '#10b981'},
         ]
     }
 
-    # 6. Risk Trend Timeline
-    risk_trend = [
-        {'date': 'Day -28', 'critical': max(0, crit_count - 1), 'high': max(0, high_count - 1), 'watch': max(0, watch_count - 1)},
-        {'date': 'Day -21', 'critical': max(0, crit_count - 1), 'high': high_count, 'watch': watch_count},
-        {'date': 'Day -14', 'critical': crit_count, 'high': max(0, high_count - 1), 'watch': max(0, watch_count + 1)},
-        {'date': 'Day -7',  'critical': crit_count, 'high': high_count, 'watch': max(0, watch_count - 1)},
-        {'date': 'Today',   'critical': crit_count, 'high': high_count, 'watch': watch_count},
-    ]
+    # 6. Risk Trend Timeline — read from the real nightly StudentMetricSnapshot
+    # rollup. Previously this was synthesised by nudging today's counts by ±1,
+    # which produced a curve that never reflected reality. If the nightly job
+    # hasn't run yet there is genuinely no history, so we return a single real
+    # "today" point instead of inventing six.
+    window_start = (datetime.utcnow() - timedelta(days=days)).date()
+    snap_rows = (StudentMetricSnapshot.query
+                 .filter(StudentMetricSnapshot.institution_id == g.institution_id,
+                         StudentMetricSnapshot.student_id.in_([s['student_id'] for s in all_student_evals] or ['-']),
+                         StudentMetricSnapshot.snapshot_date >= window_start,
+                         StudentMetricSnapshot.section_subject_id.is_(None))
+                 .order_by(StudentMetricSnapshot.snapshot_date)
+                 .all())
+
+    snaps_by_date = defaultdict(lambda: {'critical': 0, 'high': 0, 'watch': 0})
+    for snap in snap_rows:
+        metrics = snap.metrics if isinstance(snap.metrics, dict) else {}
+        band = ((metrics.get('risk') or {}).get('risk_band') or '').lower()
+        if band in ('critical', 'high', 'watch'):
+            snaps_by_date[snap.snapshot_date][band] += 1
+
+    if snaps_by_date:
+        risk_trend = [
+            {'date': d.strftime('%b %d'), **counts}
+            for d, counts in sorted(snaps_by_date.items())
+        ]
+        # Guarantee the series ends on today's live numbers
+        risk_trend.append({'date': 'Today', 'critical': crit_count,
+                           'high': high_count, 'watch': watch_count})
+    else:
+        # No snapshot history yet — show only what we can prove.
+        risk_trend = [{'date': 'Today', 'critical': crit_count,
+                       'high': high_count, 'watch': watch_count}]
 
     # 7. Available Filters
     from app.models.subject import Subject
@@ -1884,26 +1953,29 @@ def analytics_overview():
             'active_students': {
                 'value': active_count,
                 'total_enrolled': total_enrolled,
-                'delta': 0.0,
-                'delta_direction': 'up',
+                'delta': None,
+                'delta_direction': 'flat',
+                'delta_available': False,
                 'label': f'of {total_enrolled} enrolled',
-                'sparkline': [max(0, active_count - 2), max(0, active_count - 1), active_count, active_count],
+                'sparkline': [],
             },
             'class_avg_grade': {
-                'value': f"{round(avg_grade)}%",
+                'value': f"{round(avg_grade)}%" if avg_grade is not None else None,
                 'raw_value': avg_grade,
-                'delta': 0.0,
-                'delta_direction': 'up',
+                'delta': None,
+                'delta_direction': 'flat',
+                'delta_available': False,
                 'label': 'class average score',
-                'sparkline': [max(0, round(avg_grade - 2)), round(avg_grade), round(avg_grade)],
+                'sparkline': [],
             },
             'focus_engagement': {
-                'value': f"{round(avg_focus)}%",
+                'value': f"{round(avg_focus)}%" if avg_focus is not None else None,
                 'raw_value': avg_focus,
-                'delta': 0.0,
-                'delta_direction': 'up',
+                'delta': None,
+                'delta_direction': 'flat',
+                'delta_available': False,
                 'label': 'active participation rate',
-                'sparkline': [max(0, round(avg_focus - 2)), round(avg_focus), round(avg_focus)],
+                'sparkline': [],
             },
             'needs_attention': {
                 'value': total_at_risk,
@@ -1911,10 +1983,11 @@ def analytics_overview():
                 'critical_count': crit_count,
                 'high_count': high_count,
                 'watch_count': watch_count,
-                'delta': 0.0,
-                'delta_direction': 'down' if total_at_risk == 0 else 'up',
+                'delta': None,
+                'delta_direction': 'flat',
+                'delta_available': False,
                 'label': 'students at risk' if total_at_risk != 1 else 'student at risk',
-                'sparkline': [max(0, total_at_risk - 1), total_at_risk, total_at_risk],
+                'sparkline': [],
             },
         },
         'needs_attention_students': needs_attention_students,
@@ -1944,6 +2017,86 @@ def analytics_overview():
 # ══════════════════════════════════════════════════════════════════════════════
 # COHORT RISK & ACADEMIC HEALTH MATRIX (100% Real Database Analytics)
 # ══════════════════════════════════════════════════════════════════════════════
+
+# ── Real history helpers ────────────────────────────────────────────────────
+# KPI deltas and sparklines are derived from the nightly StudentMetricSnapshot
+# rows. When there is no history we return 0 / "flat" / [] rather than a
+# made-up trend line.
+def _cohort_insights(high_critical_pct, high_critical_count, mean_focus, total_enrolled):
+    """Insight strings derived only from the metrics actually computed."""
+    items = [{
+        'type': 'critical',
+        'color': '#ef4444',
+        'text': f'{high_critical_pct}% of enrolled students are at Critical or High risk.',
+    }]
+    if not total_enrolled:
+        items.append({
+            'type': 'info',
+            'color': '#64748b',
+            'text': 'No students are enrolled in your sections yet.',
+        })
+    elif not mean_focus:
+        items.append({
+            'type': 'info',
+            'color': '#06b6d4',
+            'text': 'No focus or engagement sessions have been recorded for this cohort yet.',
+        })
+    else:
+        items.append({
+            'type': 'predictor',
+            'color': '#06b6d4',
+            'text': f'Cohort mean focus is {mean_focus}% across recorded sessions.',
+        })
+    if high_critical_count:
+        items.append({
+            'type': 'action',
+            'color': '#8b5cf6',
+            'text': f'Consider intervention for {high_critical_count} high-risk student(s) this week.',
+        })
+    return items
+
+def _snapshot_series(student_ids, metric_key, days=60):
+    """Chronological cohort-average series of one frozen snapshot metric."""
+    if not student_ids:
+        return []
+    start = (datetime.utcnow() - timedelta(days=days)).date()
+    rows = (
+        db.session.query(StudentMetricSnapshot.snapshot_date, StudentMetricSnapshot.metrics)
+        .filter(
+            StudentMetricSnapshot.student_id.in_(student_ids),
+            StudentMetricSnapshot.snapshot_date >= start,
+            StudentMetricSnapshot.section_subject_id.is_(None),
+        )
+        .all()
+    )
+    by_date = defaultdict(list)
+    for d, m in rows:
+        if isinstance(m, dict):
+            v = m.get(metric_key)
+            if v is not None:
+                try:
+                    by_date[d].append(float(v))
+                except (TypeError, ValueError):
+                    pass
+    return [round(sum(v) / len(v), 2) for _, v in sorted(by_date.items())]
+
+
+def _delta_from_series(series):
+    """
+    (delta_value, direction, series) computed from real daily snapshots only.
+
+    With fewer than two observations there is no movement to report, so the
+    delta is None (the UI prints an em dash) instead of a fabricated "0%".
+    """
+    if not series or len(series) < 2:
+        return (None, 'flat', series or [])
+    first, last = series[0], series[-1]
+    if first in (None, 0):
+        return (None, 'flat', series)
+    pct = round(((last - first) / abs(first)) * 100, 1)
+    direction = 'up' if pct > 0.05 else ('down' if pct < -0.05 else 'flat')
+    return (pct, direction, series)
+
 
 @analytics_bp.route('/cohort-matrix', methods=['GET'])
 @require_role('instructor', 'institution_admin')
@@ -1996,18 +2149,33 @@ def analytics_cohort_matrix():
     if not (exp_filter and exp_filter != 'all') and selected_ss and selected_ss.subject_id:
         sub_exp_ids = [e.id for e in Experiment.query.filter_by(subject_id=selected_ss.subject_id).all()]
 
+    # ONE grade-scope rule (app/analytics/scope.py): only grades attributed to an
+    # experiment in scope count. This endpoint used to fall back to "every grade
+    # this student has" when no experiment filter was set, which is why the
+    # Students tab reported 83 while Overview reported 77 for the same cohort.
     bulk_g_query = Grade.query.filter(Grade.student_id.in_(s_ids), Grade.final_grade.isnot(None)) if s_ids else None
     if bulk_g_query is not None:
         if exp_filter and exp_filter != 'all':
             bulk_g_query = bulk_g_query.filter_by(experiment_id=exp_filter)
         elif sub_exp_ids:
             bulk_g_query = bulk_g_query.filter(Grade.experiment_id.in_(sub_exp_ids))
+        else:
+            bulk_g_query = bulk_g_query.filter(Grade.experiment_id.isnot(None))
         bulk_g_rows = bulk_g_query.order_by(Grade.created_at.asc()).all()
     else:
         bulk_g_rows = []
     grades_by_sid = defaultdict(list)
     for gr in bulk_g_rows:
         grades_by_sid[gr.student_id].append(float(gr.final_grade))
+
+    last_submit_by_sid = {}
+    if s_ids:
+        from app.models.submission import CodeAttempt
+        for _sid, _ts in db.session.query(
+            CodeAttempt.student_id, func.max(CodeAttempt.submitted_at)
+        ).filter(CodeAttempt.student_id.in_(s_ids)).group_by(CodeAttempt.student_id).all():
+            if _ts:
+                last_submit_by_sid[_sid] = _ts
 
     att_by_sid = defaultdict(list)
     if s_ids:
@@ -2036,31 +2204,47 @@ def analytics_cohort_matrix():
         initials = (parts[0][0] + (parts[1][0] if len(parts) > 1 else '')).upper()
 
         all_grades = grades_by_sid.get(s.id, [])
-        avg_grade = statistics.mean(all_grades) if all_grades else 0.0
+        avg_grade = statistics.mean(all_grades) if all_grades else None
 
         att_statuses = att_by_sid.get(s.id, [])
         if att_statuses:
-            present_count = sum(1 for st in att_statuses if st in ('present', 'late', 'partial'))
-            att_rate = (present_count / len(att_statuses)) * 100.0
+            # ONE attendance definition across all three roles.
+            _credit = {'present': 1.0, 'late': 0.8, 'partial': 0.6,
+                       'inactive_present': 0.5, 'absent': 0.0}
+            credit = sum(_credit.get(st, 0.0) for st in att_statuses)
+            att_rate = (credit / len(att_statuses)) * 100.0
         else:
-            att_rate = 0.0
+            att_rate = None
 
         focus_rows = focus_by_sid.get(s.id, [])
-        avg_focus = statistics.mean(focus_rows) if focus_rows else 0.0
+        avg_focus = statistics.mean(focus_rows) if focus_rows else None
 
         m_rows = mastery_by_sid.get(s.id, [])
-        avg_mastery = statistics.mean(m_rows) if m_rows else 0.0
+        avg_mastery = statistics.mean(m_rows) if m_rows else None
 
         viol_count = viol_counts_by_sid.get(s.id, 0)
 
-        # Risk calculation
+        # Risk calculation — every factor is measured, none imputed.
+        # (consistency used to be the constant 80.0 and recency the constant
+        # 2.0 for every student, so 25% of the risk score was fabricated.)
+        _grades = [float(g) for g in grades_by_sid.get(s.id, []) if g is not None]
+        consistency_v = None
+        if len(_grades) >= 2:
+            consistency_v = max(0.0, 100.0 - statistics.pstdev(_grades))
+
+        _last_submit = last_submit_by_sid.get(s.id)
+        recency_v = (
+            max(0.0, (datetime.utcnow() - _last_submit).total_seconds() / 86400.0)
+            if _last_submit else None
+        )
+
         risk_res = compute_student_risk({
             'mastery_avg': {'value': avg_mastery},
             'grade_avg': {'value': avg_grade},
             'attendance_rate': {'value': att_rate},
             'focus_avg': {'value': avg_focus},
-            'consistency': {'value': 80.0},
-            'submission_recency_days': {'value': 2.0},
+            'consistency': {'value': consistency_v},
+            'submission_recency_days': {'value': recency_v},
         })
 
         raw_score = risk_res['risk_score']
@@ -2081,7 +2265,7 @@ def analytics_cohort_matrix():
             trend_points = all_grades[-6:]
         else:
             trend = 'stable'
-            base_val = round(avg_grade) if avg_grade > 0 else 50
+            base_val = round(avg_grade) if avg_grade is not None else None
             trend_points = [base_val, base_val, base_val, base_val]
 
         mastery_dist.append(avg_mastery)
@@ -2097,10 +2281,10 @@ def analytics_cohort_matrix():
             'risk_score': risk_score,
             'risk_band': risk_band,
             'primary_reason': primary_reason,
-            'mastery_pct': round(avg_mastery),
-            'grade_avg': round(avg_grade),
-            'attendance_rate': round(att_rate),
-            'focus_score': round(avg_focus),
+            'mastery_pct': None if avg_mastery is None else round(avg_mastery),
+            'grade_avg': None if avg_grade is None else round(avg_grade),
+            'attendance_rate': None if att_rate is None else round(att_rate),
+            'focus_score': None if avg_focus is None else round(avg_focus),
             'violations_count': viol_count,
             'trend': trend,
             'trend_points': trend_points,
@@ -2112,9 +2296,11 @@ def analytics_cohort_matrix():
 
     # Percentiles within cohort
     for r in raw_list:
-        r['mastery_p'] = int(compute_percentile(r['_m'], mastery_dist)) if mastery_dist else 50
-        r['grade_p'] = int(compute_percentile(r['_g'], grade_dist)) if grade_dist else 50
-        r['attendance_p'] = int(compute_percentile(r['_a'], att_dist)) if att_dist else 50
+        # A percentile against a cohort of 1-4 is noise; report None ("n/a").
+        _min_cohort = 5
+        r['mastery_p'] = int(compute_percentile(r['_m'], mastery_dist)) if len(mastery_dist) >= _min_cohort else None
+        r['grade_p'] = int(compute_percentile(r['_g'], grade_dist)) if len(grade_dist) >= _min_cohort else None
+        r['attendance_p'] = int(compute_percentile(r['_a'], att_dist)) if len(att_dist) >= _min_cohort else None
         del r['_m']
         del r['_g']
         del r['_a']
@@ -2158,11 +2344,20 @@ def analytics_cohort_matrix():
     high_critical_count = crit_count + high_count
     high_critical_pct = round((high_critical_count / max(1, total_students)) * 100, 1)
 
-    mean_mastery = round(statistics.mean([s['mastery_pct'] for s in raw_list])) if raw_list else 76
-    mean_grade = round(statistics.mean([s['grade_avg'] for s in raw_list])) if raw_list else 72
-    mean_att = round(statistics.mean([s['attendance_rate'] for s in raw_list])) if raw_list else 89
-    mean_focus = round(statistics.mean([s['focus_score'] for s in raw_list])) if raw_list else 76
-    mean_integrity = max(70, 100 - round(statistics.mean([s['violations_count'] for s in raw_list]) * 5)) if raw_list else 96
+    def _mean_of(key):
+        vals = [s[key] for s in raw_list if s.get(key) is not None]
+        return round(statistics.mean(vals)) if vals else None
+
+    mean_mastery = _mean_of('mastery_pct')
+    mean_grade = _mean_of('grade_avg')
+    mean_att = _mean_of('attendance_rate')
+    mean_focus = _mean_of('focus_score')
+    # Weighted severity, no floor: a cohort with real violations must be able
+    # to fall below 70.
+    mean_integrity = (
+        max(0, 100 - round(statistics.mean([s.get('weighted_violations', s['violations_count']) for s in raw_list]) * 10))
+        if raw_list else None
+    )
 
     # 5. Cascading Filter options
     from app.models.academic import Section
@@ -2199,37 +2394,55 @@ def analytics_cohort_matrix():
         {'id': 180, 'label': 'Semester to Date'},
     ]
 
+    _m_series = _snapshot_series(student_ids, 'mastery_avg')
+    _g_series = _snapshot_series(student_ids, 'grade_avg')
+    _a_series = _snapshot_series(student_ids, 'attendance_rate')
+    _m_delta, _m_dir, _m_spark = _delta_from_series(_m_series)
+    _g_delta, _g_dir, _g_spark = _delta_from_series(_g_series)
+    _a_delta, _a_dir, _a_spark = _delta_from_series(_a_series)
+
     return jsonify({
         'kpis': {
             'students_in_scope': {
                 'value': total_students,
                 'total_enrolled': total_enrolled,
-                'delta': '+ 2%',
-                'sparkline': [total_students - 2, total_students - 1, total_students, total_students, total_students],
+                'delta': None,
+                'delta_direction': 'flat',
+                'delta_available': False,
+                'sparkline': [],
             },
             'high_critical_risk': {
                 'value': high_critical_count,
                 'percentage': f'({high_critical_pct}%)',
-                'delta': '↓ 1%',
-                'sparkline': [high_critical_count + 1, high_critical_count + 1, high_critical_count, high_critical_count],
+                'delta': None,
+                'delta_direction': 'flat',
+                'delta_available': False,
+                'sparkline': [],
             },
             'cohort_avg_mastery': {
-                'value': f'{mean_mastery}%',
+                'value': None if mean_mastery is None else f'{mean_mastery}%',
                 'raw_value': mean_mastery,
-                'delta': '↑ 3%',
-                'sparkline': [mean_mastery - 3, mean_mastery - 2, mean_mastery - 1, mean_mastery],
+                'is_available': mean_mastery is not None,
+                'delta': _m_delta,
+                'delta_direction': _m_dir,
+                'delta_available': _m_delta is not None,
+                'sparkline': _m_spark,
             },
             'avg_grade': {
-                'value': f'{mean_grade} / 100',
+                'value': None if mean_grade is None else f'{mean_grade} / 100',
                 'raw_value': mean_grade,
-                'delta': '↑ 4%',
-                'sparkline': [mean_grade - 4, mean_grade - 3, mean_grade - 1, mean_grade],
+                'is_available': mean_grade is not None,
+                'delta': _g_delta,
+                'delta_direction': _g_dir,
+                'sparkline': _g_spark,
             },
             'attendance': {
-                'value': f'{mean_att}%',
+                'value': None if mean_att is None else f'{mean_att}%',
                 'raw_value': mean_att,
-                'delta': '↑ 2%',
-                'sparkline': [mean_att - 2, mean_att - 1, mean_att, mean_att],
+                'is_available': mean_att is not None,
+                'delta': _a_delta,
+                'delta_direction': _a_dir,
+                'sparkline': _a_spark,
             },
         },
         'risk_distribution': {
@@ -2241,30 +2454,19 @@ def analytics_cohort_matrix():
                 {'name': 'On Track', 'count': ok_count, 'percentage': round((ok_count / max(1, total_students)) * 100, 1), 'color': '#10b981'},
             ],
         },
+        # Any of these can be unmeasured (no focus ML, no attendance yet); the
+        # combined "Engagement" score only exists when both inputs do.
         'risk_breakdown': [
             {'name': 'Academic Performance', 'value': mean_grade, 'color': '#8b5cf6'},
-            {'name': 'Engagement', 'value': round((mean_att + mean_focus) / 2), 'color': '#3b82f6'},
+            {'name': 'Engagement',
+             'value': round((mean_att + mean_focus) / 2)
+             if isinstance(mean_att, (int, float)) and isinstance(mean_focus, (int, float)) else None,
+             'color': '#3b82f6'},
             {'name': 'Attendance', 'value': mean_att, 'color': '#06b6d4'},
             {'name': 'Focus', 'value': mean_focus, 'color': '#10b981'},
             {'name': 'Integrity', 'value': mean_integrity, 'color': '#6366f1'},
         ],
-        'insights': [
-            {
-                'type': 'critical',
-                'color': '#ef4444',
-                'text': f'{high_critical_pct}% students are at Critical or High Risk.',
-            },
-            {
-                'type': 'predictor',
-                'color': '#06b6d4',
-                'text': 'Focus is the strongest predictor of academic success (+96%).',
-            },
-            {
-                'type': 'action',
-                'color': '#8b5cf6',
-                'text': f'Consider intervention for {high_critical_count} high-risk students this week.',
-            },
-        ],
+        'insights': _cohort_insights(high_critical_pct, high_critical_count, mean_focus, total_students),
         'students': raw_list,
         'filters': {
             'sections': filter_sections,
@@ -2371,9 +2573,10 @@ def analytics_mastery_overview():
 
     # 3. KPI Calculations from Live DB Data (Specification C: Authentic database aggregation)
     all_scores = [score for scores in concept_scores.values() for score in scores]
-    overall_mastery = round(statistics.mean(all_scores)) if all_scores else 68
+    # No mastery rows recorded => 0, never an invented 68%.
+    overall_mastery = round(statistics.mean(all_scores)) if all_scores else 0
 
-    total_concepts_count = len(concept_averages) or 86
+    total_concepts_count = len(concept_averages)
     mastered_count = sum(1 for c, avg in concept_averages.items() if avg >= 70.0)
 
     # Students with >= 3 weak concepts (< 50%)
@@ -2384,46 +2587,49 @@ def analytics_mastery_overview():
         if weak_c >= 3:
             at_risk_students_count += 1
 
-    avg_attempts = round(sum(exp_attempt_counts) / max(1, len(exp_attempt_counts)), 1) if exp_attempt_counts else 2.1
+    avg_attempts = round(sum(exp_attempt_counts) / max(1, len(exp_attempt_counts)), 1) if exp_attempt_counts else 0.0
 
     kpis = {
         'overall_mastery': {
             'value': f'{overall_mastery}%',
             'raw_value': overall_mastery,
-            'delta': '↑ 6%',
-            'delta_direction': 'up',
+            'delta': '0%',
+            'delta_direction': 'flat',
             'label': 'Class average across all concepts',
-            'sparkline': [62, 63, 64, 65, 66, 67, overall_mastery],
+            'sparkline': [],
         },
         'mastered_concepts': {
             'value': f'{mastered_count} / {total_concepts_count}',
-            'delta': '↑ 8',
-            'delta_direction': 'up',
+            'delta': '0',
+            'delta_direction': 'flat',
             'label': 'Concepts with ≥70% mastery',
-            'sparkline': [34, 36, 38, 39, 41, mastered_count],
+            'sparkline': [],
         },
         'students_at_risk': {
             'value': f'{at_risk_students_count} / {total_enrolled}',
-            'delta': '↓ 29%',
-            'delta_direction': 'down',
+            'delta': '0',
+            'delta_direction': 'flat',
             'label': 'Students with ≥3 weak concepts',
-            'sparkline': [7, 7, 6, 6, 5],
+            'sparkline': [],
         },
         'avg_concept_attempts': {
             'value': str(avg_attempts),
             'raw_value': avg_attempts,
-            'delta': '↑ 12%',
-            'delta_direction': 'up',
+            'delta': '0%',
+            'delta_direction': 'flat',
             'label': 'Attempts per concept',
-            'sparkline': [1.9, 2.0, 2.1, 2.2, avg_attempts],
+            'sparkline': [],
         },
     }
 
     # 4. Concept Mastery Heatmap Data
+    # Columns are the concepts this cohort actually has mastery rows for —
+    # previously a fixed 12-item curriculum that rendered even with no data.
+    _coverage = {
+        c: len(concept_scores.get(c, [])) for c in concept_averages
+    }
     heatmap_columns = [
-        "Variables", "Control Flow", "Functions", "Recursion",
-        "Arrays", "Linked Lists", "Stacks", "Queues",
-        "Trees", "Graphs", "Hashing", "Sorting"
+        c for c, _ in sorted(_coverage.items(), key=lambda kv: (-kv[1], kv[0]))[:12]
     ]
 
     # Map column headers to actual concept averages in DB
@@ -2506,53 +2712,43 @@ def analytics_mastery_overview():
         },
     ]
 
+    def _status(v):
+        return "mastered" if v >= 70 else ("developing" if v >= 50 else "weak")
+
+    # Only surface categories that the cohort genuinely has data for, and only
+    # fill a cell when a real mastery row exists (None = "no data", not 0%).
     heatmap_rows = []
     for cat in category_definitions:
-        row_values = []
-        # Calculate real category baseline from child concepts present in DB
-        cat_scores = [
-            concept_averages[c] for c in cat["concepts"]
+        present = [
+            c for c in cat["concepts"]
             if c in concept_averages
         ]
-        cat_baseline = round(statistics.mean(cat_scores)) if cat_scores else overall_mastery
+        if not present:
+            continue
 
+        row_values = []
         for col in heatmap_columns:
             concept_key = col_lookup.get(col, col)
             if concept_key in concept_averages:
-                val = concept_averages[concept_key]
+                row_values.append(round(concept_averages[concept_key]))
             else:
-                # Find matching concept in this category or fall back to category baseline
                 matched_val = None
-                for c in cat["concepts"]:
-                    if col.lower() in c.lower() and c in concept_averages:
+                for c in present:
+                    if col.lower() in c.lower():
                         matched_val = concept_averages[c]
                         break
-                val = matched_val if matched_val is not None else cat_baseline
-            row_values.append(round(val))
+                row_values.append(round(matched_val) if matched_val is not None else None)
 
-        # Children breakdown calculated directly from live DB concept scores
-        child_details = []
-        for cname in cat["concepts"]:
-            c_val = concept_averages.get(cname)
-            if c_val is None:
-                for db_c, db_val in concept_averages.items():
-                    if db_c.lower() == cname.lower() or db_c.lower() in cname.lower() or cname.lower() in db_c.lower():
-                        c_val = db_val
-                        break
-            if c_val is None:
-                c_val = cat_baseline
-            c_val = round(c_val)
-            child_details.append({
-                "concept": cname,
-                "mastery": c_val,
-                "status": "mastered" if c_val >= 70 else ("developing" if c_val >= 50 else "weak")
-            })
+        child_details = [
+            {"concept": c, "mastery": round(concept_averages[c]), "status": _status(concept_averages[c])}
+            for c in present
+        ]
 
         heatmap_rows.append({
             "id": cat["id"],
-            "name": cat["name"],
+            "name": f"{cat['short_name']} ({len(present)})",
             "short_name": cat["short_name"],
-            "count": cat["count"],
+            "count": len(present),
             "values": row_values,
             "children": child_details,
         })
@@ -3078,46 +3274,51 @@ def analytics_engagement_overview():
         at_risk_count = sum(1 for s in student_details if s["engagement_score"] < 50)
 
     # 4. KPIs Data Payload
-    avg_tot_val = round(statistics.mean([s["time_on_task_min"] for s in student_details])) if student_details else 42
+    avg_tot_val = round(statistics.mean([s["time_on_task_min"] for s in student_details])) if student_details else 0
+
+    # Deltas/sparklines come from real snapshot history (empty history => flat/[])
+    _eng_ids = [s.get("student_id") for s in student_details if s.get("student_id")]
+    _f_delta, _f_dir, _f_spark = _delta_from_series(_snapshot_series(_eng_ids, "focus_avg"))
+    _mst_delta, _mst_dir, _mst_spark = _delta_from_series(_snapshot_series(_eng_ids, "mastery_avg"))
 
     kpis = {
         "active_students": {
             "value": active_count,
             "total_enrolled": total_enrolled,
-            "delta": "↑ 8%",
-            "delta_direction": "up",
+            "delta": "0%",
+            "delta_direction": "flat",
             "label": f"of {total_enrolled} enrolled",
-            "sparkline": [20, 21, 22, 23, 24],
+            "sparkline": [],
         },
         "avg_time_on_task": {
             "value": f"{avg_tot_val} min",
             "raw_value": avg_tot_val,
-            "delta": "↑ 12%",
-            "delta_direction": "up",
+            "delta": "0%",
+            "delta_direction": "flat",
             "label": "per active session",
-            "sparkline": [35, 37, 39, 40, avg_tot_val],
+            "sparkline": [],
         },
         "focus_engagement": {
             "value": f"{class_focus_avg}%",
             "raw_value": class_focus_avg,
-            "delta": "↑ 5%",
-            "delta_direction": "up",
+            "delta": _f_delta,
+            "delta_direction": _f_dir,
             "label": "code in focus / active time",
-            "sparkline": [74, 75, 76, 77, class_focus_avg],
+            "sparkline": _f_spark,
         },
         "high_distraction_sessions": {
             "value": high_distraction_count,
-            "delta": "↓ 29%",
-            "delta_direction": "down",
+            "delta": "0%",
+            "delta_direction": "flat",
             "label": "students with frequent switches",
-            "sparkline": [9, 8, 8, 7, high_distraction_count],
+            "sparkline": [],
         },
         "at_risk_students": {
             "value": f"{at_risk_count} / {total_enrolled}",
-            "delta": "↑ 1",
-            "delta_direction": "up",
+            "delta": _mst_delta,
+            "delta_direction": _mst_dir,
             "label": "students",
-            "sparkline": [4, 4, 5, 5, at_risk_count],
+            "sparkline": _mst_spark,
         },
     }
 
@@ -3131,10 +3332,12 @@ def analytics_engagement_overview():
     trend_over_time = {
         "dates": trend_dates,
         "series": {
-            "focus_engagement": [max(50, min(100, round(class_focus_avg - (4 - i) * 1.5))) for i in range(intervals - 1)] + [class_focus_avg],
-            "time_on_task": [max(20, min(100, round(avg_tot_val - (4 - i) * 2.0))) for i in range(intervals - 1)] + [avg_tot_val],
-            "active_coding": [max(15, min(90, round(avg_tot_val * 0.7 - (4 - i) * 1.2))) for i in range(intervals - 1)] + [round(avg_tot_val * 0.7)],
-            "hint_reliance": [max(5, min(60, round(avg_hint_val + (4 - i) * 1.0))) for i in range(intervals - 1)] + [avg_hint_val],
+            # Real history only — these were arithmetic ramps anchored on the
+            # current mean, not measurements.
+            "focus_engagement": _real_series("focus", trend_dates, class_focus_avg),
+            "time_on_task": _real_series("time_on_task", trend_dates, avg_tot_val),
+            "active_coding": _real_series("active_coding", trend_dates, None),
+            "hint_reliance": _real_series("hint_reliance", trend_dates, avg_hint_val),
         },
     }
 
@@ -3607,44 +3810,46 @@ def analytics_integrity_overview():
     }
 
     # 7. Dynamic KPIs & Sparklines
-    avg_conf = round(statistics.mean([s["confidence"] for s in review_queue])) if review_queue else 94
-    needs_review_count = sum(1 for s in review_queue if s["review_status_type"] == "needs_review")
+    avg_conf = round(statistics.mean([s["confidence"] for s in review_queue])) if review_queue else 0
+    # Every queue row needs *some* human decision — counting only 'needs_review'
+    # displayed "0" directly above a queue holding a row marked 'under_review'.
+    needs_review_count = len(review_queue)
     plag_count = len(plagiarism_pairs)
     proctor_total = len(window_pes)
 
-    spark_intervals = 7
+    # No synthetic history: deltas are 0/neutral until real trend data exists.
     kpis = {
         "integrity_confidence": {
             "value": f"{avg_conf:.1f}%",
-            "delta": "+3%",
-            "direction": "up",
-            "status": "positive",
+            "delta": "0%",
+            "direction": "flat",
+            "status": "positive" if avg_conf >= 70 else "warning",
             "note": "Cohort-weighted signal; not a misconduct verdict.",
-            "sparkline": [max(50, min(100, round(avg_conf - (6 - i) * 1.0, 1))) for i in range(spark_intervals - 1)] + [float(avg_conf)],
+            "sparkline": [],
         },
         "review_recommended": {
             "value": needs_review_count,
-            "delta": f"+{needs_review_count}" if needs_review_count > 0 else "0",
-            "direction": "up" if needs_review_count > 0 else "down",
+            "delta": "0",
+            "direction": "flat",
             "status": "warning" if needs_review_count > 0 else "positive",
             "note": "Students with signals needing human review.",
-            "sparkline": [max(0, needs_review_count - (6 - i)) for i in range(spark_intervals - 1)] + [needs_review_count],
+            "sparkline": [],
         },
         "plagiarism_matches": {
             "value": plag_count,
-            "delta": "-1",
-            "direction": "down",
+            "delta": "0",
+            "direction": "flat",
             "status": "positive",
             "note": "Similarity flags awaiting review.",
-            "sparkline": [max(0, plag_count + (6 - i) % 2) for i in range(spark_intervals - 1)] + [plag_count],
+            "sparkline": [],
         },
         "proctor_events": {
             "value": proctor_total,
-            "delta": "-3",
-            "direction": "down",
+            "delta": "0",
+            "direction": "flat",
             "status": "positive",
             "note": "Severity-weighted events in selected window.",
-            "sparkline": [max(5, round(proctor_total * (0.8 + 0.03 * i))) for i in range(spark_intervals - 1)] + [proctor_total],
+            "sparkline": [],
         },
     }
 
@@ -4124,7 +4329,7 @@ def ai_usage_overview():
         # Average grade calculation
         grades_query = Grade.query.filter(Grade.student_id.in_(enrolled_stu_ids), Grade.final_grade.isnot(None))
         all_grades = [float(g.final_grade) for g in grades_query.all()]
-        avg_grade = statistics.mean(all_grades) if all_grades else 70.0
+        avg_grade = statistics.mean(all_grades) if all_grades else None
         active_student_count = len(student_agg_rows) or 1
         tokens_per_grade = round((total_tokens_sum / active_student_count) / max(1.0, avg_grade), 1)
 
@@ -4204,8 +4409,8 @@ def ai_usage_overview():
         ai_student_ids = {r[0] for r in student_agg_rows}
         ai_grades = [float(g.final_grade) for g in grades_query.filter(Grade.student_id.in_(ai_student_ids)).all()]
         non_ai_grades = [float(g.final_grade) for g in grades_query.filter(~Grade.student_id.in_(ai_student_ids)).all()]
-        avg_ai_grade = round(statistics.mean(ai_grades), 1) if ai_grades else avg_grade
-        avg_non_ai_grade = round(statistics.mean(non_ai_grades), 1) if non_ai_grades else round(avg_grade - 4.5, 1)
+        avg_ai_grade = round(statistics.mean(ai_grades), 1) if ai_grades else None
+        avg_non_ai_grade = round(statistics.mean(non_ai_grades), 1) if non_ai_grades else None
 
         reliance_efficacy = {
             'has_sufficient_data': len(ai_grades) >= 3,
@@ -4290,4 +4495,212 @@ def ai_usage_overview():
             'active_days': days,
         },
         'updated_at': 'Just now',
+    }), 200
+
+# ══════════════════════════════════════════════════════════════════════════════
+# AT-RISK ROSTER  —  GET /instructor/analytics/at-risk
+# ══════════════════════════════════════════════════════════════════════════════
+# Was called by the frontend (services/experience.service.ts -> analyticsAtRisk)
+# but never implemented, so the "Today" worklist silently received a 404.
+# Computed from the unified risk engine using real grade / attendance / mastery /
+# focus / recency rows — no synthetic values.
+
+@analytics_bp.route('/at-risk', methods=['GET'])
+@require_role('instructor', 'institution_admin')
+def analytics_at_risk():
+    """
+    Explainable at-risk roster for the instructor's own sections.
+
+    Query params:
+      days               look-back window (default 30)
+      section_subject_id narrow to one SectionSubject
+      section, subject   name filters
+      experiment_id      narrow to one experiment
+      min_band           critical | high | watch (default: all three)
+
+    Response:
+      { at_risk_students: [{student_id, full_name, roll_number, risk_score,
+                            risk_band, reasons[], primary_driver, suggested_action}],
+        summary: {critical, high, watch, total, enrolled, on_track},
+        scope: {...} }
+    """
+    from app.models.analytics_config import AnalyticsConfig
+
+    my_ss_ids = _my_ss_ids()
+    my_exp_ids = _my_exp_ids()
+    active_ss_ids, active_exp_ids = _resolve_active_scope(my_ss_ids, my_exp_ids)
+    days = int(request.args.get('days', 30) or 30)
+    min_band = (request.args.get('min_band') or '').lower()
+
+    # Live config so custom weights/bands apply here too
+    cfg_row = AnalyticsConfig.query.filter_by(institution_id=g.institution_id).first()
+    risk_cfg = ({
+        'risk_weights': cfg_row.risk_weights,
+        'risk_bands': cfg_row.risk_bands,
+    } if cfg_row and getattr(cfg_row, 'risk_weights', None) else None)
+
+    # ── Scope: which students? ─────────────────────────────────────────────
+    sec_subjs = SectionSubject.query.filter(SectionSubject.id.in_(active_ss_ids)).all() if active_ss_ids else []
+    section_ids = sorted({ss.section_id for ss in sec_subjs if ss.section_id})
+
+    enrolled_ids = [
+        r[0] for r in db.session.query(SectionStudent.student_id)
+        .filter(SectionStudent.section_id.in_(section_ids)).distinct().all()
+    ] if section_ids else []
+
+    students = (User.query
+                .filter(User.id.in_(enrolled_ids), User.is_active.is_(True))
+                .order_by(User.full_name).all()) if enrolled_ids else []
+
+    if not students:
+        return jsonify({
+            'at_risk_students': [],
+            'summary': {'critical': 0, 'high': 0, 'watch': 0, 'total': 0,
+                        'enrolled': 0, 'on_track': 0},
+            'scope': {'days': days, 'sections': len(section_ids),
+                      'experiments': len(active_exp_ids)},
+        }), 200
+
+    student_ids = [s.id for s in students]
+    cutoff = datetime.utcnow() - timedelta(days=days)
+
+    # ── Real aggregates, batched (no N+1) ──────────────────────────────────
+    # Grades
+    grade_rows = (db.session.query(Grade.student_id, Grade.final_grade)
+                  .filter(Grade.student_id.in_(student_ids),
+                          Grade.final_grade.isnot(None))
+                  .all())
+    grades_by_student = defaultdict(list)
+    for sid, val in grade_rows:
+        try:
+            grades_by_student[sid].append(float(val))
+        except (TypeError, ValueError):
+            pass
+
+    # Attendance: attended sessions / sessions they were expected in
+    att_rows = (db.session.query(SessionAttendance.student_id,
+                                 SessionAttendance.joined_at)
+                .join(LabSession, LabSession.id == SessionAttendance.session_id)
+                .filter(SessionAttendance.student_id.in_(student_ids),
+                        LabSession.institution_id == g.institution_id)
+                .all())
+    attended = defaultdict(int)
+    for sid, joined_at in att_rows:
+        if joined_at:
+            attended[sid] += 1
+    expected_rows = (db.session.query(SectionStudent.student_id, func.count(LabSession.id))
+                     .join(SectionSubject, SectionSubject.section_id == SectionStudent.section_id)
+                     .join(LabSession, LabSession.section_subject_id == SectionSubject.id)
+                     .filter(SectionStudent.student_id.in_(student_ids),
+                             LabSession.institution_id == g.institution_id)
+                     .group_by(SectionStudent.student_id)
+                     .all())
+    expected = {sid: int(cnt or 0) for sid, cnt in expected_rows}
+
+    # Concept mastery
+    mastery_rows = (db.session.query(ConceptMastery.student_id,
+                                     func.avg(ConceptMastery.mastery_score))
+                    .filter(ConceptMastery.student_id.in_(student_ids))
+                    .group_by(ConceptMastery.student_id).all())
+    mastery_by_student = {sid: float(avg or 0) for sid, avg in mastery_rows}
+
+    # Focus
+    focus_rows = (db.session.query(FocusScore.student_id, func.avg(FocusScore.focus_score))
+                  .filter(FocusScore.student_id.in_(student_ids))
+                  .group_by(FocusScore.student_id).all())
+    focus_by_student = {sid: float(avg or 0) for sid, avg in focus_rows}
+
+    # Recency of last submission
+    last_sub = (db.session.query(CodeAttempt.student_id,
+                                 func.max(CodeAttempt.submitted_at))
+                .filter(CodeAttempt.student_id.in_(student_ids))
+                .group_by(CodeAttempt.student_id).all())
+    last_sub_map = {sid: ts for sid, ts in last_sub if ts}
+
+    # ── Evaluate ───────────────────────────────────────────────────────────
+    now = datetime.utcnow()
+    at_risk, on_track = [], 0
+
+    for s in students:
+        g_list = grades_by_student.get(s.id, [])
+        grade_avg = (sum(g_list) / len(g_list)) if g_list else 0.0
+
+        exp_n = expected.get(s.id, 0)
+        att_rate = (attended.get(s.id, 0) / exp_n * 100.0) if exp_n else 0.0
+
+        mastery_avg = mastery_by_student.get(s.id, 0.0)
+        focus_avg = focus_by_student.get(s.id, 0.0)
+
+        ts = last_sub_map.get(s.id)
+        days_idle = ((now - ts).days if ts else days)
+
+        risk = compute_student_risk({
+            'grade_avg': {'value': grade_avg},
+            'attendance_rate': {'value': att_rate},
+            'mastery_avg': {'value': mastery_avg},
+            'focus_avg': {'value': focus_avg},
+            'days_idle': {'value': days_idle},
+        }, config=risk_cfg)
+
+        band = (risk.get('risk_band') or 'ok').lower()
+        if band in ('critical', 'high', 'watch'):
+            reasons = []
+            comps = risk.get('components') or {}
+            if comps.get('grade', 0) < 50:
+                reasons.append(f"Average grade {comps.get('grade', 0):.0f}%")
+            if exp_n and comps.get('attendance', 0) < 60:
+                reasons.append(f"Attendance {comps.get('attendance', 0):.0f}%")
+            if comps.get('mastery', 0) < 40:
+                reasons.append(f"Concept mastery {comps.get('mastery', 0):.0f}%")
+            if comps.get('focus', 0) and comps.get('focus', 0) < 50:
+                reasons.append(f"Focus score {comps.get('focus', 0):.0f}")
+            if not g_list:
+                reasons.append("No graded submissions")
+            if days_idle >= 7:
+                reasons.append(f"Inactive {int(days_idle)} days")
+            if not reasons:
+                reasons.append(risk.get('primary_reason') or 'Multiple weak signals')
+
+            at_risk.append({
+                'student_id': s.id,
+                'full_name': s.full_name or s.email or 'Student',
+                'roll_number': s.roll_number,
+                'risk_score': round(float(risk.get('risk_score') or 0), 1),
+                'risk_band': band,
+                'reasons': reasons[:4],
+                'primary_driver': risk.get('primary_reason'),
+                'suggested_action': (
+                    'Check in during lab' if att_rate < 60 and exp_n else
+                    'Review submission' if grade_avg < 50 else
+                    'Assign practice' if mastery_avg < 40 else
+                    'Encourage participation'
+                ),
+                'components': comps,
+            })
+        else:
+            on_track += 1
+
+    # Worst first, then by name
+    band_rank = {'critical': 0, 'high': 1, 'watch': 2}
+    at_risk.sort(key=lambda r: (band_rank.get(r['risk_band'], 3), -r['risk_score']))
+
+    if min_band in band_rank:
+        allowed = [b for b in ('critical', 'high', 'watch')
+                   if band_rank[b] <= band_rank[min_band]]
+        at_risk = [r for r in at_risk if r['risk_band'] in allowed]
+
+    summary = {
+        'critical': sum(1 for r in at_risk if r['risk_band'] == 'critical'),
+        'high': sum(1 for r in at_risk if r['risk_band'] == 'high'),
+        'watch': sum(1 for r in at_risk if r['risk_band'] == 'watch'),
+        'total': len(at_risk),
+        'enrolled': len(students),
+        'on_track': on_track,
+    }
+
+    return jsonify({
+        'at_risk_students': at_risk,
+        'summary': summary,
+        'scope': {'days': days, 'sections': len(section_ids),
+                  'experiments': len(active_exp_ids)},
     }), 200
