@@ -1867,7 +1867,10 @@ def subject_grade_summary(subject_id):
                 "code_quality_grade": g_obj.code_quality_grade,
                 "manual_feedback": g_obj.manual_feedback,
                 "graded_at": g_obj.graded_at.isoformat() if g_obj.graded_at else None,
-                "submitted_at": att.submitted_at.isoformat() if att and att.submitted_at else (g_obj.graded_at.isoformat() if g_obj.graded_at else None),
+                # Keep student submission time separate from instructor grading time.
+                # A grade timestamp is not evidence that the student submitted code.
+                "submitted_at": att.submitted_at.isoformat() if att and att.submitted_at else None,
+                "graded_at": g_obj.graded_at.isoformat() if g_obj.graded_at else None,
                 "language": att.language if att else None,
                 "test_cases_passed": att.test_cases_passed if att else None,
                 "test_cases_total": att.test_cases_total if att else None,

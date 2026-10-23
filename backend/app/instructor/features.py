@@ -20,7 +20,7 @@ from app.models.session import LabSession, SessionAttendance
 from app.models.submission import CodeAttempt
 from app.models.grading import Grade
 from app.models.knowledge import ConceptMastery, FocusScore
-from app.models.academic import SectionSubject, SectionStudent
+from app.models.academic import SectionSubject, SectionStudent, Section
 from app.models.feedback import PlagiarismFlag
 from app.models.proctor_event import ProctorEvent
 from app.models.conductor import (
@@ -820,6 +820,58 @@ def list_reports():
     return jsonify({'reports': [r.to_dict() for r in rows]}), 200
 
 
+def _report_section_subjects(params):
+    """Resolve report scope only to section-subjects owned by this instructor."""
+    allowed_ids = set(_my_ss_ids())
+    requested = params.get('section_subject_ids')
+    if not requested and params.get('section_subject_id'):
+        requested = [params['section_subject_id']]
+    if requested:
+        ids = {str(x) for x in requested if str(x) in allowed_ids}
+        if len(ids) != len({str(x) for x in requested}):
+            raise ValueError('One or more selected classes are not assigned to you.')
+    else:
+        ids = allowed_ids
+    if not ids:
+        return []
+    q = SectionSubject.query.filter(
+        SectionSubject.id.in_(ids),
+        SectionSubject.institution_id == g.institution_id,
+        SectionSubject.instructor_id == g.user_id,
+    )
+    if params.get('section_id'):
+        q = q.filter(SectionSubject.section_id == params['section_id'])
+    if params.get('subject_id'):
+        q = q.filter(SectionSubject.subject_id == params['subject_id'])
+    rows = q.all()
+    if (params.get('section_subject_ids') or params.get('section_subject_id') or params.get('section_id') or params.get('subject_id')) and not rows:
+        raise ValueError('No assigned classes match the selected report filters.')
+    return rows
+
+
+def _report_student_ids(section_subjects):
+    section_ids = {x.section_id for x in section_subjects if x.section_id}
+    if not section_ids:
+        return []
+    return sorted({row[0] for row in db.session.query(SectionStudent.student_id)
+                   .filter(SectionStudent.section_id.in_(section_ids)).all()})
+
+
+def _report_experiments(params, section_subjects=None):
+    section_subjects = section_subjects if section_subjects is not None else _report_section_subjects(params)
+    subject_ids = {x.subject_id for x in section_subjects if x.subject_id}
+    if not subject_ids:
+        return []
+    q = Experiment.query.filter(
+        Experiment.institution_id == g.institution_id,
+        Experiment.instructor_id == g.user_id,
+        Experiment.subject_id.in_(subject_ids),
+    )
+    if params.get('experiment_id'):
+        q = q.filter(Experiment.id == params['experiment_id'])
+    return q.order_by(Experiment.exp_number).all()
+
+
 @features_bp.route('/reports', methods=['POST'])
 @require_role('instructor', 'institution_admin')
 def request_report():
@@ -828,22 +880,45 @@ def request_report():
     if kind not in REPORT_TYPES:
         return jsonify({'error': f'Unknown report kind "{kind}". Valid: {sorted(REPORT_TYPES)}'}), 400
 
+    params = dict(data.get('params') or {})
+    try:
+        if kind in {'session_summary', 'viva_consolidated'}:
+            session_id = params.get('session_id')
+            session = _require_my_session(session_id) if session_id else None
+            if not session:
+                return jsonify({'error': 'Choose a session assigned to you.'}), 400
+            if params.get('section_subject_ids') or params.get('section_subject_id') or params.get('section_id') or params.get('subject_id'):
+                scoped = _report_section_subjects(params)
+                if session.section_subject_id not in {ss.id for ss in scoped}:
+                    return jsonify({'error': 'The selected session is outside the current report filters.'}), 400
+                params['section_subject_ids'] = [ss.id for ss in scoped]
+                params['section_subject_id'] = scoped[0].id if len(scoped) == 1 else None
+        else:
+            scoped = _report_section_subjects(params)
+            if kind == 'cross_section' and not params.get('subject_id'):
+                return jsonify({'error': 'Choose a subject for cross-section comparison.'}), 400
+            if kind == 'student_progress' and params.get('student_id'):
+                if params['student_id'] not in _report_student_ids(scoped):
+                    return jsonify({'error': 'Selected student is not enrolled in the chosen report scope.'}), 400
+            params['section_subject_ids'] = [ss.id for ss in scoped]
+            params['section_subject_id'] = scoped[0].id if len(scoped) == 1 else None
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
     report = Report(
         institution_id=g.institution_id,
         created_by=g.user_id,
         kind=kind,
-        params=data.get('params') or {},
+        params=params,
         status='pending',
     )
     db.session.add(report)
     db.session.commit()
 
-    # Truly async (R2): return 202 immediately, generate on a background thread.
     report_id = report.id
     import threading
 
     def _worker():
-        # Fresh app context for the worker (separate thread, no request context)
         from app import create_app
         worker_app = create_app()
         with worker_app.app_context():
@@ -854,12 +929,14 @@ def request_report():
             try:
                 r.status = 'generating'
                 db.session.commit()
-                # The CSV builders read g.user_id / g.institution_id — provide
-                # them from the stored report row in this thread's context.
                 from flask import g as _g
-                _g.user_id        = r.created_by
+                _g.user_id = r.created_by
                 _g.institution_id = r.institution_id
                 csv_path, pdf_path = _generate_report(r)
+                if not os.path.isfile(csv_path) or os.path.getsize(csv_path) == 0:
+                    raise RuntimeError('Report CSV was not created.')
+                if not pdf_path or not os.path.isfile(pdf_path) or os.path.getsize(pdf_path) == 0:
+                    raise RuntimeError('Report PDF was not created; no downloadable report was marked ready.')
                 r.status = 'ready'
                 r.file_path = csv_path
                 r.params = dict(r.params or {})
@@ -873,9 +950,7 @@ def request_report():
                 db.session.commit()
 
     threading.Thread(target=_worker, daemon=True).start()
-
     return jsonify({'report': report.to_dict()}), 202
-
 
 @features_bp.route('/reports/<report_id>/download', methods=['GET'])
 @require_role('instructor', 'institution_admin')
@@ -890,8 +965,9 @@ def download_report(report_id):
     target = report.file_path
     if fmt == 'pdf':
         pdf_path = (report.params or {}).get('pdf_path')
-        if pdf_path and os.path.exists(pdf_path):
-            target = pdf_path
+        if not pdf_path or not os.path.isfile(pdf_path):
+            return jsonify({'error': 'PDF file is not available for this report.'}), 404
+        target = pdf_path
     elif fmt == 'xlsx':
         # T3-13 — Excel export: convert the CSV via openpyxl when installed;
         # graceful 400 with instruction otherwise.
@@ -925,28 +1001,24 @@ def _generate_report(report: Report):
     csv_path = os.path.join(out_dir, f"{kind}_{report.id[:8]}.csv")
     pdf_path = os.path.join(out_dir, f"{kind}_{report.id[:8]}.pdf")
 
-    ss_id = params.get('section_subject_id')
     session_id = params.get('session_id')
-    experiment_id = params.get('experiment_id')
 
     if kind == 'gradebook':
-        _csv_gradebook(csv_path, ss_id, session_id)
+        _csv_gradebook(csv_path, params)
     elif kind == 'session_summary':
         _csv_session_summary(csv_path, session_id)
     elif kind == 'student_progress':
-        # R5: two audiences from one dataset — internal (instructor, includes
-        # integrity + recommendations) vs student (motivational, no integrity).
-        _csv_student_progress(csv_path, ss_id, audience=params.get('audience', 'internal'))
+        _csv_student_progress(csv_path, params, audience=params.get('audience', 'internal'))
     elif kind == 'experiment_performance':
-        _csv_experiment_performance(csv_path, experiment_id or ss_id)
+        _csv_experiment_performance(csv_path, params)
     elif kind == 'at_risk':
-        _csv_at_risk(csv_path, ss_id)
+        _csv_at_risk(csv_path, params)
     elif kind == 'cross_section':
-        _csv_cross_section(csv_path, params.get('subject_id'))
+        _csv_cross_section(csv_path, params)
     elif kind == 'viva_consolidated':
-        _csv_viva_consolidated(csv_path, session_id)
+        _csv_viva_consolidated(csv_path, params)
     elif kind == 'catch_up':
-        _csv_catch_up(csv_path, ss_id)
+        _csv_catch_up(csv_path, params)
     else:
         raise ValueError(f'Unhandled report kind {kind}')
 
@@ -957,42 +1029,74 @@ def _generate_report(report: Report):
 
 
 def _render_csv_as_pdf(csv_path, pdf_path, kind, report):
-    """Build a styled HTML table from the CSV and render it to PDF via
-    pdf_service._render_pdf (pdfkit → WeasyPrint → HTML fallback)."""
+    # Build a dependable, multi-page PDF directly from the generated CSV.
     import html as _html
-    try:
-        from app.services.pdf_service import _render_pdf
-        with open(csv_path, 'r', encoding='utf-8', newline='') as f:
-            rows = list(csv.reader(f))
-        if not rows:
-            return
-        thead = ''.join(f'<th>{_html.escape(h)}</th>' for h in rows[0])
-        tbody = ''
-        for row in rows[1:]:
-            cells = ''.join(f'<td>{_html.escape(c)}</td>' for c in row)
-            tbody += f'<tr>{cells}</tr>'
-        title = _html.escape(f"{kind} — {report.created_at.isoformat() if report.created_at else ''}")
-        html_doc = (
-            '<!DOCTYPE html><html><head><meta charset="utf-8"><style>'
-            'body{font-family:Arial,sans-serif;margin:24px;color:#111}'
-            'h1{font-size:18px;color:#7c3aed;margin-bottom:4px}'
-            'p{font-size:11px;color:#666;margin-bottom:16px}'
-            'table{border-collapse:collapse;width:100%;font-size:11px}'
-            'th,td{border:1px solid #ccc;padding:6px 8px;text-align:left}'
-            'th{background:#f3f0ff;color:#5b21b6;font-weight:700}'
-            'tr:nth-child(even){background:#faf9ff}'
-            '</style></head><body>'
-            f'<h1>NexLab Report — {title}</h1>'
-            f'<p>Generated {datetime.utcnow().strftime("%d %B %Y, %H:%M UTC")}</p>'
-            f'<table><thead><tr>{thead}</tr></thead><tbody>{tbody}</tbody></table>'
-            '</body></html>'
-        )
-        pdf_bytes = _render_pdf(html_doc)
-        with open(pdf_path, 'wb') as f:
-            f.write(pdf_bytes)
-    except Exception:
-        # PDF is best-effort — CSV is the canonical output.
-        return
+    from reportlab.lib import colors
+    from reportlab.lib.enums import TA_LEFT
+    from reportlab.lib.pagesizes import A4, landscape
+    from reportlab.lib.styles import ParagraphStyle, getSampleStyleSheet
+    from reportlab.lib.units import mm
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.platypus import LongTable, Paragraph, SimpleDocTemplate, Spacer, TableStyle
+
+    with open(csv_path, 'r', encoding='utf-8', newline='') as f:
+        rows = list(csv.reader(f))
+    if not rows:
+        raise RuntimeError('Report CSV is empty; cannot render PDF.')
+
+    font_name, bold_font = 'Helvetica', 'Helvetica-Bold'
+    regular_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans.ttf'
+    bold_path = '/usr/share/fonts/truetype/dejavu/DejaVuSans-Bold.ttf'
+    if os.path.isfile(regular_path) and os.path.isfile(bold_path):
+        if 'NexLabDejaVu' not in pdfmetrics.getRegisteredFontNames():
+            pdfmetrics.registerFont(TTFont('NexLabDejaVu', regular_path))
+            pdfmetrics.registerFont(TTFont('NexLabDejaVu-Bold', bold_path))
+        font_name, bold_font = 'NexLabDejaVu', 'NexLabDejaVu-Bold'
+
+    cols = max(len(row) for row in rows)
+    available_width = landscape(A4)[0] - 24 * mm
+    col_width = available_width / max(1, cols)
+    body_style = ParagraphStyle('ReportCell', fontName=font_name, fontSize=7,
+                                 leading=8.5, alignment=TA_LEFT, wordWrap='CJK')
+    header_style = ParagraphStyle('ReportHeader', parent=body_style, fontName=bold_font,
+                                  textColor=colors.white, fontSize=7.2)
+    table_data = []
+    for row_index, row in enumerate(rows):
+        padded = list(row) + [''] * (cols - len(row))
+        style = header_style if row_index == 0 else body_style
+        table_data.append([Paragraph(_html.escape(str(cell)).replace('\\n', '<br/>'), style)
+                           for cell in padded])
+
+    os.makedirs(os.path.dirname(pdf_path), exist_ok=True)
+    doc = SimpleDocTemplate(pdf_path, pagesize=landscape(A4),
+                            rightMargin=12 * mm, leftMargin=12 * mm,
+                            topMargin=14 * mm, bottomMargin=14 * mm,
+                            title=f'NexLab {kind} report')
+    styles = getSampleStyleSheet()
+    title_style = ParagraphStyle('ReportTitle', parent=styles['Title'],
+                                 fontName=bold_font, fontSize=15, leading=18,
+                                 textColor=colors.HexColor('#5b21b6'), alignment=TA_LEFT)
+    title = Paragraph(f'NexLab Report — {_html.escape(kind.replace("_", " ").title())}', title_style)
+    subtitle = Paragraph(
+        f'Generated {datetime.utcnow().strftime("%d %B %Y, %H:%M UTC")} · '
+        f'Report ID {_html.escape(report.id)}', body_style)
+    table = LongTable(table_data, colWidths=[col_width] * cols,
+                      repeatRows=1, splitByRow=1, hAlign='LEFT')
+    table.setStyle(TableStyle([
+        ('BACKGROUND', (0, 0), (-1, 0), colors.HexColor('#6d28d9')),
+        ('GRID', (0, 0), (-1, -1), 0.35, colors.HexColor('#cbd5e1')),
+        ('VALIGN', (0, 0), (-1, -1), 'TOP'),
+        ('LEFTPADDING', (0, 0), (-1, -1), 4),
+        ('RIGHTPADDING', (0, 0), (-1, -1), 4),
+        ('TOPPADDING', (0, 0), (-1, -1), 4),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ('ROWBACKGROUNDS', (0, 1), (-1, -1), [colors.white, colors.HexColor('#f8fafc')]),
+    ]))
+    doc.build([title, Spacer(1, 3 * mm), subtitle, Spacer(1, 5 * mm), table])
+    with open(pdf_path, 'rb') as f:
+        if not f.read(5).startswith(b'%PDF'):
+            raise RuntimeError('PDF renderer did not produce a valid PDF file.')
 
 
 def _write_csv(file_path, header, rows):
@@ -1004,368 +1108,315 @@ def _write_csv(file_path, header, rows):
     return file_path
 
 
-def _csv_gradebook(file_path, ss_id, session_id):
-    exp_ids = _my_exp_ids()
-    experiments = Experiment.query.filter(
-        Experiment.id.in_(exp_ids)).order_by(Experiment.exp_number).all() if exp_ids else []
-    exps = {e.id: e for e in experiments}
-
+def _csv_gradebook(file_path, params):
+    section_subjects = _report_section_subjects(params)
+    experiments = _report_experiments(params, section_subjects)
+    exp_ids = [e.id for e in experiments]
+    student_ids = _report_student_ids(section_subjects)
+    users_map = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
     grades = Grade.query.filter(
-        Grade.experiment_id.in_(exp_ids),
-        Grade.session_id == session_id,
-    ).all() if exp_ids and session_id else (Grade.query.filter(
-        Grade.experiment_id.in_(exp_ids)).all() if exp_ids else [])
+        Grade.experiment_id.in_(exp_ids), Grade.student_id.in_(student_ids),
+        Grade.final_grade.isnot(None),
+    ).all() if exp_ids and student_ids else []
 
-    by_student = {}
+    by_student_exp = {}
     for gr in grades:
-        by_student.setdefault(gr.student_id, {})[gr.experiment_id] = gr
+        key = (gr.student_id, gr.experiment_id)
+        score = float(gr.final_grade)
+        if score > by_student_exp.get(key, float('-inf')):
+            by_student_exp[key] = score
 
-    users_map = {u.id: u for u in User.query.filter(
-        User.id.in_(list(by_student.keys()))).all()}
+    section_names = {ss.section_id: (Section.query.get(ss.section_id).name if Section.query.get(ss.section_id) else '') for ss in section_subjects}
+    student_section = {}
+    for ss in section_subjects:
+        for row in SectionStudent.query.filter_by(section_id=ss.section_id).all():
+            student_section.setdefault(row.student_id, section_names.get(ss.section_id, ''))
 
-    header = ['Roll', 'Name'] + [f'Exp {e.exp_number}' for e in experiments] + ['Avg']
+    submitted = db.session.query(CodeAttempt.student_id, CodeAttempt.experiment_id).filter(
+        CodeAttempt.student_id.in_(student_ids), CodeAttempt.experiment_id.in_(exp_ids),
+        CodeAttempt.is_final_submission.is_(True),
+    ).distinct().all() if student_ids and exp_ids else []
+    submitted_keys = {(sid, eid) for sid, eid in submitted}
+    allocated = sum(float(e.weightage or 0) for e in experiments if getattr(e, 'is_published', False))
+    header = (['Section', 'Roll', 'Name']
+              + [f'Exp {e.exp_number}: {e.title} ({e.weightage} pts)' for e in experiments]
+              + ['Assessments Graded', 'Final Submissions', 'Average Grade (%)',
+                 'Weighted Points Earned', 'Points with Grades', 'Course Marks Allocated',
+                 'Percent of Graded Marks (%)'])
     rows = []
-    for sid, grs in by_student.items():
+    for sid in student_ids:
         u = users_map.get(sid)
-        vals = [grs.get(e.id).final_grade if grs.get(e.id) else '' for e in experiments]
-        avg = round(sum(v for v in vals if isinstance(v, (int, float))) / len([v for v in vals if isinstance(v, (int, float))]), 1) if any(isinstance(v, (int, float)) for v in vals) else ''
-        rows.append([u.roll_number if u else '', u.full_name if u else ''] + vals + [avg])
+        vals = [by_student_exp.get((sid, e.id)) for e in experiments]
+        measured = [v for v in vals if v is not None]
+        avg = round(sum(measured) / len(measured), 1) if measured else ''
+        points = sum((by_student_exp[(sid, e.id)] / (e.grade_scale or 100)) * (e.weightage or 0)
+                     for e in experiments if getattr(e, 'is_published', False) and (sid, e.id) in by_student_exp)
+        assessed_allocated = sum(float(e.weightage or 0) for e in experiments
+                                 if getattr(e, 'is_published', False) and (sid, e.id) in by_student_exp)
+        percentage = round(points / assessed_allocated * 100, 1) if assessed_allocated else ''
+        rows.append([student_section.get(sid, ''), u.roll_number if u else '', u.full_name if u else '']
+                    + [v if v is not None else '' for v in vals]
+                    + [len(measured), sum(1 for e in experiments if (sid, e.id) in submitted_keys), avg,
+                       round(points, 2) if measured else '', round(assessed_allocated, 2),
+                       round(allocated, 2), percentage])
     _write_csv(file_path, header, rows)
 
-
 def _csv_session_summary(file_path, session_id):
-    """
-    R4 — sectioned session summary: METADATA | ATTENDANCE | PERFORMANCE |
-    FOCUS | INTEGRITY blocks in one CSV (blank line separates sections; the
-    PDF renderer prints them sequentially).
-    """
-    sess = LabSession.query.get(session_id)
+    sess = _require_my_session(session_id) if session_id else None
     if not sess:
-        _write_csv(file_path, ['error'], [['Session not found']])
-        return
+        raise ValueError('Choose a session assigned to you.')
     att = SessionAttendance.query.filter_by(session_id=session_id).all()
-    users_map = {u.id: u for u in User.query.filter(
-        User.id.in_([a.student_id for a in att])).all()}
-
+    att_by = {a.student_id: a for a in att}
     ss = SectionSubject.query.get(sess.section_subject_id) if sess.section_subject_id else None
     sec = Section.query.get(ss.section_id) if ss else None
     subj = Subject.query.get(ss.subject_id) if ss else None
     exp = Experiment.query.get(sess.experiment_id) if sess.experiment_id else None
+    enrolled = _report_student_ids([ss]) if ss else []
+    student_ids = sorted(set(enrolled) | set(att_by))
+    users_map = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
+    rows = [
+        ['SESSION SUMMARY'], ['Session', sess.title or '—'], ['Subject', subj.name if subj else '—'],
+        ['Section', sec.name if sec else '—'], ['Experiment', exp.title if exp else '—'],
+        ['Status', sess.status], ['Scheduled', sess.scheduled_at.isoformat() if sess.scheduled_at else '—'],
+        ['Started', sess.started_at.isoformat() if sess.started_at else '—'], ['Ended', sess.ended_at.isoformat() if sess.ended_at else '—'],
+        [], ['ATTENDANCE'], ['Student', 'Roll', 'Status', 'Joined At', 'Total Time (s)', 'Active'],
+    ]
+    for sid in student_ids:
+        user, record = users_map.get(sid), att_by.get(sid)
+        rows.append([user.full_name if user else '', user.roll_number if user else '',
+                     record.status if record else 'not_recorded',
+                     record.joined_at.isoformat() if record and record.joined_at else '',
+                     record.total_time_seconds if record else '',
+                     bool(record.is_active_participant) if record else ''])
 
-    out_rows = []
+    attempts = CodeAttempt.query.filter_by(session_id=session_id).all()
+    attempts_by = {}
+    for attempt in attempts:
+        state = attempts_by.setdefault(attempt.student_id, {'attempts': 0, 'best': None})
+        state['attempts'] += 1
+        if attempt.is_final_submission and attempt.test_cases_total:
+            pct = attempt.test_cases_passed / attempt.test_cases_total * 100
+            state['best'] = max(state['best'] or 0, pct)
+    rows += [[], ['PERFORMANCE'], ['Student', 'Roll', 'Attempts', 'Final Score (%)', 'Best Test Pass (%)']]
+    for sid in student_ids:
+        user, d = users_map.get(sid), attempts_by.get(sid, {})
+        rows.append([user.full_name if user else '', user.roll_number if user else '', d.get('attempts', 0),
+                     '', round(d['best'], 1) if d.get('best') is not None else ''])
 
-    # ── METADATA ──────────────────────────────────────────────────────────────
-    out_rows.append(['SESSION SUMMARY'])
-    out_rows.append(['Session', sess.title or '—'])
-    out_rows.append(['Subject', subj.name if subj else '—'])
-    out_rows.append(['Section', sec.name if sec else '—'])
-    out_rows.append(['Experiment', exp.title if exp else '—'])
-    out_rows.append(['Mode', sess.current_mode or '—'])
-    out_rows.append(['Started', sess.started_at.isoformat() if sess.started_at else '—'])
-    out_rows.append(['Ended', sess.ended_at.isoformat() if sess.ended_at else '—'])
-    out_rows.append(['Duration (min)', sess.duration_minutes])
-    out_rows.append([])
-    out_rows.append(['ATTENDANCE'])
-    out_rows.append(['Student', 'Roll', 'Status', 'Joined At', 'Total Time (s)', 'Active'])
-    for a in att:
-        u = users_map.get(a.student_id)
-        out_rows.append([
-            u.full_name if u else '',
-            u.roll_number if u else '',
-            a.status,
-            a.joined_at.isoformat() if a.joined_at else '',
-            a.total_time_seconds,
-            a.is_active_participant,
-        ])
-    out_rows.append([])
-
-    # ── PERFORMANCE (attempts / final score / test-pass) ──────────────────────
-    out_rows.append(['PERFORMANCE'])
-    out_rows.append(['Student', 'Roll', 'Attempts', 'Final Score', 'Best Test Pass %'])
-    attempts = CodeAttempt.query.filter_by(
-        session_id=session_id,
-        experiment_id=sess.experiment_id,
-    ).all() if sess.experiment_id else []
-    per_student = {}
-    for a in attempts:
-        d = per_student.setdefault(a.student_id, {'n': 0, 'final': None, 'best_pct': 0.0})
-        d['n'] += 1
-        if a.is_final_submission and a.test_cases_total:
-            d['best_pct'] = max(d['best_pct'], a.test_cases_passed / a.test_cases_total * 100)
-            if d['final'] is None or (a.test_cases_passed / a.test_cases_total * 100) >= d['best_pct']:
-                d['final'] = round(a.test_cases_passed / a.test_cases_total * 100, 1)
-    for a in att:
-        u = users_map.get(a.student_id)
-        d = per_student.get(a.student_id)
-        out_rows.append([
-            u.full_name if u else '',
-            u.roll_number if u else '',
-            d['n'] if d else 0,
-            d['final'] if d and d['final'] is not None else '',
-            round(d['best_pct'], 1) if d and d['best_pct'] else '',
-        ])
-    out_rows.append([])
-
-    # ── FOCUS (per-student avg + class average) ───────────────────────────────
-    out_rows.append(['FOCUS'])
-    out_rows.append(['Student', 'Roll', 'Avg Focus', 'Low-focus Readings (<40)'])
     focus_rows = FocusScore.query.filter_by(session_id=session_id).all()
     focus_by = {}
     for f in focus_rows:
         if f.focus_score is not None:
-            focus_by.setdefault(f.student_id, []).append(f.focus_score)
-    class_focus = []
-    for a in att:
-        u = users_map.get(a.student_id)
-        scores = focus_by.get(a.student_id, [])
-        class_focus.extend(scores)
-        avg = round(sum(scores) / len(scores), 1) if scores else ''
-        low = len([s for s in scores if s < 40])
-        out_rows.append([u.full_name if u else '', u.roll_number if u else '', avg, low])
-    out_rows.append(['CLASS AVERAGE', '', round(sum(class_focus) / len(class_focus), 1) if class_focus else ''])
-    out_rows.append([])
+            focus_by.setdefault(f.student_id, []).append(float(f.focus_score))
+    all_focus = [v for vals in focus_by.values() for v in vals]
+    rows += [[], ['FOCUS'], ['Student', 'Roll', 'Avg Focus', 'Low-focus Readings (<40)']]
+    for sid in student_ids:
+        user, vals = users_map.get(sid), focus_by.get(sid, [])
+        rows.append([user.full_name if user else '', user.roll_number if user else '',
+                     round(sum(vals) / len(vals), 1) if vals else '',
+                     sum(1 for v in vals if v < 40) if vals else ''])
+    rows.append(['CLASS AVERAGE', '', round(sum(all_focus) / len(all_focus), 1) if all_focus else ''])
 
-    # ── INTEGRITY (proctor events + weighted score + plagiarism) ─────────────
-    out_rows.append(['INTEGRITY'])
-    out_rows.append(['Student', 'Roll', 'Tab Switches', 'Fullscreen Exits',
-                     'Copy Paste', 'Lockdown Violations', 'Integrity Score', 'Plagiarism Flags'])
-    from collections import defaultdict
-    ev_by = defaultdict(lambda: defaultdict(int))
-    from app.models.proctor_event import ProctorEvent
-    for pe in ProctorEvent.query.filter_by(session_id=session_id).all():
-        ev_by[pe.student_id][pe.event_type] += 1
-    for a in att:
-        u = users_map.get(a.student_id)
-        ev = ev_by.get(a.student_id, {})
-        integrity = max(0, 100 - min(100,
-            ev.get('tab_switch', 0) * 0.5 +
-            ev.get('fullscreen_exit', 0) * 1 +
-            ev.get('copy_paste', 0) * 3 +
-            ev.get('lockdown_violation', 0) * 5))
-        flags = PlagiarismFlag.query.filter(
-            db.or_(PlagiarismFlag.student_a_id == a.student_id,
-                   PlagiarismFlag.student_b_id == a.student_id),
-            PlagiarismFlag.status == 'pending',
-        ).count()
-        out_rows.append([
-            u.full_name if u else '',
-            u.roll_number if u else '',
-            ev.get('tab_switch', 0),
-            ev.get('fullscreen_exit', 0),
-            ev.get('copy_paste', 0),
-            ev.get('lockdown_violation', 0),
-            round(integrity, 1),
-            flags,
-        ])
-
-    # Sections CSV — written directly (not via _write_csv, which forces a header).
+    from app.analytics.integrity import compute_integrity_confidence
+    rows += [[], ['INTEGRITY'], ['Student', 'Roll', 'Proctor Events', 'Plagiarism Flags', 'Integrity Confidence (%)']]
+    for sid in student_ids:
+        user = users_map.get(sid)
+        integrity = compute_integrity_confidence(sid, session_id=session_id, institution_id=g.institution_id)
+        event_count = sum(integrity.get('violation_counts', {}).values())
+        flags = len(integrity.get('plagiarism_flags', []))
+        confidence = integrity.get('integrity_confidence')
+        rows.append([user.full_name if user else '', user.roll_number if user else '',
+                     event_count if integrity.get('confidence_band') != 'no_data' else '',
+                     flags if integrity.get('confidence_band') != 'no_data' else '',
+                     confidence if confidence is not None else ''])
     with open(file_path, 'w', newline='', encoding='utf-8') as f:
-        w = csv.writer(f)
-        for row in out_rows:
-            w.writerow(row)
+        csv.writer(f).writerows(rows)
     return file_path
 
-
-def _csv_student_progress(file_path, ss_id, audience='internal'):
-    """
-    R5 — student progress, two audiences:
-      internal : full — grades, mastery, integrity score, open flags, recommendation
-      student  : motivational — scores, mastery, next-concept recommendation;
-                 NO integrity / plagiarism columns ever.
-    """
-    if not ss_id:
-        _write_csv(file_path, ['error'], [['section_subject_id required']])
-        return
-    ss = SectionSubject.query.get(ss_id)
-    if not ss:
-        _write_csv(file_path, ['error'], [['Section not found']])
-        return
-    students = SectionStudent.query.filter_by(section_id=ss.section_id).all()
-    users_map = {u.id: u for u in User.query.filter(
-        User.id.in_([st.student_id for st in students])).all()}
+def _csv_student_progress(file_path, params, audience='internal'):
+    section_subjects = _report_section_subjects(params)
+    student_ids = _report_student_ids(section_subjects)
+    if params.get('student_id'):
+        if params['student_id'] not in student_ids:
+            raise ValueError('Selected student is not enrolled in the chosen report scope.')
+        student_ids = [params['student_id']]
+    experiments = _report_experiments(params, section_subjects)
+    exp_ids = [e.id for e in experiments]
+    users_map = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
+    grades = Grade.query.filter(
+        Grade.student_id.in_(student_ids), Grade.experiment_id.in_(exp_ids), Grade.final_grade.isnot(None)
+    ).all() if student_ids and exp_ids else []
+    grades_by_student = {}
+    grade_by_student_experiment = {}
+    for grade in grades:
+        grades_by_student.setdefault(grade.student_id, []).append(float(grade.final_grade))
+        key = (grade.student_id, grade.experiment_id)
+        if key not in grade_by_student_experiment or float(grade.final_grade) > float(grade_by_student_experiment[key].final_grade):
+            grade_by_student_experiment[key] = grade
+    submissions = db.session.query(CodeAttempt.student_id, db.func.count(db.func.distinct(CodeAttempt.experiment_id))).filter(
+        CodeAttempt.student_id.in_(student_ids), CodeAttempt.experiment_id.in_(exp_ids),
+        CodeAttempt.is_final_submission.is_(True),
+    ).group_by(CodeAttempt.student_id).all() if student_ids and exp_ids else []
+    submissions_by_student = dict(submissions)
+    final_attempts = CodeAttempt.query.filter(
+        CodeAttempt.student_id.in_(student_ids), CodeAttempt.experiment_id.in_(exp_ids),
+        CodeAttempt.is_final_submission.is_(True),
+    ).order_by(CodeAttempt.submitted_at.desc()).all() if student_ids and exp_ids else []
+    submitted_at_by_student_experiment = {}
+    for attempt in final_attempts:
+        submitted_at_by_student_experiment.setdefault((attempt.student_id, attempt.experiment_id), attempt.submitted_at)
 
     internal = audience != 'student'
-    header = ['Roll', 'Name', 'Experiments Completed', 'Avg Grade', 'Mastery Avg', 'Next Concept']
+    header = ['Roll', 'Name', 'Final Submissions', 'Assigned Experiments', 'Avg Grade (%)', 'Mastery Avg (%)', 'Next Concept']
+    for exp in experiments:
+        header.extend([f'Exp {exp.exp_number} {exp.title} Grade',
+                       f'Exp {exp.exp_number} Student Submitted At',
+                       f'Exp {exp.exp_number} Instructor Graded At'])
     if internal:
-        header += ['Integrity Score', 'Open Flags', 'Recommendation']
-
+        header += ['Integrity Confidence (%)', 'Open Plagiarism Flags', 'Recommendation']
     rows = []
-    exp_ids = _my_exp_ids()
-    for st in students:
-        sid = st.student_id
-        grades = Grade.query.filter(
-            Grade.student_id == sid,
-            Grade.experiment_id.in_(exp_ids),
-        ).all() if exp_ids else []
-        finals = [g.final_grade for g in grades if g.final_grade is not None]
-        masteries = ConceptMastery.query.filter_by(student_id=sid).all()
-        m_avg = round(sum(m.mastery_score for m in masteries) / len(masteries), 1) if masteries else ''
-
-        # Next-concept recommendation: the weakest mastered concept (motivational framing)
-        weakest = min(masteries, key=lambda m: m.mastery_score) if masteries else None
-        next_concept = ''
-        if weakest is not None:
-            next_concept = (f'Revise "{weakest.concept}" '
-                            f'(mastery {round(weakest.mastery_score or 0)})')
-
+    from app.analytics.integrity import compute_integrity_confidence
+    for sid in student_ids:
+        user = users_map.get(sid)
+        student_grades = grades_by_student.get(sid, [])
+        mastery_rows = ConceptMastery.query.filter_by(student_id=sid, institution_id=g.institution_id).all()
+        mastery_vals = [float(m.mastery_score) for m in mastery_rows if m.mastery_score is not None]
+        mastery_avg = round(sum(mastery_vals) / len(mastery_vals), 1) if mastery_vals else ''
+        weakest = min(mastery_rows, key=lambda m: m.mastery_score) if mastery_rows else None
+        next_concept = f'Review {weakest.concept}' if weakest else ''
         row = [
-            u.roll_number if (u := users_map.get(sid)) else '',
-            u.full_name if u else '',
-            len([g for g in grades if g.final_grade is not None]),
-            round(sum(finals) / len(finals), 1) if finals else '',
-            m_avg,
-            next_concept,
+            user.roll_number if user else '', user.full_name if user else '',
+            int(submissions_by_student.get(sid, 0)), len(exp_ids),
+            round(sum(student_grades) / len(student_grades), 1) if student_grades else '',
+            mastery_avg, next_concept,
         ]
-
+        for exp in experiments:
+            grade = grade_by_student_experiment.get((sid, exp.id))
+            row.extend([
+                grade.final_grade if grade else '',
+                submitted_at_by_student_experiment.get((sid, exp.id)).isoformat()
+                if submitted_at_by_student_experiment.get((sid, exp.id)) else '',
+                grade.graded_at.isoformat() if grade and grade.graded_at else '',
+            ])
         if internal:
-            # Integrity columns — NEVER emitted in the student variant.
-            from app.models.proctor_event import ProctorEvent
-            pe_rows = ProctorEvent.query.filter_by(student_id=sid).all()
-            from collections import defaultdict
-            ev = defaultdict(int)
-            for pe in pe_rows:
-                ev[pe.event_type] += 1
-            integrity = max(0, 100 - min(100,
-                ev.get('tab_switch', 0) * 0.5 +
-                ev.get('fullscreen_exit', 0) * 1 +
-                ev.get('copy_paste', 0) * 3 +
-                ev.get('lockdown_violation', 0) * 5))
-            flags = PlagiarismFlag.query.filter(
-                db.or_(PlagiarismFlag.student_a_id == sid,
-                       PlagiarismFlag.student_b_id == sid),
-                PlagiarismFlag.status == 'pending',
-            ).count()
-
-            if finals and m_avg != '' and m_avg < 40:
-                rec = 'Schedule a 1:1 — mastery is below the pass line'
-            elif flags:
+            integrity = compute_integrity_confidence(sid, institution_id=g.institution_id)
+            confidence = integrity.get('integrity_confidence')
+            open_flags = sum(1 for flag in integrity.get('plagiarism_flags', []) if flag.get('status') == 'pending')
+            if student_grades and mastery_avg != '' and mastery_avg < 40:
+                rec = 'Schedule a 1:1 — measured mastery is below the pass line'
+            elif open_flags:
                 rec = 'Review pending plagiarism flag before finalizing grades'
-            elif not finals:
-                rec = 'No final submissions yet — follow up on participation'
+            elif not submissions_by_student.get(sid):
+                rec = 'No final submission is recorded yet — verify participation'
             else:
-                rec = 'On track — keep current pace'
-            row += [round(integrity, 1), flags, rec]
-
+                rec = 'On track — continue monitoring measured progress'
+            row += [confidence if confidence is not None else '', open_flags if integrity.get('confidence_band') != 'no_data' else '', rec]
         rows.append(row)
     _write_csv(file_path, header, rows)
 
-
-def _csv_experiment_performance(file_path, experiment_id_or_ss):
-    exp_ids = _my_exp_ids()
-    experiments = Experiment.query.filter(
-        Experiment.id.in_(exp_ids)).order_by(Experiment.exp_number).all() if exp_ids else []
-    header = ['Exp', 'Title', 'Avg Final', 'Attempts', 'Completion %']
+def _csv_experiment_performance(file_path, params):
+    section_subjects = _report_section_subjects(params)
+    experiments = _report_experiments(params, section_subjects)
+    student_ids = _report_student_ids(section_subjects)
+    header = ['Experiment', 'Title', 'Avg Final Grade (%)', 'Final Graded Students', 'Attempts', 'Final Submissions', 'Enrolled Students', 'Completion (%)']
     rows = []
-    for e in experiments:
-        grades = Grade.query.filter_by(experiment_id=e.id).all()
-        finals = [g.final_grade for g in grades if g.final_grade is not None]
-        attempts = CodeAttempt.query.filter_by(experiment_id=e.id).count()
-        unique = len({a.student_id for a in CodeAttempt.query.filter_by(experiment_id=e.id).all()})
-        rows.append([
-            e.exp_number, e.title,
-            round(sum(finals) / len(finals), 1) if finals else '',
-            attempts,
-            round(len([g for g in grades if g.final_grade is not None]) / unique * 100, 1) if unique else '',
-        ])
+    for exp in experiments:
+        grades = Grade.query.filter_by(experiment_id=exp.id).filter(
+            Grade.student_id.in_(student_ids), Grade.final_grade.isnot(None)
+        ).all() if student_ids else []
+        attempts = CodeAttempt.query.filter(
+            CodeAttempt.experiment_id == exp.id, CodeAttempt.student_id.in_(student_ids)
+        ).count() if student_ids else 0
+        finals = {x[0] for x in db.session.query(CodeAttempt.student_id).filter(
+            CodeAttempt.experiment_id == exp.id,
+            CodeAttempt.student_id.in_(student_ids),
+            CodeAttempt.is_final_submission.is_(True),
+        ).distinct().all()} if student_ids else set()
+        avg = round(sum(float(g.final_grade) for g in grades) / len(grades), 1) if grades else ''
+        completion = round(len(finals) / len(student_ids) * 100, 1) if student_ids else ''
+        rows.append([exp.exp_number, exp.title, avg, len(grades), attempts, len(finals), len(student_ids), completion])
     _write_csv(file_path, header, rows)
 
-
-def _csv_at_risk(file_path, ss_id):
-    s = InstructorSettings.query.get(g.user_id)
-    avg_th = s.at_risk_avg_threshold if s else 40
-    min_th = s.at_risk_min_threshold if s else 20
-    my_ss_ids = _my_ss_ids()
-    if ss_id and ss_id in my_ss_ids:
-        my_ss_ids = [ss_id]
-    section_ids = {ss.section_id for ss in SectionSubject.query.filter(
-        SectionSubject.id.in_(my_ss_ids)).all()}
-    students = SectionStudent.query.filter(
-        SectionStudent.section_id.in_(section_ids)).all() if section_ids else []
-    users_map = {u.id: u for u in User.query.filter(
-        User.id.in_([st.student_id for st in students])).all()}
-    header = ['Roll', 'Name', 'Mastery Avg', 'Mastery Min', 'Reason']
+def _csv_at_risk(file_path, params):
+    section_subjects = _report_section_subjects(params)
+    student_ids = _report_student_ids(section_subjects)
+    experiments = _report_experiments(params, section_subjects)
+    exp_ids = [e.id for e in experiments]
+    settings = InstructorSettings.query.get(g.user_id)
+    threshold = settings.at_risk_avg_threshold if settings and settings.at_risk_avg_threshold is not None else 40
+    users_map = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
+    grades = Grade.query.filter(
+        Grade.student_id.in_(student_ids), Grade.experiment_id.in_(exp_ids), Grade.final_grade.isnot(None)
+    ).all() if student_ids and exp_ids else []
+    by_student = {}
+    for grade in grades:
+        by_student.setdefault(grade.student_id, []).append(float(grade.final_grade))
     rows = []
-    from collections import defaultdict
-    by_student = defaultdict(list)
-    masteries = ConceptMastery.query.filter(
-        ConceptMastery.student_id.in_([st.student_id for st in students])).all()
-    for m in masteries:
-        by_student[m.student_id].append(m.mastery_score)
-    for sid, scores in by_student.items():
-        avg = sum(scores) / len(scores)
-        mn = min(scores)
-        if avg < avg_th or mn < min_th:
-            u = users_map.get(sid)
-            reason = f'avg {avg:.1f} < {avg_th}' if avg < avg_th else f'min {mn:.1f} < {min_th}'
-            rows.append([u.roll_number if u else '', u.full_name if u else '',
-                         round(avg, 1), round(mn, 1), reason])
-    _write_csv(file_path, header, rows)
+    for sid, vals in by_student.items():
+        avg = sum(vals) / len(vals)
+        if avg < threshold:
+            user = users_map.get(sid)
+            rows.append([user.roll_number if user else '', user.full_name if user else '', round(avg, 1), len(vals), threshold, 'Average grade below configured threshold'])
+    _write_csv(file_path, ['Roll', 'Name', 'Avg Grade (%)', 'Graded Assessments', 'At-Risk Threshold (%)', 'Reason'], rows)
 
-
-def _csv_cross_section(file_path, subject_id):
-    if not subject_id:
-        _write_csv(file_path, ['error'], [['subject_id required']])
-        return
-    ss_list = SectionSubject.query.filter_by(
-        instructor_id=g.user_id, subject_id=subject_id).all()
-    header = ['Section', 'Avg Final', 'Students']
+def _csv_cross_section(file_path, params):
+    from app.models.academic import Section
+    if not params.get('subject_id'):
+        raise ValueError('subject_id required for cross-section comparison')
+    ss_list = _report_section_subjects(params)
+    exp_ids = [e.id for e in _report_experiments(params, ss_list)]
     rows = []
     for ss in ss_list:
-        exp_ids = [e.id for e in Experiment.query.filter_by(subject_id=subject_id).all()]
-        grades = Grade.query.filter(Grade.experiment_id.in_(exp_ids)).all() if exp_ids else []
-        finals = [g.final_grade for g in grades if g.final_grade is not None]
+        section_students = _report_student_ids([ss])
+        grades = Grade.query.filter(
+            Grade.experiment_id.in_(exp_ids), Grade.student_id.in_(section_students),
+            Grade.final_grade.isnot(None),
+        ).all() if exp_ids and section_students else []
+        finals = [float(g.final_grade) for g in grades]
         rows.append([
-            ss.section.name if ss.section else '',
+            (Section.query.get(ss.section_id).name if Section.query.get(ss.section_id) else ''),
+            len(section_students), len({g.student_id for g in grades}),
             round(sum(finals) / len(finals), 1) if finals else '',
-            len({g.student_id for g in grades}),
         ])
-    _write_csv(file_path, header, rows)
+    _write_csv(file_path, ['Section', 'Enrolled Students', 'Students with Grades', 'Avg Final Grade (%)'], rows)
 
-
-def _csv_viva_consolidated(file_path, session_id):
+def _csv_viva_consolidated(file_path, params):
     from app.models.grading import VivaSession
-    vivas = VivaSession.query.all()
-    if session_id:
-        sess = LabSession.query.get(session_id)
-        if sess and sess.experiment_id:
-            vivas = VivaSession.query.filter_by(experiment_id=sess.experiment_id).all()
-    users_map = {u.id: u for u in User.query.filter(
-        User.id.in_([v.student_id for v in vivas])).all()}
-    header = ['Student', 'Viva Score', 'Status']
-    rows = [[users_map.get(v.student_id).full_name if users_map.get(v.student_id) else '',
-             v.total_score, v.status] for v in vivas]
-    _write_csv(file_path, header, rows)
+    section_subjects = _report_section_subjects(params)
+    student_ids = _report_student_ids(section_subjects)
+    exp_ids = [e.id for e in _report_experiments(params, section_subjects)]
+    q = VivaSession.query.filter(
+        VivaSession.student_id.in_(student_ids), VivaSession.experiment_id.in_(exp_ids)
+    ) if student_ids and exp_ids else VivaSession.query.filter(db.false())
+    if params.get('session_id'):
+        sess = _require_my_session(params['session_id'])
+        if not sess:
+            raise ValueError('Session is not assigned to you.')
+        if sess.experiment_id:
+            q = q.filter(VivaSession.experiment_id == sess.experiment_id)
+    vivas = q.order_by(VivaSession.created_at.desc()).all()
+    users_map = {u.id: u for u in User.query.filter(User.id.in_({v.student_id for v in vivas})).all()} if vivas else {}
+    rows = [[users_map.get(v.student_id).full_name if users_map.get(v.student_id) else '', v.experiment_id,
+             v.total_score if v.total_score is not None else '', v.status,
+             v.started_at.isoformat() if v.started_at else '', v.completed_at.isoformat() if v.completed_at else '']
+            for v in vivas]
+    _write_csv(file_path, ['Student', 'Experiment ID', 'Viva Score', 'Status', 'Started At', 'Completed At'], rows)
 
-
-def _csv_catch_up(file_path, ss_id):
-    my_ss_ids = _my_ss_ids()
-    if ss_id and ss_id in my_ss_ids:
-        my_ss_ids = [ss_id]
-    sessions = LabSession.query.filter(
-        LabSession.section_subject_id.in_(my_ss_ids)).all() if my_ss_ids else []
+def _csv_catch_up(file_path, params):
+    section_subjects = _report_section_subjects(params)
+    ss_ids = [ss.id for ss in section_subjects]
+    sessions = LabSession.query.filter(LabSession.section_subject_id.in_(ss_ids)).all() if ss_ids else []
     session_ids = [s.id for s in sessions]
     att = SessionAttendance.query.filter(
-        SessionAttendance.session_id.in_(session_ids),
-        SessionAttendance.is_catchup == True,
+        SessionAttendance.session_id.in_(session_ids), SessionAttendance.is_catchup.is_(True)
     ).all() if session_ids else []
-    users_map = {u.id: u for u in User.query.filter(
-        User.id.in_([a.student_id for a in att])).all()}
-    header = ['Student', 'Session', 'Catch-up']
-    rows = []
+    users_map = {u.id: u for u in User.query.filter(User.id.in_({a.student_id for a in att})).all()} if att else {}
     sess_map = {s.id: s for s in sessions}
-    for a in att:
-        u = users_map.get(a.student_id)
-        sess = sess_map.get(a.session_id)
-        rows.append([u.full_name if u else '', sess.title if sess else '', 'Yes'])
-    _write_csv(file_path, header, rows)
+    rows = [[users_map.get(a.student_id).full_name if users_map.get(a.student_id) else '',
+             sess_map.get(a.session_id).title if sess_map.get(a.session_id) else '',
+             a.status, a.joined_at.isoformat() if a.joined_at else ''] for a in att]
+    _write_csv(file_path, ['Student', 'Session', 'Attendance Status', 'Joined At'], rows)
 
-
-# ══════════════════════════════════════════════════════════════════════════════
-# Student search (shell search bar) — my sections' students only
-# ══════════════════════════════════════════════════════════════════════════════
-
-@features_bp.route('/search', methods=['GET'])
-@require_role('instructor', 'institution_admin')
 def instructor_search():
     """
     Cross-entity search for the instructor shell.

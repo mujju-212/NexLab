@@ -21,6 +21,7 @@ const REPORT_KINDS = [
   { value: 'at_risk',                label: 'At-Risk Roster',         desc: 'Students projected below the pass threshold' },
   { value: 'cross_section',          label: 'Cross-Section Compare',  desc: 'Same experiment compared across your sections' },
   { value: 'viva_consolidated',      label: 'Viva Consolidated',      desc: 'Per-student oral AI viva grades + feedback' },
+  { value: 'catch_up',               label: 'Catch-up Attendance',    desc: 'Catch-up session attendance and outcomes' },
 ];
 
 interface SectionSubjectItem {
@@ -43,6 +44,7 @@ interface SectionSubjectItem {
 
 interface SessionOption {
   id: string;
+  section_subject_id?: string;
   experiment_title: string;
   section_name?: string | null;
   subject_name?: string | null;
@@ -57,6 +59,7 @@ interface AttendanceRow {
   email: string;
   status: string;
   joined_at?: string | null;
+  is_recorded?: boolean;
 }
 
 const fmtDate = (iso: string | null | undefined) => {
@@ -172,6 +175,15 @@ export default function ReportsPage() {
     }, [] as Array<{ section_id: string; section_name: string; batch_name?: string }>);
   }, [sectionSubjects, selectedDept, selectedYear, selectedBatch]);
 
+  const selectedSectionSubjectIds = useMemo(() => sectionSubjects.filter(ss => {
+    if (selectedDept !== 'all' && (ss.department_code || ss.department_name) !== selectedDept) return false;
+    if (selectedYear !== 'all' && ss.academic_year !== selectedYear) return false;
+    if (selectedBatch !== 'all' && ss.batch_id !== selectedBatch) return false;
+    if (selectedSection !== 'all' && ss.section_id !== selectedSection) return false;
+    if (selectedSubject && ss.subject_id !== selectedSubject) return false;
+    return true;
+  }).map(ss => ss.section_subject_id), [sectionSubjects, selectedDept, selectedYear, selectedBatch, selectedSection, selectedSubject]);
+
   const availableSubjects = useMemo(() => {
     return sectionSubjects.filter(ss => {
       if (selectedDept !== 'all' && (ss.department_code || ss.department_name) !== selectedDept) return false;
@@ -229,14 +241,16 @@ export default function ReportsPage() {
 
   const allSessions: SessionOption[] = (sessionsData as any)?.sessions ?? [];
   const filteredSessions = useMemo(() => {
+    const scopeIds = new Set(selectedSectionSubjectIds);
     const activeSubjName = availableSubjects.find(s => s.subject_id === selectedSubject)?.subject_name;
     const activeSecName = availableSections.find(s => s.section_id === selectedSection)?.section_name;
     return allSessions.filter(s => {
+      if (s.section_subject_id) return scopeIds.has(s.section_subject_id);
       if (activeSubjName && s.subject_name && s.subject_name !== activeSubjName) return false;
       if (activeSecName && s.section_name && s.section_name !== activeSecName) return false;
       return true;
     });
-  }, [allSessions, availableSubjects, selectedSubject, availableSections, selectedSection]);
+  }, [allSessions, selectedSectionSubjectIds, availableSubjects, selectedSubject, availableSections, selectedSection]);
 
   const loadAttendance = useCallback(async (id: string) => {
     if (!id) return;
@@ -264,6 +278,7 @@ export default function ReportsPage() {
     queryKey: ['instructor', 'reports'],
     queryFn: () => experienceService.listReports(),
     staleTime: 30 * 1000,
+    refetchInterval: query => query.state.data?.some(r => r.status === 'pending' || r.status === 'generating') ? 1500 : false,
   });
 
   useEffect(() => {
@@ -295,11 +310,11 @@ export default function ReportsPage() {
           r[`#${e.exp_number} Feedback`] = det.manual_feedback;
         }
       });
-      r['Total Subject Score'] = s.subject_score;
-      r['Subject Ceiling'] = gradeSummaryData.subject.total_marks;
-      r['Percentage (%)'] = gradeSummaryData.subject.total_marks > 0
-        ? Math.round((s.subject_score / gradeSummaryData.subject.total_marks) * 100)
-        : 0;
+      r['Points Earned'] = s.points_earned ?? s.subject_score ?? '';
+      r['Points Allocated'] = s.points_allocated ?? gradeSummaryData.subject.total_weightage ?? '';
+      r['Percentage of Allocated Marks (%)'] = s.subject_percent ?? '';
+      r['Course Marks Total'] = gradeSummaryData.subject.total_marks;
+      r['Course Marks Not Yet Allocated'] = gradeSummaryData.subject.unallocated_marks ?? '';
       return r;
     });
     exportCSV(rows, `${gradeSummaryData.subject.code || 'subject'}-custom-report-${new Date().toISOString().slice(0, 10)}`);
@@ -311,7 +326,7 @@ export default function ReportsPage() {
     const rows = gradeSummaryData.experiments.map(e => {
       const raw = activeStudentReport.experiment_scores?.[e.id];
       const det = activeStudentReport.experiment_details?.[e.id];
-      const weighted = raw != null ? ((raw / (e.grade_scale || 100)) * (e.weightage || 0)).toFixed(2) : '0.00';
+      const weighted = raw != null ? ((raw / (e.grade_scale || 100)) * (e.weightage || 0)).toFixed(2) : null;
       return {
         'Student Name': activeStudentReport.full_name,
         'Roll Number': activeStudentReport.roll_number || '',
@@ -320,14 +335,15 @@ export default function ReportsPage() {
         'Assessment Title': e.title,
         'Type': e.delivery_mode === 'exam' ? 'Timed Exam' : 'Lab Experiment',
         'Weightage (pts)': e.weightage,
-        'Raw Score': raw ?? 'Not Submitted',
-        'Weighted Points': weighted,
+        'Raw Score': raw ?? (det?.submitted_at ? 'Submitted, not graded' : '—'),
+        'Weighted Points': weighted ?? '—',
         'Auto Test Case Grade (%)': det?.auto_grade ?? '—',
         'Viva Grade (%)': det?.viva_grade ?? '—',
         'Manual Grade (%)': det?.manual_grade ?? '—',
         'Language': det?.language ?? '—',
         'Test Cases Passed': det?.test_cases_total ? `${det.test_cases_passed}/${det.test_cases_total}` : '—',
         'Submitted At': det?.submitted_at ? fmtDateTime(det.submitted_at) : '—',
+        'Graded At': det?.graded_at ? fmtDateTime(det.graded_at) : '—',
         'Instructor Feedback': det?.manual_feedback ?? '',
       };
     });
@@ -335,17 +351,28 @@ export default function ReportsPage() {
     flash(`Individual report exported for ${activeStudentReport.full_name}.`);
   };
 
-  const generateServerReport = async () => {
+  const generateServerReport = async (kind = reportKind, extraParams: Record<string, unknown> = {}) => {
     setGenerating(true);
     try {
-      const params: Record<string, string | undefined> = {
-        session_id: sessionId || undefined,
+      const scopedIds = kind === 'cross_section'
+        ? sectionSubjects.filter(ss =>
+            (selectedDept === 'all' || (ss.department_code || ss.department_name) === selectedDept) &&
+            (selectedYear === 'all' || ss.academic_year === selectedYear) &&
+            (selectedBatch === 'all' || ss.batch_id === selectedBatch) &&
+            ss.subject_id === selectedSubject
+          ).map(ss => ss.section_subject_id)
+        : selectedSectionSubjectIds;
+      const params: Record<string, unknown> = {
         subject_id: selectedSubject || undefined,
-        section_id: selectedSection !== 'all' ? selectedSection : undefined,
+        section_id: selectedSection !== 'all' && kind !== 'cross_section' ? selectedSection : undefined,
+        section_subject_ids: scopedIds,
+        section_subject_id: scopedIds.length === 1 ? scopedIds[0] : undefined,
       };
-      if (reportKind === 'student_progress') params.audience = audience;
-      await experienceService.requestReport(reportKind, params);
-      flash('Server report generated — ready to download in CSV or XLSX below.');
+      if (kind === 'session_summary' || kind === 'viva_consolidated') params.session_id = sessionId || undefined;
+      if (kind === 'student_progress') params.audience = audience;
+      Object.assign(params, extraParams);
+      const queued = await experienceService.requestReport(kind, params);
+      flash(`Report ${queued.status === 'ready' ? 'ready' : 'queued'} — status will update here.`);
       queryClient.invalidateQueries({ queryKey: ['instructor', 'reports'] });
     } catch (e: any) {
       setError(e?.response?.data?.error || 'Report generation failed.');
@@ -354,20 +381,26 @@ export default function ReportsPage() {
     }
   };
 
-  const downloadReport = async (id: string, fmt: 'csv' | 'xlsx' = 'csv') => {
+  const downloadReport = async (id: string, fmt: 'csv' | 'xlsx' | 'pdf' = 'csv') => {
     try { await experienceService.downloadReport(id, fmt); }
     catch (e: any) { setError(e?.response?.data?.error || 'Download failed.'); }
   };
 
-  const { present, late, absent } = useMemo(() => {
-    let present = 0, late = 0, absent = 0;
+  const attendanceStats = useMemo(() => {
+    let present = 0, late = 0, absent = 0, notRecorded = 0, credit = 0;
     for (const a of attendance) {
-      if (a.status === 'present') present++;
-      else if (a.status === 'late') late++;
+      if (a.status === 'present') { present++; credit += 1; }
+      else if (a.status === 'late') { late++; credit += 0.8; }
+      else if (a.status === 'partial') credit += 0.6;
+      else if (a.status === 'inactive_present') credit += 0.5;
       else if (a.status === 'absent') absent++;
+      else if (a.status === 'not_recorded') notRecorded++;
     }
-    return { present, late, absent };
+    const recorded = attendance.length - notRecorded;
+    return { present, late, absent, notRecorded, recorded,
+      rate: recorded ? Math.round(credit / recorded * 100) : null };
   }, [attendance]);
+  const { present, late, absent, notRecorded, recorded } = attendanceStats;
 
   const handleExportAttendanceCsv = () => {
     if (attendance.length === 0) return;
@@ -492,7 +525,7 @@ export default function ReportsPage() {
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 12, marginBottom: 14 }}>
               <div>
                 <h2 className={styles.sectionTitle}>Custom Subject Gradebook & Rubric Report</h2>
-                <p className={styles.sectionSub}>Configure included telemetry columns and export instant CSV/PDF or XLSX reports</p>
+                <p className={styles.sectionSub}>Configure included columns and export CSV or print to PDF. Scores show earned points against marks currently allocated.</p>
               </div>
               <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
                 <button type="button" className={styles.secondaryBtn} onClick={() => window.print()}>
@@ -520,6 +553,13 @@ export default function ReportsPage() {
               </label>
             </div>
 
+            {gradeSummaryData && (
+              <p className={styles.sectionSub} style={{ margin: '0 0 12px' }}>
+                {gradeSummaryData.subject.total_weightage.toFixed(1)} of {gradeSummaryData.subject.total_marks} course marks currently allocated
+                {gradeSummaryData.subject.unallocated_marks != null ? ` · ${gradeSummaryData.subject.unallocated_marks} not yet allocated` : ''}.
+                {' '}Percentages are based on allocated marks, not the full course total.
+              </p>
+            )}
             {loadingSummary ? (
               <p className={styles.sectionSub}>Loading subject report preview…</p>
             ) : !gradeSummaryData ? (
@@ -535,15 +575,15 @@ export default function ReportsPage() {
                           #{e.exp_number} {e.title.slice(0, 18)} ({e.weightage}p)
                         </th>
                       ))}
-                      <th style={{ textAlign: 'right' }}>Total ({gradeSummaryData.subject.total_marks}p)</th>
+                      <th style={{ textAlign: 'right' }}>Points Earned / Allocated</th>
                       <th style={{ textAlign: 'right' }}>Dossier</th>
                     </tr>
                   </thead>
                   <tbody>
                     {(gradeSummaryData.students as any[]).map(s => {
-                      const pct = gradeSummaryData.subject.total_marks > 0
-                        ? Math.round((s.subject_score / gradeSummaryData.subject.total_marks) * 100)
-                        : 0;
+                      const pointsEarned = s.points_earned ?? s.subject_score ?? null;
+                      const pointsAllocated = s.points_allocated ?? gradeSummaryData.subject.total_weightage ?? null;
+                      const pct = s.subject_percent ?? null;
                       return (
                         <tr key={s.student_id}>
                           <td>
@@ -568,7 +608,10 @@ export default function ReportsPage() {
                             );
                           })}
                           <td style={{ textAlign: 'right', fontWeight: 800 }}>
-                            {s.subject_score.toFixed(1)} ({pct}%)
+                            {pointsEarned == null || pointsAllocated == null ? '—' : `${pointsEarned.toFixed(2)} / ${pointsAllocated.toFixed(2)}`}
+                            <div style={{ fontSize: 10.5, fontWeight: 600, color: '#64748b' }}>
+                              {pct == null ? 'No marks allocated' : `${pct.toFixed(1)}% of allocated marks`}
+                            </div>
                           </td>
                           <td style={{ textAlign: 'right' }}>
                             <button
@@ -609,42 +652,13 @@ export default function ReportsPage() {
                     <option value="student">Student-Facing (Motivational)</option>
                   </select>
                 )}
-                <button className={styles.primaryBtn} onClick={generateServerReport} disabled={generating}>
+                <button className={styles.primaryBtn} onClick={() => generateServerReport()} disabled={generating}>
                   {generating ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
                   Generate Workbook
                 </button>
               </div>
             </div>
 
-            {reportsLoading ? (
-              <Loader2 size={16} className="animate-spin" />
-            ) : reports.length > 0 ? (
-              <div className={styles.list}>
-                {reports.slice(0, 8).map(r => (
-                  <div key={r.id} className={styles.listRow}>
-                    <div className={styles.rowBody}>
-                      <div className={styles.rowTitle}>{r.kind.replace(/_/g, ' ').toUpperCase()}</div>
-                      <div className={styles.rowMeta}>{r.created_at ?? '—'} · {r.status}</div>
-                    </div>
-                    <div className={styles.rowSide} style={{ display: 'flex', gap: 8 }}>
-                      <span className={`${styles.badge} ${r.status === 'ready' ? styles.greenBadge : styles.amberBadge}`}>{r.status}</span>
-                      {r.status === 'ready' && r.id && (
-                        <>
-                          <button className={styles.secondaryBtn} onClick={() => downloadReport(r.id, 'csv')} style={{ padding: '6px 12px', minHeight: 0, fontSize: 12 }}>
-                            <Download size={12} /> CSV
-                          </button>
-                          <button className={styles.ghostBtn} onClick={() => downloadReport(r.id, 'xlsx')} style={{ padding: '6px 12px', minHeight: 0, fontSize: 12 }}>
-                            <Download size={12} /> XLSX
-                          </button>
-                        </>
-                      )}
-                    </div>
-                  </div>
-                ))}
-              </div>
-            ) : (
-              <p className={styles.sectionSub}>No batch workbooks generated yet.</p>
-            )}
           </div>
         </>
       )}
@@ -675,6 +689,12 @@ export default function ReportsPage() {
               </button>
               <button type="button" className={styles.primaryBtn} onClick={handleExportIndividualStudentCSV} disabled={!activeStudentReport}>
                 <Download size={14} /> Export Student CSV
+              </button>
+              <button type="button" className={styles.ghostBtn}
+                onClick={() => generateServerReport('student_progress', { student_id: selectedStudentId })}
+                disabled={!activeStudentReport || generating}>
+                {generating ? <Loader2 size={14} className="animate-spin" /> : <FileText size={14} />}
+                Generate XLSX / PDF dossier
               </button>
             </div>
           </div>
@@ -711,14 +731,17 @@ export default function ReportsPage() {
                 </div>
 
                 <div style={{ textAlign: 'right' }}>
-                  <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Cumulative Subject Score</div>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Points on allocated marks</div>
                   <div style={{ fontSize: 26, fontWeight: 800, color: '#7c3aed' }}>
-                    {activeStudentReport.subject_score.toFixed(1)} / {gradeSummaryData.subject.total_marks}
+                    {(activeStudentReport.points_earned ?? activeStudentReport.subject_score).toFixed(2)} / {(activeStudentReport.points_allocated ?? gradeSummaryData.subject.total_weightage).toFixed(2)}
                   </div>
                   <div style={{ fontSize: 12, fontWeight: 700, color: '#059669' }}>
-                    {gradeSummaryData.subject.total_marks > 0
-                      ? `${Math.round((activeStudentReport.subject_score / gradeSummaryData.subject.total_marks) * 100)}% Overall Mastery`
-                      : ''}
+                    {activeStudentReport.subject_percent == null
+                      ? 'No marks allocated yet'
+                      : `${activeStudentReport.subject_percent.toFixed(1)}% of allocated marks`}
+                  </div>
+                  <div style={{ fontSize: 11, color: '#64748b', marginTop: 3 }}>
+                    {gradeSummaryData.subject.total_weightage.toFixed(1)} of {gradeSummaryData.subject.total_marks} course marks allocated
                   </div>
                 </div>
               </div>
@@ -758,8 +781,13 @@ export default function ReportsPage() {
                               <span className={`${styles.pill} ${styles.pillGreen}`} style={{ fontSize: 10.5 }}>Submitted</span>
                               <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>{fmtDateTime(det.submitted_at)}</div>
                             </div>
+                          ) : det?.graded_at ? (
+                            <div>
+                              <span className={`${styles.pill} ${styles.pillAmber}`} style={{ fontSize: 10.5 }}>Graded · submission time unavailable</span>
+                              <div style={{ fontSize: 11, color: '#64748b', marginTop: 2 }}>Graded {fmtDateTime(det.graded_at)}</div>
+                            </div>
                           ) : (
-                            <span className={`${styles.pill} ${styles.pillSlate}`} style={{ fontSize: 10.5 }}>Not Submitted</span>
+                            <span className={`${styles.pill} ${styles.pillSlate}`} style={{ fontSize: 10.5 }}>No submission recorded</span>
                           )}
                         </td>
                         <td>
@@ -833,26 +861,36 @@ export default function ReportsPage() {
 
           <div className={styles.kpiRow}>
             <div className={styles.kpiCard}>
-              <p className={styles.kpiLabel}>Attendance Records</p>
+              <p className={styles.kpiLabel}>Enrolled</p>
               <p className={styles.kpiValue} style={{ color: '#7c3aed' }}>{attendance.length}</p>
-              <p className={styles.kpiSub}>Enrolled students in session</p>
+              <p className={styles.kpiSub}>Students in this session</p>
             </div>
             <div className={styles.kpiCard}>
-              <p className={styles.kpiLabel}>Present</p>
-              <p className={styles.kpiValue} style={{ color: '#16a34a' }}>{present}</p>
-              <p className={styles.kpiSub}>{late} joined late</p>
+              <p className={styles.kpiLabel}>Attendance Recorded</p>
+              <p className={styles.kpiValue} style={{ color: '#334155' }}>{recorded} / {attendance.length}</p>
+              <p className={styles.kpiSub}>Saved attendance entries</p>
             </div>
             <div className={styles.kpiCard}>
-              <p className={styles.kpiLabel}>Absent</p>
+              <p className={styles.kpiLabel}>Present / Late</p>
+              <p className={styles.kpiValue} style={{ color: '#16a34a' }}>{present + late}</p>
+              <p className={styles.kpiSub}>{present} present · {late} late</p>
+            </div>
+            <div className={styles.kpiCard}>
+              <p className={styles.kpiLabel}>Explicitly Absent</p>
               <p className={styles.kpiValue} style={{ color: '#b91c1c' }}>{absent}</p>
-              <p className={styles.kpiSub}>Did not attend live window</p>
+              <p className={styles.kpiSub}>Absence saved in the record</p>
             </div>
             <div className={styles.kpiCard}>
-              <p className={styles.kpiLabel}>Attendance Rate</p>
+              <p className={styles.kpiLabel}>Not Recorded</p>
+              <p className={styles.kpiValue} style={{ color: '#64748b' }}>{notRecorded}</p>
+              <p className={styles.kpiSub}>Not counted as absent</p>
+            </div>
+            <div className={styles.kpiCard}>
+              <p className={styles.kpiLabel}>Rate of Recorded Attendance</p>
               <p className={styles.kpiValue} style={{ color: '#7c3aed' }}>
-                {attendance.length === 0 ? '—' : `${Math.round(((present + late) / attendance.length) * 100)}%`}
+                {attendanceStats.rate == null ? '—' : `${attendanceStats.rate}%`}
               </p>
-              <p className={styles.kpiSub}>Present + late / total</p>
+              <p className={styles.kpiSub}>Weighted rate among recorded statuses</p>
             </div>
           </div>
 
@@ -860,7 +898,7 @@ export default function ReportsPage() {
             <div className={styles.sectionHeader}>
               <div>
                 <h2 className={styles.sectionTitle}>Session Attendance Ledger</h2>
-                <p className={styles.sectionSub}>Verified session join timestamps and attendance statuses</p>
+                <p className={styles.sectionSub}>Saved attendance and join times. Missing records are shown as Not Recorded, not inferred absent.</p>
               </div>
             </div>
 
@@ -895,6 +933,41 @@ export default function ReportsPage() {
           </section>
         </>
       )}
+
+      <section className={styles.sectionCard} style={{ marginTop: 18 }}>
+        <div className={styles.sectionHeader}>
+          <div>
+            <h2 className={styles.sectionTitle}>Generated Reports</h2>
+            <p className={styles.sectionSub}>Server-built files are listed here when their status changes to Ready. Each report can be downloaded as CSV, Excel (.xlsx), or PDF.</p>
+          </div>
+        </div>
+        {reportsLoading ? (
+          <Loader2 size={16} className="animate-spin" />
+        ) : reports.length > 0 ? (
+          <div className={styles.list}>
+            {reports.slice(0, 8).map(r => (
+              <div key={r.id} className={styles.listRow}>
+                <div className={styles.rowBody}>
+                  <div className={styles.rowTitle}>{r.kind.replace(/_/g, ' ').toUpperCase()}</div>
+                  <div className={styles.rowMeta}>{r.created_at ?? '—'} · {r.status}{r.error ? ` · ${r.error}` : ''}</div>
+                </div>
+                <div className={styles.rowSide} style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
+                  <span className={`${styles.badge} ${r.status === 'ready' ? styles.greenBadge : r.status === 'failed' ? styles.redBadge : styles.amberBadge}`}>{r.status}</span>
+                  {r.status === 'ready' && r.id && (
+                    <>
+                      <button className={styles.secondaryBtn} onClick={() => downloadReport(r.id, 'csv')} style={{ padding: '6px 12px', minHeight: 0, fontSize: 12 }}><Download size={12} /> CSV</button>
+                      <button className={styles.ghostBtn} onClick={() => downloadReport(r.id, 'xlsx')} style={{ padding: '6px 12px', minHeight: 0, fontSize: 12 }}><Download size={12} /> XLSX</button>
+                      <button className={styles.ghostBtn} onClick={() => downloadReport(r.id, 'pdf')} style={{ padding: '6px 12px', minHeight: 0, fontSize: 12 }}><Download size={12} /> PDF</button>
+                    </>
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <p className={styles.sectionSub}>No server-generated reports yet. Create one from the Subject report or individual dossier view.</p>
+        )}
+      </section>
     </InstructorShell>
   );
 }

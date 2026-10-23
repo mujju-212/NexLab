@@ -616,7 +616,7 @@ export const experienceService = {
     return data.report;
   },
 
-  async downloadReport(reportId: string, fmt: 'csv' | 'xlsx' = 'csv') {
+  async downloadReport(reportId: string, fmt: 'csv' | 'xlsx' | 'pdf' = 'csv') {
     const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
     const token = (await import('js-cookie')).default.get('access_token');
     const res = await fetch(`${base}/instructor/reports/${reportId}/download?format=${fmt}`, {

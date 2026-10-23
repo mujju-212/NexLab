@@ -167,14 +167,18 @@ def get_attendance(session_id):
         a = att_by_student.get(sid)
         if a:
             d = a.to_dict()
+            d['is_recorded'] = True
         else:
+            # No attendance row is missing evidence, not proof of absence.
+            # Only an explicitly stored 'absent' status may be counted absent.
             d = {
                 'student_id': sid,
-                'status': 'absent',
+                'status': 'not_recorded',
                 'joined_at': None,
-                'total_time_seconds': 0,
-                'is_active_participant': False,
+                'total_time_seconds': None,
+                'is_active_participant': None,
                 'override_reason': None,
+                'is_recorded': False,
             }
         d['full_name']   = u.full_name if u else 'Unknown'
         d['roll_number'] = u.roll_number if u else ''
@@ -185,9 +189,12 @@ def get_attendance(session_id):
     result.sort(key=lambda x: (x.get('roll_number') or '', x.get('full_name') or ''))
     avg_focus = round(sum(focus_scores.values()) / len(focus_scores), 1) if focus_scores else None
 
+    recorded_total = sum(1 for row in result if row.get('is_recorded'))
     return jsonify({
         'attendance': result,
         'total': len(result),
+        'recorded_total': recorded_total,
+        'unrecorded_total': max(0, len(result) - recorded_total),
         'avg_focus_score': avg_focus,
         'session': {
             'id': session.id,
@@ -291,10 +298,10 @@ def export_attendance(session_id):
     for sid in sorted_sids:
         u = students.get(sid)
         a = att_by_student.get(sid)
-        st = a.status if a else 'absent'
+        st = a.status if a else 'not_recorded'
         j_at = a.joined_at.strftime('%Y-%m-%d %H:%M:%S') if (a and a.joined_at) else ''
-        t_sec = a.total_time_seconds if (a and a.total_time_seconds) else 0
-        is_act = 'Yes' if (a and a.is_active_participant) else 'No'
+        t_sec = a.total_time_seconds if (a and a.total_time_seconds is not None) else ''
+        is_act = ('Yes' if a.is_active_participant else 'No') if a else ''
         ovr = (a.override_reason or '') if a else ''
         f_score = round(focus_scores[sid], 1) if sid in focus_scores else ''
 
@@ -304,7 +311,7 @@ def export_attendance(session_id):
             u.email if u else '',
             st,
             j_at,
-            round(t_sec / 60, 1),
+            round(float(t_sec) / 60, 1) if t_sec != '' else '',
             f_score,
             is_act,
             ovr,
@@ -342,7 +349,7 @@ def attendance_summary(session_id):
     summary = {}
     for sid in all_ids:
         a = att_by_student.get(sid)
-        st = a.status if a else 'absent'
+        st = a.status if a else 'not_recorded'
         summary[st] = summary.get(st, 0) + 1
 
     return jsonify({
