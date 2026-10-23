@@ -111,8 +111,9 @@ def get_announcements_stats():
     total_likes = sum(a.likes_count for a in sent_announcements)
 
     # Calculate delivery rate & open rate
-    open_rate_pct = round((total_views / total_reach * 100), 1) if total_reach > 0 else 95.0
-    delivery_rate_pct = 92.4 if total_reach > 0 else 98.0
+    open_rate_pct = round((total_views / total_reach * 100), 1) if total_reach > 0 else 0
+    # Delivery receipts are not stored per channel; don't fabricate a percentage.
+    delivery_rate_pct = None
 
     scheduled_count = Announcement.query.filter_by(institution_id=iid, status='scheduled').count()
     drafts_count = Announcement.query.filter_by(institution_id=iid, status='draft').count()

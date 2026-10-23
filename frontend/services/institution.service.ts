@@ -2610,7 +2610,7 @@ export const institutionService = {
     total_announcements: number;
     new_this_month: number;
     students_reached: number;
-    delivery_rate_pct: number;
+    delivery_rate_pct: number | null;
     total_views: number;
     open_rate_pct: number;
     scheduled_count: number;

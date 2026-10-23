@@ -18,7 +18,7 @@ interface StatData {
   total_announcements: number;
   new_this_month: number;
   students_reached: number;
-  delivery_rate_pct: number;
+  delivery_rate_pct: number | null;
   total_views: number;
   open_rate_pct: number;
   scheduled_count: number;
@@ -65,7 +65,7 @@ export default function AnnouncementsPage() {
     total_announcements: 0,
     new_this_month: 0,
     students_reached: 0,
-    delivery_rate_pct: 100,
+    delivery_rate_pct: null,
     total_views: 0,
     open_rate_pct: 0,
     scheduled_count: 0,
@@ -455,12 +455,8 @@ export default function AnnouncementsPage() {
               <div className={styles.statValueRow}>
                 <span className={styles.statValue}>{stats.students_reached.toLocaleString()}</span>
               </div>
-              <p className={styles.statLabel}>Students Reached</p>
-              <div>
-                <span className={`${styles.statBadge} ${styles.badgeSuccess}`}>
-                  ↑ {stats.delivery_rate_pct}% delivery rate
-                </span>
-              </div>
+              <p className={styles.statLabel}>Recipient deliveries</p>
+              <div><span className={styles.statBadge}>Across sent announcements · delivery receipts not tracked</span></div>
             </div>
           </div>
 
@@ -1256,26 +1252,27 @@ export default function AnnouncementsPage() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 16 }}>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: 14 }}>
                 <div style={{ border: '1px solid #ede8f5', borderRadius: 12, padding: 16, background: '#faf8ff' }}>
-                  <p style={{ margin: 0, fontSize: 12, color: '#6b7280', fontWeight: 600 }}>Aggregate Delivery Rate</p>
-                  <p style={{ margin: '4px 0', fontSize: 24, fontWeight: 700, color: '#7c3aed' }}>{stats.delivery_rate_pct}%</p>
-                  <p style={{ margin: 0, fontSize: 11.5, color: '#10b981' }}>High delivery reliability across all institutional batches</p>
+                  <p style={{ margin: 0, fontSize: 12, color: '#6b7280', fontWeight: 600 }}>Delivery confirmations</p>
+                  <p style={{ margin: '4px 0', fontSize: 20, fontWeight: 700, color: '#7c3aed' }}>{stats.delivery_rate_pct == null ? 'Not tracked' : `${stats.delivery_rate_pct}%`}</p>
+                  <p style={{ margin: 0, fontSize: 11.5, color: '#6b7280' }}>The app does not store channel-delivery receipts, so no delivery rate is shown.</p>
                 </div>
                 <div style={{ border: '1px solid #ede8f5', borderRadius: 12, padding: 16, background: '#f0fdf4' }}>
                   <p style={{ margin: 0, fontSize: 12, color: '#6b7280', fontWeight: 600 }}>Average Open Rate</p>
                   <p style={{ margin: '4px 0', fontSize: 24, fontWeight: 700, color: '#059669' }}>{stats.open_rate_pct}%</p>
-                  <p style={{ margin: 0, fontSize: 11.5, color: '#059669' }}>Top 5% engagement across virtual lab academic portals</p>
+                  <p style={{ margin: 0, fontSize: 11.5, color: '#059669' }}>Based on recorded reads divided by recipient deliveries.</p>
                 </div>
               </div>
 
               <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 16 }}>
                 <h4 style={{ margin: '0 0 10px', fontSize: 14, fontWeight: 700, color: '#111827' }}>Top Viewed Announcements</h4>
                 <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                  {announcements.slice(0, 4).map(a => (
-                    <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
-                      <span style={{ fontWeight: 600, color: '#1f2937' }}>{a.title}</span>
-                      <span style={{ fontWeight: 700, color: '#7c3aed' }}>{a.views_count.toLocaleString()} views ({a.open_rate_pct}%)</span>
-                    </div>
-                  ))}
+                  {announcements.filter(a => a.status === 'sent').length === 0 ? <p style={{ margin: 0, color: '#7b7488', fontSize: 12 }}>No sent announcements to measure yet.</p> :
+                    [...announcements].filter(a => a.status === 'sent').sort((a, b) => b.views_count - a.views_count).slice(0, 4).map(a => (
+                      <div key={a.id} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 13 }}>
+                        <span style={{ fontWeight: 600, color: '#1f2937' }}>{a.title}</span>
+                        <span style={{ fontWeight: 700, color: '#7c3aed' }}>{a.views_count.toLocaleString()} reads ({a.open_rate_pct}%)</span>
+                      </div>
+                    ))}
                 </div>
               </div>
             </div>
