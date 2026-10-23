@@ -182,6 +182,11 @@ def create_app(config_name=None):
         except Exception:
             pass
         try:
+            from app.models.feedback import SessionFeedbackReceipt
+            SessionFeedbackReceipt.__table__.create(bind=db.engine, checkfirst=True)
+        except Exception:
+            pass
+        try:
             from sqlalchemy import text as _sa_text
             _SCHEMA_AND_INDEX_DDL = [
                 # AI Harness Phase 1 & 2 schema upgrades (safe idempotent column additions)

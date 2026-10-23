@@ -15,7 +15,7 @@ from app.models.exam import Exam, ExamQuestion, ExamAttempt
 from app.models.submission import CodeVersion, CodeAttempt
 from app.models.grading import Grade, InlineComment, VivaSession, VivaAnswer, HintLog
 from app.models.knowledge import ConceptMastery, StudentRanking, FocusScore, ExperimentConcept, ConceptPrereq
-from app.models.feedback import SessionFeedback, PlagiarismFlag, Notification
+from app.models.feedback import SessionFeedback, SessionFeedbackReceipt, PlagiarismFlag, Notification
 from app.models.free import FreeCourse, FreeExercise, FreeProgress
 from app.models.otp import EmailOTP
 from app.models.ai_usage import AIUsageLog, AIPolicy, AIAgentRun
@@ -63,7 +63,7 @@ __all__ = [
     'CodeVersion', 'CodeAttempt',
     'Grade', 'InlineComment', 'VivaSession', 'VivaAnswer', 'HintLog',
     'ConceptMastery', 'StudentRanking', 'FocusScore',
-    'SessionFeedback', 'PlagiarismFlag', 'Notification',
+    'SessionFeedback', 'SessionFeedbackReceipt', 'PlagiarismFlag', 'Notification',
     'FreeCourse', 'FreeExercise', 'FreeProgress',
     'EmailOTP',
     'AIUsageLog', 'AIPolicy', 'AIAgentRun',

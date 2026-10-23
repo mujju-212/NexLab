@@ -19,7 +19,7 @@ import type {
 } from '@/hooks/use-socket';
 import type { ContentModule, QuizQuestion, GateResult, Language } from '@/types';
 import {
-  Radio, Sparkles, Loader2, ShieldAlert, Video,
+  Radio, Sparkles, Loader2, ShieldAlert, Video, Star,
   CheckCircle2, Circle, Camera, Monitor, UserCheck, X,
   Bell, PauseCircle, FileDown, BookOpen, Send,
   Users, ShieldCheck, TrendingUp, Mic, ArrowLeft, ArrowRight,
@@ -1597,6 +1597,7 @@ export default function LiveLabRoomPage() {
       try {
         const g = await studentService.checkGate(sessionId) as GateResult;
         if (cancelled || !g) return;
+        setGate(current => current ? { ...current, feedback_submitted: g.feedback_submitted } : current);
         if (g.session_status === 'ended' || g.session_status === 'cancelled') {
           setSessionEnded(true);
           setSharePrompt(null);
@@ -1616,6 +1617,7 @@ export default function LiveLabRoomPage() {
       .then(async (res) => {
         const g = res as GateResult;
         setGate(g);
+        if (g.session_status === 'ended' || g.session_status === 'cancelled') setSessionEnded(true);
         if (g?.session) {
           const t = g.session.started_at || g.session.scheduled_at;
           if (t) {
@@ -2264,8 +2266,17 @@ export default function LiveLabRoomPage() {
             <CheckCircle2 size={15} color="#4b5563" />
             <span style={{ flex: 1 }}>
               <b>The instructor ended this session.</b> Your screen has stopped being shared and
-              your work is saved. You can close this page.
+              your work is saved.
             </span>
+            {gate?.session_status === 'ended' && (gate.feedback_submitted ? (
+              <span style={{ color: '#15803d', fontWeight: 700, fontSize: 12.5, whiteSpace: 'nowrap' }}>
+                Feedback submitted
+              </span>
+            ) : (
+              <button className={styles.checkBtn} onClick={() => setShowFeedbackModal(true)}>
+                <Star size={13} /> Rate Session
+              </button>
+            ))}
             <button className={styles.checkBtn} onClick={() => router.push('/student/live-lab')}>
               Back to Live Lab
             </button>
@@ -2282,13 +2293,17 @@ export default function LiveLabRoomPage() {
           <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '10px 14px', borderRadius: 10, background: 'rgba(239,68,68,.1)', border: '1px solid rgba(239,68,68,.3)', fontSize: 13.5 }}>
             <FileDown size={15} color="#ef4444" />
             <span style={{ flex: 1 }}>{forcedSubmit.reason || 'Session ended by instructor — your code was auto-submitted.'}</span>
-            <button
-              className={styles.checkBtn}
-              style={{ background: '#7c3aed', color: '#ffffff', fontWeight: 600, border: 'none' }}
-              onClick={() => setShowFeedbackModal(true)}
-            >
-              Rate Session
-            </button>
+            {gate?.feedback_submitted ? (
+              <span style={{ color: '#15803d', fontWeight: 700, fontSize: 12.5 }}>Feedback submitted</span>
+            ) : (
+              <button
+                className={styles.checkBtn}
+                style={{ background: '#7c3aed', color: '#ffffff', fontWeight: 600, border: 'none' }}
+                onClick={() => setShowFeedbackModal(true)}
+              >
+                Rate Session
+              </button>
+            )}
             <button className={styles.checkBtn} onClick={() => setForcedSubmit(null)}><X size={13} /> OK</button>
           </div>
         )}
@@ -2389,6 +2404,7 @@ export default function LiveLabRoomPage() {
               instructorName={instructorName}
               onClose={() => setShowFeedbackModal(false)}
               onSuccess={() => {
+                setGate(current => current ? { ...current, feedback_submitted: true } : current);
                 setToastMsg('Thank you! Your anonymous feedback was recorded.');
                 setTimeout(() => setToastMsg(null), 3500);
               }}

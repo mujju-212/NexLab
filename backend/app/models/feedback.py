@@ -23,6 +23,22 @@ class SessionFeedback(db.Model):
     submitted_at            = db.Column(db.DateTime, default=datetime.utcnow)
 
 
+class SessionFeedbackReceipt(db.Model):
+    """Per-student submission receipt, kept separate from anonymous feedback content."""
+    __tablename__ = 'session_feedback_receipts'
+    __table_args__ = (
+        db.Index('ix_feedback_receipts_student', 'student_id'),
+    )
+
+    session_id = db.Column(
+        db.String(36), db.ForeignKey('lab_sessions.id', ondelete='CASCADE'), primary_key=True
+    )
+    student_id = db.Column(
+        db.String(36), db.ForeignKey('users.id', ondelete='CASCADE'), primary_key=True
+    )
+    submitted_at = db.Column(db.DateTime, nullable=False, default=datetime.utcnow, server_default=db.func.now())
+
+
 class PlagiarismFlag(db.Model):
     """Similarity flags raised after session — instructor reviews"""
     __tablename__ = 'plagiarism_flags'

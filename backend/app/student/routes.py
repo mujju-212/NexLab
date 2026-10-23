@@ -12,11 +12,12 @@ from app.models.submission import CodeAttempt, CodeVersion
 from app.models.grading import Grade, HintLog
 from app.models.knowledge import ConceptMastery, StudentRanking, FocusScore
 from app.ml.knowledge_tracing import update_concept_mastery
-from app.models.feedback import SessionFeedback, Notification
+from app.models.feedback import SessionFeedback, SessionFeedbackReceipt, Notification
 from app.models.academic import SectionSubject, SectionStudent
 from app.models.subject import Subject
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import or_
+from sqlalchemy.exc import IntegrityError
 
 student_bp = Blueprint('student', __name__)
 
@@ -956,8 +957,17 @@ def check_gate(session_id):
             can_subscribe=True,  # see/hear instructor
         )
 
+    feedback_receipt = SessionFeedbackReceipt.query.filter_by(
+        session_id=session_id, student_id=g.user_id
+    ).first()
+    feedback_attendance = SessionAttendance.query.filter_by(
+        session_id=session_id, student_id=g.user_id
+    ).first()
+    feedback_submitted = bool(feedback_receipt or (feedback_attendance and feedback_attendance.feedback_submitted))
+
     return jsonify({
         'gate_passed':      quiz_gate_passed,
+        'feedback_submitted': feedback_submitted,
         'session':          session.to_dict(),
         'jitsi_room':       session.jitsi_room_name if can_join_live else None,  # kept for compat
         'livekit_token':    livekit_token,
@@ -1089,57 +1099,81 @@ def my_notifications():
 @student_bp.route('/feedback', methods=['POST'])
 @require_role('student')
 def submit_feedback():
-    """Submit anonymous session feedback — student_id is NOT stored"""
-    data = request.get_json() or {}
+    """Submit one anonymous response per student and ended session."""
+    data = request.get_json(silent=True) or {}
     session_id = data.get('session_id')
+    if not session_id:
+        return jsonify({'error': 'session_id is required.'}), 400
 
     session = LabSession.query.filter_by(
         id=session_id, institution_id=g.institution_id
     ).first_or_404()
+    if session.status != 'ended' or not session.ended_at:
+        return jsonify({'error': 'Feedback is available after the session has ended.'}), 400
+    if datetime.utcnow() > session.ended_at + timedelta(hours=24):
+        return jsonify({'error': 'Feedback window has closed (24 hours after session end).'}), 400
 
-    # Check feedback window (24 hours after session ended)
-    if session.ended_at and datetime.utcnow() > session.ended_at + timedelta(hours=24):
-        return jsonify({'error': 'Feedback window has closed (24 hours after session end)'}), 400
+    rating_fields = (
+        'experiment_clarity', 'session_pacing', 'ai_hint_helpfulness', 'overall_rating'
+    )
+    ratings = {}
+    for field in rating_fields:
+        value = data.get(field)
+        if isinstance(value, bool) or not isinstance(value, int) or not 1 <= value <= 5:
+            return jsonify({'error': f'{field} must be an integer from 1 to 5.'}), 400
+        ratings[field] = value
 
-    # Verify student attendance or enrollment
+    comment = data.get('comment')
+    if comment is not None and not isinstance(comment, str):
+        return jsonify({'error': 'comment must be text.'}), 400
+    comment = comment.strip() if isinstance(comment, str) else ''
+    if len(comment) > 2000:
+        return jsonify({'error': 'comment must be 2,000 characters or fewer.'}), 400
+
+    # A recorded attendance row is sufficient; otherwise require active enrollment.
+    # Never create or modify attendance to track a feedback submission.
     att = SessionAttendance.query.filter_by(
         session_id=session_id, student_id=g.user_id
     ).first()
     if not att:
-        from app.models.academic import SectionSubject, SectionStudent
         enrolled = SectionStudent.query.join(
             SectionSubject, SectionSubject.section_id == SectionStudent.section_id
         ).filter(
             SectionStudent.student_id == g.user_id,
-            SectionSubject.id == session.section_subject_id
+            SectionStudent.section_id == SectionSubject.section_id,
+            SectionSubject.id == session.section_subject_id,
+            SectionSubject.institution_id == g.institution_id,
         ).first()
         if not enrolled:
-            return jsonify({'error': 'You are not enrolled in this session'}), 403
-        att = SessionAttendance(
-            session_id=session_id,
-            student_id=g.user_id,
-            status='present',
-            feedback_submitted=False
-        )
-        db.session.add(att)
+            return jsonify({'error': 'You are not enrolled in this session.'}), 403
 
-    if getattr(att, 'feedback_submitted', False):
+    if (SessionFeedbackReceipt.query.filter_by(
+            session_id=session_id, student_id=g.user_id
+        ).first() or (att and att.feedback_submitted)):
         return jsonify({'error': 'You have already submitted feedback for this session.'}), 400
 
     feedback = SessionFeedback(
         session_id=session_id,
         institution_id=g.institution_id,
-        # Intentionally NO student_id
-        experiment_clarity=data.get('experiment_clarity'),
-        session_pacing=data.get('session_pacing'),
-        ai_hint_helpfulness=data.get('ai_hint_helpfulness'),
-        overall_rating=data.get('overall_rating'),
-        comment=data.get('comment'),
+        # Student identity is intentionally stored only in the separate receipt table,
+        # never on the feedback row returned to instructors or institution admins.
+        experiment_clarity=ratings['experiment_clarity'],
+        session_pacing=ratings['session_pacing'],
+        ai_hint_helpfulness=ratings['ai_hint_helpfulness'],
+        overall_rating=ratings['overall_rating'],
+        comment=comment or None,
     )
-    db.session.add(feedback)
-    att.feedback_submitted = True
-    db.session.commit()
-    return jsonify({'message': 'Feedback submitted anonymously. Thank you!'}), 201
+    receipt = SessionFeedbackReceipt(session_id=session_id, student_id=g.user_id)
+    db.session.add_all([feedback, receipt])
+    if att:
+        att.feedback_submitted = True
+    try:
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'You have already submitted feedback for this session.'}), 400
+
+    return jsonify({'message': 'Feedback submitted anonymously. Thank you!', 'submitted': True}), 201
 
 
 # â”€â”€ PDF Lab Record â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
@@ -1306,6 +1340,11 @@ def my_sessions():
     sessions = LabSession.query.filter(
         LabSession.section_subject_id.in_(ss_ids)
     ).order_by(LabSession.scheduled_at.desc()).all() if ss_ids else []
+    session_ids = [session.id for session in sessions]
+    feedback_done = {row.session_id for row in SessionFeedbackReceipt.query.filter(
+        SessionFeedbackReceipt.student_id == g.user_id,
+        SessionFeedbackReceipt.session_id.in_(session_ids),
+    ).all()} if session_ids else set()
 
     result = []
     for session in sessions:
@@ -1313,7 +1352,10 @@ def my_sessions():
             session_id=session.id, student_id=g.user_id
         ).first()
         d = session.to_dict()
-        d['my_attendance'] = att.to_dict() if att else {'status': 'absent'}
+        d['my_attendance'] = att.to_dict() if att else {'status': 'not_recorded'}
+        d['my_attendance']['feedback_submitted'] = (
+            session.id in feedback_done or bool(att and att.feedback_submitted)
+        )
         result.append(d)
     return jsonify({'sessions': result}), 200
 

@@ -135,6 +135,7 @@ export interface LabSession {
 // Returned by GET /student/sessions/<id>/check-gate
 export interface GateResult {
   gate_passed:      boolean;
+  feedback_submitted?: boolean;
   session:          LabSession;
   jitsi_room:       string | null;   // kept for backward compat
   livekit_token:    string | null;   // null when LiveKit is not configured

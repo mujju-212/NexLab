@@ -1667,6 +1667,17 @@ CREATE TABLE public.session_feedback (
 
 
 --
+-- Name: session_feedback_receipts; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.session_feedback_receipts (
+    session_id character varying(36) NOT NULL,
+    student_id character varying(36) NOT NULL,
+    submitted_at timestamp without time zone DEFAULT now() NOT NULL
+);
+
+
+--
 -- Name: session_mode_transitions; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -2633,6 +2644,14 @@ ALTER TABLE ONLY public.session_attendance
 
 ALTER TABLE ONLY public.session_feedback
     ADD CONSTRAINT session_feedback_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: session_feedback_receipts session_feedback_receipts_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.session_feedback_receipts
+    ADD CONSTRAINT session_feedback_receipts_pkey PRIMARY KEY (session_id, student_id);
 
 
 --
@@ -4187,6 +4206,13 @@ CREATE INDEX ix_session_feedback_session_submitted ON public.session_feedback US
 
 
 --
+-- Name: ix_feedback_receipts_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_feedback_receipts_student ON public.session_feedback_receipts USING btree (student_id);
+
+
+--
 -- Name: ix_sms_inst_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -5679,6 +5705,22 @@ ALTER TABLE ONLY public.session_feedback
 
 ALTER TABLE ONLY public.session_feedback
     ADD CONSTRAINT session_feedback_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.lab_sessions(id);
+
+
+--
+-- Name: session_feedback_receipts session_feedback_receipts_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.session_feedback_receipts
+    ADD CONSTRAINT session_feedback_receipts_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.lab_sessions(id) ON DELETE CASCADE;
+
+
+--
+-- Name: session_feedback_receipts session_feedback_receipts_student_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.session_feedback_receipts
+    ADD CONSTRAINT session_feedback_receipts_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id) ON DELETE CASCADE;
 
 
 --

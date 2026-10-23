@@ -16,7 +16,7 @@ import SessionFeedbackModal from '@/components/student/SessionFeedbackModal';
 import styles from './page.module.css';
 
 interface SessionWithMeta extends LabSession {
-  my_attendance?: { status: string; joined_at?: string | null };
+  my_attendance?: { status: string; joined_at?: string | null; feedback_submitted?: boolean };
   duration_minutes?: number | null;
   subject_name?: string;
   subject_code?: string;
@@ -489,7 +489,7 @@ export default function StudentLiveLabPage() {
                               <RotateCcw size={12} /> CATCH-UP READY
                             </span>
                           )}
-                          {s.my_attendance && s.my_attendance.status !== 'absent' && (
+                          {s.my_attendance && !['absent', 'not_recorded'].includes(s.my_attendance.status) && (
                             <span className={styles.attendanceBadgePresent}>
                               <Check size={11} strokeWidth={3} /> {s.my_attendance.status.toUpperCase()}
                             </span>
@@ -559,15 +559,27 @@ export default function StudentLiveLabPage() {
 
                       {isEnded && (
                         <>
-                          <button
-                            className={styles.openDetailsBtn}
-                            style={{ borderColor: '#7c3aed', color: '#7c3aed', background: 'rgba(124,58,237,0.06)' }}
-                            onClick={() => setFeedbackSession(s)}
-                            title="Rate this session"
-                          >
-                            <Star size={14} />
-                            <span>Rate Session</span>
-                          </button>
+                          {s.my_attendance?.feedback_submitted ? (
+                            <button
+                              className={styles.openDetailsBtn}
+                              disabled
+                              aria-label="Feedback already submitted"
+                              style={{ borderColor: '#16a34a', color: '#15803d', background: 'rgba(22,163,74,0.07)', cursor: 'default' }}
+                            >
+                              <CheckCircle2 size={14} />
+                              <span>Feedback Submitted</span>
+                            </button>
+                          ) : (
+                            <button
+                              className={styles.openDetailsBtn}
+                              style={{ borderColor: '#7c3aed', color: '#7c3aed', background: 'rgba(124,58,237,0.06)' }}
+                              onClick={() => setFeedbackSession(s)}
+                              title="Rate this session"
+                            >
+                              <Star size={14} />
+                              <span>Rate Session</span>
+                            </button>
+                          )}
                           {!catchupAvailable && (
                             <button
                               className={styles.openDetailsBtn}
@@ -863,6 +875,11 @@ export default function StudentLiveLabPage() {
             instructorName={(feedbackSession as any).instructor_name}
             onClose={() => setFeedbackSession(null)}
             onSuccess={() => {
+              const submittedSessionId = feedbackSession.id;
+              setSessions(current => current.map(session => session.id === submittedSessionId
+                ? { ...session, my_attendance: { ...session.my_attendance, status: session.my_attendance?.status || 'not_recorded', feedback_submitted: true } }
+                : session));
+              setFeedbackSession(null);
               setNotice('Thank you! Your feedback was submitted.');
               setTimeout(() => setNotice(''), 3000);
             }}
