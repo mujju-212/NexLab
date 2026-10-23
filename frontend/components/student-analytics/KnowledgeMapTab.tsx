@@ -110,71 +110,6 @@ const MINDMAP_LAYOUT: Record<string, DomainLayoutCoord> = {
 
 const CENTER_NODE = { x: 460, y: 285 };
 
-const DEFAULT_DOMAINS: KnowledgeMapDomain[] = [
-  {
-    id: 'domain-ds',
-    name: 'Data Structures',
-    color: '#3b82f6',
-    score: 82,
-    concepts: [
-      { id: 'ds-1', name: 'Arrays & Strings', domain: 'Data Structures', score: 92, practice_strength: 95, academic_score: 89, blended_score: 92, status: 'Strong', band: 'strong', color: '#10b981' },
-      { id: 'ds-2', name: 'Linked Lists', domain: 'Data Structures', score: 85, practice_strength: 88, academic_score: 82, blended_score: 85, status: 'Strong', band: 'strong', color: '#10b981' },
-      { id: 'ds-3', name: 'Stacks & Queues', domain: 'Data Structures', score: 88, practice_strength: 90, academic_score: 86, blended_score: 88, status: 'Strong', band: 'strong', color: '#10b981' },
-      { id: 'ds-4', name: 'Trees & BST', domain: 'Data Structures', score: 78, practice_strength: 75, academic_score: 81, blended_score: 78, status: 'Good', band: 'good', color: '#3b82f6' },
-      { id: 'ds-5', name: 'Graphs', domain: 'Data Structures', score: 72, practice_strength: 68, academic_score: 76, blended_score: 72, status: 'Good', band: 'good', color: '#3b82f6' },
-      { id: 'ds-6', name: 'Hash Tables', domain: 'Data Structures', score: 86, practice_strength: 84, academic_score: 88, blended_score: 86, status: 'Strong', band: 'strong', color: '#10b981' },
-    ],
-  },
-  {
-    id: 'domain-algo',
-    name: 'Algorithms',
-    color: '#8b5cf6',
-    score: 74,
-    concepts: [
-      { id: 'algo-1', name: 'Sorting & Searching', domain: 'Algorithms', score: 88, practice_strength: 92, academic_score: 84, blended_score: 88, status: 'Strong', band: 'strong', color: '#10b981' },
-      { id: 'algo-2', name: 'Recursion', domain: 'Algorithms', score: 80, practice_strength: 82, academic_score: 78, blended_score: 80, status: 'Good', band: 'good', color: '#3b82f6' },
-      { id: 'algo-3', name: 'Greedy Algorithms', domain: 'Algorithms', score: 70, practice_strength: 68, academic_score: 72, blended_score: 70, status: 'Good', band: 'good', color: '#3b82f6' },
-      { id: 'algo-4', name: 'Dynamic Programming', domain: 'Algorithms', score: 45, practice_strength: 42, academic_score: 48, blended_score: 45, status: 'Weak', band: 'weak', color: '#ef4444' },
-      { id: 'algo-5', name: 'Graph Algorithms', domain: 'Algorithms', score: 62, practice_strength: 58, academic_score: 66, blended_score: 62, status: 'Moderate', band: 'moderate', color: '#f59e0b' },
-    ],
-  },
-  {
-    id: 'domain-db',
-    name: 'Database Systems',
-    color: '#10b981',
-    score: 79,
-    concepts: [
-      { id: 'db-1', name: 'Relational Model', domain: 'Database Systems', score: 90, practice_strength: 88, academic_score: 92, blended_score: 90, status: 'Strong', band: 'strong', color: '#10b981' },
-      { id: 'db-2', name: 'Normalization', domain: 'Database Systems', score: 82, practice_strength: 80, academic_score: 84, blended_score: 82, status: 'Good', band: 'good', color: '#3b82f6' },
-      { id: 'db-3', name: 'Transaction', domain: 'Database Systems', score: 74, practice_strength: 72, academic_score: 76, blended_score: 74, status: 'Good', band: 'good', color: '#3b82f6' },
-      { id: 'db-4', name: 'Query Optimization', domain: 'Database Systems', score: 65, practice_strength: 60, academic_score: 70, blended_score: 65, status: 'Moderate', band: 'moderate', color: '#f59e0b' },
-    ],
-  },
-  {
-    id: 'domain-os',
-    name: 'Operating Systems',
-    color: '#f59e0b',
-    score: 71,
-    concepts: [
-      { id: 'os-1', name: 'Processes', domain: 'Operating Systems', score: 78, practice_strength: 75, academic_score: 81, blended_score: 78, status: 'Good', band: 'good', color: '#3b82f6' },
-      { id: 'os-2', name: 'Memory Mgmt', domain: 'Operating Systems', score: 68, practice_strength: 64, academic_score: 72, blended_score: 68, status: 'Moderate', band: 'moderate', color: '#f59e0b' },
-      { id: 'os-3', name: 'File Systems', domain: 'Operating Systems', score: 72, practice_strength: 70, academic_score: 74, blended_score: 72, status: 'Good', band: 'good', color: '#3b82f6' },
-    ],
-  },
-  {
-    id: 'domain-cn',
-    name: 'Computer Networks',
-    color: '#ec4899',
-    score: 69,
-    concepts: [
-      { id: 'cn-1', name: 'OSI Model', domain: 'Computer Networks', score: 84, practice_strength: 82, academic_score: 86, blended_score: 84, status: 'Good', band: 'good', color: '#3b82f6' },
-      { id: 'cn-2', name: 'TCP/IP', domain: 'Computer Networks', score: 76, practice_strength: 74, academic_score: 78, blended_score: 76, status: 'Good', band: 'good', color: '#3b82f6' },
-      { id: 'cn-3', name: 'Routing', domain: 'Computer Networks', score: 55, practice_strength: 50, academic_score: 60, blended_score: 55, status: 'Moderate', band: 'moderate', color: '#f59e0b' },
-      { id: 'cn-4', name: 'Network Security', domain: 'Computer Networks', score: 64, practice_strength: 62, academic_score: 66, blended_score: 64, status: 'Moderate', band: 'moderate', color: '#f59e0b' },
-    ],
-  },
-];
-
 interface KnowledgeMapTabProps {
   knowledgeMap?: UnifiedStudentOverview['knowledge_map'];
   focusTopics?: string[];
@@ -217,7 +152,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
   const [detailsSubTab, setDetailsSubTab] = useState<'overview' | 'practice' | 'experiments'>('overview');
 
   // Currently selected concept for right details panel
-  const [selectedConceptName, setSelectedConceptName] = useState<string>('Dynamic Programming');
+  const [selectedConceptName, setSelectedConceptName] = useState<string>('');
 
   // Video and Bottom Cards modal states
   const [isVideoModalOpen, setIsVideoModalOpen] = useState(false);
@@ -227,7 +162,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
   const [openDropdown, setOpenDropdown] = useState<string | null>(null);
 
   // Fetch real knowledge map dashboard payload from backend
-  const { data: dashboardData, isLoading } = useQuery<KnowledgeMapDashboardResponse>({
+  const { data: dashboardData, isLoading, isError, error, refetch } = useQuery<KnowledgeMapDashboardResponse>({
     queryKey: ['student-knowledge-map-dashboard', viewMode, selectedSubject, selectedTopic, selectedPeriod],
     queryFn: () =>
       studentAnalyticsService.getKnowledgeMapDashboard({
@@ -239,37 +174,25 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
     staleTime: 60_000,
   });
 
-  // KPI data with graceful fallbacks
-  const kpi = dashboardData?.kpi_summary || {
-    blended_mastery_score: 72,
-    blended_delta: '+8%',
-    concepts_mastered: 18,
-    total_concepts: 26,
-    mastery_bars: [10, 12, 14, 16, 18],
-    strong_areas_count: 8,
-    areas_to_improve_count: 6,
-    not_started_count: 2,
-  };
+  // Analytics are rendered only from the API response. Missing observations remain unavailable.
+  const kpi = dashboardData?.kpi_summary ?? null;
 
   const domains: KnowledgeMapDomain[] = useMemo(() => {
-    const raw = dashboardData?.mindmap?.domains;
-    if (raw && raw.length > 0) {
-      return raw.map((d) => ({
-        ...d,
-        color:
-          d.color ||
-          (d.name.toLowerCase().includes('data structure')
-            ? '#3b82f6'
-            : d.name.toLowerCase().includes('algo')
-            ? '#8b5cf6'
-            : d.name.toLowerCase().includes('data') || d.name.toLowerCase().includes('db')
-            ? '#10b981'
-            : d.name.toLowerCase().includes('operat') || d.name.toLowerCase().includes('os')
-            ? '#f59e0b'
-            : '#ec4899'),
-      }));
-    }
-    return DEFAULT_DOMAINS;
+    const raw = dashboardData?.mindmap?.domains ?? [];
+    return raw.map((d) => ({
+      ...d,
+      color:
+        d.color ||
+        (d.name.toLowerCase().includes('data structure')
+          ? '#3b82f6'
+          : d.name.toLowerCase().includes('algo')
+          ? '#8b5cf6'
+          : d.name.toLowerCase().includes('data') || d.name.toLowerCase().includes('db')
+          ? '#10b981'
+          : d.name.toLowerCase().includes('operat') || d.name.toLowerCase().includes('os')
+          ? '#f59e0b'
+          : '#ec4899'),
+    }));
   }, [dashboardData?.mindmap?.domains]);
 
   // Flatten all concepts for subject/topic lookups and list view
@@ -281,106 +204,29 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
     return list;
   }, [domains]);
 
-  // Find active concept details (from API or derived from selected concept)
-  const activeConcept = useMemo(() => {
-    if (dashboardData?.concept_details && dashboardData.concept_details.name.toLowerCase() === selectedConceptName.toLowerCase()) {
-      return dashboardData.concept_details;
-    }
-    const match = allConcepts.find(
-      (c) => c.name.toLowerCase() === selectedConceptName.toLowerCase()
-    );
-    if (match) {
-      return {
-        id: match.id,
-        name: match.name,
-        domain: match.domain,
-        breadcrumb: `${match.domain} > ${match.name}`,
-        status_badge: match.status,
-        mastery_score: match.score,
-        practice_strength: match.practice_strength,
-        academic_strength: match.academic_score,
-        callout_reason:
-          match.score < 50
-            ? `You have attempted 5 problems with low acceptance rate and scored below average in recent evaluations.`
-            : `Consistent performance across lab sessions and algorithmic problem sets.`,
-        recommended_steps: [
-          {
-            step: 1,
-            title: `Practice 5 problems on ${match.name} fundamentals`,
-            action_label: 'Start Practice',
-            action_link: `/student/practice?topic=${encodeURIComponent(match.name)}`,
-          },
-          {
-            step: 2,
-            title: 'Watch quick concept video (10 mins)',
-            action_label: 'Watch Now',
-            action_link: '#video',
-          },
-          {
-            step: 3,
-            title: 'Complete related experiment',
-            action_label: 'Go to Experiment',
-            action_link: '/student/subjects',
-          },
-        ],
-        practice_stats: {
-          attempted: 5,
-          solved: Math.round(match.practice_strength / 20),
-          acceptance_rate: Math.round(match.practice_strength),
-          avg_time_mins: 22,
-        },
-        experiment_stats: {
-          count: 2,
-          avg_grade: match.academic_score,
-          last_submission: `Module evaluation: ${match.name}`,
-        },
-      };
-    }
-
-    return dashboardData?.concept_details || {
-      id: 'concept-dp',
-      name: 'Dynamic Programming',
-      domain: 'Algorithms',
-      breadcrumb: 'Algorithms > Dynamic Programming',
-      status_badge: 'Weak',
-      mastery_score: 42,
-      practice_strength: 38,
-      academic_strength: 46,
-      callout_reason:
-        'You have attempted 5 problems with 20% acceptance rate and scored below average in 2 related experiments.',
-      recommended_steps: [
-        {
-          step: 1,
-          title: 'Practice 5 easy problems on DP basics',
-          action_label: 'Start Practice',
-          action_link: '/student/practice?topic=Dynamic+Programming',
-        },
-        {
-          step: 2,
-          title: 'Watch quick concept video (10 mins)',
-          action_label: 'Watch Now',
-          action_link: '#video',
-        },
-        {
-          step: 3,
-          title: 'Complete related experiment',
-          action_label: 'Go to Experiment',
-          action_link: '/student/subjects',
-        },
-      ],
-      practice_stats: {
-        attempted: 5,
-        solved: 1,
-        acceptance_rate: 20,
-        avg_time_mins: 24,
-      },
-      experiment_stats: {
-        count: 2,
-        avg_grade: 46,
-        last_submission: 'Exp 6: Dynamic Programming Fundamentals',
-      },
+  // Prefer detailed API records; map-only records retain their measured scores and
+  // explicitly mark unavailable attempt/grade statistics instead of inventing them.
+  const activeConcept = useMemo<NonNullable<KnowledgeMapDashboardResponse['concept_details']> | null>(() => {
+    const name = selectedConceptName || allConcepts[0]?.name || '';
+    const details = dashboardData?.concept_details;
+    if (details && details.name.toLowerCase() === name.toLowerCase()) return details;
+    const match = allConcepts.find((c) => c.name.toLowerCase() === name.toLowerCase());
+    if (!match) return null;
+    return {
+      id: match.id,
+      name: match.name,
+      domain: match.domain,
+      breadcrumb: `${match.domain} > ${match.name}`,
+      status_badge: match.status,
+      mastery_score: match.score,
+      practice_strength: match.practice_strength,
+      academic_strength: match.academic_score,
+      callout_reason: 'Detailed attempt and assessment records are not available for this concept.',
+      recommended_steps: [],
+      practice_stats: { attempted: null, solved: null, acceptance_rate: null, avg_time_mins: null },
+      experiment_stats: { count: null, avg_grade: null, last_submission: null },
     };
-  }, [dashboardData, selectedConceptName, allConcepts]);
+  }, [dashboardData?.concept_details, allConcepts, selectedConceptName]);
 
   // Mouse pan handlers for SVG mindmap
   const handleMouseDown = (e: React.MouseEvent) => {
@@ -427,6 +273,10 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
     }
   };
 
+  if (isLoading) return <div className={styles.container} style={{ padding: '2rem', color: '#64748b' }}>Loading knowledge-map records…</div>;
+  if (isError) return <div role="alert" className={styles.container} style={{ padding: '2rem', color: '#991b1b' }}>Could not load knowledge-map records. No sample data is shown. <button onClick={() => refetch()}>Retry</button></div>;
+  if (domains.length === 0) return <div className={styles.container} style={{ padding: '2rem', color: '#64748b' }}>No measured concept mastery is available yet. Knowledge-map scores are not estimated from missing data.</div>;
+
   return (
     <div className={styles.container} ref={containerRef}>
       {/* ── 1. Top Filter Bar ─────────────────────────────────────────────── */}
@@ -472,7 +322,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
             </button>
             {openDropdown === 'subject' && (
               <ul className={styles.dropdownMenu} style={{ left: 0, minWidth: '190px' }}>
-                {['all', 'Data Structures', 'Algorithms', 'Databases', 'Operating Systems', 'Computer Networks'].map((s) => (
+                {['all', ...Array.from(new Set(domains.map((domain) => domain.name)))].map((s) => (
                   <li
                     key={s}
                     className={`${styles.dropdownItem} ${selectedSubject === s ? styles.dropdownItemActive : ''}`}
@@ -565,9 +415,9 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
             <p className={styles.kpiTitle}>Blended Mastery Score</p>
           </div>
           <div className={styles.kpiValueRow}>
-            <span className={styles.kpiValue}>{kpi.blended_mastery_score}%</span>
+            <span className={styles.kpiValue}>{kpi?.blended_mastery_score != null ? `${kpi.blended_mastery_score}%` : '—'}</span>
             <span className={styles.kpiDeltaBadge}>
-              <TrendingUp size={11} /> {kpi.blended_delta}
+              {kpi?.blended_delta ? <><TrendingUp size={11} /> {kpi.blended_delta}</> : 'Trend unavailable'}
             </span>
           </div>
           <p className={styles.kpiSubtext}>Across all subjects and practice</p>
@@ -585,11 +435,11 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between' }}>
             <div className={styles.kpiValueRow}>
               <span className={styles.kpiValue}>
-                {kpi.concepts_mastered} <span style={{ fontSize: '1rem', color: '#94a3b8', fontWeight: 600 }}>/ {kpi.total_concepts}</span>
+                {kpi?.concepts_mastered ?? '—'} <span style={{ fontSize: '1rem', color: '#94a3b8', fontWeight: 600 }}>/ {kpi?.total_concepts ?? '—'}</span>
               </span>
             </div>
             <div className={styles.kpiMiniBars}>
-              {(kpi.mastery_bars || []).map((h, i) => (
+              {(kpi?.mastery_bars || []).map((h, i) => (
                 <div
                   key={i}
                   className={styles.kpiMiniBar}
@@ -613,7 +463,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
             <p className={styles.kpiTitle}>Strong Areas</p>
           </div>
           <div className={styles.kpiValueRow}>
-            <span className={styles.kpiValue}>{kpi.strong_areas_count}</span>
+            <span className={styles.kpiValue}>{kpi?.strong_areas_count ?? '—'}</span>
           </div>
           <p className={styles.kpiSubtext}>High mastery concepts</p>
         </div>
@@ -627,7 +477,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
             <p className={styles.kpiTitle}>Areas to Improve</p>
           </div>
           <div className={styles.kpiValueRow}>
-            <span className={styles.kpiValue}>{kpi.areas_to_improve_count}</span>
+            <span className={styles.kpiValue}>{kpi?.areas_to_improve_count ?? '—'}</span>
           </div>
           <p className={styles.kpiSubtext}>Recommended focus areas</p>
         </div>
@@ -641,7 +491,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
             <p className={styles.kpiTitle}>Not Started</p>
           </div>
           <div className={styles.kpiValueRow}>
-            <span className={styles.kpiValue}>{kpi.not_started_count}</span>
+            <span className={styles.kpiValue}>{kpi?.not_started_count ?? '—'}</span>
           </div>
           <p className={styles.kpiSubtext}>Upcoming concepts</p>
         </div>
@@ -831,6 +681,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
                           onClick={(e) => {
                             e.stopPropagation();
                             setSelectedConceptName(concept.name);
+                            setSelectedTopic(concept.name);
                           }}
                         >
                           {/* Highlight Halo if Selected */}
@@ -904,6 +755,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
                           e.stopPropagation();
                           if (domain.concepts.length > 0) {
                             setSelectedConceptName(domain.concepts[0].name);
+                            setSelectedTopic(domain.concepts[0].name);
                           }
                         }}
                       >
@@ -1141,6 +993,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
             <h3>Concept Details</h3>
           </div>
 
+          {activeConcept ? <>
           {/* Active Concept Header Card */}
           <div className={styles.activeConceptCard}>
             <div className={styles.conceptIdentityLeft}>
@@ -1200,33 +1053,33 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
               <div className={styles.scoreBarsGroup}>
                 <div className={styles.scoreBarCol}>
                   <span className={styles.scoreBarLabel}>Mastery Score</span>
-                  <span className={styles.scoreBarValue}>{Math.round(activeConcept.mastery_score)}%</span>
+                  <span className={styles.scoreBarValue}>{activeConcept.mastery_score != null ? `${Math.round(activeConcept.mastery_score)}%` : '—'}</span>
                   <div className={styles.scoreBarTrack}>
                     <div
                       className={styles.scoreBarCoralFill}
-                      style={{ width: `${Math.min(100, activeConcept.mastery_score)}%` }}
+                      style={{ width: `${activeConcept.mastery_score != null ? Math.max(0, Math.min(100, activeConcept.mastery_score)) : 0}%` }}
                     />
                   </div>
                 </div>
 
                 <div className={styles.scoreBarCol}>
                   <span className={styles.scoreBarLabel}>Practice Strength</span>
-                  <span className={styles.scoreBarValue}>{Math.round(activeConcept.practice_strength)}%</span>
+                  <span className={styles.scoreBarValue}>{activeConcept.practice_strength != null ? `${Math.round(activeConcept.practice_strength)}%` : '—'}</span>
                   <div className={styles.scoreBarTrack}>
                     <div
                       className={styles.scoreBarOrangeFill}
-                      style={{ width: `${Math.min(100, activeConcept.practice_strength)}%` }}
+                      style={{ width: `${activeConcept.practice_strength != null ? Math.max(0, Math.min(100, activeConcept.practice_strength)) : 0}%` }}
                     />
                   </div>
                 </div>
 
                 <div className={styles.scoreBarCol}>
                   <span className={styles.scoreBarLabel}>Academic Strength</span>
-                  <span className={styles.scoreBarValue}>{Math.round(activeConcept.academic_strength)}%</span>
+                  <span className={styles.scoreBarValue}>{activeConcept.academic_strength != null ? `${Math.round(activeConcept.academic_strength)}%` : '—'}</span>
                   <div className={styles.scoreBarTrack}>
                     <div
                       className={styles.scoreBarCoralFill}
-                      style={{ width: `${Math.min(100, activeConcept.academic_strength)}%` }}
+                      style={{ width: `${activeConcept.academic_strength != null ? Math.max(0, Math.min(100, activeConcept.academic_strength)) : 0}%` }}
                     />
                   </div>
                 </div>
@@ -1244,7 +1097,9 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
               {/* Recommended Next Steps */}
               <h5 className={styles.recommendedSectionTitle}>Recommended Next Steps</h5>
               <div className={styles.stepsList}>
-                {activeConcept.recommended_steps.map((st) => (
+                {activeConcept.recommended_steps.length === 0 ? (
+                  <p style={{ color: '#64748b' }}>No recorded next-step recommendations are available.</p>
+                ) : activeConcept.recommended_steps.map((st) => (
                   <div key={st.step} className={styles.stepItem}>
                     <div className={styles.stepLeft}>
                       <span className={styles.stepNumCircle}>{st.step}</span>
@@ -1285,25 +1140,25 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
                 <div>
                   <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Attempted</span>
                   <p style={{ fontSize: '1.1rem', fontWeight: 800, margin: '2px 0 0', color: '#0f172a' }}>
-                    {activeConcept.practice_stats.attempted} problems
+                    {activeConcept.practice_stats.attempted != null ? `${activeConcept.practice_stats.attempted} problems` : '—'}
                   </p>
                 </div>
                 <div>
                   <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Solved</span>
                   <p style={{ fontSize: '1.1rem', fontWeight: 800, margin: '2px 0 0', color: '#16a34a' }}>
-                    {activeConcept.practice_stats.solved} accepted
+                    {activeConcept.practice_stats.solved != null ? `${activeConcept.practice_stats.solved} accepted` : '—'}
                   </p>
                 </div>
                 <div>
                   <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Acceptance Rate</span>
                   <p style={{ fontSize: '1.1rem', fontWeight: 800, margin: '2px 0 0', color: '#ea580c' }}>
-                    {activeConcept.practice_stats.acceptance_rate}%
+                    {activeConcept.practice_stats.acceptance_rate != null ? `${activeConcept.practice_stats.acceptance_rate}%` : '—'}
                   </p>
                 </div>
                 <div>
                   <span style={{ fontSize: '0.72rem', color: '#64748b' }}>Avg Solve Time</span>
                   <p style={{ fontSize: '1.1rem', fontWeight: 800, margin: '2px 0 0', color: '#475569' }}>
-                    {activeConcept.practice_stats.avg_time_mins} mins
+                    {activeConcept.practice_stats.avg_time_mins != null ? `${activeConcept.practice_stats.avg_time_mins} mins` : '—'}
                   </p>
                 </div>
               </div>
@@ -1344,17 +1199,17 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.45rem' }}>
                   <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Linked Lab Exercises:</span>
                   <strong style={{ fontSize: '0.78rem', color: '#0f172a' }}>
-                    {activeConcept.experiment_stats.count} completed
+                    {activeConcept.experiment_stats.count != null ? `${activeConcept.experiment_stats.count} completed` : '—'}
                   </strong>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.45rem' }}>
                   <span style={{ fontSize: '0.75rem', color: '#64748b' }}>Average Grade:</span>
                   <strong style={{ fontSize: '0.78rem', color: '#7c3aed' }}>
-                    {activeConcept.experiment_stats.avg_grade}%
+                    {activeConcept.experiment_stats.avg_grade != null ? `${activeConcept.experiment_stats.avg_grade}%` : '—'}
                   </strong>
                 </div>
                 <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '0.5rem' }}>
-                  Latest: <em>{activeConcept.experiment_stats.last_submission}</em>
+                  Latest: <em>{activeConcept.experiment_stats.last_submission || '—'}</em>
                 </div>
               </div>
 
@@ -1379,6 +1234,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
               </Link>
             </div>
           )}
+          </> : <p style={{ color: '#64748b', padding: '1rem 0' }}>No concept records are available for the selected filters.</p>}
         </div>
       </div>
 
@@ -1558,7 +1414,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
       </div>
 
       {/* Concept Video Modal */}
-      {isVideoModalOpen && (
+      {isVideoModalOpen && activeConcept && (
         <div
           style={{
             position: 'fixed',
@@ -1740,7 +1596,9 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
             </div>
 
             <div style={{ display: 'flex', flexDirection: 'column', gap: '1rem' }}>
-              {(dashboardData?.learning_path_unlocks || []).map((un: any) => (
+              {(dashboardData?.learning_path_unlocks || []).length === 0 ? (
+                <p style={{ color: '#64748b', textAlign: 'center', padding: '1rem' }}>No unlock progress is available.</p>
+              ) : (dashboardData?.learning_path_unlocks || []).map((un: any) => (
                 <div
                   key={un.id}
                   style={{
@@ -1766,7 +1624,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: '0.35rem', fontSize: '0.72rem', color: '#64748b', marginTop: '0.35rem' }}>
                     <Sparkles size={11} color="#7c3aed" />
-                    <span>Reward: {un.reward}</span>
+                    <span>Unlock progress from recorded solves.</span>
                   </div>
                 </div>
               ))}
@@ -1882,6 +1740,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
                     }}
                     onClick={() => {
                       setSelectedConceptName(item.name);
+                      setSelectedTopic(item.name);
                       setIsStrengthsModalOpen(false);
                     }}
                     title={`Click to inspect ${item.name}`}
@@ -2016,6 +1875,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
                     }}
                     onClick={() => {
                       setSelectedConceptName(item.name);
+                      setSelectedTopic(item.name);
                       setIsFocusModalOpen(false);
                     }}
                     title={`Click to inspect ${item.name}`}

@@ -19,78 +19,22 @@ interface RecentActivityCardProps {
   overview: UnifiedStudentOverview | null;
 }
 
-const DEFAULT_ACTIVITIES = [
-  {
-    id: 'act-1',
-    title: 'Exp 3: Stack Implementation',
-    category: 'DSA Lab',
-    type: 'experiment',
-    status: 'Graded',
-    score_display: '87%',
-    time_ago: '2 hours ago',
-  },
-  {
-    id: 'act-2',
-    title: 'Binary Search Practice',
-    category: 'Practice',
-    type: 'practice',
-    status: 'Accepted',
-    score_display: '+25 XP',
-    time_ago: '5 hours ago',
-  },
-  {
-    id: 'act-3',
-    title: 'Exp 2: SQL Queries',
-    category: 'DBMS Lab',
-    type: 'experiment',
-    status: 'Needs Review',
-    score_display: '—',
-    time_ago: '1 day ago',
-  },
-];
-
 export const RecentActivityCard: React.FC<RecentActivityCardProps> = ({ overview }) => {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [filterType, setFilterType] = useState<'all' | 'experiment' | 'practice'>('all');
 
-  const activities = overview?.recent_activity && overview.recent_activity.length > 0
-    ? overview.recent_activity
-    : DEFAULT_ACTIVITIES;
+  const activities = overview?.recent_activity ?? [];
 
   const filteredActivities = activities.filter((item) => {
     if (filterType === 'all') return true;
     return item.type === filterType;
   });
 
-  const getStatusBadge = (status: string) => {
-    switch (status) {
-      case 'Graded':
-        return (
-          <span className={`${styles.pillBadge} ${styles.pillGreen}`}>
-            Graded
-          </span>
-        );
-      case 'Accepted':
-        return (
-          <span
-            className={styles.pillBadge}
-            style={{ background: '#e0f2fe', color: '#0369a1', border: '1px solid #bae6fd' }}
-          >
-            Accepted
-          </span>
-        );
-      case 'Needs Review':
-      default:
-        return (
-          <span
-            className={styles.pillBadge}
-            style={{ background: '#fef3c7', color: '#b45309', border: '1px solid #fde68a' }}
-          >
-            Needs Review
-          </span>
-        );
-    }
-  };
+  const getStatusBadge = (status: string) => (
+    <span className={`${styles.pillBadge} ${status === 'Graded' || status === 'Accepted' ? styles.pillGreen : ''}`}>
+      {status || 'Status unavailable'}
+    </span>
+  );
 
   const getIcon = (item: any) => {
     if (item.category?.toLowerCase().includes('dbms') || item.title?.toLowerCase().includes('sql')) {
@@ -140,13 +84,15 @@ export const RecentActivityCard: React.FC<RecentActivityCardProps> = ({ overview
         </div>
 
         <div className={styles.activityList}>
-          {activities.slice(0, 3).map((item) => (
+          {activities.length === 0 ? (
+            <p style={{ textAlign: 'center', color: '#64748b', padding: '1.5rem 0' }}>No recent activity is recorded for this period.</p>
+          ) : activities.slice(0, 3).map((item) => (
             <div key={item.id} className={styles.activityItem}>
               <div className={styles.activityLeft}>
                 {getIcon(item)}
                 <div className={styles.activityText}>
-                  <h5>{item.title}</h5>
-                  <p>{item.category}</p>
+                  <h5>{item.title || 'Activity title unavailable'}</h5>
+                  <p>{item.category || ''}</p>
                 </div>
               </div>
 
@@ -159,10 +105,10 @@ export const RecentActivityCard: React.FC<RecentActivityCardProps> = ({ overview
                       color: item.status === 'Accepted' ? '#16a34a' : '#0f172a',
                     }}
                   >
-                    {item.score_display}
+                    {item.score_display || '—'}
                   </span>
                 </div>
-                <span className={styles.activityTime}>{item.time_ago}</span>
+                <span className={styles.activityTime}>{item.time_ago || 'Time unavailable'}</span>
               </div>
             </div>
           ))}
@@ -277,7 +223,7 @@ export const RecentActivityCard: React.FC<RecentActivityCardProps> = ({ overview
                       {getIcon(item)}
                       <div className={styles.activityText}>
                         <h5 style={{ fontSize: '0.88rem' }}>{item.title}</h5>
-                        <p>{item.category}</p>
+                        <p>{item.category || ''}</p>
                       </div>
                     </div>
 
@@ -290,10 +236,10 @@ export const RecentActivityCard: React.FC<RecentActivityCardProps> = ({ overview
                             color: item.status === 'Accepted' ? '#16a34a' : '#0f172a',
                           }}
                         >
-                          {item.score_display}
+                          {item.score_display || '—'}
                         </span>
                       </div>
-                      <span className={styles.activityTime}>{item.time_ago}</span>
+                      <span className={styles.activityTime}>{item.time_ago || 'Time unavailable'}</span>
                     </div>
                   </div>
                 ))

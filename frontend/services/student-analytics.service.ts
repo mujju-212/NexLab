@@ -5,184 +5,42 @@ import { apiClient } from './api-client';
 export interface UnifiedStudentOverview {
   student_id: string;
   academic: {
-    completion: {
-      assigned: number;
-      completed: number;
-      completion_pct: number;
-    };
-    attendance: {
-      scheduled_sessions: number;
-      attended_sessions: number;
-      attendance_rate: number;
-      active_participant_sessions: number;
-      active_rate: number;
-    };
-    grades: {
-      average: number;
-      trend_slope: number;
-      recent: Array<{
-        experiment_id: string;
-        experiment_title: string;
-        final_grade: number;
-        auto_grade: number | null;
-        manual_grade: number | null;
-        created_at: string | null;
-      }>;
-    };
-    mastery: {
-      scope_avg: number;
-      weak_concepts: string[];
-      concepts: Array<{
-        concept: string;
-        mastery_score: number;
-        is_weak: boolean;
-        experiment_count: number;
-      }>;
-    };
-    ranks: Record<string, {
-      position: number;
-      cohort_size: number;
-      percentile: number;
-      rank_score: number;
-      components?: Record<string, number>;
-    }>;
-    standing: {
-      band: 'ok' | 'watch' | 'high' | 'critical';
-      primary_reason: string;
-    };
+    completion: { assigned: number; completed: number; submitted?: number; graded?: number; completion_pct: number };
+    attendance: { scheduled: number; present: number; late: number; partial: number; absent: number; active_participants: number; attendance_rate: number | null; active_rate: number | null; sessions?: unknown[] };
+    grades: { avg_grade: number | null; count: number; history: Array<{ experiment_id: string | null; experiment_title: string | null; final_grade: number; auto_grade: number | null; manual_grade: number | null; created_at: string | null }> };
+    mastery: Record<string, any>;
+    ranks: Record<string, { position: number; cohort_size: number; percentile: number; rank_score: number; components?: Record<string, number> }>;
+    standing: { band: string; primary_reason: string };
   };
   platform: {
-    rating: number;
-    level: number;
-    level_name: string;
-    global_rank: number | null;
-    global_percentile: number | null;
-    rank_movement: number;
-    problems_solved: number;
-    easy_solved: number;
-    medium_solved: number;
-    hard_solved: number;
-    streak_days: number;
-    badges: Array<{
-      id: string;
-      badge_type: string;
-      earned_at: string;
-      title?: string;
-      icon?: string;
-    }>;
+    rating: number | null; level: number | null; level_name: string | null; total_xp: number | null; next_level_xp: number | null;
+    global_rank: number | null; global_percentile: number | null; rank_movement: number | null;
+    problems_solved: number; easy_solved: number; medium_solved: number; hard_solved: number; streak_days: number | null;
+    badges: Array<{ badge_id: string; title: string; icon: string; desc: string; earned_at: string | null }>;
   };
   unlocks: {
-    unlocked_tiers: string[];
-    easy_solved: number;
-    medium_solved: number;
-    hard_solved: number;
-    rating: number;
-    next_unlock: {
-      tier: string;
-      requirement: string;
-      current: number;
-      target: number;
-      progress_pct: number;
-    } | null;
+    unlocked_tiers: string[]; medium_unlocked: boolean; hard_unlocked: boolean; contests_unlocked: boolean;
+    next_unlock: { target: string; requirement: string; current: string; progress_pct: number | null };
+    stats: { easy_solved: number; medium_solved: number; rating: number | null; level: number | null };
   };
   knowledge_map: Array<{
-    topic: string;
-    academic_score: number | null;
-    practice_strength: number | null;
-    blended_score: number;
-    band: 'Mastered' | 'Proficient' | 'Learning' | 'Developing' | 'Needs Practice' | 'Critical Gap' | string;
-    confidence: 'high' | 'medium' | 'low';
+    topic: string; academic_score: number | null; practice_strength: number | null; blended_score: number;
+    band: string; confidence: string; recommended_action: string;
   }>;
-  highlights: {
-    strong_topics: string[];
-    focus_topics: string[];
-    suggestions: string[];
-    next_unlock: {
-      tier: string;
-      requirement: string;
-      current: number;
-      target: number;
-      progress_pct: number;
-    } | null;
-  };
-  profile?: {
-    name: string;
-    avatar_url?: string | null;
-    roll_number?: string | null;
-    department_year: string;
-    institution_name: string;
-    quote: string;
-  };
+  highlights: { strong_topics: string[]; focus_topics: string[]; suggestions: string[]; next_unlock: UnifiedStudentOverview['unlocks']['next_unlock'] | null };
+  profile?: { name: string | null; avatar_url: string | null; roll_number: string | null; department_year: string | null; institution_name: string | null };
   summary_kpis?: {
-    overall_progress: {
-      value: number;
-      delta: string;
-      sparkline: number[];
-    };
-    concepts_mastered: {
-      mastered: number;
-      total: number;
-      delta: string;
-      bars: number[];
-    };
-    experiments_completed: {
-      completed: number;
-      assigned: number;
-      pct: number;
-    };
-    practice_problems_solved: {
-      total: number;
-      delta: string;
-      easy: number;
-      medium: number;
-      hard: number;
-      bars: number[];
-    };
+    overall_progress: { value: number | null; delta: number | null; delta_available?: boolean; sparkline: number[] | null };
+    concepts_mastered: { mastered: number; total: number; delta: string | null; bars: number[] };
+    experiments_completed: { completed: number; assigned: number; pct: number | null };
+    practice_problems_solved: { total: number; delta: string | null; easy: number; medium: number; hard: number; bars: number[] };
   };
-  learning_trend?: Array<{
-    week: string;
-    label: string;
-    academic_grade: number;
-    practice_rating_scaled: number;
-    practice_rating_raw: number;
-  }>;
-  strongest_concepts?: Array<{
-    name: string;
-    score: number;
-    icon?: string;
-  }>;
-  focus_next_concepts?: Array<{
-    name: string;
-    score: number;
-    icon?: string;
-  }>;
-  recent_activity?: Array<{
-    id: string;
-    title: string;
-    category: string;
-    type: string;
-    status: string;
-    status_color?: string;
-    score_display: string;
-    time_ago: string;
-  }>;
-  upcoming_goals?: Array<{
-    id: string;
-    title: string;
-    type: string;
-    current_display: string;
-    progress_pct: number;
-    color: string;
-  }>;
-  achievements?: Array<{
-    id: string;
-    title: string;
-    subtitle: string;
-    category: string;
-    icon: string;
-    badge_color: 'gold' | 'fire' | 'purple' | string;
-    value_display: string;
-  }>;
+  learning_trend?: Array<{ week: string; label: string; academic_grade: number | null; practice_rating_scaled: number | null; practice_rating_raw: number | null }>;
+  strongest_concepts?: Array<{ name: string; score: number; icon?: string }>;
+  focus_next_concepts?: Array<{ name: string; score: number; icon?: string }>;
+  recent_activity?: Array<{ id: string; title: string | null; category: string | null; type: string; status: string; status_color?: string; score_display: string | null; time_ago: string | null; timestamp?: number | null }>;
+  upcoming_goals?: Array<{ id: string; title: string | null; type: string; current_display: string | null; progress_pct: number | null; color: string }>;
+  achievements?: Array<{ id: string; title: string | null; subtitle: string | null; category: string; icon: string | null; badge_color: string; value_display: string | null; earned_at?: string | null }>;
 }
 
 export interface SubjectAnalyticsItem {
@@ -192,7 +50,7 @@ export interface SubjectAnalyticsItem {
   total_experiments: number;
   completed_experiments: number;
   completion_pct: number;
-  subject_average: number;
+  subject_average: number | null;
   experiments: Array<{
     experiment_id: string;
     exp_number: number;
@@ -386,49 +244,49 @@ export interface ContentUnlocksResponse {
 export interface AcademicDashboardResponse {
   student: {
     id: string;
-    name: string;
-    department_year: string;
-    avatar_url: string;
+    name: string | null;
+    department_year: string | null;
+    avatar_url: string | null;
   };
   kpi_metrics: {
-    overall_score: number;
-    overall_delta: number;
+    overall_score: number | null;
+    overall_delta: number | null;
     sparkline_overall: number[];
     subjects_enrolled: number;
     subjects_on_track: number;
-    subjects_ring_pct: number;
+    subjects_ring_pct: number | null;
     experiments_completed: number;
     experiments_total: number;
-    experiments_completion_pct: number;
-    attendance_rate: number;
-    attendance_period: string;
+    experiments_completion_pct: number | null;
+    attendance_rate: number | null;
+    attendance_period: string | null;
     attendance_mini_bars: number[];
     academic_rank: string;
-    rank_position: number;
-    rank_cohort: number;
-    rank_delta: string;
-    rank_percentile_text: string;
+    rank_position: number | null;
+    rank_cohort: number | null;
+    rank_delta: string | null;
+    rank_percentile_text: string | null;
     sparkline_rank: number[];
   };
   performance_trend: {
     weeks: string[];
-    overall: number[];
+    overall: Array<number | null>;
     subjects: Array<{
       code: string;
       name: string;
       color: string;
-      data: number[];
+      data: Array<number | null>;
     }>;
   };
   subject_performance: Array<{
     code: string;
     name: string;
     full_name: string;
-    avg_grade: number;
+    avg_grade: number | null;
     completed: number;
     total: number;
-    completion_pct: number;
-    trend_pct: number;
+    completion_pct: number | null;
+    trend_pct: number | null;
     sparkline: number[];
     color: string;
     bg: string;
@@ -442,10 +300,11 @@ export interface AcademicDashboardResponse {
     color: string;
   }>;
   attendance_breakdown: {
-    rate: number;
+    rate: number | null;
     present: number;
+    late: number;
+    partial: number;
     absent: number;
-    excused: number;
     total: number;
     period_label: string;
   };
@@ -479,12 +338,11 @@ export interface AcademicDashboardResponse {
     name: string;
     completed: number;
     total: number;
-    completion_pct: number;
+    completion_pct: number | null;
     color: string;
   }>;
   filter_options: {
     subjects: Array<{ id: string; label: string }>;
-    semesters: Array<{ id: string; label: string }>;
     experiments: Array<{ id: string; label: string }>;
     date_ranges: Array<{ id: string; label: string }>;
   };
@@ -493,23 +351,22 @@ export interface AcademicDashboardResponse {
 export interface PlatformDashboardResponse {
   student_profile: {
     id: string;
-    name: string;
-    department_year: string;
-    avatar_url: string;
-    quote: string;
+    name: string | null;
+    department_year: string | null;
+    avatar_url: string | null;
   };
   standing: {
-    rating: number;
-    rating_delta: number;
+    rating: number | null;
+    rating_delta: number | null;
     sparkline_rating: number[];
-    global_rank: number;
-    global_percentile: number;
-    top_percent: number;
-    level: number;
-    level_name: string;
-    current_xp: number;
-    next_level_xp: number;
-    streak_days: number;
+    global_rank: number | null;
+    global_percentile: number | null;
+    top_percent: number | null;
+    level: number | null;
+    level_name: string | null;
+    current_xp: number | null;
+    next_level_xp: number | null;
+    streak_days: number | null;
     week_dots: Array<{ day: string; active: boolean }>;
   };
   badges: Array<{
@@ -525,23 +382,23 @@ export interface PlatformDashboardResponse {
   kpi_metrics: {
     problems_solved: {
       value: number;
-      delta: string;
+      delta: string | null;
       breakdown: { easy: number; medium: number; hard: number };
       bars: number[];
     };
     acceptance_rate: {
-      value: number;
-      delta: string;
+      value: number | null;
+      delta: string | null;
       sparkline: number[];
     };
     avg_time: {
-      value: string;
-      delta: string;
+      value: string | null;
+      delta: string | null;
       sparkline: number[];
     };
     hints_used: {
       value: number;
-      delta: string;
+      delta: string | null;
       bars: number[];
     };
   };
@@ -564,20 +421,20 @@ export interface PlatformDashboardResponse {
   };
   recent_submissions: Array<{
     id: string;
-    problem: string;
-    difficulty: 'Easy' | 'Medium' | 'Hard';
+    problem: string | null;
+    difficulty: 'Easy' | 'Medium' | 'Hard' | null;
     result: string;
     is_accepted: boolean;
-    time: string;
-    xp: string;
-    date: string;
+    time: string | null;
+    xp: string | null;
+    date: string | null;
   }>;
   next_unlocks: Array<{
     id: string;
     title: string;
-    current: number;
+    current: number | null;
     target: number;
-    pct: number;
+    pct: number | null;
     reward: string;
     color: string;
     icon_bg: string;
@@ -585,10 +442,10 @@ export interface PlatformDashboardResponse {
   leaderboard: {
     current_scope: string;
     entries: Array<{
-      rank: number;
-      name: string;
+      rank: number | null;
+      name: string | null;
       initials: string;
-      rating: number;
+      rating: number | null;
       avatar_color: string;
       is_current_user: boolean;
     }>;
@@ -795,8 +652,8 @@ export interface KnowledgeMapConcept {
   status: 'Strong' | 'Good' | 'Moderate' | 'Weak' | 'Not Started';
   color: string;
   band: 'strong' | 'good' | 'moderate' | 'weak' | 'not_started';
-  academic_score: number;
-  practice_strength: number;
+  academic_score: number | null;
+  practice_strength: number | null;
   blended_score: number;
 }
 
@@ -815,20 +672,20 @@ export interface KnowledgeMapDashboardResponse {
   topic_filter: string;
   period_filter: string;
   kpi_summary: {
-    blended_mastery_score: number;
-    blended_delta: string;
-    concepts_mastered: number;
-    total_concepts: number;
+    blended_mastery_score: number | null;
+    blended_delta: string | null;
+    concepts_mastered: number | null;
+    total_concepts: number | null;
     mastery_bars: number[];
-    strong_areas_count: number;
-    areas_to_improve_count: number;
-    not_started_count: number;
+    strong_areas_count: number | null;
+    areas_to_improve_count: number | null;
+    not_started_count: number | null;
   };
   mindmap: {
     root: {
       id: string;
       name: string;
-      score: number;
+      score: number | null;
       color: string;
     };
     domains: KnowledgeMapDomain[];
@@ -839,9 +696,9 @@ export interface KnowledgeMapDashboardResponse {
     domain: string;
     breadcrumb: string;
     status_badge: string;
-    mastery_score: number;
-    practice_strength: number;
-    academic_strength: number;
+    mastery_score: number | null;
+    practice_strength: number | null;
+    academic_strength: number | null;
     callout_reason: string;
     recommended_steps: Array<{
       step: number;
@@ -850,17 +707,17 @@ export interface KnowledgeMapDashboardResponse {
       action_link: string;
     }>;
     practice_stats: {
-      attempted: number;
-      solved: number;
-      acceptance_rate: number;
-      avg_time_mins: number;
+      attempted: number | null;
+      solved: number | null;
+      acceptance_rate: number | null;
+      avg_time_mins: number | null;
     };
     experiment_stats: {
-      count: number;
-      avg_grade: number;
-      last_submission: string;
+      count: number | null;
+      avg_grade: number | null;
+      last_submission: string | null;
     };
-  };
+  } | null;
   top_strengths: Array<{
     rank: number;
     name: string;

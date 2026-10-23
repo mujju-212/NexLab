@@ -44,8 +44,8 @@ def compute_student_completion_rollup(
     entities = resolve_scope_entities(scope_level, scope_id, institution_id)
     scope_exp_ids = entities.get('experiment_ids', [])
 
-    if not scope_exp_ids:
-        # Fallback: if no scope specified, grab all experiments in the student's enrolled sections
+    if not scope_exp_ids and not scope_id:
+        # Only an unspecified scope may fall back to the student's own enrolled sections
         enrolled_secs = SectionStudent.query.filter_by(student_id=student_id).all()
         sec_ids = [es.section_id for es in enrolled_secs]
         if sec_ids:
@@ -55,12 +55,12 @@ def compute_student_completion_rollup(
                 exps = Experiment.query.filter(Experiment.subject_id.in_(sub_ids)).all()
                 scope_exp_ids = [e.id for e in exps]
 
-    if not scope_exp_ids and institution_id:
-        exps = Experiment.query.filter_by(institution_id=institution_id).all()
-        scope_exp_ids = [e.id for e in exps]
 
-    all_experiments = Experiment.query.filter(Experiment.id.in_(scope_exp_ids)).all()
+    all_experiments = Experiment.query.filter(
+        Experiment.id.in_(scope_exp_ids), Experiment.is_published.is_(True)
+    ).all()
     exp_map = {e.id: e for e in all_experiments}
+    assigned_exp_ids = list(exp_map)
     assigned_count = len(all_experiments)
 
     # A final submission is the completion event. A grade can be entered
@@ -70,7 +70,7 @@ def compute_student_completion_rollup(
         db.session.query(CodeAttempt.experiment_id)
         .filter(
             CodeAttempt.student_id == student_id,
-            CodeAttempt.experiment_id.in_(scope_exp_ids),
+            CodeAttempt.experiment_id.in_(assigned_exp_ids) if assigned_exp_ids else db.literal(False),
             CodeAttempt.is_final_submission.is_(True),
         )
         .distinct()
@@ -81,14 +81,14 @@ def compute_student_completion_rollup(
         r[0] for r in db.session.query(Grade.experiment_id)
         .filter(
             Grade.student_id == student_id,
-            Grade.experiment_id.in_(scope_exp_ids),
+            Grade.experiment_id.in_(assigned_exp_ids) if assigned_exp_ids else db.literal(False),
             Grade.final_grade.isnot(None),
         )
         .distinct().all()
     }
 
     completed_count = len(completed_exp_ids)
-    pct = round(100.0 * (completed_count / max(1, assigned_count)), 1) if assigned_count > 0 else 0.0
+    pct = round(100.0 * (completed_count / assigned_count), 1) if assigned_count > 0 else None
 
     completed_list = []
     pending_list = []
@@ -121,6 +121,7 @@ def compute_student_attendance_rollup(
     scope_level: str = 'subject',
     scope_id: Optional[str] = None,
     institution_id: Optional[str] = None,
+    window_start: Optional[datetime] = None,
 ) -> Dict[str, Any]:
     """
     Computes session attendance history, present rate, and active coder rate.
@@ -136,8 +137,14 @@ def compute_student_attendance_rollup(
 
     if scope_session_ids:
         q = q.filter(SessionAttendance.session_id.in_(scope_session_ids))
-    elif institution_id:
+    elif scope_level == 'institution' and institution_id:
         q = q.filter(LabSession.institution_id == institution_id)
+    else:
+        # Empty student/subject scope is genuinely empty; do not widen to the
+        # institution and accidentally count sessions the student was not assigned.
+        q = q.filter(db.literal(False))
+    if window_start is not None:
+        q = q.filter(LabSession.scheduled_at >= window_start)
 
     q = q.order_by(LabSession.scheduled_at.desc())
     records = q.all()
@@ -160,17 +167,16 @@ def compute_student_attendance_rollup(
         credit = ATT_CREDIT.get(status, 0.0)
         credit_sum += credit
         is_pres = credit >= 0.5
-        if status == 'present':
+        if status in ('present', 'inactive_present'):
             present_count += 1
         elif status == 'late':
-            present_count += 1
             late_count += 1
         elif status == 'partial':
             partial_count += 1
         else:
             absent_count += 1
 
-        is_act = bool(att.is_active_participant)
+        is_act = status in ('present', 'late', 'partial', 'inactive_present') and bool(att.is_active_participant)
         if is_act:
             active_count += 1
 
@@ -190,7 +196,8 @@ def compute_student_attendance_rollup(
         })
 
     rate = round(100.0 * (credit_sum / scheduled_count), 1) if scheduled_count > 0 else None
-    active_rate = round(100.0 * (active_count / max(1, present_count)), 1) if present_count > 0 else None
+    attended_count = present_count + late_count + partial_count
+    active_rate = round(100.0 * (active_count / max(1, attended_count)), 1) if attended_count > 0 else None
 
     return {
         'scheduled': scheduled_count,
@@ -227,6 +234,13 @@ def get_student_360_overview(
 
     iid = institution_id or student.institution_id
 
+    # A student-facing overview with no explicit slice means all of the
+    # student's own enrolments, never institution-wide assignments.
+    effective_scope_level = scope_level
+    effective_scope_id = scope_id
+    if not scope_id and scope_level in ('subject', 'student'):
+        effective_scope_level, effective_scope_id = 'student', student_id
+
     # 1. Enrolled Section & Department metadata
     sec_student = SectionStudent.query.filter_by(student_id=student_id).first()
     sec_info = None
@@ -241,7 +255,7 @@ def get_student_360_overview(
         if dept:
             dept_info = {'id': dept.id, 'name': dept.name, 'code': dept.code}
 
-    full_name = getattr(student, 'full_name', None) or getattr(student, 'name', None) or 'Student'
+    full_name = getattr(student, 'full_name', None) or getattr(student, 'name', None)
     student_profile = {
         'id': student.id,
         'name': full_name,
@@ -254,17 +268,20 @@ def get_student_360_overview(
     }
 
     # 2. Completion Rollup
-    completion = compute_student_completion_rollup(student_id, scope_level, scope_id, iid)
+    completion = compute_student_completion_rollup(student_id, effective_scope_level, effective_scope_id, iid)
 
     # 3. Attendance Rollup
-    attendance = compute_student_attendance_rollup(student_id, scope_level, scope_id, iid)
+    attendance = compute_student_attendance_rollup(student_id, effective_scope_level, effective_scope_id, iid)
 
     # 4. Atomic metrics & Risk score
     start_dt = datetime.utcnow().replace(month=1, day=1) if datetime.utcnow().month > 6 else datetime.utcnow().replace(year=datetime.utcnow().year-1, month=7, day=1)
     end_dt = datetime.utcnow()
+    scoped_entities = resolve_scope_entities(effective_scope_level, effective_scope_id, iid)
     atomic = compute_student_atomic_metrics(
         student_id=student_id,
         institution_id=iid,
+        experiment_ids=scoped_entities.get('experiment_ids', []),
+        session_ids=scoped_entities.get('session_ids', []),
         window_start=start_dt,
         window_end=end_dt,
     )
@@ -273,8 +290,8 @@ def get_student_360_overview(
     # 5. Scoped Mastery
     mastery = compute_scoped_mastery(
         student_id=student_id,
-        scope_level=scope_level,
-        scope_id=scope_id,
+        scope_level=effective_scope_level,
+        scope_id=effective_scope_id,
         institution_id=iid,
     )
 
@@ -284,7 +301,7 @@ def get_student_360_overview(
     # 7. Grade summary & recent grades
     grades_rows = (
         Grade.query
-        .filter(Grade.student_id == student_id, Grade.final_grade.isnot(None))
+        .filter(Grade.student_id == student_id, Grade.final_grade.isnot(None), Grade.experiment_id.in_(scoped_entities.get('experiment_ids', [])) if scoped_entities.get('experiment_ids') else db.literal(False))
         .order_by(Grade.created_at.desc())
         .limit(20)
         .all()
@@ -292,21 +309,23 @@ def get_student_360_overview(
     grade_list = []
     for g in grades_rows:
         exp = getattr(g, 'experiment', None) or (Experiment.query.get(g.experiment_id) if g.experiment_id else None)
-        exp_name = exp.title if exp else 'Experiment'
+        if not exp or not exp.grade_scale or exp.grade_scale <= 0 or not exp.weightage or exp.weightage <= 0:
+            continue
+        exp_name = exp.title
         grade_list.append({
             'experiment_id': g.experiment_id,
             'experiment_title': exp_name,
-            'final_grade': float(g.final_grade),
+            'final_grade': max(0.0, min(100.0, float(g.final_grade) / float(exp.grade_scale) * 100.0)),
             'auto_grade': float(g.auto_grade) if g.auto_grade is not None else None,
             'manual_grade': float(g.manual_grade) if g.manual_grade is not None else None,
             'created_at': g.created_at.isoformat() if g.created_at else None,
         })
 
-    avg_grade = float(atomic.get('grade_avg', {}).get('value') or 0.0)
+    avg_grade = atomic.get('grade_avg', {}).get('value')
 
     return {
         'student': student_profile,
-        'scope': {'level': scope_level, 'id': scope_id},
+        'scope': {'level': effective_scope_level, 'id': effective_scope_id},
         'completion': completion,
         'attendance': attendance,
         'grades': {

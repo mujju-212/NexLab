@@ -190,13 +190,13 @@ export default function StudentDashboardPage() {
     );
   }
 
-  const overallProgress = dash.overall_progress ?? (dash.avg_grade != null ? Math.round(dash.avg_grade) : 0);
-  const studentDisplayName = user?.full_name ?? 'Test Student';
+  const overallProgress = dash.overall_progress ?? null;
+  const studentDisplayName = user?.full_name || '—';
 
   // SVG Circular progress math (radius = 38)
   const radius = 38;
   const circumference = 2 * Math.PI * radius;
-  const strokeDashoffset = circumference - (overallProgress / 100) * circumference;
+  const strokeDashoffset = circumference - ((overallProgress ?? 0) / 100) * circumference;
 
   // Active tab sessions list
   const currentTabSessions = sessionTab === 'upcoming'
@@ -250,7 +250,7 @@ export default function StudentDashboardPage() {
                 {studentDisplayName} <span className={styles.waveEmoji}>👋</span>
               </h1>
               <p className={styles.motivationText}>
-                Keep learning, keep building. You&apos;re <strong className={styles.highlightProgress}>{overallProgress}%</strong> towards your goals!
+                {overallProgress != null ? <> <strong className={styles.highlightProgress}>{overallProgress}%</strong> of published lab experiments have a final submission.</> : 'No published lab experiments are assigned yet.'}
               </p>
 
               {/* Action Buttons Row */}
@@ -339,27 +339,18 @@ export default function StudentDashboardPage() {
                   />
                 </svg>
                 <div className={styles.ringValText}>
-                  <span className={styles.ringNumber}>{overallProgress}%</span>
+                  <span className={styles.ringNumber}>{overallProgress != null ? `${overallProgress}%` : '—'}</span>
                 </div>
               </div>
 
               <div className={styles.progressLabels}>
-                <h3 className={styles.progressTitle}>Overall Progress</h3>
+                <h3 className={styles.progressTitle}>Published Lab Completion</h3>
                 <p className={styles.progressSubtitle}>
-                  {overallProgress >= 70 ? "You're doing great!" : overallProgress >= 40 ? "Keep up the momentum!" : "Let's build daily momentum!"}
+                  {overallProgress != null ? 'Based on final submissions for your assigned experiments.' : 'Completion is unavailable until experiments are assigned.'}
                 </p>
               </div>
             </div>
 
-            {/* Motivation Quote Card */}
-            <div className={styles.quotePill}>
-              <div className={styles.quoteIcon}>
-                <TrendingUp size={14} strokeWidth={2.4} />
-              </div>
-              <p className={styles.quoteText}>
-                &ldquo;Small steps everyday lead to big results.&rdquo;
-              </p>
-            </div>
           </div>
         </section>
 
@@ -401,31 +392,25 @@ export default function StudentDashboardPage() {
             <div className={styles.metricBody}>
               <span className={styles.metricLabel}>Best Rank Score</span>
               <div className={styles.metricValue}>
-                {dash.best_rank ? dash.best_rank.rank_score.toFixed(1) : (dash.avg_grade != null ? dash.avg_grade.toFixed(1) : '70.0')}
+                {dash.best_rank?.rank_score != null ? dash.best_rank.rank_score.toFixed(1) : '—'}
               </div>
               <span className={styles.metricSub}>
-                <Sparkles size={12} className={styles.sparkleIcon} /> {dash.hints_used_today} AI hints used today
+                {dash.best_rank?.rank_position != null ? `Rank #${dash.best_rank.rank_position} in an enrolled section` : 'No section rank available'}
               </span>
             </div>
           </div>
 
           {/* Card 3: Unread Notifications */}
-          <div
-            className={styles.metricCard}
-            onClick={() => router.push('/student/certificates')}
-            role="button"
-            tabIndex={0}
-          >
+          <div className={`${styles.metricCard} ${styles.metricCardStatic}`}>
             <div className={styles.metricHeader}>
               <div className={`${styles.metricIconBox} ${styles.iconRose}`}>
                 <Bell size={18} strokeWidth={2.2} />
               </div>
-              <ChevronRight size={16} className={styles.metricChevron} />
             </div>
             <div className={styles.metricBody}>
               <span className={styles.metricLabel}>Unread Notifications</span>
               <div className={styles.metricValue}>{dash.unread_notifications}</div>
-              <span className={styles.metricSub}>Tap to view notifications</span>
+              <span className={styles.metricSub}>Open the bell menu to view details</span>
             </div>
           </div>
 
@@ -444,8 +429,8 @@ export default function StudentDashboardPage() {
             </div>
             <div className={styles.metricBody}>
               <span className={styles.metricLabel}>Daily Streak</span>
-              <div className={styles.metricValue}>{dash.daily_streak ?? 0} Days</div>
-              <span className={styles.metricSub}>Keep it going! 🔥</span>
+              <div className={styles.metricValue}>{dash.daily_streak != null ? `${dash.daily_streak} Days` : '—'}</div>
+              <span className={styles.metricSub}>{dash.daily_streak == null ? 'Streak unavailable' : dash.daily_streak > 0 ? 'Recorded platform streak' : 'No active streak recorded'}</span>
             </div>
           </div>
         </section>
@@ -501,11 +486,11 @@ export default function StudentDashboardPage() {
               {currentTabSessions.slice(0, 4).map((s, idx) => {
                 const IconComponent = EXP_ICONS[idx % EXP_ICONS.length];
                 const iconColor = EXP_ICON_COLORS[idx % EXP_ICON_COLORS.length];
-                const title = expTitles[s.experiment_id] || s.title || 'Interactive Lab Session';
+                const title = expTitles[s.experiment_id] || s.title || 'Session title unavailable';
                 const dateFormatted = s.scheduled_at
                   ? new Date(s.scheduled_at).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' })
                   : 'Scheduled';
-                const duration = s.duration_minutes ? `${s.duration_minutes} min` : '90 min';
+                const duration = s.duration_minutes != null ? `${s.duration_minutes} min` : '—';
 
                 const targetRoute = s.status === 'active'
                   ? `/student/live-lab/${s.id}`
@@ -677,9 +662,9 @@ export default function StudentDashboardPage() {
                     >
                       <div className={styles.agendaDot} />
                       <div className={styles.agendaInfo}>
-                        <p className={styles.agendaTitle}>{expTitles[s.experiment_id] || s.title || 'Lab Session'}</p>
+                        <p className={styles.agendaTitle}>{expTitles[s.experiment_id] || s.title || 'Session title unavailable'}</p>
                         <p className={styles.agendaMeta}>
-                          {s.scheduled_at ? new Date(s.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'All Day'} • {s.status}
+                          {s.scheduled_at ? new Date(s.scheduled_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : 'Time unavailable'} • {s.status}
                         </p>
                       </div>
                       <ChevronRight size={14} className={styles.agendaChevron} />

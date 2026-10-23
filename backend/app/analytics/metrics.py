@@ -117,6 +117,8 @@ def batch_student_atomic_metrics(
     mastery_rows = ConceptMastery.query.filter(
         ConceptMastery.institution_id == institution_id,
         ConceptMastery.student_id.in_(student_ids),
+        ConceptMastery.experiment_count > 0,
+        ConceptMastery.mastery_score.isnot(None),
     ).all()
 
     mastery_map = defaultdict(list)
@@ -138,15 +140,26 @@ def batch_student_atomic_metrics(
         Grade.created_at <= window_end,
         Grade.final_grade.isnot(None),
     ]
-    if experiment_ids:
-        grade_filters.append(Grade.experiment_id.in_(experiment_ids))
+    if experiment_ids is not None:
+        grade_filters.append(Grade.experiment_id.in_(experiment_ids) if experiment_ids else db.literal(False))
 
     grade_rows = Grade.query.filter(*grade_filters).order_by(Grade.created_at.asc()).all()
 
     grade_map = defaultdict(list)
+    experiment_cache = {}
     for g in grade_rows:
+        if not g.experiment_id:
+            continue
+        exp = experiment_cache.get(g.experiment_id)
+        if exp is None:
+            exp = db.session.get(Experiment, g.experiment_id)
+            if exp is not None:
+                experiment_cache[g.experiment_id] = exp
+        if not exp or not exp.grade_scale or exp.grade_scale <= 0 or not exp.weightage or exp.weightage <= 0:
+            continue
+        normalized = max(0.0, min(100.0, float(g.final_grade) / float(exp.grade_scale) * 100.0))
         grade_map[g.student_id].append({
-            'grade': float(g.final_grade),
+            'grade': normalized, 'weight': float(exp.weightage),
             'timestamp': g.created_at or window_start,
         })
 
@@ -160,8 +173,8 @@ def batch_student_atomic_metrics(
         LabSession.scheduled_at <= window_end,
         LabSession.status != 'cancelled',
     ]
-    if session_ids:
-        att_filters.append(LabSession.id.in_(session_ids))
+    if session_ids is not None:
+        att_filters.append(LabSession.id.in_(session_ids) if session_ids else db.literal(False))
 
     att_rows = db.session.query(
         SessionAttendance.student_id,
@@ -275,8 +288,9 @@ def batch_student_atomic_metrics(
         g_sample = len(g_items)
         if g_sample > 0:
             g_vals = [x['grade'] for x in g_items]
-            grade_avg_val = statistics.mean(g_vals)
-            consistency_val = max(0.0, 100.0 - (statistics.stdev(g_vals) if g_sample > 1 else 0.0))
+            g_weights = [x['weight'] for x in g_items]
+            grade_avg_val = sum(v * w for v, w in zip(g_vals, g_weights)) / sum(g_weights) if sum(g_weights) else None
+            consistency_val = max(0.0, 100.0 - statistics.stdev(g_vals)) if g_sample >= 2 else None
 
             # OLS Slope (points change per week)
             if g_sample >= 2:
@@ -285,7 +299,7 @@ def batch_student_atomic_metrics(
                 y_mean = statistics.mean(g_vals)
                 numerator = sum((t_weeks[i] - t_mean) * (g_vals[i] - y_mean) for i in range(g_sample))
                 denominator = sum((t_weeks[i] - t_mean) ** 2 for i in range(g_sample))
-                grade_trend_val = (numerator / denominator) if denominator > 1e-6 else 0.0
+                grade_trend_val = numerator / denominator if denominator > 1e-6 else None
             else:
                 grade_trend_val = 0.0
         else:

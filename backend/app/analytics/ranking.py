@@ -390,11 +390,21 @@ def _compute_experiment_rank(
     period: str = 'live',
 ) -> List[Dict]:
     """Experiment-level ranking: order students by Grade.final_grade."""
+    from app.models.experiment import Experiment
+    experiment = db.session.get(Experiment, experiment_id)
+    scale = float(experiment.grade_scale or 0) if experiment else 0.0
     grades = (
-        Grade.query.filter(Grade.experiment_id == experiment_id)
-        .all()
-    )
-    grade_map = {g.student_id: float(g.final_grade or 0.0) for g in grades}
+        Grade.query.filter(
+            Grade.experiment_id == experiment_id,
+            Grade.final_grade.isnot(None),
+        ).order_by(Grade.created_at.desc(), Grade.graded_at.desc()).all()
+    ) if scale > 0 else []
+    grade_map = {}
+    for grade in grades:
+        grade_map.setdefault(
+            grade.student_id,
+            max(0.0, min(100.0, float(grade.final_grade) / scale * 100.0)),
+        )
     cohort_size = len(student_ids)
 
     from app.analytics.composite import percentile_of
@@ -516,7 +526,7 @@ def get_student_all_ranks(student_id: str, institution_id: Optional[str]) -> Dic
 
     # 4. Platform Rank
     platform_total = User.query.filter_by(role='student', is_active=True).count()
-    student_score = ranks.get('institution', {}).get('rank_score', 50.0)
+    student_score = ranks.get('institution', {}).get('rank_score')
     higher_platform = (
         db.session.query(func.count(User.id))
         .filter(User.role == 'student', User.is_active == True)

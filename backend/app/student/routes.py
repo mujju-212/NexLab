@@ -1224,33 +1224,67 @@ def dashboard():
     ).order_by(LabSession.scheduled_at).limit(5).all() if ss_ids else []
 
     # Top 5 concept mastery
-    top_concepts = ConceptMastery.query.filter_by(
-        student_id=g.user_id, institution_id=g.institution_id
+    top_concepts = ConceptMastery.query.filter(
+        ConceptMastery.student_id == g.user_id,
+        ConceptMastery.institution_id == g.institution_id,
+        ConceptMastery.experiment_count > 0,
     ).order_by(ConceptMastery.mastery_score.desc()).limit(5).all()
 
     # Weak concepts (below 40)
     weak_concepts = ConceptMastery.query.filter(
         ConceptMastery.student_id == g.user_id,
         ConceptMastery.institution_id == g.institution_id,
+        ConceptMastery.experiment_count > 0,
         ConceptMastery.mastery_score < 40
     ).order_by(ConceptMastery.mastery_score).limit(3).all()
 
     # Overall rank (best rank across all section-subjects)
-    best_rank = StudentRanking.query.filter_by(
-        student_id=g.user_id, institution_id=g.institution_id
+    best_rank = StudentRanking.query.filter(
+        StudentRanking.student_id == g.user_id,
+        StudentRanking.institution_id == g.institution_id,
+        StudentRanking.section_subject_id.in_(ss_ids) if ss_ids else db.literal(False),
     ).order_by(StudentRanking.rank_score.desc()).first()
 
-    # Grades summary — same grade-scope rule as the analytics pages: only grades
-    # attached to an experiment count, so the dashboard headline matches the
-    # Submissions page and the instructor's view of the same student.
-    grades = Grade.query.filter(
-        Grade.student_id == g.user_id,
-        Grade.final_grade.isnot(None),
-        Grade.experiment_id.isnot(None),
-    ).all()
-    avg_grade = (
-        sum(g2.final_grade for g2 in grades) / len(grades)
-    ) if grades else None
+    # Grades summary: enrolled + published experiments only; normalize each
+    # graded score to 0–100 and weight only experiments with an actual grade.
+    grades = []
+    enrolled_experiment_map = {}
+    if section_subjects:
+        subject_ids = list({ss.subject_id for ss in section_subjects})
+        enrolled_experiments = Experiment.query.filter(
+            Experiment.subject_id.in_(subject_ids),
+            Experiment.institution_id == g.institution_id,
+            Experiment.is_published.is_(True),
+        ).all() if subject_ids else []
+        enrolled_experiment_map = {exp.id: exp for exp in enrolled_experiments}
+        enrolled_experiment_ids = list(enrolled_experiment_map)
+        if enrolled_experiment_ids:
+            # A current final grade record per experiment. Missing/ungraded rows,
+            # zero-weight items, and invalid scales are excluded from the average.
+            grade_rows = Grade.query.filter(
+                Grade.student_id == g.user_id,
+                Grade.final_grade.isnot(None),
+                Grade.experiment_id.in_(enrolled_experiment_ids),
+            ).order_by(Grade.created_at.desc(), Grade.graded_at.desc()).all()
+            seen_grade_experiments = set()
+            for grade in grade_rows:
+                if grade.experiment_id not in seen_grade_experiments:
+                    grades.append(grade)
+                    seen_grade_experiments.add(grade.experiment_id)
+    weighted_grade_sum = 0.0
+    graded_weight_sum = 0.0
+    for grade in grades:
+        exp = enrolled_experiment_map.get(grade.experiment_id)
+        if not exp:
+            continue
+        scale = float(exp.grade_scale or 0)
+        weight = float(exp.weightage or 0)
+        if scale <= 0 or weight <= 0:
+            continue
+        normalized_grade = max(0.0, min(100.0, float(grade.final_grade) / scale * 100.0))
+        weighted_grade_sum += normalized_grade * weight
+        graded_weight_sum += weight
+    avg_grade = round(weighted_grade_sum / graded_weight_sum, 1) if graded_weight_sum > 0 else None
 
     # Unread notifications
     unread_count = Notification.query.filter_by(
@@ -1265,62 +1299,42 @@ def dashboard():
     ).count()
 
     # Total submissions
-    total_submissions = CodeAttempt.query.filter_by(
-        student_id=g.user_id, is_final_submission=True
+    enrolled_exp_ids = list(enrolled_experiment_map)
+    total_submissions = CodeAttempt.query.filter(
+        CodeAttempt.student_id == g.user_id,
+        CodeAttempt.is_final_submission.is_(True),
+        CodeAttempt.experiment_id.in_(enrolled_exp_ids) if enrolled_exp_ids else db.literal(False),
     ).count()
 
     # Calculate real overall progress percentage
-    total_exps = 0
-    completed_exps = 0
-    if section_subjects:
-        subj_ids = list({ss.subject_id for ss in section_subjects})
-        exps = Experiment.query.filter(
-            Experiment.subject_id.in_(subj_ids),
-            Experiment.institution_id == g.institution_id,
-            Experiment.is_published == True
-        ).all()
-        total_exps = len(exps)
-        exp_ids = [e.id for e in exps]
-        if exp_ids:
-            graded_exp_ids = {
-                r[0] for r in db.session.query(Grade.experiment_id).filter(
-                    Grade.student_id == g.user_id,
-                    Grade.experiment_id.in_(exp_ids),
-                ).all()
-            }
-            submitted_exp_ids = {
-                r[0] for r in db.session.query(CodeAttempt.experiment_id).filter(
-                    CodeAttempt.student_id == g.user_id,
-                    CodeAttempt.experiment_id.in_(exp_ids),
-                    CodeAttempt.is_final_submission == True,
-                ).all()
-            }
-            completed_exps = len(graded_exp_ids | submitted_exp_ids)
+    exp_ids = list(enrolled_experiment_map)
+    total_exps = len(exp_ids)
+    submitted_exp_ids = {
+        r[0] for r in db.session.query(CodeAttempt.experiment_id).filter(
+            CodeAttempt.student_id == g.user_id,
+            CodeAttempt.experiment_id.in_(exp_ids) if exp_ids else db.literal(False),
+            CodeAttempt.is_final_submission.is_(True),
+        ).distinct().all()
+    }
+    completed_exps = len(submitted_exp_ids)
+    overall_progress = round((completed_exps / total_exps) * 100) if total_exps > 0 else None
 
-    overall_progress = round((completed_exps / total_exps) * 100) if total_exps > 0 else 0
-
-    # Daily streak from StudentXP
-    daily_streak = 0
-    try:
-        from app.models.practice import StudentXP
-        xp = StudentXP.query.filter_by(student_id=g.user_id).first()
-        if xp and xp.streak_days and xp.streak_days > 0:
-            daily_streak = xp.streak_days
-        else:
-            daily_streak = total_submissions if total_submissions > 0 else 0
-    except Exception:
-        daily_streak = 0
+    # Streak is available only when the platform has a persisted XP record; do
+    # not substitute a lifetime submission count for a daily streak.
+    from app.models.practice import StudentXP
+    xp = StudentXP.query.filter_by(student_id=g.user_id).first()
+    daily_streak = xp.streak_days if xp else None
 
     top_concepts_data = [c.to_dict() for c in top_concepts]
     weak_concepts_data = [c.to_dict() for c in weak_concepts]
 
     return jsonify({
-        'subjects_enrolled': len(section_subjects),
+        'subjects_enrolled': len({ss.subject_id for ss in section_subjects}),
         'upcoming_sessions': [s.to_dict() for s in upcoming],
         'top_concepts': top_concepts_data,
         'weak_concepts': weak_concepts_data,
         'best_rank': best_rank.to_dict() if best_rank else None,
-        'avg_grade': round(avg_grade, 1) if avg_grade else None,
+        'avg_grade': avg_grade,
         'total_submissions': total_submissions,
         'unread_notifications': unread_count,
         'hints_used_today': hints_today,

@@ -5,7 +5,6 @@ import {
   GraduationCap,
   Trophy,
   Flame,
-  Award,
   Zap,
   CheckCircle2,
   AlertCircle,
@@ -35,29 +34,29 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
   overview,
   activeTab,
   onTabChange,
-  studentName = 'Student',
+  studentName,
   rollNumber,
-  department = 'Computer Science',
-  academicYear = '2026',
+  department,
+  academicYear,
 }) => {
   const academic = overview?.academic;
   const platform = overview?.platform;
   const unlocks = overview?.unlocks;
 
-  const standingBand = academic?.standing?.band || 'ok';
+  const standingBand = academic?.standing?.band ?? null;
   const standingClass =
     standingBand === 'ok'
       ? styles.standingOk
       : standingBand === 'watch'
       ? styles.standingWatch
-      : styles.standingHigh;
+      : standingBand ? styles.standingHigh : '';
 
   const standingLabel =
     standingBand === 'ok'
       ? 'On track ✓'
       : standingBand === 'watch'
       ? 'Needs focus'
-      : 'Guidance available';
+      : standingBand ? 'Guidance available' : 'Standing unavailable';
 
   // Institution Rank
   const instRank = academic?.ranks?.institution;
@@ -68,16 +67,10 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
   const rankPercentile = instRank?.percentile ?? academic?.ranks?.section?.percentile ?? null;
   const topPct = rankPercentile == null ? null : Math.max(1, 100 - Math.round(rankPercentile));
 
-  const initials = studentName
-    ? studentName
-        .split(' ')
-        .map((n) => n[0])
-        .slice(0, 2)
-        .join('')
-        .toUpperCase()
-    : 'ST';
+  const displayName = studentName || '—';
+  const initials = studentName?.split(' ').filter(Boolean).map((n) => n[0]).slice(0, 2).join('').toUpperCase() || '—';
 
-  const streakDays = platform?.streak_days ?? 0;
+  const streakDays = platform?.streak_days ?? null;
   const nextUnlock = unlocks?.next_unlock;
 
   return (
@@ -87,19 +80,14 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
         <div className={styles.heroIdentity}>
           <div className={styles.avatarRing}>{initials}</div>
           <div className={styles.identityText}>
-            <h1>{studentName}</h1>
+            <h1>{displayName}</h1>
             <div className={styles.metaRow}>
               {rollNumber && (
                 <span className={styles.metaBadge}>
                   <strong>Roll:</strong> {rollNumber}
                 </span>
               )}
-              <span className={styles.metaBadge}>
-                {department} · Year {academicYear}
-              </span>
-              <span className={styles.metaBadge}>
-                <Award size={13} color="#7c3aed" /> Two-Track Certified
-              </span>
+              {(department || academicYear) && <span className={styles.metaBadge}>{[department, academicYear].filter(Boolean).join(' · ')}</span>}
             </div>
           </div>
         </div>
@@ -121,7 +109,7 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
             }}
           >
             <Flame size={18} fill="#f97316" color="#ea580c" />
-            <span>{streakDays}-day streak</span>
+            <span>{streakDays != null ? `${streakDays}-day streak` : 'Streak unavailable'}</span>
           </div>
         </div>
       </div>
@@ -136,7 +124,7 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
               <span>🎓 Track 1 · Academic Surface</span>
             </div>
             <span className={`${styles.trackPill} ${standingClass}`}>
-              {standingBand === 'ok' ? <CheckCircle2 size={13} /> : <AlertCircle size={13} />}
+              {standingBand === 'ok' ? <CheckCircle2 size={13} /> : standingBand ? <AlertCircle size={13} /> : null}
               {standingLabel}
             </span>
           </div>
@@ -151,14 +139,14 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
                 </div>
               </div>
               <div className={styles.statLabel}>
-                Institution Rank (top {topPct}%)
+                {topPct != null ? `Institution Rank (top ${topPct}%)` : 'Institution rank unavailable'}
               </div>
             </div>
 
             {/* Average Grade */}
             <div>
               <div className={styles.bigStat} style={{ color: '#7c3aed' }}>
-                {academic?.grades?.average != null ? `${Math.round(academic.grades.average)}%` : '—'}
+                {academic?.grades?.avg_grade != null ? `${Math.round(academic.grades.avg_grade)}%` : '—'}
               </div>
               <div className={styles.statLabel}>Avg Course Grade</div>
             </div>
@@ -183,7 +171,7 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
               <ArrowUp size={11} color="#15803d" />{' '}
               {topPct != null && (cohortSize ?? 0) >= 5
                 ? `Top ${topPct}% in Institution`
-                : (cohortSize ?? 0) < 2
+                : cohortSize != null && cohortSize < 2
                 ? 'Only student in cohort'
                 : 'Cohort too small for a percentile'}
             </span>
@@ -212,7 +200,7 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
               <span>🏆 Track 2 · Platform Competitive</span>
             </div>
             <span className={`${styles.trackPill} ${styles.ratingPill}`}>
-              {platform?.level_name || 'Novice'}
+              {platform?.level_name || '—'}
             </span>
           </div>
 
@@ -220,7 +208,7 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
             {/* Rating & Global Standing */}
             <div>
               <div className={styles.bigStat} style={{ color: '#047857' }}>
-                {platform?.rating ? Math.round(platform.rating).toLocaleString() : '—'}
+                {platform?.rating != null ? Math.round(platform.rating).toLocaleString() : '—'}
               </div>
               <div className={styles.statLabel}>
                 Rating · Global #{platform?.global_rank ?? '—'} (top{' '}
@@ -233,10 +221,10 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
             {/* Level Ring */}
             <div>
               <LevelRing
-                level={platform?.level ?? 1}
-                levelName={platform?.level_name || 'Novice'}
-                currentXp={(platform as any)?.total_xp ?? (platform?.level ?? 1) * 350}
-                nextXp={(platform as any)?.next_level_xp ?? ((platform?.level ?? 1) + 1) * 500}
+                level={platform?.level ?? null}
+                levelName={platform?.level_name ?? null}
+                currentXp={platform?.total_xp ?? null}
+                nextXp={platform?.next_level_xp ?? null}
                 size={48}
                 strokeWidth={5}
               />
@@ -263,7 +251,7 @@ export const TwoTrackHero: React.FC<TwoTrackHeroProps> = ({
             </span>
             {nextUnlock && (
               <span className={styles.metaBadge} style={{ background: '#f3e8ff', color: '#7e22ce' }}>
-                <Sparkles size={11} /> Next: {nextUnlock.tier} in {Math.max(0, nextUnlock.target - nextUnlock.current)} solves
+                <Sparkles size={11} /> Next: {nextUnlock.target} — {nextUnlock.current}
               </span>
             )}
           </div>

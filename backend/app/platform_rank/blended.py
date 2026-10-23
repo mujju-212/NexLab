@@ -78,6 +78,7 @@ def compute_blended_knowledge_map(
     q = ConceptMastery.query.filter_by(student_id=student_id)
     if institution_id:
         q = q.filter_by(institution_id=institution_id)
+    q = q.filter(ConceptMastery.experiment_count > 0)
     academic_rows = q.all()
 
     academic_map: Dict[str, List[float]] = {}
@@ -90,22 +91,16 @@ def compute_blended_knowledge_map(
 
     # 2. Fetch practice topic mastery
     practice_list = get_practice_topic_mastery(student_id)
-    practice_scores: Dict[str, float] = {}
-    for p in practice_list:
-        canon = _canonicalize_topic(p['topic'])
-        practice_scores[canon] = float(p.get('strength', 0.0))
+    practice_map: Dict[str, List[float]] = {}
+    for row in practice_list:
+        if not row.get('topic') or row.get('strength') is None:
+            continue
+        canon = _canonicalize_topic(row['topic'])
+        practice_map.setdefault(canon, []).append(float(row['strength']))
+    practice_scores = {k: sum(v) / len(v) for k, v in practice_map.items() if v}
 
     # 3. Fuse topics present in either or both tracks
     all_topics = set(academic_scores.keys()).union(set(practice_scores.keys()))
-    if not all_topics:
-        all_topics = {
-            'Arrays & Strings',
-            'Linked Lists',
-            'Pointers & Memory',
-            'Recursion & Backtracking',
-            'Trees & Graphs',
-            'Dynamic Programming',
-        }
 
     knowledge_map = []
     total_blended = 0.0
@@ -114,20 +109,16 @@ def compute_blended_knowledge_map(
         acad = academic_scores.get(topic)
         prac = practice_scores.get(topic)
 
-        # Formula: Blended Score = 0.60 * Academic Mastery + 0.40 * Practice Strength
-        # Academic Mastery derived from ConceptMastery.mastery_score (or 70.0 base score if not evaluated)
-        # Practice Strength derived from PracticeSubmission.passed / total and topic strength
-        effective_acad = float(acad) if acad is not None else 70.0
-        effective_prac = float(prac) if prac is not None else 0.0
-
+        # Blend measured sources only. If only one source exists, it supplies
+        # the entire observed score; an absent source is not replaced by 0 or 70.
         if acad is not None and prac is not None:
             blended = round((acad * weight_academic) + (prac * weight_practice), 1)
         elif acad is not None:
-            blended = round((acad * weight_academic) + (effective_prac * weight_practice), 1)
+            blended = round(float(acad), 1)
         elif prac is not None:
-            blended = round((effective_acad * weight_academic) + (prac * weight_practice), 1)
+            blended = round(float(prac), 1)
         else:
-            blended = 0.0
+            continue
 
         total_blended += blended
 
@@ -139,7 +130,7 @@ def compute_blended_knowledge_map(
             action = 'Solid comprehension. Practice timed problem variations to build fluency.'
         elif blended >= 40:
             band = 'Developing'
-            action = 'Needs reinforcement. Review core textbook algorithms and solve 3-5 Medium exercises.'
+            action = 'Needs reinforcement. Review the core concepts and practice related exercises.'
         else:
             band = 'Critical Gap'
             action = 'High priority gap. Review foundational pre-lab concepts and debug trace examples.'
@@ -164,7 +155,7 @@ def compute_blended_knowledge_map(
     # Sort descending by blended score
     knowledge_map.sort(key=lambda x: x['blended_score'], reverse=True)
 
-    avg_blended = round(total_blended / max(1, len(knowledge_map)), 1)
+    avg_blended = round(total_blended / len(knowledge_map), 1) if knowledge_map else None
     strong_topics = [k['topic'] for k in knowledge_map if k['blended_score'] >= 70][:3]
     weak_topics = [k['topic'] for k in reversed(knowledge_map) if k['blended_score'] < 60][:3]
 

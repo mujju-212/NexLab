@@ -61,7 +61,7 @@ export const CompletionRing: React.FC<CompletionRingProps> = ({
             color: '#0f172a',
           }}
         >
-          {Math.round(pct * 100)}%
+          {total > 0 ? `${Math.round(pct * 100)}%` : '—'}
         </div>
       </div>
 

@@ -2,13 +2,14 @@
 Practice Topic Mastery Engine (Track 2)
 Computes topic-level proficiency and strength from practice problem submissions.
 """
-from typing import Dict, Any, List
+from typing import Dict, Any, List, Optional
+from datetime import datetime
 from collections import defaultdict
 from app.extensions import db
 from app.models.practice import Problem, PracticeSubmission
 
 
-def get_practice_topic_mastery(student_id: str) -> List[Dict[str, Any]]:
+def get_practice_topic_mastery(student_id: str, window_start: Optional[datetime] = None) -> List[Dict[str, Any]]:
     """
     Computes difficulty-weighted mastery strength across all practice topics
     for a given student.
@@ -24,12 +25,14 @@ def get_practice_topic_mastery(student_id: str) -> List[Dict[str, Any]]:
       }]
     """
     # 1. Fetch practice submissions by this student
-    subs = (
+    sub_q = (
         db.session.query(PracticeSubmission, Problem)
         .join(Problem, PracticeSubmission.problem_id == Problem.id)
-        .filter(PracticeSubmission.student_id == student_id, PracticeSubmission.is_run == False)
-        .all()
+        .filter(PracticeSubmission.student_id == student_id, PracticeSubmission.is_run.is_(False))
     )
+    if window_start is not None:
+        sub_q = sub_q.filter(PracticeSubmission.submitted_at >= window_start)
+    subs = sub_q.all()
 
     # 2. Fetch course exercise records from FreeProgress (Track 2 unified)
     from app.models.free import FreeProgress, FreeExercise, FreeCourse
@@ -38,25 +41,15 @@ def get_practice_topic_mastery(student_id: str) -> List[Dict[str, Any]]:
         .join(FreeExercise, FreeProgress.exercise_id == FreeExercise.id)
         .join(FreeCourse, FreeProgress.course_id == FreeCourse.id)
         .filter(FreeProgress.user_id == student_id)
-        .all()
     )
+    if window_start is not None:
+        course_q = course_records.filter(FreeProgress.updated_at >= window_start)
+        course_records = course_q.all()
+    else:
+        course_records = course_records.all()
 
     if not subs and not course_records:
-        # Return default topics with 0 strength
-        topics_query = db.session.query(Problem.nexlab_topic).distinct().all()
-        known_topics = [t[0] for t in topics_query if t[0]]
-        return [
-            {
-                'topic': top,
-                'strength': 0.0,
-                'band': 'Needs Practice',
-                'solved_by_difficulty': {'Easy': 0, 'Medium': 0, 'Hard': 0},
-                'total_solved': 0,
-                'total_attempted': 0,
-                'accuracy_pct': 0.0,
-            }
-            for top in (known_topics or ['Arrays', 'Strings', 'Linked Lists', 'Trees', 'Dynamic Programming'])
-        ]
+        return []
 
     # Aggregate by topic
     topic_data = defaultdict(lambda: {
@@ -73,14 +66,16 @@ def get_practice_topic_mastery(student_id: str) -> List[Dict[str, Any]]:
 
     # 3a. Process practice library submissions
     for sub, prob in subs:
-        top = prob.nexlab_topic or 'General'
-        diff = (prob.difficulty or 'Easy').capitalize()
+        top = (prob.nexlab_topic or '').strip()
+        if not top:
+            continue
+        diff = (prob.difficulty or '').capitalize()
 
         td = topic_data[top]
         td['attempted_pids'].add(prob.id)
         td['total_subs'] += 1
         td['total_passed_cases'] += (sub.passed or 0)
-        td['total_test_cases'] += max(1, (sub.total or 1))
+        td['total_test_cases'] += max(0, int(sub.total or 0))
 
         if sub.status == 'Accepted':
             td['accepted_subs'] += 1
@@ -96,17 +91,19 @@ def get_practice_topic_mastery(student_id: str) -> List[Dict[str, Any]]:
     # 3b. Process course exercises
     for prog, ex, course in course_records:
         course_tags = course.tags if (course.tags and isinstance(course.tags, list)) else [course.title or 'Programming']
-        diff = (ex.difficulty or 'Easy').capitalize()
+        diff = (ex.difficulty or '').capitalize()
 
         for tag in course_tags:
-            top_name = str(tag).strip().title()
+            top_name = str(tag or '').strip().title()
+            if not top_name:
+                continue
             td = topic_data[top_name]
             td['attempted_pids'].add(f"course_ex_{ex.id}")
-            attempts = (prog.attempts or 1)
+            attempts = int(prog.attempts or 0)
             td['total_subs'] += attempts
-            best_score = float(prog.best_score or 0.0)
-            td['total_passed_cases'] += int(round(best_score))
-            td['total_test_cases'] += 100
+            if prog.best_score is not None:
+                td['total_passed_cases'] += int(round(float(prog.best_score)))
+                td['total_test_cases'] += 100
 
             if prog.status == 'solved':
                 td['accepted_subs'] += 1
@@ -131,15 +128,16 @@ def get_practice_topic_mastery(student_id: str) -> List[Dict[str, Any]]:
         # e.g., 5 Easy + 3 Medium + 1 Hard = 5*1 + 3*2.5 + 1*5 = 17.5 points
         # Benchmark for 100% mastery = 15 points
         raw_pts = (easy * 1.0) + (med * 2.5) + (hard * 5.0)
-        solve_strength = min(100.0, round((raw_pts / 15.0) * 100.0, 1))
+        solve_strength = min(100.0, round((raw_pts / 15.0) * 100.0, 1)) if total_solved > 0 else None
 
         # Test case pass ratio: passed / total
-        pass_ratio = round(100.0 * (data['total_passed_cases'] / max(1, data['total_test_cases'])), 1)
-        # Combined practice strength: blends test case passing ratio and difficulty solve coverage
-        if total_solved > 0:
-            strength = round(0.5 * pass_ratio + 0.5 * solve_strength, 1)
-        else:
-            strength = pass_ratio
+        pass_ratio = round(100.0 * data['total_passed_cases'] / data['total_test_cases'], 1) if data['total_test_cases'] > 0 else None
+        # Combine only measurements that exist; do not treat missing test-case
+        # results as zero or infer an unrecorded solve score.
+        measured = [v for v in (pass_ratio, solve_strength) if v is not None]
+        if not measured:
+            continue
+        strength = round(sum(measured) / len(measured), 1)
 
         if strength >= 80:
             band = 'Mastered'
@@ -150,7 +148,7 @@ def get_practice_topic_mastery(student_id: str) -> List[Dict[str, Any]]:
         else:
             band = 'Needs Practice'
 
-        acc = round(100.0 * (data['accepted_subs'] / max(1, data['total_subs'])), 1)
+        acc = round(100.0 * data['accepted_subs'] / data['total_subs'], 1) if data['total_subs'] > 0 else None
 
         result.append({
             'topic': top,

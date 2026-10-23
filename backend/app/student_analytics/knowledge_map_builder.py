@@ -18,6 +18,7 @@ from app.models.submission import CodeAttempt
 from app.models.practice import Problem, PracticeSubmission, StudentXP, PlatformRating
 from app.platform_rank.practice_mastery import get_practice_topic_mastery
 from app.platform_rank.unlock import check_content_unlocks
+from app.platform_rank.blended import _canonicalize_topic
 
 
 # Domain taxonomy grouping for CS curriculum mindmap
@@ -101,303 +102,282 @@ def build_knowledge_map_dashboard_payload(
     period: str = '30d',
     institution_id: Optional[str] = None,
 ) -> Dict[str, Any]:
-    """
-    Constructs the complete knowledge map dashboard response matching real DB stats.
-    Formula: Blended Score = 0.60 * Academic Mastery + 0.40 * Practice Strength
+    """Build a knowledge map from measured student observations only.
+
+    Blended scores use the configured 60/40 weights when both tracks exist;
+    when only one track is measured, that score is shown as-is rather than
+    replacing the missing track with a synthetic zero or baseline.
     """
     student = db.session.get(User, student_id)
     iid = institution_id or (student.institution_id if student else None)
+    view = view if view in ('blended', 'academic', 'practice') else 'blended'
+    days = {'30d': 30, '30': 30, '60d': 60, '60': 60, '90d': 90, '90': 90, '12w': 84,
+            'semester': 120, 'this_semester': 120}.get(period)
+    window_start = datetime.utcnow() - timedelta(days=days) if days else None
 
-    # 1. Fetch real academic ConceptMastery records from DB
-    q_acad = ConceptMastery.query.filter_by(student_id=student_id)
+    # Keep academic observations institution-scoped and period-scoped by their
+    # recorded update time; mastery is a snapshot, not an invented history.
+    academic_q = ConceptMastery.query.filter_by(student_id=student_id)
     if iid:
-        q_acad = q_acad.filter_by(institution_id=iid)
-    acad_records = q_acad.all()
-    acad_map = {r.concept.strip().lower(): float(r.mastery_score or 0.0) for r in acad_records}
+        academic_q = academic_q.filter_by(institution_id=iid)
+    academic_q = academic_q.filter(ConceptMastery.experiment_count > 0)
+    if window_start is not None:
+        academic_q = academic_q.filter(ConceptMastery.last_updated >= window_start)
+    academic_rows = academic_q.all()
+    academic_accum = defaultdict(list)
+    for row in academic_rows:
+        if row.mastery_score is not None and row.concept:
+            academic_accum[_canonicalize_topic(row.concept)].append(float(row.mastery_score))
+    academic_scores = {key: sum(values) / len(values) for key, values in academic_accum.items() if values}
 
-    # 2. Fetch real practice topic strength
-    practice_list = get_practice_topic_mastery(student_id)
-    practice_map = {p['topic'].strip().lower(): float(p.get('strength', 0.0)) for p in practice_list}
+    practice_rows = get_practice_topic_mastery(student_id, window_start=window_start)
+    practice_accum = defaultdict(list)
+    for row in practice_rows:
+        if row.get('topic') and row.get('strength') is not None:
+            practice_accum[_canonicalize_topic(row['topic'])].append(float(row['strength']))
+    practice_scores = {key: sum(values) / len(values) for key, values in practice_accum.items() if values}
 
-    # 3. Assemble hierarchical domain and concept nodes with verified blended calculations
+    def _score_for(canonical: str):
+        acad = academic_scores.get(canonical)
+        prac = practice_scores.get(canonical)
+        if view == 'academic':
+            return (round(acad, 1), acad, None) if acad is not None else (None, None, None)
+        if view == 'practice':
+            return (round(prac, 1), None, prac) if prac is not None else (None, None, None)
+        if acad is not None and prac is not None:
+            # Normalize the available weights (0.60 + 0.40 = 1.00).
+            return (round(0.60 * acad + 0.40 * prac, 1), acad, prac)
+        if acad is not None:
+            return (round(acad, 1), acad, None)
+        if prac is not None:
+            return (round(prac, 1), None, prac)
+        return (None, acad, prac)
+
+    # Construct only concepts with at least one measurement for this view.
     domain_nodes = []
-    all_evaluated_concepts = []
-    strong_areas_count = 0
-    areas_to_improve_count = 0
-    not_started_count = 0
-    mastered_count = 0
-
-    for domain_name, d_info in CURRICULUM_TAXONOMY.items():
-        concept_nodes = []
+    observed_concepts = []
+    observed_canonicals = set()
+    for domain_name, domain_info in CURRICULUM_TAXONOMY.items():
+        nodes = []
         domain_scores = []
+        for concept_spec in domain_info['concepts']:
+            aliases = [concept_spec['name'], *concept_spec.get('sub_aliases', [])]
+            canonical = next((_canonicalize_topic(alias) for alias in aliases
+                              if _canonicalize_topic(alias) in academic_scores or
+                                 _canonicalize_topic(alias) in practice_scores),
+                             _canonicalize_topic(concept_spec['name']))
+            score, academic, practice = _score_for(canonical)
+            # Also match observed labels via their aliases, even when the
+            # canonical form is the alias rather than the curriculum label.
+            if score is None:
+                for alias in aliases:
+                    candidate = _canonicalize_topic(alias)
+                    score, academic, practice = _score_for(candidate)
+                    if score is not None:
+                        canonical = candidate
+                        break
+            if score is None or canonical in observed_canonicals:
+                continue
+            observed_canonicals.add(canonical)
 
-        for c in d_info['concepts']:
-            c_name = c['name']
-            c_lower = c_name.lower()
+            if score >= 80:
+                status, color, band = 'Strong', '#10b981', 'strong'
+            elif score >= 60:
+                status, color, band = 'Good', '#10b981', 'good'
+            elif score >= 40:
+                status, color, band = 'Moderate', '#f59e0b', 'moderate'
+            else:
+                status, color, band = 'Weak', '#ef4444', 'weak'
 
-            # Find matching academic score
-            acad_val = None
-            for alias in c.get('sub_aliases', [c_lower]):
-                if alias in acad_map:
-                    acad_val = acad_map[alias]
-                    break
-
-            # Find matching practice score
-            prac_val = None
-            for alias in c.get('sub_aliases', [c_lower]):
-                if alias in practice_map:
-                    prac_val = practice_map[alias]
-                    break
-
-            is_evaluated = (acad_val is not None) or (prac_val is not None)
-
-            # Apply formula: Blended Score = 0.60 * Academic Mastery + 0.40 * Practice Strength
-            # Academic Mastery defaults to 70.0 base score if not evaluated yet but practice exists
-            eff_acad = acad_val if acad_val is not None else (70.0 if prac_val is not None else 0.0)
-            eff_prac = prac_val if prac_val is not None else 0.0
-
-            if view == 'academic':
-                final_score = round(eff_acad, 1) if acad_val is not None else 0.0
-            elif view == 'practice':
-                final_score = round(eff_prac, 1) if prac_val is not None else 0.0
-            else:  # blended
-                if is_evaluated:
-                    final_score = round(0.60 * eff_acad + 0.40 * eff_prac, 1)
-                else:
-                    final_score = 0.0
-
-            band_info = _get_status_band(final_score, is_evaluated)
-            if band_info['band'] == 'strong':
-                strong_areas_count += 1
-                mastered_count += 1
-            elif band_info['band'] == 'good':
-                if final_score >= 75.0:
-                    mastered_count += 1
-            elif band_info['band'] in ('moderate', 'weak'):
-                areas_to_improve_count += 1
-            elif band_info['band'] == 'not_started':
-                not_started_count += 1
-
-            c_obj = {
-                'id': f"concept-{c_name.lower().replace(' ', '-').replace('&', 'and')}",
-                'name': c_name,
+            node = {
+                'id': f"concept-{concept_spec['name'].lower().replace(' ', '-').replace('&', 'and')}",
+                'name': concept_spec['name'],
                 'domain': domain_name,
-                'score': final_score,
-                'status': band_info['status'],
-                'color': band_info['color'],
-                'band': band_info['band'],
-                'academic_score': round(acad_val, 1) if acad_val is not None else None,
-                'practice_strength': round(prac_val, 1) if prac_val is not None else None,
-                'blended_score': final_score,
-                'is_evaluated': is_evaluated,
+                'score': score,
+                'status': status,
+                'color': color,
+                'band': band,
+                'academic_score': round(academic, 1) if academic is not None else None,
+                'practice_strength': round(practice, 1) if practice is not None else None,
+                'blended_score': score,
+                'is_evaluated': True,
             }
-            concept_nodes.append(c_obj)
-            all_evaluated_concepts.append(c_obj)
-            domain_scores.append(final_score)
+            nodes.append(node)
+            observed_concepts.append(node)
+            domain_scores.append(score)
 
-        avg_domain = round(sum(domain_scores) / max(1, len(domain_scores)), 1)
-        domain_nodes.append({
-            'id': d_info['id'],
-            'name': domain_name,
-            'score': avg_domain,
-            'color': d_info['color'],
-            'concepts': concept_nodes,
-        })
+        if nodes:
+            domain_nodes.append({
+                'id': domain_info['id'],
+                'name': domain_name,
+                'score': round(sum(domain_scores) / len(domain_scores), 1),
+                'color': domain_info['color'],
+                'concepts': nodes,
+            })
 
-    total_concepts_count = len(all_evaluated_concepts)
-    evaluated_scores = [c['score'] for c in all_evaluated_concepts if c['is_evaluated']]
-    overall_blended = round(sum(evaluated_scores) / max(1, len(evaluated_scores)), 1) if evaluated_scores else 0.0
+    if subject and subject.lower() != 'all':
+        domain_nodes = [d for d in domain_nodes if d['name'].lower() == subject.lower()]
+        observed_concepts = [c for c in observed_concepts if c['domain'].lower() == subject.lower()]
 
-    # 4. Filter nodes if specific subject requested
-    if subject != 'all':
-        matching_domains = [d for d in domain_nodes if d['name'].lower() == subject.lower() or subject.lower() in d['name'].lower()]
-        if matching_domains:
-            domain_nodes = matching_domains
-            subj_concepts = [c for c in all_evaluated_concepts if c['domain'].lower() == subject.lower() or subject.lower() in c['domain'].lower()]
-            if subj_concepts:
-                all_evaluated_concepts = subj_concepts
-                total_concepts_count = len(subj_concepts)
-                subj_eval = [c['score'] for c in subj_concepts if c['is_evaluated']]
-                overall_blended = round(sum(subj_eval) / max(1, len(subj_eval)), 1) if subj_eval else 0.0
-                mastered_count = sum(1 for c in subj_concepts if c['score'] >= 75)
-                strong_areas_count = sum(1 for c in subj_concepts if c['score'] >= 80)
-                areas_to_improve_count = sum(1 for c in subj_concepts if 0 < c['score'] < 60)
-                not_started_count = sum(1 for c in subj_concepts if not c['is_evaluated'] or c['score'] == 0)
-
-    # 5. Top Strengths (real evaluated concepts sorted by score DESC)
-    evaluated_only = [c for c in all_evaluated_concepts if c['is_evaluated']]
-    sorted_desc = sorted(evaluated_only, key=lambda x: x['score'], reverse=True)
-    top_strengths = []
-    for idx, c in enumerate(sorted_desc[:5]):
-        sub_code = (
-            'DSA' if c['domain'] == 'Data Structures'
-            else 'DBMS' if c['domain'] == 'Databases'
-            else 'CN' if c['domain'] == 'Computer Networks'
-            else 'OS' if c['domain'] == 'Operating Systems'
-            else 'Algorithms'
-        )
-        top_strengths.append({
-            'rank': idx + 1,
-            'name': f"{c['name']} ({sub_code})",
-            'concept_name': c['name'],
-            'subject_code': sub_code,
-            'score': c['score'],
-        })
-
-    # 6. Focus Next (evaluated concepts with score < 75 sorted ASC)
-    sorted_asc = sorted([c for c in evaluated_only if c['score'] < 75], key=lambda x: x['score'])
-    if not sorted_asc:
-        sorted_asc = sorted(all_evaluated_concepts, key=lambda x: x['score'])
-
-    focus_next = []
-    for idx, c in enumerate(sorted_asc[:5]):
-        sub_code = (
-            'OS' if c['domain'] == 'Operating Systems'
-            else 'DBMS' if c['domain'] == 'Databases'
-            else ''
-        )
-        display_name = f"{c['name']} ({sub_code})" if sub_code else c['name']
-        focus_next.append({
-            'rank': idx + 1,
-            'name': display_name,
-            'concept_name': c['name'],
-            'score': c['score'],
-        })
-
-    # 7. Concept Details payload for selected or default topic
-    selected_concept_name = topic if (topic != 'all' and topic) else (focus_next[0]['concept_name'] if focus_next else 'Arrays')
-    matched_c = next((c for c in all_evaluated_concepts if c['name'].lower() == selected_concept_name.lower()), None)
-    if not matched_c and all_evaluated_concepts:
-        matched_c = all_evaluated_concepts[0]
-
-    # Query real practice stats for this concept
-    c_prob_attempts = 0
-    c_prob_solved = 0
-    c_times = []
-    all_student_subs = PracticeSubmission.query.filter_by(student_id=student_id).all()
-    for s in all_student_subs:
-        p = db.session.get(Problem, s.problem_id) if s.problem_id else None
-        if p and (matched_c['name'].lower() in (p.nexlab_topic or '').lower() or (p.nexlab_topic or '').lower() in matched_c['name'].lower()):
-            c_prob_attempts += 1
-            if s.status == 'Accepted':
-                c_prob_solved += 1
-            if s.time_ms:
-                c_times.append(s.time_ms)
-
-    c_acc = round(100.0 * c_prob_solved / max(1, c_prob_attempts)) if c_prob_attempts > 0 else 0
-    c_avg_mins = round((sum(c_times) / len(c_times)) / 60000, 1) if c_times else 0
-
-    # Query real experiment stats for this concept
-    exp_links = ExperimentConcept.query.filter(ExperimentConcept.concept.ilike(f"%{matched_c['name']}%")).all()
-    matched_eids = [el.experiment_id for el in exp_links]
-    c_grades = Grade.query.filter(Grade.student_id == student_id, Grade.experiment_id.in_(matched_eids), Grade.final_grade.isnot(None)).all() if matched_eids else []
-    c_exp_avg = round(sum(float(g.final_grade) for g in c_grades) / len(c_grades)) if c_grades else 0
-    last_exp_title = 'Lab Assignment'
-    if c_grades:
-        last_exp = db.session.get(Experiment, c_grades[0].experiment_id)
-        if last_exp:
-            last_exp_title = last_exp.title
-
-    concept_details = {
-        'id': matched_c['id'],
-        'name': matched_c['name'],
-        'domain': matched_c.get('domain', 'Computer Science'),
-        'breadcrumb': f"{matched_c.get('domain', 'Computer Science')} > {matched_c['name']}",
-        'status_badge': matched_c.get('status', 'Not Started'),
-        'mastery_score': matched_c['score'],
-        'practice_strength': matched_c.get('practice_strength') or 0.0,
-        'academic_strength': matched_c.get('academic_score') or 0.0,
-        'callout_reason': f"Attempted {c_prob_attempts} practice problems with {c_acc}% acceptance rate.",
-        'recommended_steps': [
-            {
-                'step': 1,
-                'title': f"Practice foundational problems on {matched_c['name']}",
-                'action_label': 'Start Practice',
-                'action_link': f"/student/practice?topic={matched_c['name'].replace(' ', '+')}",
-            },
-            {
-                'step': 2,
-                'title': 'Review lecture & textbook notes',
-                'action_label': 'Review Notes',
-                'action_link': '/student/subjects',
-            },
-            {
-                'step': 3,
-                'title': 'Complete associated lab experiment',
-                'action_label': 'Go to Lab',
-                'action_link': '/student/subjects',
-            },
-        ],
-        'practice_stats': {
-            'attempted': c_prob_attempts,
-            'solved': c_prob_solved,
-            'acceptance_rate': c_acc,
-            'avg_time_mins': c_avg_mins,
-        },
-        'experiment_stats': {
-            'count': len(c_grades),
-            'avg_grade': c_exp_avg,
-            'last_submission': last_exp_title,
-        }
-    }
-
-    # 8. Learning Path & Unlocks from real unlock engine
-    unlock_data = check_content_unlocks(student_id)
-    standing = db.session.get(PlatformRating, student_id)
-    rating_num = round(float(standing.rating or 1000.0)) if standing else 1000
-    easy_num = standing.easy_solved if standing else 0
-    med_num = standing.medium_solved if standing else 0
-
-    unlocks_list = [
-        {
-            'id': 'unlock-1',
-            'title': 'Solve 15 Easy problems for Medium Tier',
-            'current_display': f'{easy_num} / 15',
-            'progress_pct': min(100, round((easy_num / 15.0) * 100)),
-            'icon': 'lock' if not unlock_data.get('medium_unlocked') else 'check',
-            'color': 'gold',
-        },
-        {
-            'id': 'unlock-2',
-            'title': 'Solve 20 Medium problems for Hard Tier',
-            'current_display': f'{med_num} / 20',
-            'progress_pct': min(100, round((med_num / 20.0) * 100)),
-            'icon': 'shield' if not unlock_data.get('hard_unlocked') else 'check',
-            'color': 'purple',
-        },
-        {
-            'id': 'unlock-3',
-            'title': 'Reach 1,500 Platform Rating',
-            'current_display': f'{rating_num} / 1,500',
-            'progress_pct': min(100, round((rating_num / 1500.0) * 100)),
-            'icon': 'trophy',
-            'color': 'amber',
-        },
+    overall_scores = [c['score'] for c in observed_concepts]
+    overall = round(sum(overall_scores) / len(overall_scores), 1) if overall_scores else None
+    strong_count = sum(1 for c in observed_concepts if c['score'] >= 80)
+    needs_work_count = sum(1 for c in observed_concepts if c['score'] < 60)
+    histogram = [
+        sum(1 for c in observed_concepts if lo <= c['score'] < hi)
+        for lo, hi in ((0, 20), (20, 40), (40, 60), (60, 80), (80, 101))
     ]
 
+    ranked_desc = sorted(observed_concepts, key=lambda row: row['score'], reverse=True)
+    top_strengths = []
+    for idx, concept in enumerate([row for row in ranked_desc if row['score'] >= 80][:5]):
+        code = ('DSA' if concept['domain'] == 'Data Structures' else
+                'DBMS' if concept['domain'] == 'Databases' else
+                'CN' if concept['domain'] == 'Computer Networks' else
+                'OS' if concept['domain'] == 'Operating Systems' else 'Algorithms')
+        top_strengths.append({
+            'rank': idx + 1, 'name': f"{concept['name']} ({code})",
+            'concept_name': concept['name'], 'subject_code': code, 'score': concept['score'],
+        })
+
+    focus_rows = sorted([row for row in observed_concepts if row['score'] < 75], key=lambda row: row['score'])[:5]
+    focus_next = [
+        {'rank': idx + 1, 'name': row['name'], 'concept_name': row['name'], 'score': row['score']}
+        for idx, row in enumerate(focus_rows)
+    ]
+
+    selected_name = topic if topic and topic.lower() != 'all' else (focus_rows[0]['name'] if focus_rows else (ranked_desc[0]['name'] if ranked_desc else None))
+    matched = next((row for row in observed_concepts if selected_name and row['name'].lower() == selected_name.lower()), None)
+    if matched is None and selected_name:
+        aliases_by_name = {spec['name'].lower(): spec.get('sub_aliases', []) for info in CURRICULUM_TAXONOMY.values() for spec in info['concepts']}
+        requested_aliases = {selected_name.lower(), *[v.lower() for v in aliases_by_name.get(selected_name.lower(), [])]}
+        matched = next((row for row in observed_concepts if row['name'].lower() in requested_aliases), None)
+
+    concept_details = None
+    if matched is not None:
+        matched_canon = _canonicalize_topic(matched['name'])
+        # Topic diagnostics use the student's real submissions, within the same
+        # period. Missing attempts/grades remain null rather than becoming 0.
+        practice_q = (db.session.query(PracticeSubmission, Problem)
+                      .join(Problem, PracticeSubmission.problem_id == Problem.id)
+                      .filter(PracticeSubmission.student_id == student_id,
+                              PracticeSubmission.is_run.is_(False)))
+        if window_start is not None:
+            practice_q = practice_q.filter(PracticeSubmission.submitted_at >= window_start)
+        p_rows = []
+        for sub_row, problem in practice_q.all():
+            if problem.nexlab_topic and _canonicalize_topic(problem.nexlab_topic) == matched_canon:
+                p_rows.append((sub_row, problem))
+        attempted = len(p_rows)
+        solved = sum(1 for sub_row, _ in p_rows if sub_row.status == 'Accepted')
+        acceptance = round(100.0 * solved / attempted, 1) if attempted else None
+        times = [sub_row.time_ms for sub_row, _ in p_rows if sub_row.time_ms is not None and sub_row.time_ms > 0]
+        avg_mins = round(sum(times) / len(times) / 60000, 1) if times else None
+
+        # Experiments are limited to this student's enrolled section-subjects.
+        sec_rows = SectionStudent.query.filter_by(student_id=student_id).all()
+        sec_ids = [row.section_id for row in sec_rows]
+        ss_q = SectionSubject.query.filter(SectionSubject.section_id.in_(sec_ids)) if sec_ids else SectionSubject.query.filter(db.literal(False))
+        if iid:
+            ss_q = ss_q.filter(SectionSubject.institution_id == iid)
+        enrolled_subject_ids = {row.subject_id for row in ss_q.all()}
+        assigned_exp_ids = [row.id for row in Experiment.query.filter(Experiment.subject_id.in_(enrolled_subject_ids), Experiment.is_published.is_(True)).all()] if enrolled_subject_ids else []
+        if iid and assigned_exp_ids:
+            assigned_exp_ids = [row.id for row in Experiment.query.filter(Experiment.id.in_(assigned_exp_ids), Experiment.institution_id == iid, Experiment.is_published.is_(True)).all()]
+
+        exp_links = ExperimentConcept.query.filter(ExperimentConcept.concept.ilike(f"%{matched['name']}%"))
+        if assigned_exp_ids:
+            exp_links = exp_links.filter(ExperimentConcept.experiment_id.in_(assigned_exp_ids))
+        else:
+            exp_links = exp_links.filter(db.literal(False))
+        linked_ids = {link.experiment_id for link in exp_links.all()}
+        grade_q = Grade.query.filter(Grade.student_id == student_id,
+                                     Grade.experiment_id.in_(linked_ids) if linked_ids else db.literal(False),
+                                     Grade.final_grade.isnot(None))
+        if window_start is not None:
+            grade_q = grade_q.filter(Grade.created_at >= window_start)
+        grades = grade_q.order_by(Grade.created_at.desc()).all()
+        exp_by_id = {row.id: row for row in Experiment.query.filter(Experiment.id.in_(linked_ids)).all()} if linked_ids else {}
+        latest_grades = {}
+        for grade in grades:
+            latest_grades.setdefault(grade.experiment_id, grade)
+        weighted_sum = weight_sum = 0.0
+        for exp_id, grade in latest_grades.items():
+            exp = exp_by_id.get(exp_id)
+            scale = float(exp.grade_scale or 0) if exp else 0
+            weight = float(exp.weightage or 0) if exp else 0
+            if scale <= 0 or weight <= 0:
+                continue
+            percent = max(0.0, min(100.0, float(grade.final_grade) / scale * 100.0))
+            weighted_sum += percent * weight
+            weight_sum += weight
+        avg_grade = round(weighted_sum / weight_sum, 1) if weight_sum else None
+        latest_title = None
+        if grades:
+            latest_exp = exp_by_id.get(grades[0].experiment_id)
+            latest_title = latest_exp.title if latest_exp else None
+
+        if matched['practice_strength'] is None and matched['academic_score'] is not None:
+            callout = 'This score is based on recorded academic mastery; no matching practice score is available.'
+        elif matched['academic_score'] is None and matched['practice_strength'] is not None:
+            callout = 'This score is based on recorded practice activity; no matching academic mastery score is available.'
+        else:
+            callout = 'This score combines measured academic mastery and practice activity.'
+        concept_details = {
+            'id': matched['id'], 'name': matched['name'], 'domain': matched['domain'],
+            'breadcrumb': f"{matched['domain']} > {matched['name']}",
+            'status_badge': matched['status'], 'mastery_score': matched['score'],
+            'practice_strength': matched['practice_strength'],
+            'academic_strength': matched['academic_score'],
+            'callout_reason': callout, 'recommended_steps': [],
+            'practice_stats': {
+                'attempted': attempted if attempted else None,
+                'solved': solved if attempted else None,
+                'acceptance_rate': acceptance, 'avg_time_mins': avg_mins,
+            },
+            'experiment_stats': {
+                'count': len(latest_grades) if latest_grades else None,
+                'avg_grade': avg_grade, 'last_submission': latest_title,
+            },
+        }
+
+    # Unlocks are rule targets; their progress inputs come only from stored counts.
+    unlock_data = check_content_unlocks(student_id)
+    standing = db.session.get(PlatformRating, student_id)
+    rating_num = float(standing.rating) if standing and (standing.problems_solved or 0) > 0 else None
+    easy_num = int(standing.easy_solved or 0) if standing else 0
+    med_num = int(standing.medium_solved or 0) if standing else 0
+    unlocks_list = [
+        {'id': 'unlock-1', 'title': 'Solve 15 Easy problems for Medium Tier',
+         'current_display': f'{easy_num} / 15', 'progress_pct': min(100, round(easy_num / 15.0 * 100)),
+         'icon': 'check' if unlock_data.get('medium_unlocked') else 'lock', 'color': 'gold'},
+        {'id': 'unlock-2', 'title': 'Solve 20 Medium problems for Hard Tier',
+         'current_display': f'{med_num} / 20', 'progress_pct': min(100, round(med_num / 20.0 * 100)),
+         'icon': 'check' if unlock_data.get('hard_unlocked') else 'shield', 'color': 'purple'},
+    ]
+    if rating_num is not None:
+        unlocks_list.append({
+            'id': 'unlock-3', 'title': 'Reach 1,500 Platform Rating',
+            'current_display': f'{round(rating_num)} / 1,500',
+            'progress_pct': min(100, round(rating_num / 1500.0 * 100)),
+            'icon': 'trophy', 'color': 'amber',
+        })
+
     return {
-        'student_id': student_id,
-        'view_mode': view,
-        'subject_filter': subject,
-        'topic_filter': topic,
-        'period_filter': period,
+        'student_id': student_id, 'view_mode': view, 'subject_filter': subject,
+        'topic_filter': topic, 'period_filter': period,
         'kpi_summary': {
-            'blended_mastery_score': overall_blended,
-            'blended_delta': f'{overall_blended}%',
-            'concepts_mastered': mastered_count,
-            'total_concepts': total_concepts_count,
-            'mastery_bars': [mastered_count],
-            'strong_areas_count': strong_areas_count,
-            'areas_to_improve_count': areas_to_improve_count,
-            'not_started_count': not_started_count,
+            'blended_mastery_score': overall,
+            'blended_delta': None,
+            'concepts_mastered': strong_count if observed_concepts else None,
+            'total_concepts': len(observed_concepts) if observed_concepts else None,
+            'mastery_bars': histogram,
+            'strong_areas_count': strong_count if observed_concepts else None,
+            'areas_to_improve_count': needs_work_count if observed_concepts else None,
+            'not_started_count': None,
         },
         'mindmap': {
-            'root': {
-                'id': 'root-cs',
-                'name': 'Computer Science',
-                'score': overall_blended,
-                'color': '#7c3aed',
-            },
+            'root': {'id': 'root-cs', 'name': 'Computer Science', 'score': overall, 'color': '#7c3aed'},
             'domains': domain_nodes,
         },
         'concept_details': concept_details,

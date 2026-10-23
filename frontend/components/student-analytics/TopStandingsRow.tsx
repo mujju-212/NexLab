@@ -31,6 +31,7 @@ interface TopStandingsRowProps {
   studentName?: string;
   rollNumber?: string | null;
   department?: string | null;
+  subjectCount?: number | null;
 }
 
 export const TopStandingsRow: React.FC<TopStandingsRowProps> = ({
@@ -38,18 +39,19 @@ export const TopStandingsRow: React.FC<TopStandingsRowProps> = ({
   studentName,
   rollNumber,
   department,
+  subjectCount = null,
 }) => {
   const profile = overview?.profile;
   const academic = overview?.academic;
   const platform = overview?.platform;
 
   // Student Profile Data
-  const displayName = profile?.name || studentName || 'Aditi Rao';
-  const displayRoll = profile?.roll_number || rollNumber || 'CS-2024-042';
-  const displayDept = profile?.department_year || (department ? `${department} • 2nd Year` : 'CSE-A • 2nd Year');
-  const displayInst = profile?.institution_name || 'NexLab Institute of Technology';
-  const defaultAvatarUrl = profile?.avatar_url || '/images/student_avatar.jpg';
-  const defaultQuote = profile?.quote || 'Consistent practice today builds expertise tomorrow.';
+  const displayName = profile?.name || studentName || '—';
+  const displayRoll = profile?.roll_number || rollNumber || '—';
+  const displayDept = profile?.department_year || department || '—';
+  const displayInst = profile?.institution_name || '—';
+  const defaultAvatarUrl = profile?.avatar_url || null;
+  const defaultQuote = '';
 
   // Interactive Avatar and Quote State (Persisted in localStorage)
   const [isEditModalOpen, setIsEditModalOpen] = useState(false);
@@ -125,57 +127,62 @@ export const TopStandingsRow: React.FC<TopStandingsRowProps> = ({
     .map((n) => n[0])
     .join('')
     .slice(0, 2)
-    .toUpperCase() || 'AR';
+    .toUpperCase() || '?';
 
   // Academic Standing Data
   const instRank = academic?.ranks?.institution;
-  const rankPos = instRank?.position ?? academic?.ranks?.section?.position ?? 42;
-  const cohortSize = instRank?.cohort_size ?? academic?.ranks?.section?.cohort_size ?? 480;
-  const rankPercentile = instRank?.percentile ?? 91;
-  const topPct = Math.max(1, 100 - Math.round(rankPercentile));
-  const avgGrade = academic?.grades?.average != null ? Math.round(academic.grades.average) : 78;
+  const sectionRank = academic?.ranks?.section;
+  const rankPos = instRank?.position ?? sectionRank?.position ?? null;
+  const cohortSize = instRank?.cohort_size ?? sectionRank?.cohort_size ?? null;
+  const rankPercentile = instRank?.percentile ?? sectionRank?.percentile ?? null;
+  const topPct = rankPercentile != null ? Math.max(1, 100 - Math.round(rankPercentile)) : null;
+  const rawAverage = academic?.grades?.avg_grade ?? null;
+  const avgGrade = rawAverage != null ? Math.round(rawAverage) : null;
 
-  const standingBand = academic?.standing?.band || 'ok';
-  const standingLabel =
-    standingBand === 'ok'
-      ? 'On Track'
-      : standingBand === 'watch'
-      ? 'Steady Progress'
-      : 'Needs Support';
+  const standingBand = academic?.standing?.band ?? null;
+  const standingLabel = standingBand === 'ok'
+    ? 'On Track'
+    : standingBand === 'watch'
+    ? 'Steady Progress'
+    : standingBand === 'high' || standingBand === 'critical'
+    ? 'Needs Support'
+    : '—';
 
-  const completedExps = academic?.completion?.completed ?? 18;
-  const assignedExps = academic?.completion?.assigned ?? 24;
-  const attendancePct = academic?.attendance?.attendance_rate ?? 92;
+  const completedExps = academic?.completion?.completed ?? null;
+  const assignedExps = academic?.completion?.assigned ?? null;
+  const attendancePct = academic?.attendance?.attendance_rate ?? null;
 
-  // Platform Standing Data
-  const levelNum = platform?.level ?? 6;
-  const levelName = platform?.level_name || 'Skilled';
-  const ratingVal = platform?.rating ? Math.round(platform.rating).toLocaleString() : '1,540';
-  const globalPct = platform?.global_percentile != null ? Math.max(1, 100 - Math.round(platform.global_percentile)) : 7;
+  // Platform standing values are shown only when supplied by the API.
+  const levelNum = platform?.level ?? null;
+  const levelName = platform?.level_name || '—';
+  const ratingVal = platform?.rating != null && (platform?.problems_solved ?? 0) > 0
+    ? Math.round(platform.rating).toLocaleString()
+    : '—';
+  const globalPct = platform?.global_percentile != null && (platform?.problems_solved ?? 0) > 0
+    ? Math.max(1, 100 - Math.round(platform.global_percentile))
+    : null;
+  const curXp = (platform as any)?.total_xp ?? null;
+  const nextXp = (platform as any)?.next_level_xp ?? null;
+  const xpPct = curXp != null && nextXp != null && nextXp > 0
+    ? Math.min(100, Math.max(0, Math.round((curXp / nextXp) * 100)))
+    : null;
+  const problemsSolved = platform?.problems_solved ?? null;
+  const easySolved = platform?.easy_solved ?? null;
+  const medSolved = platform?.medium_solved ?? null;
+  const hardSolved = platform?.hard_solved ?? null;
+  const streakDays = platform?.streak_days ?? null;
+  const badgeCount = platform?.badges?.length ?? null;
 
-  const curXp = (platform as any)?.total_xp ?? 2350;
-  const nextXp = (platform as any)?.next_level_xp ?? 3500;
-  const xpPct = Math.min(100, Math.max(10, Math.round((curXp / Math.max(1, nextXp)) * 100))) || 68;
-
-  const problemsSolved = platform?.problems_solved ?? 142;
-  const easySolved = platform?.easy_solved ?? 90;
-  const medSolved = platform?.medium_solved ?? 42;
-  const hardSolved = platform?.hard_solved ?? 10;
-  const streakDays = platform?.streak_days ?? 12;
-  const badgeCount = platform?.badges?.length ?? 6;
+  // Use the same measured blended mastery KPI as the overview cards; do not
+  // invent a local weighted score from unrelated academic and attendance fields.
+  const growthScore = overview?.summary_kpis?.overall_progress?.value ?? null;
 
   // SVG Circular Gauge Calculations
   const radius = 27;
   const circumference = 2 * Math.PI * radius;
-  const gradeOffset = circumference - (Math.min(100, Math.max(0, avgGrade)) / 100) * circumference;
-  const xpOffset = circumference - (Math.min(100, Math.max(0, xpPct)) / 100) * circumference;
-
-  // Overall Growth Blended Score for Card 1 ring (Academic grade + completion rate + attendance)
-  const completionRate = academic?.completion?.completion_pct != null
-    ? academic.completion.completion_pct
-    : Math.round((completedExps / Math.max(1, assignedExps)) * 100);
-  const growthScore = Math.min(100, Math.max(10, Math.round(avgGrade * 0.5 + completionRate * 0.3 + attendancePct * 0.2))) || 78;
-  const growthOffset = circumference - (growthScore / 100) * circumference;
+  const gradeOffset = circumference - (Math.min(100, Math.max(0, avgGrade ?? 0)) / 100) * circumference;
+  const xpOffset = circumference - (Math.min(100, Math.max(0, xpPct ?? 0)) / 100) * circumference;
+  const growthOffset = circumference - (Math.min(100, Math.max(0, growthScore ?? 0)) / 100) * circumference;
 
   return (
     <div className={styles.standingsGrid}>
@@ -188,9 +195,7 @@ export const TopStandingsRow: React.FC<TopStandingsRowProps> = ({
             </div>
             <h3>Student Profile</h3>
           </div>
-          <span className={`${styles.pillBadge} ${styles.pillPurple}`}>
-            ● Active Learner
-          </span>
+
         </div>
 
         <div className={styles.standingBody}>
@@ -209,18 +214,10 @@ export const TopStandingsRow: React.FC<TopStandingsRowProps> = ({
                   alt={displayName}
                   className={styles.avatarImg}
                 />
+              ) : defaultAvatarUrl ? (
+                <Image src={defaultAvatarUrl} alt={displayName} width={56} height={56} className={styles.avatarImg} priority />
               ) : (
-                <Image
-                  src={defaultAvatarUrl}
-                  alt={displayName}
-                  width={56}
-                  height={56}
-                  className={styles.avatarImg}
-                  priority
-                  onError={(e) => {
-                    (e.target as HTMLElement).style.display = 'none';
-                  }}
-                />
+                <div className={styles.avatarInitials}>{studentInitials}</div>
               )}
               <div className={styles.avatarEditBadge} title="Edit Profile & Avatar">
                 <Pencil size={9} />
@@ -289,10 +286,10 @@ export const TopStandingsRow: React.FC<TopStandingsRowProps> = ({
                   </linearGradient>
                 </defs>
               </svg>
-              <div className={styles.ringValue}>{growthScore}%</div>
+              <div className={styles.ringValue}>{growthScore != null ? `${growthScore}%` : '—'}</div>
             </div>
             <div className={styles.ringLabel}>Growth Index</div>
-            <div className={styles.ringSublabel}>Blended Score</div>
+            <div className={styles.ringSublabel}>Measured mastery</div>
           </div>
         </div>
 
@@ -314,7 +311,7 @@ export const TopStandingsRow: React.FC<TopStandingsRowProps> = ({
           <div className={styles.footerMetric} style={{ justifyContent: 'flex-end' }}>
             <div className={styles.statusBadge}>
               <span className={styles.statusDot} />
-              <span>Active</span>
+              <span>Profile</span>
             </div>
           </div>
         </div>
@@ -337,13 +334,10 @@ export const TopStandingsRow: React.FC<TopStandingsRowProps> = ({
         <div className={styles.standingBody}>
           <div className={styles.bigRankGroup}>
             <div className={styles.bigRankRow}>
-              <span className={styles.bigRankNum}>#{rankPos}</span>
-              <span className={styles.cohortNum}>/ {cohortSize}</span>
+              <span className={styles.bigRankNum}>{rankPos != null ? `#${rankPos}` : '—'}</span>
+              {cohortSize != null && <span className={styles.cohortNum}>/ {cohortSize}</span>}
             </div>
-            <span className={styles.standingSubtext}>Top {topPct}% in Institute</span>
-            <span className={styles.standingDelta}>
-              <ArrowUp size={12} /> +5 this week
-            </span>
+            <span className={styles.standingSubtext}>{topPct != null ? `Top ${topPct}% in ${instRank ? 'Institute' : 'Section'}` : 'No rank available'}</span>
           </div>
 
           <div className={styles.ringColumn}>
@@ -376,10 +370,10 @@ export const TopStandingsRow: React.FC<TopStandingsRowProps> = ({
                   </linearGradient>
                 </defs>
               </svg>
-              <div className={styles.ringValue}>{avgGrade}%</div>
+              <div className={styles.ringValue}>{avgGrade != null ? `${avgGrade}%` : '—'}</div>
             </div>
             <div className={styles.ringLabel}>Average Grade</div>
-            <div className={styles.ringSublabel}>3/5 subjects</div>
+            <div className={styles.ringSublabel}>{subjectCount != null ? `${subjectCount} enrolled subject${subjectCount === 1 ? '' : 's'}` : 'No subject count'}</div>
           </div>
         </div>
 
@@ -387,19 +381,19 @@ export const TopStandingsRow: React.FC<TopStandingsRowProps> = ({
           <div className={styles.footerMetric} title="Enrolled Subjects">
             <BookOpen size={13} className={styles.footerMetricIcon} />
             <span className={styles.footerMetricLabel}>Subjects</span>
-            <span className={styles.footerMetricVal}>3/5</span>
+            <span className={styles.footerMetricVal}>{subjectCount ?? '—'}</span>
           </div>
 
           <div className={styles.footerMetric} title={`Completed Experiments: ${completedExps} of ${assignedExps}`}>
             <CalendarCheck size={13} className={styles.footerMetricIcon} />
             <span className={styles.footerMetricLabel}>Labs</span>
-            <span className={styles.footerMetricVal}>{completedExps}/{assignedExps}</span>
+            <span className={styles.footerMetricVal}>{completedExps != null && assignedExps != null ? `${completedExps}/${assignedExps}` : '—'}</span>
           </div>
 
           <div className={styles.footerMetric} title={`Attendance Rate: ${attendancePct}%`} style={{ justifyContent: 'flex-end' }}>
             <Clock size={13} className={styles.footerMetricIcon} />
             <span className={styles.footerMetricLabel}>Attend</span>
-            <span className={styles.footerMetricVal}>{attendancePct}%</span>
+            <span className={styles.footerMetricVal}>{attendancePct != null ? `${attendancePct}%` : '—'}</span>
           </div>
         </div>
       </div>
@@ -421,15 +415,15 @@ export const TopStandingsRow: React.FC<TopStandingsRowProps> = ({
         <div className={styles.standingBody}>
           <div className={styles.bigRankGroup}>
             <div className={styles.levelBadgeRow}>
-              <span>Level {levelNum}</span>
+              <span>{levelNum != null ? `Level ${levelNum}` : 'Unranked'}</span>
               <Shield size={15} fill="#ef4444" className={styles.levelIcon} />
             </div>
             <div className={styles.ratingRow}>{ratingVal} rating</div>
-            <span className={styles.percentilePurple}>Top {globalPct}% globally</span>
+            <span className={styles.percentilePurple}>{globalPct != null ? `Top ${globalPct}% globally` : 'No global rank'}</span>
             <div className={styles.levelProgressBar}>
               <div
                 className={styles.levelProgressFill}
-                style={{ width: `${xpPct}%` }}
+                style={{ width: `${xpPct ?? 0}%` }}
               />
             </div>
           </div>
@@ -464,12 +458,12 @@ export const TopStandingsRow: React.FC<TopStandingsRowProps> = ({
                   </linearGradient>
                 </defs>
               </svg>
-              <div className={styles.ringValue}>{xpPct}%</div>
+              <div className={styles.ringValue}>{xpPct != null ? `${xpPct}%` : '—'}</div>
             </div>
             <div className={styles.ringLabel}>
-              {curXp.toLocaleString()} / {nextXp.toLocaleString()} XP
+              {curXp != null && nextXp != null ? `${curXp.toLocaleString()} / ${nextXp.toLocaleString()} XP` : '—'}
             </div>
-            <div className={styles.ringSublabel}>to Level {levelNum + 1}</div>
+            <div className={styles.ringSublabel}>{levelNum != null ? `to Level ${levelNum + 1}` : 'Level progress'}</div>
           </div>
         </div>
 
@@ -477,19 +471,19 @@ export const TopStandingsRow: React.FC<TopStandingsRowProps> = ({
           <div className={styles.footerMetric} title={`Problems Solved: ${problemsSolved} (Easy: ${easySolved}, Med: ${medSolved}, Hard: ${hardSolved})`}>
             <Puzzle size={13} className={styles.footerMetricIcon} />
             <span className={styles.footerMetricLabel}>Solved</span>
-            <span className={styles.footerMetricVal}>{problemsSolved}</span>
+            <span className={styles.footerMetricVal}>{problemsSolved ?? '—'}</span>
           </div>
 
-          <div className={styles.footerMetric} title={`Active Streak: ${streakDays} consecutive active days`}>
+          <div className={styles.footerMetric} title={streakDays != null ? `Active Streak: ${streakDays} consecutive active days` : 'No streak record is available'}>
             <Flame size={13} color="#ea580c" fill="#ea580c" className={styles.footerMetricIcon} />
             <span className={styles.footerMetricLabel}>Streak</span>
-            <span className={styles.footerMetricVal}>{streakDays}d</span>
+            <span className={styles.footerMetricVal}>{streakDays != null ? `${streakDays}d` : '—'}</span>
           </div>
 
           <div className={styles.footerMetric} title={`Platform Badges Earned: ${badgeCount}`} style={{ justifyContent: 'flex-end' }}>
             <Award size={13} color="#7c3aed" className={styles.footerMetricIcon} />
             <span className={styles.footerMetricLabel}>Badges</span>
-            <span className={styles.footerMetricVal}>{badgeCount}</span>
+            <span className={styles.footerMetricVal}>{badgeCount ?? '—'}</span>
           </div>
         </div>
       </div>
@@ -599,8 +593,10 @@ export const TopStandingsRow: React.FC<TopStandingsRowProps> = ({
                   </div>
                 ) : customAvatar ? (
                   <img src={customAvatar} alt="Custom" style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
-                ) : (
+                ) : defaultAvatarUrl ? (
                   <Image src={defaultAvatarUrl} alt={displayName} width={72} height={72} style={{ width: '100%', height: '100%', objectFit: 'cover' }} />
+                ) : (
+                  <div className={styles.avatarInitials} style={{ width: '100%', height: '100%', fontSize: '1.5rem' }}>{studentInitials}</div>
                 )}
               </div>
 

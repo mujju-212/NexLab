@@ -320,6 +320,16 @@
   box-shadow: 0 8px 25px rgba(124, 58, 237, 0.08);
 }
 
+.metricCardStatic {
+  cursor: default;
+}
+
+.metricCardStatic:hover {
+  transform: none;
+  border-color: #e8ecf4;
+  box-shadow: 0 4px 18px rgba(15, 23, 42, 0.02);
+}
+
 .metricHeader {
   display: flex;
   align-items: center;
