@@ -1703,6 +1703,73 @@ def list_environments():
 
 # ── Institution Dashboard ───────────────────────────────────────────────────────
 
+def _probe_system_status():
+    """Probe each subsystem and report its real state.
+
+    Nothing here is hardcoded to "Operational": a component that is switched off
+    or unreachable reports 'Disabled' / 'Unavailable' so the admin can see it.
+    """
+    from flask import current_app
+    from sqlalchemy import text
+
+    checks = []
+
+    # 1. Platform (this request is being served, so the API itself is up)
+    checks.append({"name": "Platform Services", "status": "Operational", "healthy": True,
+                   "detail": "API responding"})
+
+    # 2. Database — run a trivial round-trip
+    try:
+        db.session.execute(text("SELECT 1"))
+        checks.append({"name": "Database", "status": "Operational", "healthy": True,
+                       "detail": "Connection OK"})
+    except Exception as exc:
+        db.session.rollback()
+        checks.append({"name": "Database", "status": "Unavailable", "healthy": False,
+                       "detail": str(exc)[:120]})
+
+    # 3. Live session servers — only "operational" if LiveKit is configured
+    lk_url = current_app.config.get('LIVEKIT_URL')
+    lk_key = current_app.config.get('LIVEKIT_API_KEY')
+    if lk_url and lk_key:
+        checks.append({"name": "Live Session Servers", "status": "Configured", "healthy": True,
+                       "detail": "LiveKit credentials present"})
+    else:
+        checks.append({"name": "Live Session Servers", "status": "Not configured", "healthy": False,
+                       "detail": "LIVEKIT_URL / LIVEKIT_API_KEY missing"})
+
+    # 4. Code execution — reflects the real DOCKER_RUNNER_ENABLED switch
+    if current_app.config.get('DOCKER_RUNNER_ENABLED'):
+        import shutil
+        docker_bin = current_app.config.get('DOCKER_BIN', 'docker')
+        if shutil.which(docker_bin):
+            healthy, status, detail = True, "Operational", f"{docker_bin} found"
+        else:
+            healthy, status, detail = False, "Unavailable", f"'{docker_bin}' binary not found"
+        checks.append({"name": "Code Execution", "status": status, "healthy": healthy,
+                       "detail": detail})
+    else:
+        checks.append({"name": "Code Execution", "status": "Disabled", "healthy": False,
+                       "detail": "DOCKER_RUNNER_ENABLED=false — /run returns 503"})
+
+    # 5. AI services — report which providers actually have keys
+    providers = []
+    if current_app.config.get('GROQ_API_KEY'):
+        providers.append('Groq')
+    if current_app.config.get('OPENROUTER_API_KEY'):
+        providers.append('OpenRouter')
+    if current_app.config.get('GEMINI_API_KEY'):
+        providers.append('Gemini')
+    if providers:
+        checks.append({"name": "AI Services", "status": "Configured", "healthy": True,
+                       "detail": " / ".join(providers)})
+    else:
+        checks.append({"name": "AI Services", "status": "Not configured", "healthy": False,
+                       "detail": "No provider API key set"})
+
+    return checks
+
+
 @institution_bp.route('/dashboard', methods=['GET'])
 @require_role('institution_admin')
 def institution_dashboard():
@@ -1794,14 +1861,8 @@ def institution_dashboard():
         for i in range(7)
     ]
 
-    # System Status checklist
-    system_status = [
-        {"name": "Platform Services", "status": "Operational", "healthy": True},
-        {"name": "Database", "status": "Operational", "healthy": True},
-        {"name": "Live Session Servers", "status": "Operational", "healthy": True},
-        {"name": "Code Execution", "status": "Operational", "healthy": True},
-        {"name": "AI Services", "status": "Operational", "healthy": True},
-    ]
+    # System Status — each row is actually probed, never assumed healthy.
+    system_status = _probe_system_status()
 
     # Recent Activity from real AuditLog
     recent_logs = AuditLog.query.filter_by(institution_id=iid).order_by(AuditLog.created_at.desc()).limit(8).all()
@@ -2506,11 +2567,14 @@ def analytics_overview():
     total_students = len(all_students)
     student_ids = [s.id for s in all_students]
 
-    # Prior period students
+    # Prior period students. There used to be a fallback that set the previous
+    # count equal to the current one whenever it was zero, which guaranteed a
+    # permanent "0% change" even on a brand-new institution.
     prev_students_count = sum(1 for s in all_students if s.created_at and s.created_at < date_from)
-    if prev_students_count == 0 and total_students > 0:
-        prev_students_count = total_students
-    students_delta = round(((total_students - prev_students_count) / max(prev_students_count, 1)) * 100.0, 1) if prev_students_count > 0 else 0.0
+    students_delta = (
+        round(((total_students - prev_students_count) / prev_students_count) * 100.0, 1)
+        if prev_students_count > 0 else None
+    )
 
     # 2. Sessions in window matching filters
     session_q = LabSession.query.filter(LabSession.institution_id == iid)
@@ -2537,7 +2601,7 @@ def analytics_overview():
         LabSession.scheduled_at <= date_to,
     ).count()
 
-    completion_rate_pct = round((completed_sessions / total_sessions * 100.0) if total_sessions else 0.0, 1)
+    completion_rate_pct = round((completed_sessions / total_sessions * 100.0), 1) if total_sessions else None
 
     # Prior period sessions
     prev_total_sessions = session_q.filter(
@@ -2551,9 +2615,17 @@ def analytics_overview():
         LabSession.scheduled_at < date_from,
     ).count()
 
-    prev_completion_rate_pct = round((prev_completed_sessions / prev_total_sessions * 100.0) if prev_total_sessions else 0.0, 1)
-    completion_delta = round(completion_rate_pct - prev_completion_rate_pct, 1)
-    sessions_delta = round(((total_sessions - prev_total_sessions) / max(prev_total_sessions, 1)) * 100.0, 1) if prev_total_sessions else 0.0
+    prev_completion_rate_pct = (
+        round((prev_completed_sessions / prev_total_sessions) * 100.0, 1) if prev_total_sessions else None
+    )
+    completion_delta = (
+        round(completion_rate_pct - prev_completion_rate_pct, 1)
+        if prev_completion_rate_pct is not None and completion_rate_pct is not None else None
+    )
+    sessions_delta = (
+        round(((total_sessions - prev_total_sessions) / prev_total_sessions) * 100.0, 1)
+        if prev_total_sessions else None
+    )
 
     # 3. Active instructors in window
     active_ssids_query = session_q.filter(
@@ -2581,14 +2653,15 @@ def analytics_overview():
         SectionSubject.id.in_(prev_ssids)
     ).scalar() or 0 if prev_ssids else 0
 
-    if prev_active_instructors > 0:
-        instructors_delta = round(((active_instructors - prev_active_instructors) / prev_active_instructors) * 100.0, 1)
-    else:
-        instructors_delta = 0.0
+    instructors_delta = (
+        round(((active_instructors - prev_active_instructors) / prev_active_instructors) * 100.0, 1)
+        if prev_active_instructors > 0 else None
+    )
 
     # 4. Campus Grades calculation
     grade_query = Grade.query.join(User, Grade.student_id == User.id)\
-        .filter(User.institution_id == iid, Grade.final_grade.isnot(None))
+        .filter(User.institution_id == iid, Grade.final_grade.isnot(None),
+                Grade.experiment_id.isnot(None))
 
     if student_ids:
         grade_query = grade_query.filter(Grade.student_id.in_(student_ids))
@@ -2601,15 +2674,19 @@ def analytics_overview():
         window_grades = grade_query.all()
 
     window_scores = [float(g.final_grade) for g in window_grades if g.final_grade is not None]
-    campus_avg_grade = round(sum(window_scores) / len(window_scores), 1) if window_scores else 0.0
+    # No grades in the window => unmeasured (the UI shows an em dash), not 0/100.
+    campus_avg_grade = round(sum(window_scores) / len(window_scores), 1) if window_scores else None
 
     prev_grades = grade_query.filter(
         Grade.created_at >= prev_date_from,
         Grade.created_at < date_from,
     ).all()
     prev_scores = [float(g.final_grade) for g in prev_grades if g.final_grade is not None]
-    prev_campus_avg_grade = round(sum(prev_scores) / len(prev_scores), 1) if prev_scores else campus_avg_grade
-    grade_delta = round(campus_avg_grade - prev_campus_avg_grade, 1)
+    prev_campus_avg_grade = round(sum(prev_scores) / len(prev_scores), 1) if prev_scores else None
+    grade_delta = (
+        round(campus_avg_grade - prev_campus_avg_grade, 1)
+        if prev_campus_avg_grade is not None and campus_avg_grade is not None else None
+    )
 
     # 5. Unified Risk Score & At-Risk Students
     today_date = datetime.utcnow().date()
@@ -2622,7 +2699,7 @@ def analytics_overview():
         at_risk_count = kpi_data.get('at_risk_count', 0)
         at_risk_pct = kpi_data.get('at_risk_pct', 0.0)
         bands = kpi_data.get('bands', {'critical': 0, 'high': 0, 'watch': 0, 'ok': 0})
-        avg_risk_score = kpi_data.get('avg_risk_score', 0.0)
+        avg_risk_score = kpi_data.get('avg_risk_score')
         top_risk_drivers = kpi_data.get('top_risk_drivers', {})
     else:
         atomic_map = batch_student_atomic_metrics(
@@ -2651,15 +2728,27 @@ def analytics_overview():
         institution_id=iid, snapshot_date=prev_week_date
     ).first()
 
-    prev_at_risk_count = at_risk_count
-    prev_avg_risk = avg_risk_score
+    # With no snapshot from a week ago, the previous value is unknown — not
+    # equal to today's, which used to force a permanent 0 delta.
+    prev_at_risk_count = None
+    prev_avg_risk = None
     if prev_kpi and prev_kpi.kpis:
         p_data = prev_kpi.kpis
-        prev_at_risk_count = p_data.get('at_risk_count', at_risk_count)
-        prev_avg_risk = p_data.get('avg_risk_score', avg_risk_score)
+        prev_at_risk_count = p_data.get('at_risk_count')
+        prev_avg_risk = p_data.get('avg_risk_score')
 
-    at_risk_delta = round(((at_risk_count - prev_at_risk_count) / max(prev_at_risk_count, 1)) * 100.0, 1) if prev_at_risk_count > 0 else 0.0
-    avg_risk_delta = round(avg_risk_score - prev_avg_risk, 1)
+    at_risk_delta = (
+        round(((at_risk_count - prev_at_risk_count) / prev_at_risk_count) * 100.0, 1)
+        if isinstance(at_risk_count, (int, float))
+        and isinstance(prev_at_risk_count, (int, float))
+        and prev_at_risk_count > 0
+        else None
+    )
+    avg_risk_delta = (
+        round(avg_risk_score - prev_avg_risk, 1)
+        if isinstance(avg_risk_score, (int, float)) and isinstance(prev_avg_risk, (int, float))
+        else None
+    )
 
     # 6. Real 7-interval Sparklines
     num_spark_points = 7
@@ -2963,17 +3052,21 @@ def section_comparison():
         enrolled_count = len(sids)
 
         if not sids:
+            # A section with no students has no metrics. Emitting zeros (and a
+            # hardcoded focus of 50) dragged every campus baseline down with it
+            # and drew an empty bar next to real ones.
             section_entities.append({
                 'section_id': sec.id,
                 'section_name': sec.name,
                 'enrolled': 0,
-                'avg_grade': 0.0,
-                'attendance_rate': 0.0,
-                'focus_avg': 50.0,
-                'risk_score': 0.0,
+                'avg_grade': None,
+                'attendance_rate': None,
+                'focus_avg': None,
+                'risk_score': None,
                 'at_risk_count': 0,
                 'sample_size': 0,
                 'is_sufficient': False,
+                'has_data': False,
             })
             continue
 
@@ -2983,10 +3076,10 @@ def section_comparison():
         sec_risks = [student_risk_map[sid]['risk_score'] for sid in sids if sid in student_risk_map]
         crit_high_count = sum(1 for sid in sids if student_risk_map.get(sid, {}).get('is_at_risk'))
 
-        avg_g = round(sum(sec_grades) / len(sec_grades), 1) if sec_grades else 0.0
-        avg_a = round(sum(sec_atts) / len(sec_atts), 1) if sec_atts else 0.0
-        avg_f = round(sum(sec_focus) / len(sec_focus), 1) if sec_focus else 50.0
-        avg_r = round(sum(sec_risks) / len(sec_risks), 1) if sec_risks else 0.0
+        avg_g = round(sum(sec_grades) / len(sec_grades), 1) if sec_grades else None
+        avg_a = round(sum(sec_atts) / len(sec_atts), 1) if sec_atts else None
+        avg_f = round(sum(sec_focus) / len(sec_focus), 1) if sec_focus else None
+        avg_r = round(sum(sec_risks) / len(sec_risks), 1) if sec_risks else None
 
         section_entities.append({
             'section_id': sec.id,
@@ -3425,10 +3518,23 @@ def analytics_benchmark():
             sids = sec_map.get(sec.id, [])
             if not sids:
                 continue
-            grades = [atomic[s]['grade_avg']['value'] for s in sids if s in atomic and atomic[s]['grade_avg']['value'] > 0]
-            atts = [atomic[s]['attendance_rate']['value'] for s in sids if s in atomic]
-            focus = [atomic[s]['focus_avg']['value'] for s in sids if s in atomic and atomic[s]['focus_avg']['value'] is not None]
-            risks = [compute_student_risk(atomic[s], cfg)['risk_score'] for s in sids if s in atomic]
+            grades = [
+                atomic[s]['grade_avg']['value'] for s in sids
+                if s in atomic and isinstance(atomic[s]['grade_avg']['value'], (int, float))
+                and atomic[s]['grade_avg']['value'] > 0
+            ]
+            atts = [
+                atomic[s]['attendance_rate']['value'] for s in sids
+                if s in atomic and isinstance(atomic[s]['attendance_rate']['value'], (int, float))
+            ]
+            focus = [
+                atomic[s]['focus_avg']['value'] for s in sids
+                if s in atomic and isinstance(atomic[s]['focus_avg']['value'], (int, float))
+            ]
+            risks = [
+                compute_student_risk(atomic[s], cfg)['risk_score'] for s in sids
+                if s in atomic and isinstance(compute_student_risk(atomic[s], cfg).get('risk_score'), (int, float))
+            ]
 
             # Resolve Department name from section students
             dept_name = 'General'
@@ -3438,13 +3544,34 @@ def analytics_benchmark():
                     dept_name = dept_id_to_name[d_id]
                     break
 
-            calc_grade = round(sum(grades) / len(grades), 1) if grades else 0.0
-            calc_att = round(sum(atts) / len(atts), 1) if atts else 0.0
-            calc_focus = round(sum(focus) / len(focus), 1) if focus else 50.0
-            calc_risk = round(sum(risks) / len(risks), 1) if risks else 0.0
+            # Unmeasured stays None. These used to default to 0.0 / 50.0, which
+            # made an empty section look like a failing one.
+            calc_grade = round(sum(grades) / len(grades), 1) if grades else None
+            calc_att = round(sum(atts) / len(atts), 1) if atts else None
+            calc_focus = round(sum(focus) / len(focus), 1) if focus else None
+            calc_risk = round(sum(risks) / len(risks), 1) if risks else None
 
-            # Real 5-point trend curve
-            trend_curve = [calc_grade] * 5 if calc_grade > 0 else [0.0] * 5
+            # Real 5-bucket trend from the grades actually submitted in the
+            # window (the old code repeated the current average five times).
+            trend_curve = []
+            _span = max((date_to - date_from).total_seconds(), 1.0)
+            _buckets = [[] for _ in range(5)]
+            for sid in sids:
+                if sid in atomic and isinstance(atomic[sid]['grade_avg']['value'], (int, float)):
+                    _buckets[0].append(atomic[sid]['grade_avg']['value'])
+            sec_grades = Grade.query.filter(
+                Grade.student_id.in_(sids),
+                Grade.final_grade.isnot(None),
+                Grade.experiment_id.isnot(None),
+            ).all()
+            _b = [[] for _ in range(5)]
+            for g_row in sec_grades:
+                ts = getattr(g_row, 'graded_at', None) or getattr(g_row, 'created_at', None)
+                if ts is None:
+                    continue
+                pos = int(((ts - date_from).total_seconds() / _span) * 5)
+                _b[min(4, max(0, pos))].append(float(g_row.final_grade))
+            trend_curve = [round(sum(x) / len(x), 1) if x else None for x in _b]
 
             entities.append({
                 'id': sec.id,
@@ -3461,19 +3588,30 @@ def analytics_benchmark():
 
     result = compute_cohort_benchmarks(entities, metric_keys=['avg_grade', 'attendance_rate', 'focus_avg', 'risk_score'])
     
-    # Campus Baseline Mean for avg_grade
-    campus_mean = result.get('baselines', {}).get('avg_grade', {}).get('mean', 0.0)
+    # Campus Baseline Mean for avg_grade (None when nothing was measured)
+    campus_mean = result.get('baselines', {}).get('avg_grade', {}).get('mean')
 
-    # Enrich entities with percentile_rank label, vs_campus delta, and z_score
+    # Enrich entities with percentile_rank label, vs_campus delta, and z_score.
+    # Every one of these can be NULL (unmeasured entity / cohort too small for a
+    # percentile) and must stay NULL rather than defaulting to 0.0 / 50.0.
     enriched_entities = []
     for e in result.get('entities', []):
-        z = e.get('benchmarks', {}).get('avg_grade', {}).get('z_score', 0.0)
-        pct = e.get('benchmarks', {}).get('avg_grade', {}).get('percentile', 50.0)
-        grade_val = e.get('avg_grade', 0.0)
-        vs_camp = round(grade_val - campus_mean, 1)
+        z = e.get('benchmarks', {}).get('avg_grade', {}).get('z_score')
+        pct = e.get('benchmarks', {}).get('avg_grade', {}).get('percentile')
+        grade_val = e.get('avg_grade')
+        vs_camp = (
+            round(grade_val - campus_mean, 1)
+            if isinstance(grade_val, (int, float)) and isinstance(campus_mean, (int, float))
+            else None
+        )
 
-        pct_label = f"Top {max(1, 100 - int(pct))}%" if pct >= 50 else f"Bottom {max(1, int(pct))}%"
-        
+        if pct is None:
+            pct_label = 'Cohort too small'
+        elif pct >= 50:
+            pct_label = f"Top {max(1, 100 - int(pct))}%"
+        else:
+            pct_label = f"Bottom {max(1, int(pct))}%"
+
         e_copy = dict(e)
         e_copy['z_score'] = z
         e_copy['percentile'] = pct
@@ -3482,48 +3620,56 @@ def analytics_benchmark():
         enriched_entities.append(e_copy)
 
     # Sort entities by avg_grade descending
-    enriched_entities.sort(key=lambda x: x.get('avg_grade', 0), reverse=True)
+    enriched_entities.sort(
+        key=lambda x: (x.get('avg_grade') is not None, x.get('avg_grade') or 0), reverse=True
+    )
     result['entities'] = enriched_entities
     result['entity_count'] = len(enriched_entities)
 
-    top_sec = enriched_entities[0] if enriched_entities else {'name': 'N/A', 'z_score': 0.0, 'percentile_rank': 'N/A'}
+    top_sec = enriched_entities[0] if enriched_entities else {}
     total_students_sum = sum(e.get('student_count', 0) for e in enriched_entities)
-    avg_z = round(sum(e.get('z_score', 0.0) for e in enriched_entities) / max(len(enriched_entities), 1), 2)
+    _zs = [e['z_score'] for e in enriched_entities if isinstance(e.get('z_score'), (int, float))]
+    avg_z = round(sum(_zs) / len(_zs), 2) if _zs else None
 
-    # Generate 7-point sparklines for benchmark KPIs
-    top_grade_trend = top_sec.get('trend') or ([top_sec.get('avg_grade', 0.0)] * 7 if top_sec.get('avg_grade') else [0.0] * 7)
-    full_top_spark = list(top_grade_trend)
-    if len(full_top_spark) < 7:
-        pad_val = full_top_spark[-1] if full_top_spark else 0.0
-        full_top_spark.extend([pad_val] * (7 - len(full_top_spark)))
+    # Sparklines carry the real trend only. These used to be the current value
+    # repeated seven times, which drew a perfectly flat "history".
+    full_top_spark = [
+        v for v in (top_sec.get('trend') or [])
+        if isinstance(v, (int, float))
+    ]
 
     result['kpis'] = {
         'total_sections': len(enriched_entities),
-        'sections_delta': 0.0,
-        'sections_sparkline': [len(enriched_entities)] * 7,
+        'sections_delta': None,
+        'sections_sparkline': [],
         'total_students': total_students_sum,
-        'students_delta': 0.0,
-        'students_sparkline': [total_students_sum] * 7,
+        'students_delta': None,
+        'students_sparkline': [],
         'avg_z_score': avg_z,
-        'z_score_delta': 0.0,
-        'z_score_sparkline': [avg_z] * 7,
+        'z_benchmarkable_sections': len(_zs),
+        'z_score_delta': None,
+        'z_score_sparkline': [],
         'top_section': {
-            'name': f"{top_sec.get('department_name', '')[:4].upper().strip()} - {top_sec.get('name')}" if top_sec.get('department_name') and top_sec.get('department_name') != 'General' else top_sec.get('name', 'N/A'),
-            'z_score': top_sec.get('z_score', 0.0),
-            'percentile': top_sec.get('percentile_rank', 'N/A'),
+            'name': (f"{top_sec.get('department_name', '')[:4].upper().strip()} - {top_sec.get('name')}"
+                     if top_sec.get('department_name') and top_sec.get('department_name') != 'General'
+                     else top_sec.get('name')) or '—',
+            'z_score': top_sec.get('z_score'),
+            'percentile': top_sec.get('percentile_rank') or '—',
         },
-        'top_section_sparkline': full_top_spark[:7],
+        'top_section_sparkline': full_top_spark,
     }
 
     # Distribution slices
     total_n = max(len(enriched_entities), 1)
-    above_avg_count = sum(1 for e in enriched_entities if e.get('z_score', 0) >= 0.5)
-    on_par_count = sum(1 for e in enriched_entities if -0.5 <= e.get('z_score', 0) < 0.5)
-    below_avg_count = sum(1 for e in enriched_entities if -1.5 <= e.get('z_score', 0) < -0.5)
-    sig_below_count = sum(1 for e in enriched_entities if e.get('z_score', 0) < -1.5)
+    _z_vals = [e['z_score'] for e in enriched_entities if isinstance(e.get('z_score'), (int, float))]
+    above_avg_count = sum(1 for v in _z_vals if v >= 0.5)
+    on_par_count = sum(1 for v in _z_vals if -0.5 <= v < 0.5)
+    below_avg_count = sum(1 for v in _z_vals if -1.5 <= v < -0.5)
+    sig_below_count = sum(1 for v in _z_vals if v < -1.5)
 
     result['distribution'] = {
-        'total': len(enriched_entities),
+        'total': len(_z_vals),
+        'unmeasured': len(enriched_entities) - len(_z_vals),
         'above_average': {'count': above_avg_count, 'pct': round((above_avg_count / total_n) * 100)},
         'on_par': {'count': on_par_count, 'pct': round((on_par_count / total_n) * 100)},
         'below_average': {'count': below_avg_count, 'pct': round((below_avg_count / total_n) * 100)},
@@ -3534,7 +3680,7 @@ def analytics_benchmark():
     result['top_performing'] = [
         {
             'rank': idx + 1,
-            'section': f"{e.get('department_name', '')[:4].upper().strip()} - {e.get('name')}" if e.get('department_name') and e.get('department_name') != 'General' else e.get('name'),
+            'section': e.get('section_name') or e.get('name'),  # real section name
             'avg_grade': e.get('avg_grade'),
             'z_score': e.get('z_score'),
             'percentile': e.get('percentile_rank'),
@@ -3547,7 +3693,7 @@ def analytics_benchmark():
     result['needs_attention'] = [
         {
             'rank': idx + 1,
-            'section': f"{e.get('department_name', '')[:4].upper().strip()} - {e.get('name')}" if e.get('department_name') and e.get('department_name') != 'General' else e.get('name'),
+            'section': e.get('section_name') or e.get('name'),  # real section name
             'avg_grade': e.get('avg_grade'),
             'z_score': e.get('z_score'),
             'percentile': e.get('percentile_rank'),
@@ -3565,9 +3711,17 @@ def analytics_benchmark():
         if not d_sids:
             continue
         d_atomic = batch_student_atomic_metrics(d_sids, iid, date_from, date_to) if d_sids else {}
-        d_grades = [d_atomic[s]['grade_avg']['value'] for s in d_sids if s in d_atomic and d_atomic[s]['grade_avg']['value'] > 0]
-        d_avg = round(sum(d_grades) / len(d_grades), 1) if d_grades else 0.0
-        d_z = round((d_avg - campus_mean) / 10.0, 2) if campus_mean > 0 else 0.0
+        d_grades = [
+            d_atomic[s]['grade_avg']['value'] for s in d_sids
+            if s in d_atomic and isinstance(d_atomic[s]['grade_avg']['value'], (int, float))
+            and d_atomic[s]['grade_avg']['value'] > 0
+        ]
+        d_avg = round(sum(d_grades) / len(d_grades), 1) if d_grades else None
+        d_z = (
+            round((d_avg - campus_mean) / 10.0, 2)
+            if d_avg is not None and isinstance(campus_mean, (int, float)) and campus_mean > 0
+            else None
+        )
 
         dept_comparison.append({
             'department': d.name,
@@ -3583,7 +3737,9 @@ def analytics_benchmark():
             'zScore': d_z,
         })
 
-    dept_comparison.sort(key=lambda x: x['avg_grade'], reverse=True)
+    dept_comparison.sort(
+        key=lambda x: (x['avg_grade'] is not None, x['avg_grade'] or 0), reverse=True
+    )
     result['departments'] = dept_comparison
     result['dual_axis_chart'] = dual_axis_data
 
@@ -3965,7 +4121,12 @@ def analytics_integrity():
 
     # Overall campus integrity score (100 - weighted_penalties / scale)
     total_weighted = sum(by_severity[k] * sev_weights.get(k, 1.0) for k in by_severity)
-    campus_integrity_score = max(70.0, round(100.0 - min(30.0, (total_weighted / max(1, len(by_student))) * 1.8), 1)) if by_student else 100.0
+    # No artificial floor: 10 high-severity events must be able to pull the
+    # index below 70. 100 means "no events recorded in this window".
+    campus_integrity_score = (
+        round(max(0.0, 100.0 - min(100.0, (total_weighted / max(1, len(by_student))) * 18.0)), 1)
+        if by_student else None
+    )
 
     # Format students for watchlist
     student_records = []
@@ -4074,7 +4235,7 @@ def analytics_integrity():
             prev_by_student[ev.student_id]['severities'][r_sev] += 1
 
         prev_total_weighted = sum(st['weighted'] for st in prev_by_student.values())
-        prev_integrity_score = max(70.0, round(100.0 - min(30.0, (prev_total_weighted / max(1, len(prev_by_student))) * 1.8), 1))
+        prev_integrity_score = round(max(0.0, 100.0 - min(100.0, (prev_total_weighted / max(1, len(prev_by_student))) * 18.0)), 1)
         prev_high_risk = sum(1 for st in prev_by_student.values() if (st['severities']['critical'] + st['severities']['high'] >= 1 or st['weighted'] >= 4.5))
         prev_repeat = sum(1 for st in prev_by_student.values() if st['count'] >= 3)
 
@@ -4184,21 +4345,37 @@ def analytics_outcomes():
     total_students_count = User.query.filter_by(institution_id=iid, role='student').count()
 
     # Collect actual grades for institution
+    # Same grade-scope rule as every other surface: a grade that is not attached
+    # to an experiment cannot be attributed to a subject and is excluded.
     inst_grades = Grade.query.join(User, Grade.student_id == User.id)\
-        .filter(User.institution_id == iid, Grade.final_grade.isnot(None))\
+        .filter(User.institution_id == iid,
+                Grade.final_grade.isnot(None),
+                Grade.experiment_id.isnot(None))\
         .all()
 
     actual_scores = [float(grd.final_grade) for grd in inst_grades if grd.final_grade is not None]
-    computed_avg_grade = round(sum(actual_scores) / len(actual_scores), 1) if actual_scores else 0.0
+    computed_avg_grade = round(sum(actual_scores) / len(actual_scores), 1) if actual_scores else None
 
-    # Real Concept Mastery
+    # Concept mastery — measured ONLY from concept_mastery.
+    # (It used to fall back to "% of grades >= 60" when that table was empty,
+    # which silently relabelled a pass rate as concept mastery and made the
+    # campus claim 100% mastery while the student's own mastery was 0.)
     from app.models.knowledge import ConceptMastery
     inst_masteries = ConceptMastery.query.filter_by(institution_id=iid).all()
     if inst_masteries:
-        mastery_rate = round((sum(1 for m in inst_masteries if (m.mastery_score or 0) >= 0.7) / len(inst_masteries)) * 100.0, 1)
+        scored = [float(m.mastery_score) for m in inst_masteries if m.mastery_score is not None]
+        mastery_rate = (
+            round((sum(1 for v in scored if v >= 70.0) / len(scored)) * 100.0, 1)
+            if scored else None
+        )
     else:
-        passed_count = sum(1 for s in actual_scores if s >= 60.0)
-        mastery_rate = round((passed_count / max(len(actual_scores), 1)) * 100.0, 1) if actual_scores else 0.0
+        mastery_rate = None
+
+    # Pass rate is a different, equally real metric — kept and labelled as itself.
+    pass_rate = (
+        round((sum(1 for v in actual_scores if v >= 60.0) / len(actual_scores)) * 100.0, 1)
+        if actual_scores else None
+    )
 
     # Real Curriculum Completion
     from app.models.experiment import ContentProgress, ContentModule
@@ -4224,9 +4401,25 @@ def analytics_outcomes():
         date_label = b_start.strftime('%b %d')
 
         b_grades = [float(grd.final_grade) for grd in inst_grades if (grd.graded_at or grd.created_at) and b_start <= (grd.graded_at or grd.created_at) <= b_end]
-        b_avg = round(sum(b_grades) / len(b_grades), 1) if b_grades else campus_avg
-        b_mast = round((sum(1 for s in b_grades if s >= 60.0) / max(len(b_grades), 1)) * 100.0, 1) if b_grades else mastery_rate
-        b_comp = round(min(100.0, completion_rate * ((idx + 1) / 7.0)), 1)
+        # Gaps stay gaps (None). Filling them with the campus average drew a
+        # flat line that asserted "no change" where we simply had no data.
+        b_avg = round(sum(b_grades) / len(b_grades), 1) if b_grades else None
+        b_mast = (
+            round((sum(1 for s in b_grades if s >= 60.0) / max(len(b_grades), 1)) * 100.0, 1)
+            if b_grades else None
+        )
+        # Curriculum completion at the end of this interval = modules completed
+        # up to b_end over the same expected workload. Cumulated from real
+        # ContentProgress timestamps, not rate * (i+1)/7.
+        try:
+            done_by_then = ContentProgress.query.filter(
+                ContentProgress.completed == True,
+                ContentProgress.completed_at.isnot(None),
+                ContentProgress.completed_at <= b_end,
+            ).count()
+            b_comp = round(min(100.0, (done_by_then / expected_work) * 100.0), 1)
+        except Exception:
+            b_comp = None
 
         spark_grade.append(b_avg)
         spark_mastery.append(b_mast)
@@ -4239,9 +4432,15 @@ def analytics_outcomes():
             'completion_rate': b_comp,
         })
 
-    delta_grade = round(spark_grade[-1] - spark_grade[0], 1) if len(spark_grade) >= 2 else 0.0
-    delta_mast = round(spark_mastery[-1] - spark_mastery[0], 1) if len(spark_mastery) >= 2 else 0.0
-    delta_comp = round(spark_comp[-1] - spark_comp[0], 1) if len(spark_comp) >= 2 else 0.0
+    def _series_delta(series):
+        real = [v for v in series if v is not None]
+        if len(real) < 2:
+            return None
+        return round(real[-1] - real[0], 1)
+
+    delta_grade = _series_delta(spark_grade)
+    delta_mast = _series_delta(spark_mastery)
+    delta_comp = _series_delta(spark_comp)
 
     kpis = {
         'campus_avg_grade': {
@@ -4254,11 +4453,21 @@ def analytics_outcomes():
         },
         'concept_mastery_rate': {
             'value': mastery_rate,
+            'is_available': mastery_rate is not None,
             'unit': '%',
             'delta': delta_mast,
             'is_positive_good': True,
-            'subtitle': 'Students achieving mastery threshold',
+            'subtitle': 'Concepts at or above 70% mastery',
             'sparkline': spark_mastery,
+        },
+        'pass_rate': {
+            'value': pass_rate,
+            'is_available': pass_rate is not None,
+            'unit': '%',
+            'delta': None,
+            'is_positive_good': True,
+            'subtitle': 'Grades at or above 60',
+            'sparkline': [],
         },
         'curriculum_completion': {
             'value': completion_rate,

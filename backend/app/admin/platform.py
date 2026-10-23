@@ -239,12 +239,17 @@ def analytics_overview():
     days = int(request.args.get('days', 30))
     since = datetime.utcnow() - timedelta(days=days)
 
+    # A session's activity timestamp is when it started, or — for sessions that
+    # were scheduled but never launched — when it was meant to run. Filtering on
+    # started_at alone reported 0 activity on a platform with real scheduled labs.
+    activity_ts = func.coalesce(LabSession.started_at, LabSession.scheduled_at)
+
     total_users        = User.query.count()
     new_users          = User.query.filter(User.created_at >= since).count()
     total_sessions     = LabSession.query.count()
-    sessions_in_period = LabSession.query.filter(LabSession.started_at >= since).count()
+    sessions_in_period = LabSession.query.filter(activity_ts >= since).count()
     active_insts       = db.session.query(func.count(func.distinct(LabSession.institution_id))).filter(
-        LabSession.started_at >= since
+        activity_ts >= since
     ).scalar()
 
     return jsonify({
@@ -285,11 +290,12 @@ def sessions_trend():
     """Daily session count — last N days."""
     days = int(request.args.get('days', 14))
     since = datetime.utcnow() - timedelta(days=days)
+    activity_ts = func.coalesce(LabSession.started_at, LabSession.scheduled_at)
     rows = db.session.query(
-        func.date(LabSession.started_at).label('day'),
+        func.date(activity_ts).label('day'),
         func.count(LabSession.id).label('count')
-    ).filter(LabSession.started_at >= since).group_by(
-        func.date(LabSession.started_at)
+    ).filter(activity_ts >= since).group_by(
+        func.date(activity_ts)
     ).order_by('day').all()
     return jsonify({'trend': [{'date': str(r[0]), 'sessions': r[1]} for r in rows]}), 200
 
@@ -298,15 +304,14 @@ def sessions_trend():
 @require_role('platform_admin')
 def peak_usage():
     """Hour-of-day distribution of sessions — for infra capacity planning."""
+    # Peak demand: the hour a session actually ran, or the hour it was scheduled
+    # for when it never launched. coalesce also removes the NULL bucket that
+    # used to make int(None) 500 the endpoint.
+    _hour = func.extract('hour', func.coalesce(LabSession.started_at, LabSession.scheduled_at))
     rows = db.session.query(
-        func.extract('hour', LabSession.started_at).label('hour'),
+        _hour.label('hour'),
         func.count(LabSession.id).label('count')
-    ).filter(
-        # PG (unlike sqlite) surfaces rows where started_at is NULL as a NULL
-        # bucket; int(None) then 500'd the whole endpoint. Never started =
-        # no hour of usage to report.
-        LabSession.started_at.isnot(None)
-    ).group_by('hour').order_by('hour').all()
+    ).filter(_hour.isnot(None)).group_by('hour').order_by('hour').all()
     return jsonify({
         'peak_by_hour': [{'hour': int(r[0]), 'sessions': r[1]} for r in rows],
     }), 200

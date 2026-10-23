@@ -15,6 +15,9 @@ from app.extensions import db
 from app.models.user import User
 from app.models.institution import Institution, PlatformConfig
 from app.models.session import LabSession
+from app.models.experiment import Experiment
+from app.models.academic import SectionSubject
+from app.analytics.completion import ATT_CREDIT_MAP
 from app.institution.audit import write_audit
 from app.institution.quota import student_quota
 from datetime import datetime, timedelta
@@ -706,90 +709,103 @@ def live_sessions():
         LabSession.institution_id == g.institution_id,
         LabSession.started_at >= today_start
     ).all()
-    today_mins = sum(s.duration_minutes or 60 for s in today_sessions) if today_sessions else (sum(d.get('duration_minutes', 60) for d in result) or 270)
+    # Only count sessions that actually ran today. No synthetic fallback: zero
+    # completed sessions legitimately means zero hours of lab time.
+    if today_sessions:
+        today_mins = sum(s.duration_minutes or 0 for s in today_sessions)
+    else:
+        today_mins = sum(d.get('duration_minutes', 0) for d in result)
     total_duration_today_hours = round(today_mins / 60.0, 1)
 
-    # Recent activity
+    # ── Recent live activity ───────────────────────────────────────────────
+    # Every row here is derived from a real timestamp in the database. There is
+    # deliberately NO synthetic fallback: an institution that has never run a
+    # session must see an empty feed, not invented people.
     recent_activity = []
+
     attendances = (SessionAttendance.query
         .join(LabSession, LabSession.id == SessionAttendance.session_id)
         .filter(LabSession.institution_id == g.institution_id)
-        .filter(SessionAttendance.joined_at.isnot(None))
         .order_by(SessionAttendance.joined_at.desc())
-        .limit(20).all())
+        .limit(40).all())
+
+    # Bulk-resolve names to avoid N+1 lookups
+    _uids = {a.student_id for a in attendances}
+    _sids = {a.session_id for a in attendances}
+    users_map = {u.id: u for u in User.query.filter(User.id.in_(_uids)).all()} if _uids else {}
+    sess_map = {s.id: s for s in LabSession.query.filter(LabSession.id.in_(_sids)).all()} if _sids else {}
+
+    def _actor(uid):
+        u = users_map.get(uid)
+        if not u:
+            return None, 'Unknown user'
+        label = u.full_name or u.email or 'User'
+        if getattr(u, 'roll_number', None):
+            return u, f"{label} ({u.roll_number})"
+        if getattr(u, 'staff_id', None):
+            return u, f"{label} ({u.staff_id})"
+        return u, label
 
     for att in attendances:
-        student = User.query.get(att.student_id)
-        sess = LabSession.query.get(att.session_id)
-        s_name = student.full_name if student else 'Student'
-        roll = getattr(student, 'roll_number', '') or (f"NDU2024{student.id[-4:]}" if student else '')
-        sess_title = sess.title if sess else 'Lab Session'
+        sess = sess_map.get(att.session_id)
+        sess_title = (sess.title if sess and sess.title else 'Lab Session')
+        _, actor_label = _actor(att.student_id)
 
         if att.joined_at:
             recent_activity.append({
                 'id': f"join_{att.session_id}_{att.student_id}",
-                'time': att.joined_at.strftime('%I:%M %p'),
+                'time': att.joined_at.strftime('%I:%M %p').lstrip('0'),
                 'timestamp': att.joined_at.isoformat() + 'Z',
                 'event_type': 'student_joined',
                 'event_label': 'Student Joined',
                 'session_name': sess_title,
-                'details': f"{s_name} ({roll}) joined the session" if roll else f"{s_name} joined the session",
+                'details': f"{actor_label} joined the session",
             })
         if att.left_at:
             recent_activity.append({
                 'id': f"leave_{att.session_id}_{att.student_id}",
-                'time': att.left_at.strftime('%I:%M %p'),
+                'time': att.left_at.strftime('%I:%M %p').lstrip('0'),
                 'timestamp': att.left_at.isoformat() + 'Z',
                 'event_type': 'student_left',
                 'event_label': 'Student Left',
                 'session_name': sess_title,
-                'details': f"{s_name} ({roll}) left the session" if roll else f"{s_name} left the session",
+                'details': f"{actor_label} left the session",
+            })
+
+    # Instructor start / end events come from the session itself.
+    recent_sessions = (LabSession.query
+        .filter(LabSession.institution_id == g.institution_id)
+        .order_by(LabSession.started_at.desc())
+        .limit(20).all())
+
+    for sess in recent_sessions:
+        sess_title = sess.title or 'Lab Session'
+        instr = User.query.get(sess.instructor_id) if sess.instructor_id else None
+        instr_label = (instr.full_name or instr.email) if instr else 'Instructor'
+
+        if sess.started_at:
+            recent_activity.append({
+                'id': f"start_{sess.id}",
+                'time': sess.started_at.strftime('%I:%M %p').lstrip('0'),
+                'timestamp': sess.started_at.isoformat() + 'Z',
+                'event_type': 'instructor_joined',
+                'event_label': 'Session Started',
+                'session_name': sess_title,
+                'details': f"{instr_label} started the session",
+            })
+        if getattr(sess, 'ended_at', None):
+            recent_activity.append({
+                'id': f"end_{sess.id}",
+                'time': sess.ended_at.strftime('%I:%M %p').lstrip('0'),
+                'timestamp': sess.ended_at.isoformat() + 'Z',
+                'event_type': 'session_ended',
+                'event_label': 'Session Ended',
+                'session_name': sess_title,
+                'details': f"{instr_label} ended the session",
             })
 
     recent_activity.sort(key=lambda x: x['timestamp'], reverse=True)
     recent_activity = recent_activity[:10]
-
-    # Fallback to realistic live recent activity if none in DB yet
-    if not recent_activity:
-        now = datetime.utcnow()
-        recent_activity = [
-            {
-                'id': 'ev_1',
-                'time': (now - timedelta(minutes=2)).strftime('%I:%M %p'),
-                'timestamp': (now - timedelta(minutes=2)).isoformat() + 'Z',
-                'event_type': 'student_joined',
-                'event_label': 'Student Joined',
-                'session_name': result[0]['title'] if result else 'DSA Lab 1',
-                'details': 'Rahul Sharma (NDU2024012) joined the session',
-            },
-            {
-                'id': 'ev_2',
-                'time': (now - timedelta(minutes=3)).strftime('%I:%M %p'),
-                'timestamp': (now - timedelta(minutes=3)).isoformat() + 'Z',
-                'event_type': 'student_left',
-                'event_label': 'Student Left',
-                'session_name': result[1]['title'] if len(result) > 1 else 'DBMS Lab 3',
-                'details': 'Aditi Mehta (GW26-CS235) left the session',
-            },
-            {
-                'id': 'ev_3',
-                'time': (now - timedelta(minutes=4)).strftime('%I:%M %p'),
-                'timestamp': (now - timedelta(minutes=4)).isoformat() + 'Z',
-                'event_type': 'instructor_joined',
-                'event_label': 'Instructor Joined',
-                'session_name': result[2]['title'] if len(result) > 2 else 'Computer Networks Lab',
-                'details': 'Prof. Sneha Patil joined the session',
-            },
-            {
-                'id': 'ev_4',
-                'time': (now - timedelta(minutes=6)).strftime('%I:%M %p'),
-                'timestamp': (now - timedelta(minutes=6)).isoformat() + 'Z',
-                'event_type': 'student_joined',
-                'event_label': 'Student Joined',
-                'session_name': result[0]['title'] if result else 'DSA Lab 1',
-                'details': 'Karan Gupta (NDU2024018) joined the session',
-            },
-        ]
 
     summary = {
         'total_live_sessions': total_live,
@@ -2196,24 +2212,36 @@ def analytics_grades():
 
         at_risk_delta_pct = round(((at_risk_count - prev_at_risk) / max(1, prev_at_risk)) * 100.0, 1)
     else:
-        gpa_delta_val = 0.0
-        gpa_delta_pct = 0.0
-        pass_rate_delta_val = 0.0
-        pass_rate_delta_pct = 0.0
-        subs_delta_val = 0
-        subs_delta_pct = 0.0
-        at_risk_delta_pct = 0.0
+        # Nothing in the comparison window: the change is unknown, not zero.
+        gpa_delta_val = None
+        gpa_delta_pct = None
+        pass_rate_delta_val = None
+        pass_rate_delta_pct = None
+        subs_delta_val = None
+        subs_delta_pct = None
+        at_risk_delta_pct = None
 
-    # Sparkline curves (7 time-sliced sub-buckets)
+    # Sparkline curves: seven equal TIME buckets across the window, each one a
+    # real mean of the grades submitted in that slice. Empty slices stay None
+    # (a gap) instead of repeating today's campus value seven times.
     num_buckets = 7
-    bucket_step = max(1, len(grades) // num_buckets)
     avg_grade_sparkline = []
     pass_rate_sparkline = []
     subs_sparkline = []
     at_risk_sparkline = []
 
-    for b in range(num_buckets):
-        b_slice = grades[: (b + 1) * bucket_step] if b < num_buckets - 1 else grades
+    _win_from = locals().get('start_dt') or (now - timedelta(days=365))
+    _win_to = locals().get('end_dt') or now
+    window_span = max((_win_to - _win_from).total_seconds(), 1.0)
+    buckets = [[] for _ in range(num_buckets)]
+    for g_row in grades:
+        ts = getattr(g_row, 'graded_at', None) or getattr(g_row, 'created_at', None)
+        if ts is None:
+            continue
+        pos = int(((ts - _win_from).total_seconds() / window_span) * num_buckets)
+        buckets[min(num_buckets - 1, max(0, pos))].append(g_row)
+
+    for b_slice in buckets:
         b_scores = [float(g_row.final_grade) for g_row in b_slice if g_row.final_grade is not None]
         if b_scores:
             b_avg = sum(b_scores) / len(b_scores)
@@ -2222,10 +2250,10 @@ def analytics_grades():
             subs_sparkline.append(len(b_scores))
             at_risk_sparkline.append(sum(1 for s in b_scores if s < 50.0))
         else:
-            avg_grade_sparkline.append(avg_gpa)
-            pass_rate_sparkline.append(pass_rate)
-            subs_sparkline.append(total_count)
-            at_risk_sparkline.append(at_risk_count)
+            avg_grade_sparkline.append(None)
+            pass_rate_sparkline.append(None)
+            subs_sparkline.append(None)
+            at_risk_sparkline.append(None)
 
     # Grade Histogram: F (<50), D (50-59), C (60-69), B (70-79), A (80-89), A+ (90-100)
     brackets = [
@@ -3303,14 +3331,57 @@ def analytics_instructors():
             sess_att[sid].append(st)
 
     # Pre-fetch grades for window sessions
+    instructor_ids = [i.id for i in all_instructors]
+
     sess_grades = defaultdict(list)
     if all_sess_ids:
         grade_rows = db.session.query(Grade.session_id, Grade.final_grade).filter(
-            Grade.session_id.in_(all_sess_ids)
+            Grade.session_id.in_(all_sess_ids),
+            Grade.experiment_id.isnot(None),
         ).all()
         for sid, fg in grade_rows:
             if fg is not None:
                 sess_grades[sid].append(float(fg))
+
+    # Instructor-attributed grades: a grade belongs to an instructor when the
+    # graded experiment belongs to a subject that instructor teaches. Grades with
+    # no session_id (the normal case) still count this way.
+    instr_grade_rows = defaultdict(list)
+    if instructor_ids:
+        instr_grade_rows_raw = (
+            db.session.query(SectionSubject.instructor_id, Grade.final_grade, Grade.graded_at, Grade.created_at)
+            .join(Experiment, Grade.experiment_id == Experiment.id)
+            .join(SectionSubject, Experiment.subject_id == SectionSubject.subject_id)
+            .filter(
+                SectionSubject.instructor_id.in_(instructor_ids),
+                SectionSubject.institution_id == iid,
+                Grade.final_grade.isnot(None),
+                Grade.experiment_id.isnot(None),
+            )
+            .all()
+        )
+        for iid_, fg, g_at, c_at in instr_grade_rows_raw:
+            ts = g_at or c_at
+            if ts is not None and not (start <= ts <= end):
+                continue
+            instr_grade_rows[iid_].append(float(fg))
+
+    # Pre-fetch grading turnaround: graded_at - session start, per session.
+    # (Was a hardcoded 2.0 days for every instructor.)
+    turnaround_samples = defaultdict(list)
+    if all_sess_ids:
+        t_rows = (
+            db.session.query(Grade.session_id, LabSession.started_at, Grade.graded_at)
+            .join(LabSession, Grade.session_id == LabSession.id)
+            .filter(Grade.session_id.in_(all_sess_ids),
+                    Grade.graded_at.isnot(None),
+                    LabSession.started_at.isnot(None))
+            .all()
+        )
+        for _sid, started, graded in t_rows:
+            delta_days = (graded - started).total_seconds() / 86400.0
+            if delta_days >= 0:
+                turnaround_samples[_sid].append(delta_days)
 
     # Pre-fetch feedback for window sessions
     sess_feedback = defaultdict(list)
@@ -3367,23 +3438,23 @@ def analytics_instructors():
         my_sess_ids = [s.id for s in my_sessions]
 
         # Attendance calculation
-        total_presents = 0
+        # Credit-weighted attendance (shared map): a late arrival earns 0.8, a
+        # partial 0.6 — counting them as full presence inflated the rate.
+        total_presents = 0.0
         total_records = 0
         for sid in my_sess_ids:
             for st in sess_att.get(sid, []):
                 total_records += 1
-                if st in ('present', 'late'):
-                    total_presents += 1
-        avg_att = round((total_presents / max(total_records, 1)) * 100.0, 1) if total_records > 0 else None
+                total_presents += ATT_CREDIT_MAP.get((st or 'absent').lower(), 0.0)
+        avg_att = round((total_presents / total_records) * 100.0, 1) if total_records > 0 else None
         if avg_att is not None:
             all_instructor_att_rates.append(avg_att)
 
-        # Grades calculation
-        grades_list = []
-        for sid in my_sess_ids:
-            grades_list.extend(sess_grades.get(sid, []))
+        # Grades calculation (experiment-attributed, so grades without a
+        # session_id still count)
+        grades_list = list(instr_grade_rows.get(instr.id, []))
         avg_grade = round(statistics.mean(grades_list), 1) if grades_list else None
-        grade_var = round(statistics.pstdev(grades_list), 1) if len(grades_list) > 1 else 0.0
+        grade_var = round(statistics.pstdev(grades_list), 1) if len(grades_list) > 1 else None
         if avg_grade is not None:
             all_instructor_grades.append(avg_grade)
 
@@ -3391,12 +3462,9 @@ def analytics_instructors():
         focus_list = []
         for sid in my_sess_ids:
             focus_list.extend(sess_focus.get(sid, []))
-        if focus_list:
-            eng_score = round(statistics.mean(focus_list), 1)
-        elif avg_att is not None:
-            eng_score = round(avg_att * 0.9, 1)
-        else:
-            eng_score = None
+        # Engagement is FocusScore telemetry only. It used to be back-filled as
+        # 0.9 x attendance when the ML was off, which invented a number.
+        eng_score = round(statistics.mean(focus_list), 1) if focus_list else None
 
         # Feedback calculation
         fb_list = []
@@ -3416,12 +3484,9 @@ def analytics_instructors():
             sub_g = []
             for sid in sub_sess_ids:
                 sub_g.extend(sess_grades.get(sid, []))
-            if sub_g:
-                spark.append(round(statistics.mean(sub_g), 1))
-            elif avg_grade is not None:
-                spark.append(avg_grade)
-            else:
-                spark.append(0.0)
+            # Real buckets only; empty intervals stay empty (the chart draws a
+            # gap) instead of repeating today's average as if it were history.
+            spark.append(round(statistics.mean(sub_g), 1) if sub_g else None)
 
         # Status and feedback calculation based on authentic performance metrics
         effective_g = avg_grade if avg_grade is not None else 0.0
@@ -3446,15 +3511,19 @@ def analytics_instructors():
             'department_name': d_name,
             'sections_count': sec_count,
             'students_count': st_count,
-            'avg_final_grade': avg_grade if avg_grade is not None else 0.0,
-            'avg_attendance': avg_att if avg_att is not None else 0.0,
-            'engagement_score': eng_score if eng_score is not None else 0.0,
-            'avg_feedback': display_fb if display_fb is not None else 0.0,
+            'avg_final_grade': avg_grade,
+            'avg_attendance': avg_att,
+            'engagement_score': eng_score,
+            'avg_feedback': display_fb,
             'trend_sparkline': spark,
             'status': status,
             'sessions_run': sessions_run,
             'grade_variance': grade_var,
-            'turnaround_days': 2.0,
+            # Real mean turnaround: graded_at - session start, in days.
+            'turnaround_days': (
+                round(statistics.mean([v for sid in my_sess_ids for v in turnaround_samples.get(sid, [])]), 1)
+                if any(turnaround_samples.get(sid) for sid in my_sess_ids) else None
+            ),
             'subjects_count': subj_count,
         })
 
@@ -3487,10 +3556,10 @@ def analytics_instructors():
         })
 
     # KPI summary aggregations
-    avg_inst_perf = round(statistics.mean(all_instructor_grades), 1) if all_instructor_grades else 0.0
-    avg_att_rate = round(statistics.mean(all_instructor_att_rates), 1) if all_instructor_att_rates else 0.0
-    avg_workload = round(sum(t['sections_count'] for t in table_instructors) / max(total_inst_count, 1), 1)
-    avg_fb_rating = round(statistics.mean(all_instructor_feedbacks), 1) if all_instructor_feedbacks else 0.0
+    avg_inst_perf = round(statistics.mean(all_instructor_grades), 1) if all_instructor_grades else None
+    avg_att_rate = round(statistics.mean(all_instructor_att_rates), 1) if all_instructor_att_rates else None
+    avg_workload = round(sum(t['sections_count'] for t in table_instructors) / max(total_inst_count, 1), 1) if total_inst_count else None
+    avg_fb_rating = round(statistics.mean(all_instructor_feedbacks), 1) if all_instructor_feedbacks else None
     fb_responses = len(all_instructor_feedbacks)
 
     # Real 7-point sparklines across window
@@ -3513,34 +3582,39 @@ def analytics_instructors():
         sub_g = []
         for sid in sub_sess_ids:
             sub_g.extend(sess_grades.get(sid, []))
-        spark_perf.append(round(statistics.mean(sub_g), 1) if sub_g else (avg_inst_perf or 0.0))
+        spark_perf.append(round(statistics.mean(sub_g), 1) if sub_g else None)
 
         # Sub attendance
-        sub_pres = 0
+        sub_pres = 0.0
         sub_tot = 0
         for sid in sub_sess_ids:
             for st in sess_att.get(sid, []):
                 sub_tot += 1
-                if st in ('present', 'late'):
-                    sub_pres += 1
-        spark_att.append(round((sub_pres / max(sub_tot, 1)) * 100.0, 1) if sub_tot > 0 else (avg_att_rate or 0.0))
+                sub_pres += ATT_CREDIT_MAP.get((st or 'absent').lower(), 0.0)
+        spark_att.append(round((sub_pres / max(sub_tot, 1)) * 100.0, 1) if sub_tot > 0 else None)
 
         # Sub feedback
         sub_fb = []
         for sid in sub_sess_ids:
             sub_fb.extend(sess_feedback.get(sid, []))
-        spark_fb.append(round(statistics.mean(sub_fb), 1) if sub_fb else (avg_fb_rating or 0.0))
+        spark_fb.append(round(statistics.mean(sub_fb), 1) if sub_fb else None)
 
         spark_workload.append(avg_workload)
 
     # Dynamic deltas computed authentically across the sparkline window
-    perf_delta = round(((spark_perf[-1] - spark_perf[0]) / max(spark_perf[0], 1)) * 100, 1) if len(spark_perf) >= 2 and spark_perf[0] > 0 else 0.0
-    att_delta = round(((spark_att[-1] - spark_att[0]) / max(spark_att[0], 1)) * 100, 1) if len(spark_att) >= 2 and spark_att[0] > 0 else 0.0
-    fb_delta = round(((spark_fb[-1] - spark_fb[0]) / max(spark_fb[0], 1)) * 100, 1) if len(spark_fb) >= 2 and spark_fb[0] > 0 else 0.0
+    def _delta(series):
+        pts = [v for v in series if v is not None]
+        if len(pts) < 2 or not pts[0]:
+            return None
+        return round(((pts[-1] - pts[0]) / pts[0]) * 100, 1)
+
+    perf_delta = _delta(spark_perf)
+    att_delta = _delta(spark_att)
+    fb_delta = _delta(spark_fb)
 
     kpis = {
         'total_instructors': total_inst_count,
-        'total_instructors_delta_pct': 0.0,
+        'total_instructors_delta_pct': None,
         'total_instructors_sparkline': spark_instr,
         'avg_student_performance': avg_inst_perf,
         'avg_student_performance_delta_pct': perf_delta,
@@ -3549,7 +3623,7 @@ def analytics_instructors():
         'avg_attendance_rate_delta_pct': att_delta,
         'avg_attendance_rate_sparkline': spark_att,
         'teaching_workload': avg_workload,
-        'teaching_workload_delta_pct': 0.0,
+        'teaching_workload_delta_pct': None,
         'teaching_workload_sparkline': spark_workload,
         'student_feedback': avg_fb_rating,
         'student_feedback_delta_pct': fb_delta,
