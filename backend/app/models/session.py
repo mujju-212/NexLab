@@ -86,6 +86,7 @@ class LabSession(db.Model):
             'scheduled_at': _iso_z(self.scheduled_at),
             'duration_minutes': self.duration_minutes,
             'gate_score_threshold': self.gate_score_threshold,
+            'late_join_window_min': self.late_join_window_min,
             'focus_ml_enabled': self.focus_ml_enabled,
             'lockdown_enabled': self.lockdown_enabled,
             'catchup_enabled': self.catchup_enabled,

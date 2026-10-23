@@ -5663,34 +5663,7 @@ def update_profile():
 @institution_bp.route('/profile/2fa/toggle', methods=['POST'])
 @require_role('institution_admin')
 def toggle_2fa():
-    """
-    Toggle Two-Factor Authentication for the logged-in admin.
-    """
-    user = User.query.get(g.user_id)
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-
-    user.two_factor_enabled = not bool(user.two_factor_enabled)
-    new_state = user.two_factor_enabled
-    db.session.commit()
-
-    action_label = 'enable_2fa' if new_state else 'disable_2fa'
-    _write_audit(
-        actor_id=g.user_id,
-        institution_id=g.institution_id,
-        action=action_label,
-        target_type='security',
-        target_id=g.user_id,
-        detail=f"{'Enabled' if new_state else 'Disabled'} Two-Factor Authentication",
-        module='Settings',
-        severity='medium',
-    )
-    db.session.commit()
-
-    return jsonify({
-        'message': f"Two-Factor Authentication {'enabled' if new_state else 'disabled'} successfully",
-        'two_factor_enabled': new_state,
-    }), 200
+    return jsonify({'error': 'Multi-factor authentication enrollment and login verification are not implemented yet.'}), 501
 
 
 @institution_bp.route('/profile/export-data', methods=['GET'])
@@ -5972,8 +5945,10 @@ def get_notification_settings():
     if inst and inst.notification_prefs:
         try:
             stored = json.loads(inst.notification_prefs)
-        except ValueError:
+        except (ValueError, TypeError):
             stored = {}
+    if not isinstance(stored, dict):
+        stored = {}
 
     channels = stored.get('channels', DEFAULT_NOTIFICATION_CHANNELS)
     categories = stored.get('categories', DEFAULT_NOTIFICATION_CATEGORIES)
@@ -6015,12 +5990,20 @@ def update_notification_settings():
     data = request.get_json(silent=True) or {}
     channels = data.get('channels', DEFAULT_NOTIFICATION_CHANNELS)
     categories = data.get('categories', DEFAULT_NOTIFICATION_CATEGORIES)
+    if not isinstance(channels, dict) or not isinstance(categories, dict):
+        return jsonify({'error': 'channels and categories must be objects.'}), 400
 
-    stored = {
+    try:
+        stored = json.loads(inst.notification_prefs) if inst.notification_prefs else {}
+    except (ValueError, TypeError):
+        stored = {}
+    if not isinstance(stored, dict):
+        stored = {}
+    stored.update({
         'channels': channels,
         'categories': categories,
         'updated_at': datetime.utcnow().isoformat() + 'Z',
-    }
+    })
 
     inst.notification_prefs = json.dumps(stored)
     db.session.commit()
@@ -6047,24 +6030,22 @@ def update_notification_settings():
 @institution_bp.route('/notifications/test', methods=['POST'])
 @require_role('institution_admin')
 def send_test_notification():
-    """
-    Deliver a test notification via selected channel (email, in_app, sms, push).
-    """
+    """Create a test in-app notice; external channels are not integrated."""
     data = request.get_json(silent=True) or {}
-    channel = (data.get('channel') or 'email').lower()
-    recipient = data.get('recipient') or 'inst.admin@nexlab.demo'
+    channel = str(data.get('channel') or '').lower()
+    if channel != 'in_app':
+        return jsonify({'error': f'{channel or "requested"} delivery is not connected yet. Only in-app notifications can be tested.'}), 501
 
-    if channel == 'in_app':
-        test_notif = Notification(
-            user_id=g.user_id,
-            type='alert',
-            title='Test In-App Notification',
-            message='Your notification settings are active and connected.',
-            created_at=datetime.utcnow(),
-            is_read=False,
-        )
-        db.session.add(test_notif)
-        db.session.commit()
+    test_notif = Notification(
+        user_id=g.user_id,
+        type='alert',
+        title='Test in-app notification',
+        message='This is a temporary test notification from your institution settings.',
+        created_at=datetime.utcnow(),
+        is_read=False,
+    )
+    db.session.add(test_notif)
+    db.session.commit()
 
     _write_audit(
         actor_id=g.user_id,
@@ -6072,16 +6053,16 @@ def send_test_notification():
         action='send_test_notification',
         target_type='notification',
         target_id=g.user_id,
-        detail=f"Sent test notification to {recipient} via {channel.upper()}",
+        detail='Added a test in-app notification for the current admin account',
         module='Settings',
         severity='low',
     )
     db.session.commit()
 
     return jsonify({
-        'message': f"Test notification sent successfully to {recipient} via {channel.upper()}!",
+        'message': 'Test in-app notification added to your account.',
         'channel': channel,
-        'recipient': recipient,
+        'recipient': 'your account',
     }), 200
 
 
@@ -6095,11 +6076,17 @@ def reset_notification_settings():
     if not inst:
         return jsonify({'error': 'Institution not found'}), 404
 
-    stored = {
+    try:
+        stored = json.loads(inst.notification_prefs) if inst.notification_prefs else {}
+    except (ValueError, TypeError):
+        stored = {}
+    if not isinstance(stored, dict):
+        stored = {}
+    stored.update({
         'channels': DEFAULT_NOTIFICATION_CHANNELS,
         'categories': DEFAULT_NOTIFICATION_CATEGORIES,
         'updated_at': datetime.utcnow().isoformat() + 'Z',
-    }
+    })
     inst.notification_prefs = json.dumps(stored)
     db.session.commit()
 

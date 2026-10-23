@@ -13,7 +13,7 @@ import {
 import styles from './InstitutionShell.module.css';
 import PasswordGate from './PasswordGate';
 import AgentChatPanel from './AgentChatPanel';
-import { ShellNotifications } from './shell-widgets';
+import { ShellNotifications, ShellProfileMenu } from './shell-widgets';
 import { authService } from '@/services/auth.service';
 import { institutionService, type GlobalSearchHit } from '@/services/institution.service';
 import { useAuthStore } from '@/store/auth-store';
@@ -58,6 +58,7 @@ const NAV_MAIN = [
 ];
 
 const NAV_MANAGEMENT = [
+  { id: 'Notifications',         Icon: Bell,        route: '/institution/notifications' },
   { id: 'Audit Log',             Icon: ShieldCheck, route: '/institution/audit-log' },
   { id: 'Billing & Plan',        Icon: CreditCard,  route: '/institution/billing' },
   { id: 'Institution Settings',  Icon: Settings,    route: '/institution/settings' },
@@ -95,7 +96,6 @@ export default function InstitutionShell({
   const [analyticsOpen, setAnalyticsOpen] = useState(activePage === 'Analytics');
   const [searchQuery, setSearchQuery] = useState('');
   const [searchFocused, setSearchFocused] = useState(false);
-  const [showProfileMenu, setShowProfileMenu] = useState(false);
 
   // Auto-sync institution_name into auth storage if missing
   useEffect(() => {
@@ -560,40 +560,19 @@ export default function InstitutionShell({
                   </div>
                 )}
               </div>
-              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
-              <div style={{ position: 'relative' }}>
-                <div className={styles.profileChip} onClick={() => setShowProfileMenu(p => !p)}>
-                  <div className={styles.avatarLg} style={{ background: '#7c3aed', width: 32, height: 32, fontSize: 12 }}>
-                    {institutionInitials}
-                  </div>
-                  <div className={styles.profileText}>
-                    <span className={styles.profileName}>{institutionDisplayName}</span>
-                    <span className={styles.profileRole}>Institution Admin</span>
-                  </div>
-                  <ChevronDown size={14} className={styles.profileChevron} />
-                </div>
-                {showProfileMenu && (
-                  <div style={{ position:'absolute', top:'100%', right:0, marginTop:8, zIndex:100, background:'#fff', borderRadius:12, boxShadow:'0 8px 28px rgba(0,0,0,0.12)', border:'1px solid #f1f5f9', minWidth:220, overflow:'hidden' }}>
-                    <div style={{ padding:'12px 16px', borderBottom:'1px solid #f1f5f9' }}>
-                      <p style={{ margin:0, fontSize:14, fontWeight:700, color:'#201b2e' }}>{institutionDisplayName}</p>
-                      <p style={{ margin:'2px 0 0', fontSize:12, color:'#9891a6' }}>{user?.email ?? ''}</p>
-                    </div>
-                    <button onClick={() => { setShowProfileMenu(false); router.push('/institution/profile'); }}
-                      style={{ display:'flex', alignItems:'center', gap:10, width:'100%', padding:'10px 16px', background:'none', border:'none', cursor:'pointer', fontSize:13, fontWeight:500, color:'#201b2e' }}>
-                      <User size={14} style={{ color:'#7c3aed' }} /> My Profile
-                    </button>
-                    <button onClick={() => { setShowProfileMenu(false); router.push('/institution/settings'); }}
-                      style={{ display:'flex', alignItems:'center', gap:10, width:'100%', padding:'10px 16px', background:'none', border:'none', cursor:'pointer', fontSize:13, fontWeight:500, color:'#201b2e' }}>
-                      <Settings size={14} style={{ color:'#7c3aed' }} /> Settings
-                    </button>
-                    <div style={{ height:1, background:'#f1f5f9' }} />
-                    <button onClick={() => go('Logout', '/login')}
-                      style={{ display:'flex', alignItems:'center', gap:10, width:'100%', padding:'10px 16px', background:'none', border:'none', cursor:'pointer', fontSize:13, fontWeight:500, color:'#ef4444' }}>
-                      <LogOut size={14} /> Sign Out
-                    </button>
-                  </div>
-                )}
-              </div>
+              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} role="institution_admin" />
+              <ShellProfileMenu
+                name={user?.full_name ?? institutionDisplayName}
+                email={user?.email}
+                initials={user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? institutionInitials}
+                roleLabel="Institution Admin"
+                profileHref="/institution/profile"
+                settingsHref="/institution/settings"
+                buttonClass={styles.profileChip}
+                avatarClass={styles.avatarLg}
+                avatarStyle={{ background: '#7c3aed', width: 32, height: 32, fontSize: 12 }}
+                onSignOut={() => go('Logout', '/login')}
+              />
             </div>
           </div>
 

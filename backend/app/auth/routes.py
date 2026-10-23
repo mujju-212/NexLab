@@ -158,19 +158,9 @@ def update_profile():
 
 @auth_bp.route('/2fa/toggle', methods=['POST'])
 def toggle_2fa():
-    from flask_jwt_extended import verify_jwt_in_request, get_jwt
+    from flask_jwt_extended import verify_jwt_in_request
     verify_jwt_in_request()
-    claims = get_jwt()
-    user = User.query.get(claims['sub'])
-    if not user:
-        return jsonify({'error': 'User not found'}), 404
-
-    user.two_factor_enabled = not bool(user.two_factor_enabled)
-    db.session.commit()
-    return jsonify({
-        'message': f"Two-Factor Authentication {'enabled' if user.two_factor_enabled else 'disabled'}",
-        'two_factor_enabled': user.two_factor_enabled
-    }), 200
+    return jsonify({'error': 'Multi-factor authentication enrollment and login verification are not implemented yet.'}), 501
 
 
 @auth_bp.route('/export-data', methods=['GET'])

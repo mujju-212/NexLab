@@ -15,6 +15,7 @@ from app.ml.knowledge_tracing import update_concept_mastery
 from app.models.feedback import SessionFeedback, SessionFeedbackReceipt, Notification
 from app.models.academic import SectionSubject, SectionStudent
 from app.models.subject import Subject
+from app.models.user import User
 from datetime import datetime, timedelta, timezone
 from sqlalchemy import or_
 from sqlalchemy.exc import IntegrityError
@@ -2034,6 +2035,10 @@ def student_announcements():
     # Find student's sections and batches
     enrolled_sections = SectionStudent.query.filter_by(student_id=g.user_id).all()
     section_ids = [e.section_id for e in enrolled_sections]
+    enrolled_section_subject_ids = [row.id for row in SectionSubject.query.filter(
+        SectionSubject.institution_id == iid,
+        SectionSubject.section_id.in_(section_ids),
+    ).all()] if section_ids else []
 
     batch_ids = []
     acad_years = []
@@ -2071,19 +2076,19 @@ def student_announcements():
             continue
 
         # Department filter check
-        if a.department_id and user.department_id and a.department_id != user.department_id:
+        if a.department_id and a.department_id != user.department_id:
             continue
 
-        # Section filter check
+        # Section / section-subject restrictions are both enforced; a custom
+        # class notice must not leak to other students in the institution.
         if a.section_id and a.section_id not in section_ids:
             continue
-
-        # Batch filter check
-        if a.batch_id and a.batch_id not in batch_ids:
+        if a.section_subject_id and a.section_subject_id not in enrolled_section_subject_ids:
             continue
 
-        # Academic year filter check
-        if a.academic_year and acad_years and a.academic_year not in acad_years:
+        if a.batch_id and a.batch_id not in batch_ids:
+            continue
+        if a.academic_year and a.academic_year not in acad_years:
             continue
 
         eligible.append(a)
@@ -2104,6 +2109,46 @@ def student_announcements():
     }), 200
 
 
+def _student_can_access_announcement(announcement):
+    """Re-check audience scope for reads/likes, not just the initial feed query."""
+    from app.models.academic import Section, SectionStudent, Batch
+    user = User.query.get(g.user_id)
+    if not user or announcement.target == 'instructors':
+        return False
+    if announcement.department_id and announcement.department_id != user.department_id:
+        return False
+
+    section_ids = [row.section_id for row in SectionStudent.query.filter_by(student_id=g.user_id).all()]
+    if announcement.section_id and announcement.section_id not in section_ids:
+        return False
+    if announcement.section_subject_id:
+        match = SectionSubject.query.filter_by(
+            id=announcement.section_subject_id,
+            institution_id=g.institution_id,
+        ).filter(SectionSubject.section_id.in_(section_ids or ['__none__'])).first()
+        if not match:
+            return False
+
+    batch_ids = []
+    acad_years = []
+    if section_ids:
+        for section in Section.query.filter(Section.id.in_(section_ids)).all():
+            if section.batch_id:
+                batch_ids.append(section.batch_id)
+        if batch_ids:
+            for batch in Batch.query.filter(Batch.id.in_(batch_ids)).all():
+                if batch.academic_year:
+                    try:
+                        acad_years.append(int(str(batch.academic_year)[:4]))
+                    except (TypeError, ValueError):
+                        pass
+    if announcement.batch_id and announcement.batch_id not in batch_ids:
+        return False
+    if announcement.academic_year and announcement.academic_year not in acad_years:
+        return False
+    return True
+
+
 @student_bp.route('/announcements/<announcement_id>/read', methods=['POST'])
 @require_role('student')
 def mark_announcement_read(announcement_id):
@@ -2113,7 +2158,9 @@ def mark_announcement_read(announcement_id):
     from app.models.announcement import Announcement, AnnouncementInteraction
     from app.models.feedback import Notification
 
-    ann = Announcement.query.filter_by(id=announcement_id, institution_id=g.institution_id).first_or_404()
+    ann = Announcement.query.filter_by(id=announcement_id, institution_id=g.institution_id, status='sent').first_or_404()
+    if not _student_can_access_announcement(ann):
+        return jsonify({'error': 'Announcement not found.'}), 404
 
     interaction = AnnouncementInteraction.query.filter_by(
         announcement_id=ann.id, user_id=g.user_id
@@ -2157,7 +2204,9 @@ def toggle_announcement_like(announcement_id):
     """
     from app.models.announcement import Announcement, AnnouncementInteraction
 
-    ann = Announcement.query.filter_by(id=announcement_id, institution_id=g.institution_id).first_or_404()
+    ann = Announcement.query.filter_by(id=announcement_id, institution_id=g.institution_id, status='sent').first_or_404()
+    if not _student_can_access_announcement(ann):
+        return jsonify({'error': 'Announcement not found.'}), 404
 
     interaction = AnnouncementInteraction.query.filter_by(
         announcement_id=ann.id, user_id=g.user_id

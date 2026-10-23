@@ -70,39 +70,33 @@ export default function StudentAnnouncementsPage() {
   }, []);
 
   const handleMarkRead = async (id: string) => {
-    // Optimistic UI
-    setAnnouncements(prev =>
-      prev.map(a => (a.id === id ? { ...a, is_read: true } : a))
-    );
+    const previous = announcements.find(a => a.id === id);
+    if (!previous || previous.is_read) return;
+    setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, is_read: true } : a));
     setUnreadCount(prev => Math.max(0, prev - 1));
-
     try {
       await studentService.markAnnouncementRead(id);
     } catch {
-      // revert if failed
+      setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, is_read: false } : a));
+      setUnreadCount(prev => prev + 1);
+      showToast('Could not mark this announcement as read.');
     }
   };
 
   const handleToggleLike = async (id: string) => {
-    // Optimistic UI
-    setAnnouncements(prev =>
-      prev.map(a => {
-        if (a.id === id) {
-          const nextLiked = !a.is_liked;
-          return {
-            ...a,
-            is_liked: nextLiked,
-            likes_count: nextLiked ? a.likes_count + 1 : Math.max(0, a.likes_count - 1),
-          };
-        }
-        return a;
-      })
-    );
-
+    const previous = announcements.find(a => a.id === id);
+    if (!previous) return;
+    const nextLiked = !previous.is_liked;
+    setAnnouncements(prev => prev.map(a => a.id === id ? {
+      ...a, is_liked: nextLiked,
+      likes_count: nextLiked ? a.likes_count + 1 : Math.max(0, a.likes_count - 1),
+    } : a));
     try {
-      await studentService.toggleAnnouncementLike(id);
+      const result = await studentService.toggleAnnouncementLike(id);
+      setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, is_liked: result.liked, likes_count: result.likes_count } : a));
     } catch {
-      // revert
+      setAnnouncements(prev => prev.map(a => a.id === id ? { ...a, is_liked: previous.is_liked, likes_count: previous.likes_count } : a));
+      showToast('Could not update the announcement like.');
     }
   };
 

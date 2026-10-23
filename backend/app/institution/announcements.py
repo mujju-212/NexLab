@@ -41,60 +41,43 @@ def _write_audit(user_id, institution_id, action, target_type, target_id, detail
 
 
 def _resolve_target_users(institution_id, target, department_id=None, academic_year=None, batch_id=None, section_id=None):
-    """
-    Returns list of User objects matching target filters.
-    """
+    """Resolve an explicit audience without treating an empty custom scope as a broadcast."""
     query = User.query.filter_by(institution_id=institution_id, is_active=True)
-
-    if target == 'students':
+    if target in ('all', 'custom'):
+        query = query.filter(User.role.in_(('student', 'instructor')))
+    elif target == 'students':
         query = query.filter_by(role='student')
     elif target == 'instructors':
         query = query.filter_by(role='instructor')
-    # target == 'all' or 'custom' -> both students and instructors unless narrowed
 
     if department_id:
         query = query.filter_by(department_id=department_id)
 
+    # Class/batch/year scopes resolve to enrolled students. Intersect all supplied
+    # academic scopes so the recipient count matches the audience the student feed
+    # later enforces. Department-only custom audiences may include all roles.
+    academic_scopes = []
     if section_id:
-        enrolled_student_ids = [
-            e.student_id for e in SectionStudent.query.filter_by(section_id=section_id).all()
-        ]
-        if target == 'students' or target == 'custom':
-            query = query.filter(User.id.in_(enrolled_student_ids))
-    elif batch_id:
-        batch_section_ids = [
-            s.id for s in Section.query.filter_by(institution_id=institution_id, batch_id=batch_id).all()
-        ]
-        batch_student_ids = [
-            ss.student_id for ss in SectionStudent.query.filter(
-                SectionStudent.section_id.in_(batch_section_ids)
-            ).all()
-        ]
-        if target == 'students' or target == 'custom':
-            query = query.filter(User.id.in_(batch_student_ids))
-    elif academic_year:
+        academic_scopes.append({row.student_id for row in SectionStudent.query.filter_by(section_id=section_id).all()})
+    if batch_id:
+        batch_sections = [row.id for row in Section.query.filter_by(
+            institution_id=institution_id, batch_id=batch_id).all()]
+        academic_scopes.append({row.student_id for row in SectionStudent.query.filter(
+            SectionStudent.section_id.in_(batch_sections)).all()} if batch_sections else set())
+    if academic_year:
         year_num = str(academic_year)
-        year_ids = [
-            ay.id for ay in AcademicYear.query.filter_by(institution_id=institution_id).all()
-            if ay.year_label and ay.year_label.startswith(year_num)
-        ]
-        year_batches = (
-            Batch.query.filter_by(institution_id=institution_id)
-            .filter(Batch.year_id.in_(year_ids)).all()
-            if year_ids else []
-        )
-        year_section_ids = [
-            s.id for b in year_batches
-            for s in Section.query.filter_by(batch_id=b.id).all()
-        ]
-        year_student_ids = [
-            ss.student_id for ss in SectionStudent.query.filter(
-                SectionStudent.section_id.in_(year_section_ids)
-            ).all()
-        ]
-        if target == 'students' or target == 'custom':
-            query = query.filter(User.id.in_(year_student_ids))
+        year_ids = [row.id for row in AcademicYear.query.filter_by(institution_id=institution_id).all()
+                    if row.year_label and str(row.year_label).startswith(year_num)]
+        year_batches = Batch.query.filter_by(institution_id=institution_id).filter(
+            Batch.year_id.in_(year_ids)).all() if year_ids else []
+        year_section_ids = [row.id for batch in year_batches for row in Section.query.filter_by(
+            institution_id=institution_id, batch_id=batch.id).all()]
+        academic_scopes.append({row.student_id for row in SectionStudent.query.filter(
+            SectionStudent.section_id.in_(year_section_ids)).all()} if year_section_ids else set())
 
+    if academic_scopes:
+        matching_ids = set.intersection(*academic_scopes)
+        query = query.filter(User.role == 'student', User.id.in_(matching_ids))
     return query.all()
 
 
@@ -232,6 +215,14 @@ def create_announcement():
     priority = data.get('priority', 'normal')  # 'normal' | 'important' | 'urgent'
     category = data.get('category', 'general')  # 'general' | 'cancellation' | 'schedule' | 'exam' | 'event'
     target = data.get('target', 'all')  # 'all' | 'students' | 'instructors' | 'custom'
+    if status not in ('sent', 'scheduled', 'draft'):
+        return jsonify({'error': 'status must be sent, scheduled, or draft.'}), 400
+    if priority not in ('normal', 'important', 'urgent'):
+        return jsonify({'error': 'priority must be normal, important, or urgent.'}), 400
+    if category not in ('general', 'cancellation', 'schedule', 'exam', 'event'):
+        return jsonify({'error': 'category is not supported.'}), 400
+    if target not in ('all', 'students', 'instructors', 'custom'):
+        return jsonify({'error': 'target must be all, students, instructors, or custom.'}), 400
 
     dept_id = data.get('department_id') or None
     acad_year = data.get('academic_year')
@@ -242,6 +233,11 @@ def create_announcement():
             acad_year = None
     batch_id = data.get('batch_id') or None
     section_id = data.get('section_id') or None
+
+    if target == 'custom' and status in ('sent', 'scheduled') and not any((dept_id, acad_year, batch_id, section_id)):
+        return jsonify({'error': 'Choose a department, academic year, batch, or section for a custom audience.'}), 400
+    if target != 'custom' and any((dept_id, acad_year, batch_id, section_id)):
+        return jsonify({'error': 'Use the custom audience option to apply department, year, batch, or section filters.'}), 400
 
     attachment_name = data.get('attachment_name') or None
     attachment_url = data.get('attachment_url') or None
@@ -405,9 +401,16 @@ def update_announcement(announcement_id):
     if 'category' in data:
         ann.category = data['category']
     if 'target' in data:
+        if data['target'] not in ('all', 'students', 'instructors', 'custom'):
+            return jsonify({'error': 'target must be all, students, instructors, or custom.'}), 400
         ann.target = data['target']
     if 'department_id' in data:
         ann.department_id = data['department_id'] or None
+    if 'academic_year' in data:
+        try:
+            ann.academic_year = int(str(data['academic_year'])[:4]) if data['academic_year'] else None
+        except (TypeError, ValueError):
+            return jsonify({'error': 'academic_year must start with a four-digit year.'}), 400
     if 'batch_id' in data:
         ann.batch_id = data['batch_id'] or None
     if 'section_id' in data:
@@ -419,8 +422,16 @@ def update_announcement(announcement_id):
     if 'attachment_size' in data:
         ann.attachment_size = data['attachment_size'] or None
 
-    # Handle status change (e.g. from draft -> sent, or draft -> scheduled)
+    # A custom audience is only deliverable with an explicit scope; never let an empty
+    # filter silently become an institution-wide broadcast.
     new_status = data.get('status')
+    if new_status is not None and new_status not in ('sent', 'scheduled', 'draft'):
+        return jsonify({'error': 'status must be sent, scheduled, or draft.'}), 400
+    effective_status = new_status or ann.status
+    if effective_status in ('sent', 'scheduled') and ann.target == 'custom' and not any((ann.department_id, ann.academic_year, ann.batch_id, ann.section_id)):
+        return jsonify({'error': 'Choose a department, academic year, batch, or section for a custom audience.'}), 400
+    if ann.target != 'custom' and any((ann.department_id, ann.academic_year, ann.batch_id, ann.section_id)):
+        return jsonify({'error': 'Use the custom audience option to apply department, year, batch, or section filters.'}), 400
     if new_status and new_status != ann.status:
         if new_status == 'sent':
             ann.status = 'sent'

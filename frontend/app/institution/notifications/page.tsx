@@ -1,879 +1,121 @@
 'use client';
 
-import React, { useEffect, useState, useMemo } from 'react';
-import { useRouter } from 'next/navigation';
-import { useQuery, useQueryClient } from '@tanstack/react-query';
+import { useCallback, useEffect, useState } from 'react';
+import { Bell, CheckCheck, CircleAlert, Mail, RefreshCw, Send, Smartphone, Loader2, Check } from 'lucide-react';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { institutionService } from '@/services/institution.service';
+import { notificationService, type NotificationRow } from '@/services/notification.service';
 import { useAuthStore } from '@/store/auth-store';
-import {
-  institutionService,
-  type NotificationChannelConfig,
-  type NotificationCategoryConfig,
-  type RecentNotificationItem,
-  type NotificationSettingsResponse,
-} from '@/services/institution.service';
-import {
-  Bell,
-  Mail,
-  Smartphone,
-  Send,
-  RotateCcw,
-  Save,
-  Check,
-  ChevronDown,
-  ChevronUp,
-  GraduationCap,
-  Megaphone,
-  Users,
-  Shield,
-  Clock,
-  Calendar,
-  AlertCircle,
-  XCircle,
-  FileEdit,
-  UserCheck,
-  Sparkles,
-  HelpCircle,
-  CreditCard,
-  User,
-  Loader2,
-  RefreshCw,
-  KeyRound,
-  CheckCircle2,
-} from 'lucide-react';
 import styles from './notifications.module.css';
 
-export default function NotificationsPage() {
-  const router = useRouter();
-  const queryClient = useQueryClient();
-  const { user } = useAuthStore();
+function relativeTime(value: string | null) {
+  if (!value) return 'Recently';
+  const age = Math.max(0, Date.now() - new Date(value).getTime());
+  const mins = Math.floor(age / 60_000);
+  if (mins < 1) return 'Just now';
+  if (mins < 60) return `${mins}m ago`;
+  const hours = Math.floor(mins / 60);
+  if (hours < 24) return `${hours}h ago`;
+  return `${Math.floor(hours / 24)}d ago`;
+}
 
-  // Loading & Action states
-  const [saving, setSaving] = useState(false);
-  const [resetting, setResetting] = useState(false);
+export default function InstitutionNotificationsPage() {
+  const user = useAuthStore(s => s.user);
+  const [rows, setRows] = useState<NotificationRow[]>([]);
+  const [unread, setUnread] = useState(0);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
   const [sendingTest, setSendingTest] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const [notice, setNotice] = useState<{ ok: boolean; text: string } | null>(null);
 
-  // Channels state
-  const [channels, setChannels] = useState<NotificationChannelConfig>({
-    email: true,
-    in_app: true,
-    sms: false,
-    push: false,
-  });
-
-  // Category matrix state
-  const [categories, setCategories] = useState<Record<string, NotificationCategoryConfig>>({});
-
-  // Expanded accordion sections (by category id)
-  const [expandedCats, setExpandedCats] = useState<Record<string, boolean>>({
-    academic: true,
-    announcements: false,
-    user_management: false,
-    system_security: false,
-  });
-
-  // Recent notifications list
-  const [recentNotifs, setRecentNotifs] = useState<RecentNotificationItem[]>([]);
-  const [showAllRecent, setShowAllRecent] = useState(false);
-
-  // Test Notification state
-  const [testChannel, setTestChannel] = useState<'email' | 'sms' | 'push' | 'in_app'>('email');
-  const [testRecipient, setTestRecipient] = useState('inst.admin@nexlab.demo');
-
-  // Trigger toast
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
-
-  // Sync recipient when user logs in
-  useEffect(() => {
-    if (user?.email && testRecipient === 'inst.admin@nexlab.demo') {
-      setTestRecipient(user.email);
-    }
-  }, [user]);
-
-  // Load notification settings from backend — cached; the editable
-  // channel/category/recipient state below mirrors it on first arrival so
-  // local edits aren't clobbered by background refetches.
-  const { data: settingsData, isPending: loading } = useQuery({
-    queryKey: ['institution', 'notification-settings'],
-    queryFn: () => institutionService.getNotificationSettings(),
-    staleTime: 30 * 1000,
-  });
-  const [syncedSettings, setSyncedSettings] = useState(false);
-  useEffect(() => {
-    if (!settingsData || syncedSettings) return;
-    if (settingsData.channels) setChannels(settingsData.channels);
-    if (settingsData.categories) setCategories(settingsData.categories);
-    if (settingsData.recent_notifications) setRecentNotifs(settingsData.recent_notifications);
-    setSyncedSettings(true);
-  }, [settingsData, syncedSettings]);
-  const reloadSettings = () => {
-    setSyncedSettings(false);
-    return queryClient.invalidateQueries({ queryKey: ['institution', 'notification-settings'] });
-  };
-
-  // Toggle category accordion
-  const toggleAccordion = (catId: string) => {
-    setExpandedCats((prev) => ({
-      ...prev,
-      [catId]: !prev[catId],
-    }));
-  };
-
-  // Toggle global channel card
-  const toggleChannel = (channelKey: keyof NotificationChannelConfig) => {
-    setChannels((prev) => ({
-      ...prev,
-      [channelKey]: !prev[channelKey],
-    }));
-  };
-
-  // Toggle an event's master enabled toggle
-  const toggleEventMaster = (catKey: string, eventId: string) => {
-    setCategories((prev) => {
-      const cat = prev[catKey];
-      if (!cat) return prev;
-      const updatedEvents = cat.events.map((evt) => {
-        if (evt.id === eventId) {
-          return { ...evt, enabled: !evt.enabled };
-        }
-        return evt;
-      });
-      return {
-        ...prev,
-        [catKey]: { ...cat, events: updatedEvents },
-      };
-    });
-  };
-
-  // Toggle an event's specific channel checkbox
-  const toggleEventChannel = (
-    catKey: string,
-    eventId: string,
-    channelKey: 'email' | 'in_app' | 'sms' | 'push'
-  ) => {
-    setCategories((prev) => {
-      const cat = prev[catKey];
-      if (!cat) return prev;
-      const updatedEvents = cat.events.map((evt) => {
-        if (evt.id === eventId) {
-          return { ...evt, [channelKey]: !evt[channelKey] };
-        }
-        return evt;
-      });
-      return {
-        ...prev,
-        [catKey]: { ...cat, events: updatedEvents },
-      };
-    });
-  };
-
-  // Save Preferences to backend
-  const handleSavePreferences = async () => {
+  const load = useCallback(async (background = false) => {
+    if (background) setRefreshing(true); else setLoading(true);
     try {
-      setSaving(true);
-      const res = await institutionService.updateNotificationSettings({
-        channels,
-        categories,
-      });
-      if (res.channels) setChannels(res.channels);
-      if (res.categories) setCategories(res.categories);
-      // keep the cache honest so revisiting shows saved values
-      queryClient.setQueryData(['institution', 'notification-settings'],
-        (old: NotificationSettingsResponse | undefined) =>
-          old ? { ...old, channels: res.channels ?? old.channels, categories: res.categories ?? old.categories } : old);
-      showToast('Notification preferences saved successfully!');
-    } catch (err: any) {
-      console.error('Save failed:', err);
-      showToast(err?.response?.data?.error || 'Failed to save preferences.');
-    } finally {
-      setSaving(false);
-    }
-  };
+      const result = await notificationService.list();
+      setRows(result.notifications || []);
+      setUnread(result.unread || 0);
+      setNotice(null);
+    } catch (error) {
+      const e = error as { response?: { data?: { error?: string } }; message?: string };
+      setNotice({ ok: false, text: e.response?.data?.error || e.message || 'Could not load notifications.' });
+    } finally { setLoading(false); setRefreshing(false); }
+  }, []);
 
-  // Reset to default
-  const handleReset = async () => {
-    if (!window.confirm('Reset all notification preferences to standard institution defaults?')) {
-      return;
-    }
+  useEffect(() => { void load(); }, [load]);
+
+  const sendTest = async () => {
+    setSendingTest(true); setNotice(null);
     try {
-      setResetting(true);
-      const res = await institutionService.resetNotificationSettings();
-      if (res.channels) setChannels(res.channels);
-      if (res.categories) setCategories(res.categories);
-      reloadSettings();
-      showToast('Notification preferences reset to default!');
-    } catch (err: any) {
-      console.error('Reset failed:', err);
-      showToast(err?.response?.data?.error || 'Failed to reset preferences.');
-    } finally {
-      setResetting(false);
-    }
+      await institutionService.sendTestNotification('in_app', user?.email || '');
+      await load(true);
+      setNotice({ ok: true, text: 'A test notice was added to your account. Check the header bell.' });
+    } catch (error) {
+      const e = error as { response?: { data?: { error?: string } }; message?: string };
+      setNotice({ ok: false, text: e.response?.data?.error || e.message || 'Could not create a test notification.' });
+    } finally { setSendingTest(false); }
   };
 
-  // Send Test Notification
-  const handleSendTest = async () => {
-    if (!testRecipient.trim()) {
-      showToast('Please enter a recipient address or number.');
-      return;
-    }
+  const markOneRead = async (id: string) => {
     try {
-      setSendingTest(true);
-      const res = await institutionService.sendTestNotification(testChannel, testRecipient.trim());
-      showToast(res.message || `Test notification sent via ${testChannel.toUpperCase()}!`);
-      // Refresh recent notifications if In-App test was triggered
-      if (testChannel === 'in_app') {
-        const fresh = await queryClient.fetchQuery({
-          queryKey: ['institution', 'notification-settings'],
-          queryFn: () => institutionService.getNotificationSettings(),
-          staleTime: 0,
-        });
-        if (fresh.recent_notifications) {
-          setRecentNotifs(fresh.recent_notifications);
-        }
-      }
-    } catch (err: any) {
-      console.error('Send test failed:', err);
-      showToast(err?.response?.data?.error || 'Failed to send test notification.');
-    } finally {
-      setSendingTest(false);
+      await notificationService.markRead(id);
+      setRows(current => current.map(row => row.id === id ? { ...row, is_read: true } : row));
+      setUnread(current => Math.max(0, current - 1));
+    } catch {
+      setNotice({ ok: false, text: 'Could not mark this notice as read.' });
     }
   };
 
-  // Compute category enabled counts
-  const categoryCounts = useMemo(() => {
-    const counts: Record<string, { enabled: number; total: number }> = {};
-    Object.entries(categories).forEach(([key, cat]) => {
-      const total = cat.events?.length || 0;
-      const enabled = cat.events?.filter((e) => e.enabled).length || 0;
-      counts[key] = { enabled, total };
-    });
-    return counts;
-  }, [categories]);
-
-  // Category Icon helper
-  const renderCategoryIcon = (catKey: string) => {
-    switch (catKey) {
-      case 'academic':
-        return <GraduationCap size={18} />;
-      case 'announcements':
-        return <Megaphone size={18} />;
-      case 'user_management':
-        return <Users size={18} />;
-      case 'system_security':
-        return <Shield size={18} />;
-      default:
-        return <Bell size={18} />;
+  const markAllRead = async () => {
+    try {
+      await notificationService.markAllRead();
+      setRows(current => current.map(row => ({ ...row, is_read: true })));
+      setUnread(0);
+      setNotice({ ok: true, text: 'All in-app notifications marked as read.' });
+    } catch {
+      setNotice({ ok: false, text: 'Could not mark notifications as read.' });
     }
   };
-
-  // Event Icon helper
-  const renderEventIcon = (eventId: string) => {
-    switch (eventId) {
-      case 'session_scheduled':
-        return <Calendar size={15} className={styles.eventIcon} />;
-      case 'session_started':
-        return <Clock size={15} className={styles.eventIcon} />;
-      case 'session_ended':
-        return <CheckCircle2 size={15} className={styles.eventIcon} />;
-      case 'session_rescheduled':
-        return <RefreshCw size={15} className={styles.eventIcon} />;
-      case 'session_cancelled':
-        return <XCircle size={15} className={styles.eventIcon} />;
-      case 'announcement_created':
-        return <Megaphone size={15} className={styles.eventIcon} />;
-      case 'announcement_urgent':
-        return <AlertCircle size={15} className={styles.eventIcon} />;
-      case 'announcement_reminder':
-        return <Bell size={15} className={styles.eventIcon} />;
-      case 'user_registered':
-        return <UserCheck size={15} className={styles.eventIcon} />;
-      case 'user_role_changed':
-        return <Shield size={15} className={styles.eventIcon} />;
-      case 'user_profile_updated':
-        return <FileEdit size={15} className={styles.eventIcon} />;
-      case 'user_password_reset':
-        return <KeyRound size={15} className={styles.eventIcon} />;
-      case 'security_login_alert':
-        return <AlertCircle size={15} className={styles.eventIcon} />;
-      case 'security_2fa_changed':
-        return <Shield size={15} className={styles.eventIcon} />;
-      case 'system_maintenance':
-        return <Sparkles size={15} className={styles.eventIcon} />;
-      default:
-        return <Bell size={15} className={styles.eventIcon} />;
-    }
-  };
-
-  // Recent Notification item icon & color badge
-  const renderRecentBadge = (type: string, title: string) => {
-    const t = (type || title || '').toLowerCase();
-    if (t.includes('session') && !t.includes('cancel')) {
-      return (
-        <div className={`${styles.recentNotifIconBox} ${styles.recentNotifIconPurple}`}>
-          <Calendar size={15} />
-        </div>
-      );
-    }
-    if (t.includes('announcement')) {
-      return (
-        <div className={`${styles.recentNotifIconBox} ${styles.recentNotifIconGreen}`}>
-          <Megaphone size={15} />
-        </div>
-      );
-    }
-    if (t.includes('user') || t.includes('registered')) {
-      return (
-        <div className={`${styles.recentNotifIconBox} ${styles.recentNotifIconBlue}`}>
-          <UserCheck size={15} />
-        </div>
-      );
-    }
-    if (t.includes('cancel') || t.includes('alert') || t.includes('error')) {
-      return (
-        <div className={`${styles.recentNotifIconBox} ${styles.recentNotifIconRed}`}>
-          <XCircle size={15} />
-        </div>
-      );
-    }
-    if (t.includes('profile') || t.includes('update') || t.includes('edit')) {
-      return (
-        <div className={`${styles.recentNotifIconBox} ${styles.recentNotifIconOrange}`}>
-          <FileEdit size={15} />
-        </div>
-      );
-    }
-    return (
-      <div className={`${styles.recentNotifIconBox} ${styles.recentNotifIconPurple}`}>
-        <Bell size={15} />
-      </div>
-    );
-  };
-
-  const displayedRecent = showAllRecent ? recentNotifs : recentNotifs.slice(0, 5);
 
   return (
-    <InstitutionShell activePage="Institution Settings">
-      <div className={styles.pageContainer}>
-        {/* ── Breadcrumb ───────────────────────────────────────────────────────── */}
-        <div className={styles.breadcrumbRow}>
-          <span
-            className={styles.breadcrumbLink}
-            onClick={() => router.push('/institution/dashboard')}
-          >
-            Institution
-          </span>
-          <span className={styles.breadcrumbSeparator}>&gt;</span>
-          <span
-            className={styles.breadcrumbLink}
-            onClick={() => router.push('/institution/settings')}
-          >
-            Settings
-          </span>
-          <span className={styles.breadcrumbSeparator}>&gt;</span>
-          <span className={styles.breadcrumbCurrent}>Notifications</span>
-        </div>
-
-        {/* ── Header Row with Banner Card ─────────────────────────────────────── */}
-        <div className={styles.headerRow}>
-          <div className={styles.titleGroup}>
-            <h1 className={styles.pageTitle}>Notifications</h1>
-            <p className={styles.pageSubtitle}>
-              Manage how and when you receive notifications. Stay updated with important activities in your institution.
-            </p>
-          </div>
-
-          {/* Stay Informed Lavender Banner Card */}
-          <div className={styles.stayInformedCard}>
-            <div className={styles.stayInformedIconBox}>
-              <Bell size={18} />
-            </div>
-            <div className={styles.stayInformedText}>
-              <div className={styles.stayInformedTitle}>Stay Informed, Always</div>
-              <div className={styles.stayInformedDesc}>
-                Get notified about sessions, announcements, user activity and more — so you never miss what matters.
-              </div>
-            </div>
-            <Bell size={68} className={styles.bannerBellIllustration} />
-          </div>
-        </div>
-
-        {/* ── Tab Navigation ─────────────────────────────────────────────────── */}
-        <div className={styles.tabsRow}>
-          <button
-            type="button"
-            className={styles.tabItem}
-            onClick={() => router.push('/institution/profile')}
-          >
-            <User size={15} />
-            <span>Profile & Security</span>
-          </button>
-
-          <button
-            type="button"
-            className={`${styles.tabItem} ${styles.tabItemActive}`}
-          >
-            <Bell size={15} />
-            <span>Notifications</span>
-          </button>
-
-          <button
-            type="button"
-            className={styles.tabItem}
-            onClick={() => router.push('/institution/billing')}
-          >
-            <CreditCard size={15} />
-            <span>Plan & Billing</span>
-          </button>
-
-          <button
-            type="button"
-            className={styles.tabItem}
-            onClick={() => router.push('/institution/ai-usage')}
-          >
-            <Sparkles size={15} />
-            <span>AI & Usage</span>
-          </button>
-
-          <button
-            type="button"
-            className={styles.tabItem}
-            onClick={() => router.push('/institution/help')}
-          >
-            <HelpCircle size={15} />
-            <span>Help & FAQ</span>
-          </button>
-        </div>
-
-        {/* ── Main Content Grid ──────────────────────────────────────────────── */}
-        <div className={styles.contentGrid}>
-          {/* ════ LEFT COLUMN ════ */}
-          <div className={styles.leftColumn}>
-            {/* Card 1: Notification Channels */}
-            <div className={styles.sectionCard}>
-              <div className={styles.cardHeader}>
-                <div className={styles.cardHeaderTitleGroup}>
-                  <h2 className={styles.cardTitle}>Notification Channels</h2>
-                  <p className={styles.cardSubtitle}>
-                    Choose how you want to receive notifications.
-                  </p>
-                </div>
-              </div>
-
-              <div className={styles.channelsGrid}>
-                {/* Email Channel */}
-                <div
-                  className={`${styles.channelCard} ${channels.email ? styles.channelCardActive : ''}`}
-                  onClick={() => toggleChannel('email')}
-                >
-                  <div className={styles.channelTopRow}>
-                    <div className={`${styles.channelIconBox} ${styles.channelIconPurple}`}>
-                      <Mail size={18} />
-                    </div>
-                    {channels.email ? (
-                      <div className={styles.channelCheckBadge}>
-                        <Check size={12} strokeWidth={3} />
-                      </div>
-                    ) : (
-                      <div className={styles.channelEmptyCircle} />
-                    )}
-                  </div>
-                  <div className={styles.channelTitle}>Email</div>
-                  <div className={styles.channelDesc}>
-                    Receive notifications in your email inbox
-                  </div>
-                </div>
-
-                {/* In-App Channel */}
-                <div
-                  className={`${styles.channelCard} ${channels.in_app ? styles.channelCardActive : ''}`}
-                  onClick={() => toggleChannel('in_app')}
-                >
-                  <div className={styles.channelTopRow}>
-                    <div className={`${styles.channelIconBox} ${styles.channelIconBlue}`}>
-                      <Bell size={18} />
-                    </div>
-                    {channels.in_app ? (
-                      <div className={styles.channelCheckBadge}>
-                        <Check size={12} strokeWidth={3} />
-                      </div>
-                    ) : (
-                      <div className={styles.channelEmptyCircle} />
-                    )}
-                  </div>
-                  <div className={styles.channelTitle}>In-App</div>
-                  <div className={styles.channelDesc}>
-                    Get notified inside the NexLab platform
-                  </div>
-                </div>
-
-                {/* SMS Channel */}
-                <div
-                  className={`${styles.channelCard} ${channels.sms ? styles.channelCardActive : ''}`}
-                  onClick={() => toggleChannel('sms')}
-                >
-                  <div className={styles.channelTopRow}>
-                    <div className={`${styles.channelIconBox} ${styles.channelIconGray}`}>
-                      <Smartphone size={18} />
-                    </div>
-                    {channels.sms ? (
-                      <div className={styles.channelCheckBadge}>
-                        <Check size={12} strokeWidth={3} />
-                      </div>
-                    ) : (
-                      <div className={styles.channelEmptyCircle} />
-                    )}
-                  </div>
-                  <div className={styles.channelTitle}>SMS</div>
-                  <div className={styles.channelDesc}>
-                    Receive important alerts via SMS
-                  </div>
-                </div>
-
-                {/* Push Channel */}
-                <div
-                  className={`${styles.channelCard} ${channels.push ? styles.channelCardActive : ''}`}
-                  onClick={() => toggleChannel('push')}
-                >
-                  <div className={styles.channelTopRow}>
-                    <div className={`${styles.channelIconBox} ${styles.channelIconGray}`}>
-                      <Smartphone size={18} />
-                    </div>
-                    {channels.push ? (
-                      <div className={styles.channelCheckBadge}>
-                        <Check size={12} strokeWidth={3} />
-                      </div>
-                    ) : (
-                      <div className={styles.channelEmptyCircle} />
-                    )}
-                  </div>
-                  <div className={styles.channelTitle}>Push</div>
-                  <div className={styles.channelDesc}>
-                    Browser & mobile push notifications
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            {/* Card 2: Notification Preferences (Accordions) */}
-            <div className={styles.sectionCard}>
-              <div className={styles.cardHeader}>
-                <div className={styles.cardHeaderTitleGroup}>
-                  <h2 className={styles.cardTitle}>Notification Preferences</h2>
-                  <p className={styles.cardSubtitle}>
-                    Select the events you want to be notified about.
-                  </p>
-                </div>
-                <button
-                  type="button"
-                  className={styles.resetBtn}
-                  onClick={handleReset}
-                  disabled={resetting}
-                >
-                  <RotateCcw size={13} className={resetting ? styles.spin : ''} />
-                  <span>{resetting ? 'Resetting…' : 'Reset to Default'}</span>
-                </button>
-              </div>
-
-              {loading ? (
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '40px 0', gap: 10, color: '#7c3aed' }}>
-                  <Loader2 size={22} className={styles.spin} />
-                  <span style={{ fontSize: 13, fontWeight: 600 }}>Loading notification preferences…</span>
-                </div>
-              ) : (
-                <div className={styles.categoriesContainer}>
-                  {Object.entries(categories).map(([catKey, cat]) => {
-                    const isExpanded = !!expandedCats[catKey];
-                    const counts = categoryCounts[catKey] || { enabled: 0, total: 0 };
-
-                    return (
-                      <div key={catKey} className={styles.categoryCard}>
-                        {/* Category Header */}
-                        <div
-                          className={styles.categoryHeader}
-                          onClick={() => toggleAccordion(catKey)}
-                        >
-                          <div className={styles.categoryHeaderLeft}>
-                            <div className={styles.categoryIconBox}>
-                              {renderCategoryIcon(catKey)}
-                            </div>
-                            <div className={styles.categoryTitleGroup}>
-                              <div className={styles.categoryTitle}>{cat.title}</div>
-                              <div className={styles.categorySubtitle}>{cat.subtitle}</div>
-                            </div>
-                          </div>
-
-                          <div className={styles.categoryHeaderRight}>
-                            <span className={styles.categoryCountBadge}>
-                              {counts.enabled} of {counts.total} enabled
-                            </span>
-                            <div className={styles.categoryChevron}>
-                              {isExpanded ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
-                            </div>
-                          </div>
-                        </div>
-
-                        {/* Category Body / Event list */}
-                        {isExpanded && (
-                          <div className={styles.categoryBody}>
-                            {cat.events?.map((evt) => (
-                              <div key={evt.id} className={styles.eventRow}>
-                                <div className={styles.eventLeft}>
-                                  {renderEventIcon(evt.id)}
-                                  <div className={styles.eventInfo}>
-                                    <div className={styles.eventTitle}>{evt.title}</div>
-                                    <div className={styles.eventDesc}>{evt.description}</div>
-                                  </div>
-                                </div>
-
-                                <div className={styles.eventRight}>
-                                  {/* Channel Checkboxes */}
-                                  <div className={styles.channelCheckboxes}>
-                                    <label className={styles.checkboxLabel}>
-                                      <input
-                                        type="checkbox"
-                                        className={styles.checkboxInput}
-                                        checked={evt.email}
-                                        disabled={!evt.enabled}
-                                        onChange={() => toggleEventChannel(catKey, evt.id, 'email')}
-                                      />
-                                      <span>Email</span>
-                                    </label>
-
-                                    <label className={styles.checkboxLabel}>
-                                      <input
-                                        type="checkbox"
-                                        className={styles.checkboxInput}
-                                        checked={evt.in_app}
-                                        disabled={!evt.enabled}
-                                        onChange={() => toggleEventChannel(catKey, evt.id, 'in_app')}
-                                      />
-                                      <span>In-App</span>
-                                    </label>
-
-                                    <label className={styles.checkboxLabel}>
-                                      <input
-                                        type="checkbox"
-                                        className={styles.checkboxInput}
-                                        checked={evt.sms}
-                                        disabled={!evt.enabled}
-                                        onChange={() => toggleEventChannel(catKey, evt.id, 'sms')}
-                                      />
-                                      <span>SMS</span>
-                                    </label>
-
-                                    <label className={styles.checkboxLabel}>
-                                      <input
-                                        type="checkbox"
-                                        className={styles.checkboxInput}
-                                        checked={evt.push}
-                                        disabled={!evt.enabled}
-                                        onChange={() => toggleEventChannel(catKey, evt.id, 'push')}
-                                      />
-                                      <span>Push</span>
-                                    </label>
-                                  </div>
-
-                                  {/* Master Pill Toggle */}
-                                  <button
-                                    type="button"
-                                    className={`${styles.toggleSwitch} ${
-                                      evt.enabled ? styles.toggleSwitchOn : styles.toggleSwitchOff
-                                    }`}
-                                    onClick={() => toggleEventMaster(catKey, evt.id)}
-                                  >
-                                    <span
-                                      className={`${styles.toggleSlider} ${
-                                        evt.enabled ? styles.toggleSliderOn : styles.toggleSliderOff
-                                      }`}
-                                    />
-                                  </button>
-                                </div>
-                              </div>
-                            ))}
-                          </div>
-                        )}
-                      </div>
-                    );
-                  })}
-                </div>
-              )}
-
-              {/* Save Preferences Button */}
-              <div className={styles.savePreferencesRow}>
-                <button
-                  type="button"
-                  className={styles.savePreferencesBtn}
-                  onClick={handleSavePreferences}
-                  disabled={saving || loading}
-                >
-                  {saving ? (
-                    <Loader2 size={15} className={styles.spin} />
-                  ) : (
-                    <Save size={15} />
-                  )}
-                  <span>{saving ? 'Saving…' : 'Save Preferences'}</span>
-                </button>
-              </div>
+    <InstitutionShell activePage="Notifications" title="Notifications" subtitle="Manage and verify the in-app notices delivered to your institution administrator account.">
+      <div className={styles.pageGrid}>
+        <section style={{ background: '#fff', border: '1px solid #e9e4f2', borderRadius: 18, padding: 20, boxShadow: '0 8px 24px rgba(37,22,62,.045)' }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginBottom: 16 }}>
+            <div><h2 style={{ margin: 0, color: '#201b2e', fontSize: 17 }}>Recent in-app notices</h2><p style={{ margin: '4px 0 0', color: '#787187', fontSize: 12 }}>{unread} unread · Opening the bell does not mark notices read.</p></div>
+            <div style={{ display: 'flex', gap: 8 }}>
+              <button type="button" aria-label="Refresh notifications" onClick={() => void load(true)} disabled={refreshing} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #e5dff0', borderRadius: 9, background: '#fff', padding: '8px 10px', color: '#574d68', cursor: 'pointer', fontSize: 11.5, fontWeight: 700 }}><RefreshCw size={13} /> Refresh</button>
+              {unread > 0 && <button type="button" onClick={() => void markAllRead()} style={{ display: 'inline-flex', alignItems: 'center', gap: 6, border: 0, borderRadius: 9, background: '#f3e8ff', padding: '8px 10px', color: '#6d28d9', cursor: 'pointer', fontSize: 11.5, fontWeight: 700 }}><CheckCheck size={13} /> Mark all read</button>}
             </div>
           </div>
-
-          {/* ════ RIGHT COLUMN ════ */}
-          <div className={styles.rightColumn}>
-            {/* Card 1: Test Notifications */}
-            <div className={styles.sectionCard}>
-              <div style={{ display: 'flex', alignItems: 'flex-start', gap: 12, marginBottom: 16 }}>
-                <div
-                  style={{
-                    width: 36,
-                    height: 36,
-                    borderRadius: 10,
-                    background: '#f3e8ff',
-                    color: '#7c3aed',
-                    display: 'flex',
-                    alignItems: 'center',
-                    justifyContent: 'center',
-                    flexShrink: 0,
-                  }}
-                >
-                  <Send size={17} />
-                </div>
-                <div>
-                  <h3 style={{ margin: '0 0 3px 0', fontSize: 14.5, fontWeight: 700, color: '#1e1b4b', fontFamily: "'Space Grotesk', sans-serif" }}>
-                    Test Notifications
-                  </h3>
-                  <p style={{ margin: 0, fontSize: 11.5, color: '#64748b', lineHeight: 1.35 }}>
-                    Send a test notification to make sure everything is working correctly.
-                  </p>
-                </div>
-              </div>
-
-              {/* Channel Tabs */}
-              <div className={styles.testChannelTabs}>
-                {(['email', 'sms', 'push', 'in_app'] as const).map((ch) => {
-                  const label = ch === 'in_app' ? 'In-App' : ch.toUpperCase();
-                  const isActive = testChannel === ch;
-                  return (
-                    <button
-                      key={ch}
-                      type="button"
-                      className={`${styles.testChannelTab} ${isActive ? styles.testChannelTabActive : ''}`}
-                      onClick={() => setTestChannel(ch)}
-                    >
-                      {label}
-                    </button>
-                  );
-                })}
-              </div>
-
-              {/* Input Group */}
-              <div className={styles.testInputGroup}>
-                <label className={styles.testInputLabel}>
-                  Send test {testChannel === 'in_app' ? 'in-app' : testChannel} to
-                </label>
-                <div className={styles.testInputWrapper}>
-                  {testChannel === 'email' && <Mail size={15} color="#94a3b8" />}
-                  {testChannel === 'sms' && <Smartphone size={15} color="#94a3b8" />}
-                  {testChannel === 'push' && <Bell size={15} color="#94a3b8" />}
-                  {testChannel === 'in_app' && <Bell size={15} color="#94a3b8" />}
-                  <input
-                    type="text"
-                    className={styles.testInput}
-                    value={testRecipient}
-                    onChange={(e) => setTestRecipient(e.target.value)}
-                    placeholder={
-                      testChannel === 'email'
-                        ? 'name@domain.com'
-                        : testChannel === 'sms'
-                        ? '+91 9876543210'
-                        : 'Recipient Identifier'
-                    }
-                  />
-                </div>
-              </div>
-
-              {/* Send Button */}
-              <button
-                type="button"
-                className={styles.sendTestBtn}
-                onClick={handleSendTest}
-                disabled={sendingTest}
-              >
-                {sendingTest ? (
-                  <Loader2 size={14} className={styles.spin} />
-                ) : (
-                  <Send size={14} />
-                )}
-                <span>
-                  {sendingTest
-                    ? 'Sending…'
-                    : `Send Test ${testChannel === 'in_app' ? 'In-App' : testChannel.toUpperCase()}`}
-                </span>
-              </button>
+          {notice && <p role="status" style={{ margin: '0 0 12px', borderRadius: 10, padding: '10px 12px', color: notice.ok ? '#166534' : '#b91c1c', background: notice.ok ? '#f0fdf4' : '#fef2f2', fontSize: 12.5 }}>{notice.text}</p>}
+          {loading ? <div style={{ padding: 36, textAlign: 'center', color: '#8b8494' }}><Loader2 size={20} className="animate-spin" /><p>Loading notifications…</p></div> : rows.length === 0 ? (
+            <div style={{ padding: '44px 18px', borderRadius: 14, border: '1px dashed #ddd6e8', background: '#faf9fc', textAlign: 'center' }}><Bell size={28} color="#a99fba" style={{ margin: '0 auto 10px' }} /><p style={{ margin: '0 0 4px', color: '#494156', fontSize: 14, fontWeight: 700 }}>No notifications yet</p><p style={{ margin: 0, color: '#8b8494', fontSize: 12 }}>New session and announcement notices will appear here.</p></div>
+          ) : (
+            <div style={{ display: 'grid', gap: 9 }}>
+              {rows.map(row => <article key={row.id} style={{ display: 'flex', gap: 11, padding: 13, borderRadius: 12, border: `1px solid ${row.is_read ? '#eeeaf3' : '#ddd0fb'}`, background: row.is_read ? '#fff' : '#fcfaff' }}>
+                <span style={{ width: 34, height: 34, flexShrink: 0, borderRadius: 10, display: 'grid', placeItems: 'center', background: row.type === 'announcement' ? '#e0f2fe' : '#f3e8ff', color: row.type === 'announcement' ? '#0284c7' : '#7c3aed' }}>{row.type === 'announcement' ? <Mail size={16} /> : <Bell size={16} />}</span>
+                <div style={{ flex: 1, minWidth: 0 }}><div style={{ display: 'flex', justifyContent: 'space-between', gap: 8 }}><h3 style={{ margin: 0, fontSize: 13, color: '#241d31' }}>{row.title}</h3><time style={{ flexShrink: 0, color: '#9a93a7', fontSize: 10.5 }}>{relativeTime(row.created_at)}</time></div><p style={{ margin: '5px 0 0', color: '#625b6d', fontSize: 12.5, whiteSpace: 'pre-wrap' }}>{row.message}</p></div>
+                {!row.is_read && <button type="button" aria-label={`Mark ${row.title} read`} onClick={() => void markOneRead(row.id)} style={{ alignSelf: 'center', flexShrink: 0, border: '1px solid #ddd6e8', background: '#fff', borderRadius: 8, padding: 7, color: '#6d28d9', cursor: 'pointer' }}><Check size={14} /></button>}
+              </article>)}
             </div>
+          )}
+        </section>
 
-            {/* Card 2: Recent Notifications */}
-            <div className={styles.sectionCard}>
-              <div className={styles.cardHeader} style={{ marginBottom: 14 }}>
-                <h3 className={styles.cardTitle} style={{ fontSize: 14.5 }}>
-                  Recent Notifications
-                </h3>
-                {recentNotifs.length > 5 && (
-                  <button
-                    type="button"
-                    className={styles.viewAllLink}
-                    onClick={() => setShowAllRecent((p) => !p)}
-                  >
-                    {showAllRecent ? 'Show Less' : 'View All'}
-                  </button>
-                )}
-              </div>
+        <aside style={{ display: 'grid', gap: 14 }}>
+          <section style={{ background: '#fff', border: '1px solid #e9e4f2', borderRadius: 18, padding: 20, boxShadow: '0 8px 24px rgba(37,22,62,.045)' }}>
+            <div style={{ display: 'flex', gap: 11, alignItems: 'center', marginBottom: 13 }}><span style={{ width: 38, height: 38, borderRadius: 12, background: '#f3e8ff', color: '#7c3aed', display: 'grid', placeItems: 'center' }}><Send size={17} /></span><div><h2 style={{ margin: 0, color: '#201b2e', fontSize: 15 }}>Test the in-app bell</h2><p style={{ margin: '3px 0 0', color: '#787187', fontSize: 11.5 }}>Creates one test notice for your account.</p></div></div>
+            <button type="button" onClick={() => void sendTest()} disabled={sendingTest} style={{ display: 'inline-flex', alignItems: 'center', gap: 8, border: 0, borderRadius: 10, background: '#6d28d9', color: '#fff', padding: '10px 13px', fontWeight: 700, fontSize: 12.5, cursor: sendingTest ? 'wait' : 'pointer', opacity: sendingTest ? .7 : 1 }}>{sendingTest ? <Loader2 size={14} className="animate-spin" /> : <Send size={14} />} Send test notification</button>
+          </section>
 
-              <div className={styles.recentNotifList}>
-                {displayedRecent.length === 0 ? (
-                  <div style={{ fontSize: 12, color: '#94a3b8', padding: '12px 0', textAlign: 'center' }}>
-                    No recent notifications.
-                  </div>
-                ) : (
-                  displayedRecent.map((item) => (
-                    <div key={item.id} className={styles.recentNotifItem}>
-                      {renderRecentBadge(item.type, item.title)}
-                      <div className={styles.recentNotifContent}>
-                        <div className={styles.recentNotifTitle}>{item.title}</div>
-                        <div className={styles.recentNotifMsg}>{item.message}</div>
-                      </div>
-                      <div className={styles.recentNotifTime}>{item.relative_time}</div>
-                    </div>
-                  ))
-                )}
-              </div>
+          <section style={{ background: '#fff', border: '1px solid #e9e4f2', borderRadius: 18, padding: 20, boxShadow: '0 8px 24px rgba(37,22,62,.045)' }}>
+            <h2 style={{ margin: 0, color: '#201b2e', fontSize: 15 }}>Delivery status</h2>
+            <div style={{ display: 'grid', gap: 10, marginTop: 14 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 11, borderRadius: 11, background: '#f0fdf4' }}><span style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#166534', fontSize: 12.5, fontWeight: 700 }}><Bell size={15} /> In-app bell</span><span style={{ color: '#15803d', fontSize: 10.5, fontWeight: 800 }}>ACTIVE</span></div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: 11, borderRadius: 11, background: '#f8f7fa' }}><span style={{ display: 'flex', gap: 8, alignItems: 'center', color: '#6b6475', fontSize: 12.5 }}><Mail size={15} /> Email / SMS / Push</span><span style={{ color: '#8b8494', fontSize: 10.5, fontWeight: 800 }}>NOT CONNECTED</span></div>
             </div>
-
-            {/* Card 3: You're all set! */}
-            <div className={styles.successCard}>
-              <div className={styles.successIconCircle}>
-                <Check size={18} strokeWidth={2.8} />
-              </div>
-              <div>
-                <div className={styles.successTitle}>You&apos;re all set!</div>
-                <div className={styles.successDesc}>
-                  Your notification preferences are saved and active.
-                </div>
-              </div>
-            </div>
-          </div>
-        </div>
-
-        {/* ── Toast Alert ───────────────────────────────────────────────────── */}
-        {toastMessage && (
-          <div className={styles.toastNotice}>
-            <Check size={16} color="#34d399" />
-            <span>{toastMessage}</span>
-          </div>
-        )}
+            <p style={{ margin: '12px 0 0', display: 'flex', gap: 6, color: '#80798b', fontSize: 11.5, lineHeight: 1.5 }}><CircleAlert size={14} style={{ flexShrink: 0, marginTop: 1 }} /> External delivery and event-level channel controls are not connected, so they are not presented as working settings.</p>
+          </section>
+        </aside>
       </div>
     </InstitutionShell>
   );

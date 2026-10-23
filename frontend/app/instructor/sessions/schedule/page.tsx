@@ -113,15 +113,25 @@ export default function ScheduleWizardPage() {
   useEffect(() => {
     (async () => {
       try {
-        const [ss, exps] = await Promise.all([
+        const [ss, exps, instructorDefaults] = await Promise.all([
           sessionService.getSectionSubjects(),
           experimentService.listMine(),
+          experienceService.getSettings().catch(() => null),
         ]);
         const ssArr = Array.isArray(ss)
           ? ss
           : ((ss as { section_subjects?: SectionSubjectRow[] })?.section_subjects ?? []);
         setSectionSubjects(ssArr);
         setExperiments((exps ?? []) as ExpRow[]);
+        if (instructorDefaults) {
+          const policy = (instructorDefaults.default_proctor_policy || {}) as Record<string, boolean>;
+          setDuration(Number(instructorDefaults.default_session_duration_min) || 90);
+          setGateThreshold(Number(instructorDefaults.default_gate_threshold ?? 70));
+          setLateJoinMin(Number(instructorDefaults.default_late_join_window_min ?? 10));
+          setProctor(current => ({ ...current, ...policy }));
+          setFocusMl(Boolean(policy.focus_ml ?? true));
+          setLockdown(Boolean(policy.lockdown_fullscreen ?? false));
+        }
       } catch {
         setError('Could not load your classes and experiments.');
       } finally {
@@ -170,7 +180,11 @@ export default function ScheduleWizardPage() {
   useEffect(() => {
     if (selectedExp) {
       const p = (selectedExp as unknown as { proctor_defaults?: Record<string, boolean> }).proctor_defaults;
-      if (p) setProctor(prev => ({ ...prev, ...p }));
+      if (p) {
+        setProctor(prev => ({ ...prev, ...p }));
+        setFocusMl(Boolean(p.focus_ml ?? focusMl));
+        setLockdown(Boolean(p.lockdown_fullscreen ?? lockdown));
+      }
     }
   }, [selectedExp]);
 
@@ -529,7 +543,7 @@ export default function ScheduleWizardPage() {
                 </p>
                 <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fill, minmax(240px, 1fr))', gap: 12 }}>
                   <Toggle on={!useExpProctor ? proctor.lockdown_fullscreen : !!proctor.lockdown_fullscreen}
-                    onChange={v => { setUseExpProctor(false); setProctor(p => ({ ...p, lockdown_fullscreen: v })); }}
+                    onChange={v => { setUseExpProctor(false); setLockdown(v); setProctor(p => ({ ...p, lockdown_fullscreen: v })); }}
                     label="Lockdown fullscreen" desc="Students must stay in fullscreen" icon="🔒" />
                   <Toggle on={proctor.block_copy_paste}
                     onChange={v => { setUseExpProctor(false); setProctor(p => ({ ...p, block_copy_paste: v })); }}

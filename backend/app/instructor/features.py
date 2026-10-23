@@ -515,7 +515,7 @@ def get_settings():
             'default_proctor_policy': {
                 'lockdown_fullscreen': True, 'block_copy_paste': True,
                 'block_tab_switch': True, 'plagiarism_scan': True,
-                'focus_ml': False, 'webcam_required': False,
+                'focus_ml': True, 'webcam_required': False,
             },
             'default_rubric': {'test_cases': 60, 'lab_report': 20,
                                'code_quality': 10, 'viva': 10, 'quiz': 0},
@@ -533,33 +533,71 @@ def get_settings():
 @features_bp.route('/settings', methods=['PATCH'])
 @require_role('instructor', 'institution_admin')
 def patch_settings():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'A JSON settings object is required.'}), 400
+
     s = InstructorSettings.query.get(g.user_id)
     if not s:
         s = InstructorSettings(instructor_id=g.user_id, institution_id=g.institution_id)
         db.session.add(s)
 
-    data = request.get_json() or {}
     if 'default_proctor_policy' in data:
+        policy = data['default_proctor_policy']
+        if not isinstance(policy, dict):
+            return jsonify({'error': 'default_proctor_policy must be an object.'}), 400
         allowed = {'lockdown_fullscreen', 'block_copy_paste', 'block_tab_switch',
                    'plagiarism_scan', 'focus_ml', 'webcam_required'}
-        s.default_proctor_policy = {
-            k: bool(v) for k, v in data['default_proctor_policy'].items() if k in allowed}
+        if any(k in allowed and type(v) is not bool for k, v in policy.items()):
+            return jsonify({'error': 'Proctor policy values must be true or false.'}), 400
+        current = dict(s.default_proctor_policy or {})
+        current.update({k: v for k, v in policy.items() if k in allowed})
+        s.default_proctor_policy = current
+
     if 'default_rubric' in data:
+        rubric = data['default_rubric']
+        if not isinstance(rubric, dict):
+            return jsonify({'error': 'default_rubric must be an object.'}), 400
         allowed = {'test_cases', 'lab_report', 'code_quality', 'viva', 'quiz'}
-        s.default_rubric = {
-            k: int(v) for k, v in data['default_rubric'].items() if k in allowed}
-    for field in ('default_session_duration_min', 'default_late_join_window_min',
-                  'default_gate_threshold', 'at_risk_avg_threshold', 'at_risk_min_threshold'):
+        current = {'test_cases': 60, 'lab_report': 20, 'code_quality': 10, 'viva': 10, 'quiz': 0}
+        current.update(s.default_rubric or {})
+        for key, value in rubric.items():
+            if key in allowed:
+                if isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 100:
+                    return jsonify({'error': f'default_rubric.{key} must be an integer from 0 to 100.'}), 400
+                current[key] = value
+        if sum(current.get(key, 0) for key in allowed) != 100:
+            return jsonify({'error': 'Rubric weights must sum to exactly 100.'}), 400
+        s.default_rubric = current
+
+    ranges = {
+        'default_session_duration_min': (5, 480),
+        'default_late_join_window_min': (0, 120),
+        'default_gate_threshold': (0, 100),
+        'at_risk_avg_threshold': (0, 100),
+        'at_risk_min_threshold': (0, 100),
+    }
+    for field, (minimum, maximum) in ranges.items():
         if field in data:
-            setattr(s, field, int(data[field]))
+            value = data[field]
+            if isinstance(value, bool) or not isinstance(value, int) or not minimum <= value <= maximum:
+                return jsonify({'error': f'{field} must be an integer from {minimum} to {maximum}.'}), 400
+            setattr(s, field, value)
+
     if 'allow_ai_hints' in data:
-        s.allow_ai_hints = bool(data['allow_ai_hints'])
+        if type(data['allow_ai_hints']) is not bool:
+            return jsonify({'error': 'allow_ai_hints must be true or false.'}), 400
+        s.allow_ai_hints = data['allow_ai_hints']
+
     if 'notification_prefs' in data:
-        s.notification_prefs = data['notification_prefs']
+        prefs = data['notification_prefs']
+        allowed_prefs = {'submission_ready', 'integrity_spike', 'student_at_risk', 'feedback_received'}
+        if not isinstance(prefs, list) or any(not isinstance(item, str) or item not in allowed_prefs for item in prefs):
+            return jsonify({'error': 'notification_prefs contains an unsupported preference.'}), 400
+        s.notification_prefs = prefs
 
     db.session.commit()
     return jsonify({'settings': s.to_dict()}), 200
-
 
 # ══════════════════════════════════════════════════════════════════════════════
 # Quiz per-question analytics (needs ContentProgress.answers from quiz submits)

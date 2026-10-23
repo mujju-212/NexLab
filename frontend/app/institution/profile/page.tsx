@@ -46,28 +46,28 @@ import styles from './profile.module.css';
 
 // Format date into "12 Aug 2024"
 function formatDate(isoString?: string): string {
-  if (!isoString) return '12 Aug 2024';
+  if (!isoString) return '—';
   try {
     const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
+    if (isNaN(d.getTime())) return '—';
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}`;
   } catch {
-    return '12 Aug 2024';
+    return '—';
   }
 }
 
 // Format date and time into "10 Sep 2026, 11:23 AM"
 function formatDateTime(isoString?: string): string {
-  if (!isoString) return '10 Sep 2026, 11:23 AM';
+  if (!isoString) return '—';
   try {
     const d = new Date(isoString);
-    if (isNaN(d.getTime())) return isoString;
+    if (isNaN(d.getTime())) return '—';
     const months = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
     const time = d.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit', hour12: true });
     return `${d.getDate()} ${months[d.getMonth()]} ${d.getFullYear()}, ${time}`;
   } catch {
-    return '10 Sep 2026, 11:23 AM';
+    return '—';
   }
 }
 
@@ -104,9 +104,6 @@ export default function ProfilePage() {
   const [showConfirmPw, setShowConfirmPw] = useState(false);
   const [savingPw, setSavingPw] = useState(false);
 
-  // 2FA state
-  const [twoFactorLoading, setTwoFactorLoading] = useState(false);
-  const [showTwoFactorModal, setShowTwoFactorModal] = useState(false);
 
   // Modals & Drawers
   const [showSessionsModal, setShowSessionsModal] = useState(false);
@@ -133,8 +130,8 @@ export default function ProfilePage() {
       setProfileData(data);
       setEditForm({
         fullName: data.user.full_name || '',
-        phone: data.user.phone || '+91 98765 43210',
-        bio: data.user.bio || 'Empowering education through technology.',
+        phone: data.user.phone || '',
+        bio: data.user.bio || '',
         timezone: data.user.timezone || '(GMT+05:30) Asia/Kolkata',
         language: data.user.language || 'English (India)',
       });
@@ -210,27 +207,6 @@ export default function ProfilePage() {
       showToast(err?.response?.data?.error || 'Failed to change password.', 'error');
     } finally {
       setSavingPw(false);
-    }
-  };
-
-  // Handle 2FA Toggle
-  const handleToggle2FA = async () => {
-    setTwoFactorLoading(true);
-    try {
-      const res = await institutionService.toggle2FA();
-      if (profileData) {
-        setProfileData({
-          ...profileData,
-          user: { ...profileData.user, two_factor_enabled: res.two_factor_enabled },
-          security: { ...profileData.security, two_factor_enabled: res.two_factor_enabled },
-        });
-      }
-      setShowTwoFactorModal(false);
-      showToast(res.message);
-    } catch (err: any) {
-      showToast(err?.response?.data?.error || 'Failed to toggle 2FA', 'error');
-    } finally {
-      setTwoFactorLoading(false);
     }
   };
 
@@ -459,7 +435,7 @@ export default function ProfilePage() {
                           if (profileData) {
                             setEditForm({
                               fullName: profileData.user.full_name || '',
-                              phone: profileData.user.phone || '+91 98765 43210',
+                              phone: profileData.user.phone || '',
                               bio: profileData.user.bio || '',
                               timezone: profileData.user.timezone || '',
                               language: profileData.user.language || '',
@@ -689,61 +665,21 @@ export default function ProfilePage() {
                 </form>
               </div>
 
-              {/* Two-Factor Authentication Card */}
+              {/* Multi-factor authentication is not implemented on the login path yet. */}
               <div className={styles.securityCard}>
                 <div className={styles.sectionHeader} style={{ marginBottom: 12 }}>
                   <div className={styles.sectionHeaderLeft}>
-                    <div className={styles.sectionIconBox}>
-                      <ShieldCheck size={18} />
-                    </div>
+                    <div className={styles.sectionIconBox}><ShieldCheck size={18} /></div>
                     <div>
-                      <h3 className={styles.sectionTitle}>
-                        <span>Two-Factor Authentication</span>
-                        <span className={styles.recBadge}>Recommended</span>
-                      </h3>
-                      <p className={styles.sectionSubtitle}>
-                        Add an extra layer of security to your account.
-                      </p>
+                      <h3 className={styles.sectionTitle}>Multi-factor authentication</h3>
+                      <p className={styles.sectionSubtitle}>Authenticator enrollment and login challenges are not available yet.</p>
                     </div>
                   </div>
                 </div>
-
                 <div className={styles.twoFactorCenter}>
-                  <div className={styles.twoFactorIconCircle}>
-                    <Lock size={28} />
-                  </div>
-
-                  <h4 className={styles.twoFactorTitle}>
-                    {profileData?.security?.two_factor_enabled
-                      ? 'Two-factor authentication is active'
-                      : 'Two-factor authentication is not enabled'}
-                  </h4>
-
-                  <p className={styles.twoFactorDesc}>
-                    {profileData?.security?.two_factor_enabled
-                      ? 'Your account is secured with 2FA authenticator verification on every new login.'
-                      : 'Protect your account by enabling 2FA. You will need an authenticator app like Google Authenticator.'}
-                  </p>
-
-                  {profileData?.security?.two_factor_enabled ? (
-                    <button
-                      type="button"
-                      className={styles.disableTwoFactorBtn}
-                      onClick={() => setShowTwoFactorModal(true)}
-                    >
-                      <X size={14} />
-                      <span>Disable 2FA</span>
-                    </button>
-                  ) : (
-                    <button
-                      type="button"
-                      className={styles.enableTwoFactorBtn}
-                      onClick={() => setShowTwoFactorModal(true)}
-                    >
-                      <ShieldCheck size={14} />
-                      <span>Enable 2FA</span>
-                    </button>
-                  )}
+                  <div className={styles.twoFactorIconCircle}><Lock size={28} /></div>
+                  <h4 className={styles.twoFactorTitle}>Not configured</h4>
+                  <p className={styles.twoFactorDesc}>This account currently uses password authentication. We will show an enrollment option here when multi-factor verification is supported end to end.</p>
                 </div>
               </div>
             </div>
@@ -810,15 +746,9 @@ export default function ProfilePage() {
                   </span>
                 </div>
 
-                {/* Two-Factor Auth */}
                 <div className={styles.summaryItem}>
-                  <div className={styles.summaryLeft}>
-                    <Shield size={15} color="#94a3b8" />
-                    <span>Two-Factor Auth</span>
-                  </div>
-                  <span className={profileData?.security?.two_factor_enabled ? styles.statusActive : styles.statusInactive}>
-                    ● {profileData?.security?.two_factor_enabled ? 'Enabled' : 'Not Enabled'}
-                  </span>
+                  <div className={styles.summaryLeft}><Shield size={15} color="#94a3b8" /><span>Multi-factor auth</span></div>
+                  <span className={styles.statusInactive}>● Not configured</span>
                 </div>
 
                 {/* Plan */}
@@ -871,24 +801,12 @@ export default function ProfilePage() {
                   <ChevronRight size={16} color="#94a3b8" />
                 </button>
 
-                {/* Action 2: Two-Factor Authentication */}
-                <button
-                  type="button"
-                  className={styles.actionItem}
-                  onClick={() => setShowTwoFactorModal(true)}
-                >
+                <div className={styles.actionItem} aria-label="Multi-factor authentication is not configured">
                   <div className={styles.actionItemLeft}>
-                    <span className={styles.actionItemIcon}>
-                      <ShieldCheck size={16} />
-                    </span>
-                    <span>
-                      {profileData?.security?.two_factor_enabled
-                        ? 'Manage Two-Factor Auth'
-                        : 'Enable Two-Factor Authentication'}
-                    </span>
+                    <span className={styles.actionItemIcon}><ShieldCheck size={16} /></span>
+                    <span>Multi-factor authentication — not configured</span>
                   </div>
-                  <ChevronRight size={16} color="#94a3b8" />
-                </button>
+                </div>
 
                 {/* Action 3: Download My Data */}
                 <button
@@ -938,72 +856,6 @@ export default function ProfilePage() {
             </div>
           </div>
         </div>
-
-        {/* ── 2FA Modal ─────────────────────────────────────────────────────────── */}
-        {showTwoFactorModal && (
-          <div className={styles.modalOverlay} onClick={() => setShowTwoFactorModal(false)}>
-            <div className={styles.modalContent} onClick={e => e.stopPropagation()}>
-              <div className={styles.modalHeader}>
-                <h3 className={styles.modalTitle}>
-                  {profileData?.security?.two_factor_enabled
-                    ? 'Disable Two-Factor Authentication'
-                    : 'Set Up Two-Factor Authentication'}
-                </h3>
-                <button
-                  type="button"
-                  className={styles.modalCloseBtn}
-                  onClick={() => setShowTwoFactorModal(false)}
-                >
-                  <X size={16} />
-                </button>
-              </div>
-
-              <div className={styles.modalBody}>
-                {profileData?.security?.two_factor_enabled ? (
-                  <div>
-                    <p style={{ fontSize: 13.5, color: '#475569', lineHeight: 1.5, margin: '0 0 16px 0' }}>
-                      Are you sure you want to disable two-factor authentication? Your account will only be protected by your password.
-                    </p>
-                    <button
-                      type="button"
-                      className={styles.disableTwoFactorBtn}
-                      style={{ width: '100%', justifyContent: 'center' }}
-                      onClick={handleToggle2FA}
-                      disabled={twoFactorLoading}
-                    >
-                      {twoFactorLoading ? 'Disabling...' : 'Confirm & Disable 2FA'}
-                    </button>
-                  </div>
-                ) : (
-                  <div>
-                    <p style={{ fontSize: 13.5, color: '#475569', lineHeight: 1.5, margin: '0 0 16px 0' }}>
-                      Scan the QR code below using your preferred authenticator app (Google Authenticator, Authy, or 1Password) to link your institution account.
-                    </p>
-
-                    <div style={{ background: '#f8fafc', padding: 20, borderRadius: 12, textAlign: 'center', border: '1px solid #e2e8f0', marginBottom: 16 }}>
-                      <div style={{ width: 140, height: 140, margin: '0 auto', background: '#ede9fe', borderRadius: 12, display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#7c3aed' }}>
-                        <ShieldCheck size={54} />
-                      </div>
-                      <p style={{ fontSize: 12, color: '#64748b', margin: '12px 0 0' }}>
-                        Secret Code: <strong style={{ letterSpacing: '0.1em' }}>NEXL-AB7F-2A99-INST</strong>
-                      </p>
-                    </div>
-
-                    <button
-                      type="button"
-                      className={styles.enableTwoFactorBtn}
-                      style={{ width: '100%', justifyContent: 'center' }}
-                      onClick={handleToggle2FA}
-                      disabled={twoFactorLoading}
-                    >
-                      {twoFactorLoading ? 'Enabling...' : 'Confirm & Enable 2FA'}
-                    </button>
-                  </div>
-                )}
-              </div>
-            </div>
-          </div>
-        )}
 
         {/* ── Active Sessions Modal ──────────────────────────────────────────────── */}
         {showSessionsModal && (
@@ -1177,10 +1029,10 @@ export default function ProfilePage() {
 
                 <div style={{ borderTop: '1px solid #f1f5f9', paddingTop: 12 }}>
                   <h4 style={{ margin: '0 0 4px', fontSize: 13.5, fontWeight: 700, color: '#1e1b4b' }}>
-                    How does Two-Factor Authentication protect my account?
+                    Is multi-factor authentication available?
                   </h4>
                   <p style={{ margin: 0, fontSize: 12.5, color: '#64748b', lineHeight: 1.45 }}>
-                    2FA requires both your password and a time-based 6-digit code from your authenticator app on new browser sessions.
+                    Multi-factor enrollment and login challenges are not available in this account experience yet.
                   </p>
                 </div>
 

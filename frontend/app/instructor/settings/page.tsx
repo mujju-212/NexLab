@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
-import { useQuery } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
   Save, Loader2, User, Award, ShieldCheck, Bell, LogOut,
   Mail, BookOpen, Clock, AlertTriangle, Sparkles
@@ -23,7 +23,6 @@ interface SettingsShape {
   allow_ai_hints: boolean;
   at_risk_avg_threshold: number;
   at_risk_min_threshold: number;
-  notification_prefs: string[];
 }
 
 interface SectionSubjectItem {
@@ -56,13 +55,6 @@ const RUBRIC_FIELDS = [
   { key: 'quiz',         label: 'Pre-Lab Readiness Quiz (%)', color: '#ec4899' },
 ];
 
-const NOTIFICATION_OPTIONS = [
-  { key: 'submission_ready',  label: 'Final Submission Received', desc: 'Notify when students submit final code or exam attempts' },
-  { key: 'integrity_spike',   label: 'Plagiarism & Integrity Alerts', desc: 'Immediate alert when similarity exceeds threshold' },
-  { key: 'student_at_risk',   label: 'Early-Warning Student Struggle', desc: 'Alert when SPARK detects sustained compile/runtime struggle' },
-  { key: 'feedback_received', label: 'Post-Session Student Feedback', desc: 'Notify when new anonymous session ratings are submitted' },
-];
-
 const DEFAULT_SETTINGS: SettingsShape = {
   default_proctor_policy: {
     lockdown_fullscreen: true,
@@ -85,13 +77,13 @@ const DEFAULT_SETTINGS: SettingsShape = {
   allow_ai_hints: true,
   at_risk_avg_threshold: 40,
   at_risk_min_threshold: 20,
-  notification_prefs: ['integrity_spike', 'submission_ready', 'student_at_risk'],
 };
 
 export default function InstructorSettingsPage() {
   const router = useRouter();
   const { user, clearAuth } = useAuthStore();
-  const [activeTab, setActiveTab] = useState<'profile' | 'rubric' | 'proctoring' | 'alerts'>('profile');
+  const queryClient = useQueryClient();
+  const [activeTab, setActiveTab] = useState<'assignments' | 'rubric' | 'proctoring' | 'alerts'>('assignments');
   const [settings, setSettings] = useState<SettingsShape>(DEFAULT_SETTINGS);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
@@ -123,9 +115,6 @@ export default function InstructorSettingsPage() {
           ...DEFAULT_SETTINGS.default_rubric,
           ...((data as any)?.default_rubric || {}),
         },
-        notification_prefs: Array.isArray((data as any)?.notification_prefs)
-          ? (data as any).notification_prefs
-          : DEFAULT_SETTINGS.notification_prefs,
       }));
     }
   }, [data]);
@@ -136,6 +125,7 @@ export default function InstructorSettingsPage() {
       const updated = await experienceService.patchSettings(settings as unknown as Record<string, unknown>);
       if (updated) {
         setSettings(prev => ({ ...prev, ...(updated as unknown as Partial<SettingsShape>) }));
+        queryClient.setQueryData(['instructor', 'settings'], updated);
       }
       setNotice('Instructor settings saved — new experiments and sessions will inherit these defaults.');
       setTimeout(() => setNotice(null), 4000);
@@ -172,17 +162,6 @@ export default function InstructorSettingsPage() {
       default_rubric: { ...prev.default_rubric, [key]: value },
     }));
 
-  const toggleNotificationPref = (key: string) => {
-    setSettings(prev => {
-      const exists = prev.notification_prefs.includes(key);
-      return {
-        ...prev,
-        notification_prefs: exists
-          ? prev.notification_prefs.filter(k => k !== key)
-          : [...prev.notification_prefs, key],
-      };
-    });
-  };
 
   const rubricSum = Object.values(settings.default_rubric || {}).reduce((a, b) => a + (b || 0), 0);
   const fullName = user?.full_name ?? '';
@@ -191,14 +170,14 @@ export default function InstructorSettingsPage() {
   return (
     <InstructorShell
       activePage="Settings"
-      title="Instructor Settings, Policies & Profile"
-      subtitle="Manage your faculty profile, teaching assignments, default grading rubrics, proctoring policies, and alert preferences."
+      title="Teaching Settings & Defaults"
+      subtitle="Manage teaching assignments and the defaults used for sessions, grading, and integrity policies."
     >
       {/* Top Action Bar */}
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 18, flexWrap: 'wrap', gap: 12 }}>
         <div className={styles.tabRow}>
-          <button type="button" className={`${styles.tabChip} ${activeTab === 'profile' ? styles.tabChipActive : ''}`} onClick={() => setActiveTab('profile')}>
-            <User size={13} /> Profile & Assigned Classes ({assignments.length})
+          <button type="button" className={`${styles.tabChip} ${activeTab === 'assignments' ? styles.tabChipActive : ''}`} onClick={() => setActiveTab('assignments')}>
+            <User size={13} /> Teaching Assignments ({assignments.length})
           </button>
           <button type="button" className={`${styles.tabChip} ${activeTab === 'rubric' ? styles.tabChipActive : ''}`} onClick={() => setActiveTab('rubric')}>
             <Award size={13} /> Grading Rubric Defaults
@@ -207,7 +186,7 @@ export default function InstructorSettingsPage() {
             <ShieldCheck size={13} /> Session, Proctoring & AI Policy
           </button>
           <button type="button" className={`${styles.tabChip} ${activeTab === 'alerts' ? styles.tabChipActive : ''}`} onClick={() => setActiveTab('alerts')}>
-            <Bell size={13} /> At-Risk & Notification Alerts
+            <Bell size={13} /> At-Risk Alerts
           </button>
         </div>
 
@@ -247,7 +226,7 @@ export default function InstructorSettingsPage() {
       ) : (
         <>
           {/* ═══ TAB 1: FACULTY PROFILE & TEACHING ASSIGNMENTS ═══ */}
-          {activeTab === 'profile' && (
+          {activeTab === 'assignments' && (
             <div style={{ display: 'flex', flexDirection: 'column', gap: 18 }}>
               <section className={styles.sectionCard}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', flexWrap: 'wrap', gap: 16 }}>
@@ -455,7 +434,7 @@ export default function InstructorSettingsPage() {
             </div>
           )}
 
-          {/* ═══ TAB 4: AT-RISK & NOTIFICATION PREFERENCES ═══ */}
+          {/* ═══ TAB 4: AT-RISK RULES ═══ */}
           {activeTab === 'alerts' && (
             <div className={styles.gridTwo}>
               <section className={styles.sectionCard}>
@@ -476,28 +455,10 @@ export default function InstructorSettingsPage() {
               </section>
 
               <section className={styles.sectionCard}>
-                <h2 className={styles.sectionTitle}>Notification & Alert Channels</h2>
-                <p className={styles.sectionSub}>Choose which real-time alerts appear in your instructor notification bell</p>
-                <div className={styles.list} style={{ marginTop: 14 }}>
-                  {NOTIFICATION_OPTIONS.map(opt => {
-                    const active = settings.notification_prefs.includes(opt.key);
-                    return (
-                      <div
-                        key={opt.key}
-                        className={styles.listRow}
-                        style={{ cursor: 'pointer' }}
-                        onClick={() => toggleNotificationPref(opt.key)}
-                      >
-                        <div className={styles.rowBody}>
-                          <div className={styles.rowTitle}>{opt.label}</div>
-                          <div className={styles.rowMeta}>{opt.desc}</div>
-                        </div>
-                        <div className={styles.rowSide}>
-                          <input type="checkbox" checked={active} readOnly style={{ width: 17, height: 17 }} />
-                        </div>
-                      </div>
-                    );
-                  })}
+                <h2 className={styles.sectionTitle}>Your Notifications</h2>
+                <p className={styles.sectionSub}>The header bell is connected to your account’s in-app notifications. Opening it no longer marks everything read; use “Mark all read” when you choose.</p>
+                <div style={{ marginTop: 16, padding: 14, borderRadius: 12, border: '1px solid #ddd6fe', background: '#faf5ff', color: '#5b21b6', fontSize: 12.5, lineHeight: 1.55 }}>
+                  Per-event email, SMS and push controls are not available yet, so they are not shown as working switches. Use the bell to view, open, and manage in-app notices.
                 </div>
               </section>
             </div>

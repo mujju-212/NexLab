@@ -10,7 +10,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   Bell, Search, CheckCircle2, Calendar, Trophy, AlertTriangle,
-  Megaphone, RotateCcw, FlaskConical, BookOpen, GraduationCap, X, Radio,
+  Megaphone, RotateCcw, FlaskConical, BookOpen, GraduationCap, X, Radio, User, Settings, LogOut, ChevronDown,
 } from 'lucide-react';
 import { notificationService, type NotificationRow } from '@/services/notification.service';
 import { getGlobalSocket } from '@/lib/socket';
@@ -39,136 +39,180 @@ const NOTIF_META: Record<string, { Icon: typeof Bell; color: string; bg: string 
 
 // ── Notification bell + dropdown ─────────────────────────────────────────────
 
-export function ShellNotifications({ buttonClass, dotClass }: { buttonClass?: string; dotClass?: string }) {
+export function ShellNotifications({
+  buttonClass,
+  dotClass,
+  role,
+}: {
+  buttonClass?: string;
+  dotClass?: string;
+  role: 'student' | 'instructor' | 'institution_admin' | 'platform_admin' | 'free_user';
+}) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
   const [rows, setRows] = useState<NotificationRow[]>([]);
   const [unread, setUnread] = useState(0);
   const [loading, setLoading] = useState(false);
+  const [loadError, setLoadError] = useState<string | null>(null);
+  const [actionError, setActionError] = useState<string | null>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
 
-  const refreshFull = useCallback(async () => {
+  const refreshFull = useCallback(async (): Promise<boolean> => {
     try {
       const res = await notificationService.list();
       setRows(res.notifications ?? []);
       setUnread(res.unread ?? 0);
-    } catch { /* silent */ }
+      setLoadError(null);
+      return true;
+    } catch {
+      setLoadError('Could not load notifications. Try again.');
+      return false;
+    }
   }, []);
 
   const refreshUnread = useCallback(async () => {
     try {
-      const count = await notificationService.unreadCount();
-      setUnread(count);
-    } catch { /* silent */ }
+      setUnread(await notificationService.unreadCount());
+    } catch { /* keep the last known badge count */ }
   }, []);
 
-  const refresh = refreshFull;
-
-  // Initial load + 120s badge poll (lightweight unreadCount if closed, real-time socket delivers instant events)
   useEffect(() => {
     refreshUnread();
     const t = setInterval(() => {
-      if (typeof document !== 'undefined' && (document.visibilityState === 'hidden' || document.hidden)) return;
-      if (open) {
-        refreshFull();
-      } else {
-        refreshUnread();
-      }
+      if (typeof document !== 'undefined' && document.visibilityState === 'hidden') return;
+      if (open) refreshFull();
+      else refreshUnread();
     }, 120_000);
     return () => clearInterval(t);
   }, [open, refreshUnread, refreshFull]);
 
-  // When opening dropdown, fetch full list immediately
   useEffect(() => {
-    if (open) {
-      refreshFull();
-    }
+    if (!open) return;
+    setLoading(true);
+    setActionError(null);
+    refreshFull().finally(() => setLoading(false));
   }, [open, refreshFull]);
 
-  // Real-time socket listeners for instant notification delivery
   useEffect(() => {
     const socket = getGlobalSocket();
     if (!socket) return;
-
-    const onIncoming = () => {
-      refresh();
-    };
-
+    const onIncoming = () => open ? refreshFull() : refreshUnread();
     socket.on('new_notification', onIncoming);
     socket.on('session_started', onIncoming);
     socket.on('session_ended', onIncoming);
-
     return () => {
       socket.off('new_notification', onIncoming);
       socket.off('session_started', onIncoming);
       socket.off('session_ended', onIncoming);
     };
-  }, [refresh]);
+  }, [open, refreshFull, refreshUnread]);
 
-  // Open → refresh + mark everything read (badge clears)
-  useEffect(() => {
-    if (!open) return;
-    setLoading(true);
-    refresh().finally(() => {
-      setLoading(false);
-      notificationService.markAllRead().then(() => setUnread(0)).catch(() => {});
-    });
-  }, [open, refresh]);
-
-  // Outside click closes
   useEffect(() => {
     if (!open) return;
     const close = (e: MouseEvent) => {
       if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false);
     };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
     document.addEventListener('mousedown', close);
-    return () => document.removeEventListener('mousedown', close);
+    document.addEventListener('keydown', onKey);
+    return () => {
+      document.removeEventListener('mousedown', close);
+      document.removeEventListener('keydown', onKey);
+    };
   }, [open]);
+
+  const routeFor = (type: string): string => {
+    if (type === 'announcement') {
+      if (role === 'student') return '/student/announcements';
+      if (role === 'instructor') return '/instructor/announcements';
+      if (role === 'institution_admin') return '/institution/announcements';
+      if (role === 'free_user') return '/practice/dashboard';
+      return '/admin/dashboard';
+    }
+    if (type.startsWith('session_') || type === 'session_reminder' || type === 'session_scheduled') {
+      if (role === 'student') return '/student/live-lab';
+      if (role === 'instructor') return '/instructor/sessions';
+      if (role === 'institution_admin') return '/institution/sessions?tab=history';
+      if (role === 'free_user') return '/practice/dashboard';
+      return '/admin/monitoring';
+    }
+    if (role === 'student') return '/student/dashboard';
+    if (role === 'instructor') return '/instructor/analytics';
+    if (role === 'institution_admin') return '/institution/dashboard';
+    if (role === 'free_user') return '/practice/dashboard';
+    return '/admin/dashboard';
+  };
+
+  const openNotification = async (n: NotificationRow) => {
+    if (!n.is_read) {
+      try {
+        await notificationService.markRead(n.id);
+        setRows(current => current.map(row => row.id === n.id ? { ...row, is_read: true } : row));
+        setUnread(current => Math.max(0, current - 1));
+      } catch {
+        setActionError('Could not mark this notification as read.');
+      }
+    }
+    const href = routeFor(n.type);
+    setOpen(false);
+    router.push(href);
+  };
+
+  const markAllRead = async () => {
+    try {
+      await notificationService.markAllRead();
+      setRows(current => current.map(row => ({ ...row, is_read: true })));
+      setUnread(0);
+      setActionError(null);
+    } catch {
+      setActionError('Could not mark notifications as read. Try again.');
+    }
+  };
 
   return (
     <div ref={wrapRef} style={{ position: 'relative' }}>
       <button
+        type="button"
         className={buttonClass}
         onClick={() => setOpen(o => !o)}
         aria-label="Notifications"
+        aria-expanded={open}
+        aria-haspopup="dialog"
         title={unread > 0 ? `${unread} unread notification(s)` : 'Notifications'}
       >
         <Bell size={16} strokeWidth={1.9} />
         {unread > 0 && (
-          <span
-            className={dotClass}
-            data-count={unread > 9 ? '9+' : unread}
-            style={{ display: 'flex' }}
-            title={`${unread} unread`}
-          />
+          <span className={dotClass} data-count={unread > 9 ? '9+' : unread}
+            style={{ display: 'flex', width: unread > 9 ? 20 : 16, height: 16, alignItems: 'center', justifyContent: 'center', borderRadius: 999, color: '#fff', fontSize: 9, lineHeight: 1, fontWeight: 800 }} title={`${unread} unread`}>{unread > 9 ? '9+' : unread}</span>
         )}
       </button>
 
       {open && (
-        <div
+        <section
+          role="dialog"
+          aria-label="Notifications"
           style={{
             position: 'absolute', right: 0, top: 'calc(100% + 10px)', zIndex: 200,
-            width: 340, background: '#fff', borderRadius: 14, border: '1px solid #ede9fe',
-            boxShadow: '0 18px 44px -12px rgba(30,20,60,.3)', overflow: 'hidden',
+            width: 'min(360px, calc(100vw - 24px))', background: '#fff', borderRadius: 14,
+            border: '1px solid #ede9fe', boxShadow: '0 18px 44px -12px rgba(30,20,60,.3)', overflow: 'hidden',
           }}
         >
-          <div style={{
-            display: 'flex', justifyContent: 'space-between', alignItems: 'center',
-            padding: '12px 16px', borderBottom: '1px solid #f1ecfb',
-          }}>
+          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '12px 16px', borderBottom: '1px solid #f1ecfb' }}>
             <span style={{ fontSize: 13, fontWeight: 800, color: '#201b2e' }}>Notifications</span>
-            <button
-              onClick={() => setOpen(false)}
-              style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9891a6' }}
-              aria-label="Close"
-            >
-              <X size={14} />
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+              {unread > 0 && <button type="button" onClick={markAllRead} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#7c3aed', fontSize: 11.5, fontWeight: 700 }}>Mark all read</button>}
+              <button type="button" onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#9891a6' }} aria-label="Close notifications"><X size={14} /></button>
+            </div>
           </div>
-
+          {actionError && <p role="alert" style={{ margin: 0, padding: '8px 16px', color: '#b91c1c', fontSize: 11.5, background: '#fef2f2' }}>{actionError}</p>}
           <div style={{ maxHeight: 380, overflowY: 'auto' }}>
             {loading ? (
               <p style={{ padding: 20, textAlign: 'center', fontSize: 12.5, color: '#9891a6' }}>Loading…</p>
+            ) : loadError ? (
+              <div style={{ padding: '24px 16px', textAlign: 'center' }}>
+                <p role="alert" style={{ margin: '0 0 10px', fontSize: 12.5, color: '#b91c1c' }}>{loadError}</p>
+                <button type="button" onClick={() => { setLoading(true); refreshFull().finally(() => setLoading(false)); }} style={{ border: '1px solid #ddd6fe', borderRadius: 8, background: '#faf5ff', color: '#6d28d9', padding: '7px 10px', cursor: 'pointer', fontSize: 12, fontWeight: 700 }}>Retry</button>
+              </div>
             ) : rows.length === 0 ? (
               <div style={{ padding: '28px 16px', textAlign: 'center' }}>
                 <Bell size={26} style={{ margin: '0 auto 10px', color: '#d9d3e8' }} />
@@ -177,68 +221,91 @@ export function ShellNotifications({ buttonClass, dotClass }: { buttonClass?: st
             ) : (
               rows.map(n => {
                 const meta = NOTIF_META[n.type] ?? NOTIF_META.alert;
-                const isActionable = n.type === 'session_started';
                 return (
-                  <div
-                    key={n.id}
-                    onClick={() => {
-                      if (isActionable) {
-                        setOpen(false);
-                        router.push('/student/live-lab');
-                      }
-                    }}
-                    style={{
-                      display: 'flex', gap: 11, padding: '12px 16px',
-                      borderBottom: '1px solid #f5f3ff',
-                      background: n.is_read ? 'transparent' : 'rgba(124,58,237,.045)',
-                      cursor: isActionable ? 'pointer' : 'default',
-                      transition: 'background 0.15s ease',
-                    }}
-                  >
-                    <span
-                      style={{
-                        width: 30, height: 30, borderRadius: 9, flexShrink: 0,
-                        display: 'flex', alignItems: 'center', justifyContent: 'center',
-                        background: meta.bg, color: meta.color,
-                      }}
-                    >
-                      <meta.Icon size={14} />
-                    </span>
+                  <button key={n.id} type="button" onClick={() => openNotification(n)} style={{
+                    display: 'flex', width: '100%', gap: 11, padding: '12px 16px', textAlign: 'left',
+                    border: 0, borderBottom: '1px solid #f5f3ff',
+                    background: n.is_read ? '#fff' : 'rgba(124,58,237,.045)', cursor: 'pointer',
+                  }}>
+                    <span style={{ width: 30, height: 30, borderRadius: 9, flexShrink: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', background: meta.bg, color: meta.color }}><meta.Icon size={14} /></span>
                     <span style={{ flex: 1, minWidth: 0 }}>
                       <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
                         {!n.is_read && <span style={{ width: 6, height: 6, borderRadius: 3, background: '#7c3aed', flexShrink: 0 }} />}
-                        <span style={{
-                          fontSize: 13, fontWeight: 700, color: '#201b2e',
-                          overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
-                        }}>{n.title}</span>
+                        <span style={{ fontSize: 13, fontWeight: 700, color: '#201b2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{n.title}</span>
                       </span>
-                      <span style={{
-                        display: 'block', fontSize: 12, color: '#726a85', marginTop: 2,
-                        whiteSpace: 'pre-wrap',
-                      }}>{n.message}</span>
-                      <span style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 4 }}>
-                        <span style={{ fontSize: 10.5, color: '#b3accc' }}>
-                          {timeAgo(n.created_at)}
-                        </span>
-                        {isActionable && (
-                          <span style={{ fontSize: 11, fontWeight: 700, color: '#16a34a' }}>
-                            Join Lab →
-                          </span>
-                        )}
-                      </span>
+                      <span style={{ display: 'block', fontSize: 12, color: '#726a85', marginTop: 2, whiteSpace: 'pre-wrap' }}>{n.message}</span>
+                      <span style={{ display: 'block', fontSize: 10.5, color: '#b3accc', marginTop: 4 }}>{timeAgo(n.created_at)}</span>
                     </span>
-                  </div>
+                  </button>
                 );
               })
             )}
           </div>
-        </div>
+        </section>
       )}
     </div>
   );
 }
 
-// ── Live search box ──────────────────────────────────────────────────────────
+export function ShellProfileMenu({
+  name,
+  email,
+  initials,
+  roleLabel,
+  profileHref,
+  settingsHref,
+  buttonClass,
+  avatarClass,
+  onSignOut,
+  avatarStyle,
+}: {
+  name: string;
+  email?: string | null;
+  initials: string;
+  roleLabel: string;
+  profileHref: string;
+  settingsHref?: string;
+  buttonClass?: string;
+  avatarClass?: string;
+  onSignOut: () => void;
+  avatarStyle?: React.CSSProperties;
+}) {
+  const router = useRouter();
+  const [open, setOpen] = useState(false);
+  const wrapRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (!open) return;
+    const close = (e: MouseEvent) => { if (wrapRef.current && !wrapRef.current.contains(e.target as Node)) setOpen(false); };
+    const onKey = (e: KeyboardEvent) => { if (e.key === 'Escape') setOpen(false); };
+    document.addEventListener('mousedown', close);
+    document.addEventListener('keydown', onKey);
+    return () => { document.removeEventListener('mousedown', close); document.removeEventListener('keydown', onKey); };
+  }, [open]);
+
+  const go = (href: string) => { setOpen(false); router.push(href); };
+  return (
+    <div ref={wrapRef} style={{ position: 'relative' }}>
+      <button type="button" className={buttonClass} onClick={() => setOpen(v => !v)} aria-expanded={open} aria-haspopup="menu" aria-label="Open profile menu" style={{ font: 'inherit', color: 'inherit' }}>
+        <div className={avatarClass} style={avatarStyle}>{initials || 'U'}</div>
+        <span className="shellProfileName" style={{ minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap', fontWeight: 600 }}>{name || 'Account'}</span>
+        <ChevronDown size={14} aria-hidden="true" />
+      </button>
+      {open && (
+        <div role="menu" style={{ position: 'absolute', right: 0, top: 'calc(100% + 8px)', zIndex: 220, width: 240, background: '#fff', border: '1px solid #ede9fe', borderRadius: 14, boxShadow: '0 18px 44px -12px rgba(30,20,60,.28)', overflow: 'hidden' }}>
+          <div style={{ padding: '13px 15px', borderBottom: '1px solid #f1ecfb' }}>
+            <p style={{ margin: 0, fontSize: 13, fontWeight: 800, color: '#201b2e', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{name || 'Account'}</p>
+            <p style={{ margin: '3px 0 0', fontSize: 11.5, color: '#7b728b', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{email || roleLabel}</p>
+            <p style={{ margin: '4px 0 0', fontSize: 10.5, color: '#8b5cf6', fontWeight: 700 }}>{roleLabel}</p>
+          </div>
+          <button type="button" role="menuitem" onClick={() => go(profileHref)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', border: 0, background: '#fff', padding: '10px 15px', textAlign: 'left', cursor: 'pointer', color: '#201b2e', fontSize: 12.5 }}><User size={14} color="#7c3aed" /> My Profile</button>
+          {settingsHref && <button type="button" role="menuitem" onClick={() => go(settingsHref)} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', border: 0, background: '#fff', padding: '10px 15px', textAlign: 'left', cursor: 'pointer', color: '#201b2e', fontSize: 12.5 }}><Settings size={14} color="#7c3aed" /> Settings</button>}
+          <div style={{ height: 1, background: '#f1ecfb' }} />
+          <button type="button" role="menuitem" onClick={() => { setOpen(false); onSignOut(); }} style={{ display: 'flex', alignItems: 'center', gap: 10, width: '100%', border: 0, background: '#fff', padding: '10px 15px', textAlign: 'left', cursor: 'pointer', color: '#b91c1c', fontSize: 12.5 }}><LogOut size={14} /> Sign out</button>
+        </div>
+      )}
+    </div>
+  );
+}
 
 export interface SearchHit {
   type: string;

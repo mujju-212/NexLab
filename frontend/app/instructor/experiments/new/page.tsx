@@ -11,6 +11,7 @@ import {
 import InstructorShell from '@/components/layout/InstructorShell';
 import { experimentService } from '@/services/experiment.service';
 import { sessionService } from '@/services/session.service';
+import { experienceService } from '@/services/experience.service';
 import { executionService, type CompilerLanguage } from '@/services/execution.service';
 import styles from './create-experiment.module.css';
 
@@ -63,6 +64,7 @@ function NewExperimentForm() {
     enable_viva: true,
     enable_lockdown: true,
     allow_ai_hints: true,
+    proctor_defaults: {} as Record<string, boolean>,
     prerequisites: '',
     learning_outcomes: '',
 
@@ -72,6 +74,12 @@ function NewExperimentForm() {
     rubric_code_quality: 10,
     rubric_viva: 10,
     rubric_quiz: 0,
+  });
+
+  const { data: instructorDefaults } = useQuery({
+    queryKey: ['instructor', 'settings'],
+    queryFn: () => experienceService.getSettings(),
+    staleTime: 60 * 1000,
   });
 
   const { data: ssData, isLoading: loadingSS } = useQuery({
@@ -85,6 +93,23 @@ function NewExperimentForm() {
     queryFn: () => executionService.listLanguages(),
     staleTime: 60 * 1000,
   });
+
+  useEffect(() => {
+    if (!instructorDefaults) return;
+    const rubric = (instructorDefaults.default_rubric || {}) as Record<string, number>;
+    const proctor = (instructorDefaults.default_proctor_policy || {}) as Record<string, boolean>;
+    setForm(current => ({
+      ...current,
+      rubric_test_cases: current.rubric_test_cases === 60 ? Number(rubric.test_cases ?? 60) : current.rubric_test_cases,
+      rubric_lab_report: current.rubric_lab_report === 20 ? Number(rubric.lab_report ?? 20) : current.rubric_lab_report,
+      rubric_code_quality: current.rubric_code_quality === 10 ? Number(rubric.code_quality ?? 10) : current.rubric_code_quality,
+      rubric_viva: current.rubric_viva === 10 ? Number(rubric.viva ?? 10) : current.rubric_viva,
+      rubric_quiz: current.rubric_quiz === 0 ? Number(rubric.quiz ?? 0) : current.rubric_quiz,
+      allow_ai_hints: current.allow_ai_hints === true ? Boolean(instructorDefaults.allow_ai_hints ?? true) : current.allow_ai_hints,
+      enable_lockdown: current.enable_lockdown === true ? Boolean(proctor.lockdown_fullscreen ?? true) : current.enable_lockdown,
+      proctor_defaults: Object.keys(proctor).length ? proctor : current.proctor_defaults,
+    }));
+  }, [instructorDefaults]);
 
   useEffect(() => {
     const list = ssData?.section_subjects ?? [];
@@ -183,6 +208,7 @@ function NewExperimentForm() {
         enable_viva: form.enable_viva,
         enable_lockdown: form.enable_lockdown,
         allow_ai_hints: form.allow_ai_hints,
+        proctor_defaults: form.proctor_defaults,
         weightage: form.weightage,
         grade_scale: form.grade_scale,
         rubric_test_cases: form.rubric_test_cases,

@@ -9,7 +9,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './AdminShell.module.css';
-import { ShellNotifications, ShellSearchBox, type SearchHit } from './shell-widgets';
+import { ShellNotifications, ShellSearchBox, ShellProfileMenu, type SearchHit } from './shell-widgets';
 import AgentChatPanel from './AgentChatPanel';
 import { adminService } from '@/services/admin.service';
 import { authService } from '@/services/auth.service';
@@ -149,13 +149,19 @@ export default function AdminShell({ activePage, children, title, subtitle }: Ad
                 }}
                 onSelect={(hit: SearchHit) => router.push(hit.link ?? '/admin/users')}
               />
-              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
-              <div className={styles.profileChip} onClick={() => router.push('/admin/settings')}>
-                <div className={styles.avatarLg} style={{ background: '#7c3aed' }} suppressHydrationWarning>
-                  {user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? 'AD'}
-                </div>
-                <span suppressHydrationWarning>{user?.full_name?.split(' ')[0] ?? 'Admin'}</span>
-              </div>
+              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} role="platform_admin" />
+              <ShellProfileMenu
+                name={user?.full_name ?? 'Admin'}
+                email={user?.email}
+                initials={user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? 'AD'}
+                roleLabel="Platform Admin"
+                profileHref="/admin/profile"
+                settingsHref="/admin/settings"
+                buttonClass={styles.profileChip}
+                avatarClass={styles.avatarLg}
+                avatarStyle={{ background: '#7c3aed' }}
+                onSignOut={() => go('Logout', '/login')}
+              />
             </div>
           </div>
 

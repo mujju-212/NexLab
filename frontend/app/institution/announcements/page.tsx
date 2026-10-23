@@ -78,9 +78,9 @@ export default function AnnouncementsPage() {
   // Form State
   const [title, setTitle] = useState('');
   const [message, setMessage] = useState('');
-  const [target, setTarget] = useState<'all' | 'students' | 'instructors' | 'custom'>('all');
-  const [priority, setPriority] = useState<'normal' | 'important' | 'urgent'>('important');
-  const [category, setCategory] = useState<'general' | 'cancellation' | 'schedule' | 'exam' | 'event'>('cancellation');
+  const [target, setTarget] = useState<'all' | 'students' | 'instructors' | 'custom'>('students');
+  const [priority, setPriority] = useState<'normal' | 'important' | 'urgent'>('normal');
+  const [category, setCategory] = useState<'general' | 'cancellation' | 'schedule' | 'exam' | 'event'>('general');
 
   // Targeting Cascades
   const [departments, setDepartments] = useState<any[]>([]);
@@ -92,13 +92,15 @@ export default function AnnouncementsPage() {
   const [selectedYear, setSelectedYear] = useState('');
   const [selectedBatch, setSelectedBatch] = useState('');
   const [selectedSection, setSelectedSection] = useState('');
+  const changeTarget = (next: 'all' | 'students' | 'instructors' | 'custom') => {
+    setTarget(next);
+    if (next !== 'custom') {
+      setSelectedDept(''); setSelectedYear(''); setSelectedBatch(''); setSelectedSection('');
+    }
+  };
 
   // Attachment
-  const [attachment, setAttachment] = useState<{ name: string; url: string; size: string } | null>({
-    name: 'Lab_Guidelines.pdf',
-    url: '/static/uploads/announcements/Lab_Guidelines.pdf',
-    size: '2.4 MB',
-  });
+  const [attachment, setAttachment] = useState<{ name: string; url: string; size: string } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Scheduling
@@ -225,11 +227,7 @@ export default function AnnouncementsPage() {
       setMessage("Tomorrow's Data Structures lab (Section A) has been cancelled due to maintenance. The revised schedule will be shared soon. Apologies for the inconvenience.");
       setCategory('cancellation');
       setPriority('important');
-      setAttachment({
-        name: 'Lab_Guidelines.pdf',
-        url: '/static/uploads/announcements/Lab_Guidelines.pdf',
-        size: '2.4 MB',
-      });
+      setAttachment(null);
       showToast('Loaded "Lab Cancellation" template.');
     } else if (type === 'schedule') {
       setTitle('Schedule Update: Revised Lab Timings');
@@ -243,11 +241,7 @@ export default function AnnouncementsPage() {
       setMessage('Please review the examination rubric, test-case requirements, and assigned workstation numbers. The anti-collusion proctoring system will be active.');
       setCategory('exam');
       setPriority('important');
-      setAttachment({
-        name: 'MidSem_Timetable_2026.pdf',
-        url: '/static/uploads/announcements/MidSem_Timetable_2026.pdf',
-        size: '1.8 MB',
-      });
+      setAttachment(null);
       showToast('Loaded "Exam Notice" template.');
     } else {
       setTitle('General Notice: Compiler Cloud Environment Upgrade');
@@ -286,6 +280,10 @@ export default function AnnouncementsPage() {
     }
     if (!message.trim() && !saveAsDraft) {
       showToast('Please enter the announcement message.');
+      return;
+    }
+    if (!saveAsDraft && target === 'custom' && !selectedDept && !selectedYear && !selectedBatch && !selectedSection) {
+      showToast('Choose at least one department, academic year, batch, or section for a custom audience.');
       return;
     }
 
@@ -572,9 +570,9 @@ export default function AnnouncementsPage() {
                 <div className={styles.targetGrid}>
                   <div
                     className={`${styles.targetCard} ${target === 'all' ? styles.targetCardActive : ''}`}
-                    onClick={() => setTarget('all')}
+                    onClick={() => changeTarget('all')}
                   >
-                    <input type="radio" checked={target === 'all'} onChange={() => setTarget('all')} className={styles.targetRadio} />
+                    <input type="radio" checked={target === 'all'} onChange={() => changeTarget('all')} className={styles.targetRadio} />
                     <div>
                       <p className={styles.targetCardTitle}>
                         <Users size={13} color="#7c3aed" /> Everyone
@@ -585,9 +583,9 @@ export default function AnnouncementsPage() {
 
                   <div
                     className={`${styles.targetCard} ${target === 'students' ? styles.targetCardActive : ''}`}
-                    onClick={() => setTarget('students')}
+                    onClick={() => changeTarget('students')}
                   >
-                    <input type="radio" checked={target === 'students'} onChange={() => setTarget('students')} className={styles.targetRadio} />
+                    <input type="radio" checked={target === 'students'} onChange={() => changeTarget('students')} className={styles.targetRadio} />
                     <div>
                       <p className={styles.targetCardTitle}>Students Only</p>
                       <p className={styles.targetCardSub}>Only students</p>
@@ -596,9 +594,9 @@ export default function AnnouncementsPage() {
 
                   <div
                     className={`${styles.targetCard} ${target === 'instructors' ? styles.targetCardActive : ''}`}
-                    onClick={() => setTarget('instructors')}
+                    onClick={() => changeTarget('instructors')}
                   >
-                    <input type="radio" checked={target === 'instructors'} onChange={() => setTarget('instructors')} className={styles.targetRadio} />
+                    <input type="radio" checked={target === 'instructors'} onChange={() => changeTarget('instructors')} className={styles.targetRadio} />
                     <div>
                       <p className={styles.targetCardTitle}>Instructors Only</p>
                       <p className={styles.targetCardSub}>Only instructors</p>
@@ -607,9 +605,9 @@ export default function AnnouncementsPage() {
 
                   <div
                     className={`${styles.targetCard} ${target === 'custom' ? styles.targetCardActive : ''}`}
-                    onClick={() => setTarget('custom')}
+                    onClick={() => changeTarget('custom')}
                   >
-                    <input type="radio" checked={target === 'custom'} onChange={() => setTarget('custom')} className={styles.targetRadio} />
+                    <input type="radio" checked={target === 'custom'} onChange={() => changeTarget('custom')} className={styles.targetRadio} />
                     <div>
                       <p className={styles.targetCardTitle}>Custom</p>
                       <p className={styles.targetCardSub}>Select specific groups</p>
@@ -618,7 +616,9 @@ export default function AnnouncementsPage() {
                 </div>
               </div>
 
-              {/* 2x2 Scope Filter Dropdowns */}
+              {/* Scope filters are shown only when the custom audience is selected. */}
+              {target === 'custom' && <>
+              <p className={styles.formLabel} style={{ margin: '0 0 -4px' }}>Select one or more groups to define this custom audience.</p>
               <div className={styles.scopeGrid}>
                 <div className={styles.formField}>
                   <label className={styles.formLabel}>
@@ -686,6 +686,7 @@ export default function AnnouncementsPage() {
                   </select>
                 </div>
               </div>
+              </>}
 
               {/* Priority & Category Tag Selector */}
               <div style={{ display: 'flex', gap: 20, flexWrap: 'wrap' }}>

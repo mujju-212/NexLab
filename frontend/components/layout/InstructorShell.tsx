@@ -6,11 +6,11 @@ import {
   LayoutDashboard, FlaskConical, PlayCircle, Radio,
   ClipboardCheck, BarChart3,
   LogOut, Settings, Menu,
-  FileText, HeartHandshake, Star, ShieldCheck
+  FileText, HeartHandshake, Star, ShieldCheck, Megaphone
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './InstructorShell.module.css';
-import { ShellNotifications, ShellSearchBox, type SearchHit } from './shell-widgets';
+import { ShellNotifications, ShellSearchBox, ShellProfileMenu, type SearchHit } from './shell-widgets';
 import AgentChatPanel from './AgentChatPanel';
 import { experienceService } from '@/services/experience.service';
 import { authService } from '@/services/auth.service';
@@ -28,11 +28,12 @@ const NAV_MAIN = [
 const NAV_TEACHING = [
   { id: 'Management',      label: 'Class Management', Icon: HeartHandshake, route: '/instructor/management' },
   { id: 'Feedback',        label: 'Student Feedback', Icon: Star,           route: '/instructor/feedback' },
+  { id: 'Announcements',   label: 'Announcements',    Icon: Megaphone,      route: '/instructor/announcements' },
   { id: 'Reports',         label: 'Reports Studio',   Icon: FileText,       route: '/instructor/reports' },
 ];
 
 const NAV_MORE = [
-  { id: 'Settings',        label: 'Settings & Profile', Icon: Settings,     route: '/instructor/settings' },
+  { id: 'Settings',        label: 'Teaching Settings',  Icon: Settings,     route: '/instructor/settings' },
 ];
 
 interface InstructorShellProps {
@@ -60,6 +61,7 @@ export default function InstructorShell({ activePage, children, title, subtitle,
       '/instructor/analytics',
       '/instructor/management',
       '/instructor/feedback',
+      '/instructor/announcements',
       '/instructor/reports',
       '/instructor/settings',
     ];
@@ -93,6 +95,7 @@ export default function InstructorShell({ activePage, children, title, subtitle,
     if (id === 'Dashboard' && (activePage === 'Dashboard' || activePage === 'Dashboard Home')) return true;
     if (id === 'Experiments' && (activePage === 'Experiments' || activePage === 'Exams' || activePage === 'Exam Management')) return true;
     if (id === 'Feedback' && (activePage === 'Feedback' || activePage === 'Student Feedback')) return true;
+    if (id === 'Announcements' && activePage === 'Announcements') return true;
     if (id === 'Management' && (activePage === 'Management' || activePage === 'Class Management' || activePage === 'Students' || activePage === 'Student Management')) return true;
     if (id === 'Settings' && (activePage === 'Settings' || activePage === 'Profile')) return true;
     return false;
@@ -259,17 +262,19 @@ export default function InstructorShell({ activePage, children, title, subtitle,
 
             {/* Header Right Actions */}
             <div className={styles.headerRight}>
-              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
+              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} role="instructor" />
               
-              <div className={styles.profileChip} onClick={() => router.push('/instructor/settings?tab=profile')}>
-                <div className={styles.avatarLg} suppressHydrationWarning>
-                  {initials}
-                </div>
-                <div className={styles.profileText}>
-                  <span className={styles.userName} suppressHydrationWarning>{fullName}</span>
-                  <span className={styles.userRole}>Instructor</span>
-                </div>
-              </div>
+              <ShellProfileMenu
+                name={fullName}
+                email={user?.email}
+                initials={initials}
+                roleLabel="Instructor"
+                profileHref="/instructor/profile"
+                settingsHref="/instructor/settings"
+                buttonClass={styles.profileChip}
+                avatarClass={styles.avatarLg}
+                onSignOut={() => go('Logout', '/login')}
+              />
             </div>
           </div>
 

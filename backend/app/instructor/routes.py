@@ -14,7 +14,7 @@ from app.models.feedback import PlagiarismFlag, SessionFeedback, Notification
 from app.models.academic import SectionSubject, Section, SectionStudent
 from app.models.subject import Subject
 from app.models.user import User
-from app.models.conductor import Checkpoint, CheckpointProgress, LivePageState
+from app.models.conductor import Checkpoint, CheckpointProgress, LivePageState, InstructorSettings
 from app.models.proctor_event import ProctorEvent
 from app.ai.groq_client import groq_single
 from app.institution.audit import write_audit
@@ -916,16 +916,27 @@ def create_experiment():
             'received': difficulty_level
         }), 400
 
+    # Instructor defaults are a real template for newly-created experiments;
+    # explicit fields in the request still take precedence.
+    instructor_settings = InstructorSettings.query.get(g.user_id) if g.role == 'instructor' else None
+    saved_rubric = (instructor_settings.default_rubric or {}) if instructor_settings else {}
+    rubric_keys = ('test_cases', 'lab_report', 'code_quality', 'viva', 'quiz')
+    saved_values = [saved_rubric.get(key, 0) for key in rubric_keys]
+    if any(isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 100 for value in saved_values) or sum(saved_values) != 100:
+        saved_rubric = {'test_cases': 60, 'lab_report': 20, 'code_quality': 10, 'viva': 10, 'quiz': 0}
+    r_tc   = data.get('rubric_test_cases', saved_rubric.get('test_cases', 60))
+    r_lr   = data.get('rubric_lab_report', saved_rubric.get('lab_report', 20))
+    r_cq   = data.get('rubric_code_quality', saved_rubric.get('code_quality', 10))
+    r_viva = data.get('rubric_viva', saved_rubric.get('viva', 10))
+    r_quiz = data.get('rubric_quiz', saved_rubric.get('quiz', 0))
     # ── Validation 3: rubric weights (5-field, incl. quiz) must sum to 100 ────
-    r_tc   = data.get('rubric_test_cases',   60)
-    r_lr   = data.get('rubric_lab_report',   20)
-    r_cq   = data.get('rubric_code_quality', 10)
-    r_viva = data.get('rubric_viva',         10)
-    r_quiz = data.get('rubric_quiz',         0)
-    if (r_tc + r_lr + r_cq + r_viva + r_quiz) != 100:
+    rubric_values = (r_tc, r_lr, r_cq, r_viva, r_quiz)
+    if any(isinstance(value, bool) or not isinstance(value, int) or not 0 <= value <= 100 for value in rubric_values):
+        return jsonify({'error': 'Rubric weights must be whole numbers from 0 to 100.'}), 400
+    if sum(rubric_values) != 100:
         return jsonify({
             'error': 'Rubric weights must sum to exactly 100.',
-            'received_sum': r_tc + r_lr + r_cq + r_viva + r_quiz,
+            'received_sum': sum(rubric_values),
             'breakdown': {
                 'rubric_test_cases':   r_tc,
                 'rubric_lab_report':   r_lr,
@@ -985,10 +996,10 @@ def create_experiment():
         rubric_code_quality=r_cq,
         rubric_viva=r_viva,
         rubric_quiz=r_quiz,
-        proctor_defaults=data.get('proctor_defaults') or {},
+        proctor_defaults=data.get('proctor_defaults') or (instructor_settings.default_proctor_policy if instructor_settings else {}) or {},
         enable_viva=data.get('enable_viva', False),
-        enable_lockdown=data.get('enable_lockdown', False),
-        allow_ai_hints=data.get('allow_ai_hints', True),
+        enable_lockdown=data.get('enable_lockdown', bool((instructor_settings.default_proctor_policy or {}).get('lockdown_fullscreen', False)) if instructor_settings else False),
+        allow_ai_hints=data.get('allow_ai_hints', instructor_settings.allow_ai_hints if instructor_settings else True),
         time_limit_sec=data.get('time_limit_sec', 10),
         weightage=data.get('weightage', 1),
         grade_scale=data.get('grade_scale', 100),
@@ -1294,7 +1305,7 @@ def schedule_session():
         id=section_subject_id, institution_id=g.institution_id).first()
     if not ss:
         return jsonify({'error': 'section_subject_id not found in your institution'}), 404
-    if g.role != 'institution_admin' and ss.instructor_id != g.user_id:
+    if g.role != 'institution_admin' and g.user_id not in (ss.instructor_id, ss.co_instructor_id):
         return jsonify({'error': 'That section-subject is not assigned to you.'}), 403
 
     if experiment_id:
@@ -1312,6 +1323,20 @@ def schedule_session():
     except ValueError:
         return jsonify({'error': 'Invalid scheduled_at; use an ISO datetime'}), 400
 
+    instructor_settings = InstructorSettings.query.get(g.user_id) if g.role == 'instructor' else None
+    policy = (instructor_settings.default_proctor_policy or {}) if instructor_settings else {}
+    def _session_int(name, fallback, minimum, maximum):
+        raw = data.get(name, fallback)
+        if isinstance(raw, bool) or not isinstance(raw, int) or not minimum <= raw <= maximum:
+            raise ValueError(name)
+        return raw
+    try:
+        duration = _session_int('duration_minutes', (instructor_settings.default_session_duration_min if instructor_settings and instructor_settings.default_session_duration_min is not None else 90), 5, 480)
+        gate_threshold = _session_int('gate_score_threshold', (instructor_settings.default_gate_threshold if instructor_settings and instructor_settings.default_gate_threshold is not None else 70), 0, 100)
+        late_join = _session_int('late_join_window_min', (instructor_settings.default_late_join_window_min if instructor_settings and instructor_settings.default_late_join_window_min is not None else 10), 0, 120)
+    except ValueError as exc:
+        return jsonify({'error': f'{exc.args[0]} is outside the allowed range.'}), 400
+
     room_name = f"vlab-{g.institution_id[:8]}-{uuid.uuid4().hex[:8]}"
     session = LabSession(
         institution_id=g.institution_id,
@@ -1319,13 +1344,13 @@ def schedule_session():
         experiment_id=experiment_id,
         title=data.get('title'),
         scheduled_at=scheduled_at,
-        duration_minutes=data.get('duration_minutes', 180),
-        gate_score_threshold=data.get('gate_score_threshold', 70),
-        late_join_window_min=data.get('late_join_window_min', 10),
+        duration_minutes=duration,
+        gate_score_threshold=gate_threshold,
+        late_join_window_min=late_join,
         catchup_enabled=data.get('catchup_enabled', False),
         catchup_deadline=datetime.fromisoformat(data['catchup_deadline']) if data.get('catchup_deadline') else None,
-        focus_ml_enabled=data.get('focus_ml_enabled', False),
-        lockdown_enabled=data.get('lockdown_enabled', False),
+        focus_ml_enabled=data.get('focus_ml_enabled', bool(policy.get('focus_ml', True))),
+        lockdown_enabled=data.get('lockdown_enabled', bool(policy.get('lockdown_fullscreen', False))),
         jitsi_room_name=room_name,
     )
     db.session.add(session)

@@ -177,7 +177,7 @@ export default function IndividualShell({ activePage, children, title, subtitle,
                 fetcher={(q) => practiceExtraService.searchProblems(q)}
                 onSelect={(hit: SearchHit) => router.push(hit.link ?? '/practice/library')}
               />
-              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
+              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} role="free_user" />
               <div className={styles.profileChip} onClick={() => router.push('/practice/profile')}>
                 <div className={styles.avatarLg} style={{ background: '#9333ea' }} suppressHydrationWarning>
                   {initials}

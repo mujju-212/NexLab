@@ -859,3 +859,14 @@
     justify-content: space-between;
   }
 }
+
+.pageGrid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.2fr) minmax(280px, .8fr);
+  gap: 18px;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .pageGrid { grid-template-columns: minmax(0, 1fr); }
+}

@@ -628,9 +628,18 @@ def update_notification_prefs():
     current = inst.notifications()
     for key in Institution.NOTIFICATION_DEFAULTS:
         if key in data:
-            current[key] = bool(data[key])
+            if type(data[key]) is not bool:
+                return jsonify({'error': f'{key} must be true or false.'}), 400
+            current[key] = data[key]
 
-    inst.notification_prefs = json.dumps(current)
+    try:
+        stored = json.loads(inst.notification_prefs) if inst.notification_prefs else {}
+    except (ValueError, TypeError):
+        stored = {}
+    if not isinstance(stored, dict):
+        stored = {}
+    stored.update(current)
+    inst.notification_prefs = json.dumps(stored)
     db.session.commit()
     return jsonify({'notifications': current, 'message': 'Preferences saved'}), 200
 

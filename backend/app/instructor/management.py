@@ -9,7 +9,7 @@ Instructor management endpoints — Tier 1:
 """
 from flask import Blueprint, request, jsonify, g
 from app.auth.utils import require_role
-from app.extensions import db
+from app.extensions import db, socketio
 from app.models.user import User
 from app.models.knowledge import ConceptMastery
 from app.models.feedback import Notification
@@ -257,50 +257,79 @@ def instructor_announce():
 
     Body: {section_subject_id, title, message}
     """
-    data = request.get_json() or {}
-    title = (data.get('title') or '').strip()
-    message = (data.get('message') or '').strip()
+    data = request.get_json(silent=True) or {}
+    title_raw = data.get('title')
+    message_raw = data.get('message')
     ss_id = data.get('section_subject_id')
+    if not isinstance(title_raw, str) or not isinstance(message_raw, str):
+        return jsonify({'error': 'title and message must be text.'}), 400
+    title = title_raw.strip()
+    message = message_raw.strip()
 
-    if not title or not message:
-        return jsonify({'error': 'title and message are required'}), 400
-    if len(title) > 500 or len(message) > 20_000:
-        return jsonify({'error': 'title or message too long'}), 400
+    if not title or not message or not ss_id:
+        return jsonify({'error': 'section_subject_id, title and message are required.'}), 400
+    if len(title) > 255 or len(message) > 20_000:
+        return jsonify({'error': 'Title must be 255 characters or fewer and message 20,000 characters or fewer.'}), 400
 
-    ss = SectionSubject.query.filter_by(
-        id=ss_id, institution_id=g.institution_id,
-        instructor_id=g.user_id).first()
+    ss = SectionSubject.query.filter(
+        SectionSubject.id == ss_id,
+        SectionSubject.institution_id == g.institution_id,
+        or_(SectionSubject.instructor_id == g.user_id,
+            SectionSubject.co_instructor_id == g.user_id),
+    ).first()
     if not ss:
         return jsonify({'error': 'That section-subject is not assigned to you.'}), 403
 
-    enrolled = [e.student_id for e in
-                SectionStudent.query.filter_by(section_id=ss.section_id).all()]
+    enrolled = list({e.student_id for e in
+                     SectionStudent.query.filter_by(section_id=ss.section_id).all()})
     if not enrolled:
         return jsonify({'error': 'No students enrolled in this section yet.'}), 400
 
-    created = 0
+    # Store one canonical announcement so it appears in instructor history and
+    # the student's announcement feed, in addition to the bell notification.
+    from app.models.announcement import Announcement
+    from app.models.academic import Section
+    section = Section.query.get(ss.section_id)
+    announcement = Announcement(
+        institution_id=g.institution_id,
+        author_id=g.user_id,
+        author_role='instructor',
+        title=title,
+        message=message,
+        priority='normal',
+        category='general',
+        target='custom',
+        section_id=ss.section_id,
+        section_subject_id=ss.id,
+        status='sent',
+        sent_at=datetime.utcnow(),
+        reach_count=len(enrolled),
+        views_count=0,
+        likes_count=0,
+    )
+    db.session.add(announcement)
     for sid in enrolled:
-        db.session.add(Notification(
-            user_id=sid,
-            type='announcement',
-            title=title,
-            message=message,
-        ))
-        created += 1
+        db.session.add(Notification(user_id=sid, type='announcement', title=title, message=message))
     db.session.commit()
 
-    from app.extensions import socketio
-    socketio.emit('new_announcement', {
-        'title': title,
-        'message': message,
-        'from': 'Your Instructor',
-        'timestamp': datetime.utcnow().isoformat(),
-    }, room=f"institution_{g.institution_id}")
+    try:
+        socketio.emit('new_announcement', {
+            'id': announcement.id,
+            'title': title,
+            'message': message,
+            'priority': 'normal',
+            'category': 'general',
+            'author': 'Your Instructor',
+            'target': 'custom',
+            'timestamp': datetime.utcnow().isoformat() + 'Z',
+        }, room=f"institution_{g.institution_id}")
+    except Exception:
+        pass
 
     from app.institution.audit import write_audit
     write_audit(g.user_id, g.institution_id, 'instructor_announcement',
-                'announcement', None, f'"{title}" sent to {created} students')
-    return jsonify({'sent_to': created}), 201
+                'announcement', announcement.id, f'"{title}" sent to {len(enrolled)} students')
+    return jsonify({'sent_to': len(enrolled), 'announcement': announcement.to_dict(current_user_id=g.user_id)}), 201
 
 
 @mgmt_bp.route('/announcements/recipients', methods=['GET'])
@@ -308,8 +337,11 @@ def instructor_announce():
 def announcement_recipients():
     """My section-subjects with headcounts — powers the dropdown."""
     from app.models.subject import Subject
-    my_ss = SectionSubject.query.filter_by(
-        institution_id=g.institution_id, instructor_id=g.user_id).all()
+    my_ss = SectionSubject.query.filter(
+        SectionSubject.institution_id == g.institution_id,
+        or_(SectionSubject.instructor_id == g.user_id,
+            SectionSubject.co_instructor_id == g.user_id),
+    ).all()
     # Perf pass: was 3 queries (section, subject, count) per section-subject.
     sec_ids = {ss.section_id for ss in my_ss if ss.section_id}
     subj_ids = {ss.subject_id for ss in my_ss if ss.subject_id}

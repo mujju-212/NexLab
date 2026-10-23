@@ -11,7 +11,7 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './StudentShell.module.css';
-import { ShellNotifications, ShellSearchBox, type SearchHit } from './shell-widgets';
+import { ShellNotifications, ShellSearchBox, ShellProfileMenu, type SearchHit } from './shell-widgets';
 import AgentChatPanel from './AgentChatPanel';
 import { studentService } from '@/services/student.service';
 import { authService } from '@/services/auth.service';
@@ -253,14 +253,17 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
               />
             </div>
             <div className={styles.headerRight}>
-              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} />
-              <div className={styles.profileChip} onClick={() => router.push('/student/profile')} title="My Profile">
-                <div className={styles.avatarLg} suppressHydrationWarning>
-                  {initials}
-                </div>
-                <span className={styles.profileName} suppressHydrationWarning>{user?.full_name ?? 'Test Student'}</span>
-                <ChevronDown size={14} className={styles.profileChevron} />
-              </div>
+              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} role="student" />
+              <ShellProfileMenu
+                name={user?.full_name ?? 'Student'}
+                email={user?.email}
+                initials={initials}
+                roleLabel="Student"
+                profileHref="/student/profile"
+                buttonClass={styles.profileChip}
+                avatarClass={styles.avatarLg}
+                onSignOut={handleLogout}
+              />
             </div>
           </div>
 
