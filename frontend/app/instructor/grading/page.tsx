@@ -6,16 +6,18 @@ import {
   ClipboardCheck, CheckCircle2, History, Lock, Save, X,
   Sparkles, Loader2, TrendingUp, FileCheck, Award, AlertTriangle, BookOpen,
   Calendar, Users, ShieldAlert, ShieldCheck, Download, Search, Mic2,
-  Code2, Terminal, Layers, ChevronLeft, ChevronRight, Eye, Clock, Building2, Filter
+  Code2, Terminal, Layers, ChevronLeft, ChevronRight, Eye, Clock, Building2, Filter,
+  RefreshCw
 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
-import { experimentService } from '@/services/experiment.service';
+import { experimentService, type SubjectGradeSummary } from '@/services/experiment.service';
 import { submissionService } from '@/services/submission.service';
 import { sessionService } from '@/services/session.service';
 import { instructorService, type VivaListItem, type VivaDetail } from '@/services/instructor.service';
 import { experienceService, type InstructorExam, type ExamAttemptRow } from '@/services/experience.service';
 import { exportCSV } from '@/lib/analytics-utils';
 import styles from '../shared.module.css';
+import hub from './hub.module.css';
 
 interface SectionSubjectItem {
   section_subject_id: string;
@@ -135,6 +137,13 @@ interface StudentDossierTarget {
   roll_number?: string | null;
   email?: string | null;
   subject_score: number;
+  /** Weighted points earned out of `points_allocated`. */
+  points_earned?: number;
+  points_allocated?: number;
+  /** Pro-rated percentage of the marks currently allocated (null = none). */
+  subject_percent?: number | null;
+  assessed_count?: number;
+  assessment_count?: number;
   experiment_scores: Record<string, number>;
   experiment_details?: Record<string, {
     final_grade?: number | null;
@@ -153,8 +162,107 @@ interface StudentDossierTarget {
   }>;
 }
 
+interface RollupRow extends StudentDossierTarget {
+  /** Pro-rated subject total (0–100) over the marks currently allocated. */
+  pct: number | null;
+  /** Unweighted mean of every graded assessment, 0–100. */
+  gradedAvg: number | null;
+  needsReview: boolean;
+  gradedCount: number;
+}
+
 const fmt = (iso: string | null | undefined) =>
   iso ? new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', year: 'numeric', hour: '2-digit', minute: '2-digit' }) : '—';
+
+// ── Hub presentation helpers (kept dependency-free: no chart library) ────────
+function initials(name: string): string {
+  return name
+    .split(/\s+/)
+    .filter(Boolean)
+    .slice(0, 2)
+    .map(part => part[0]?.toUpperCase() ?? '')
+    .join('') || '—';
+}
+
+function formatScore(value: number | null | undefined): string {
+  if (value == null) return '—';
+  if (Number.isInteger(value)) return String(value);
+  return String(Math.round(value * 100) / 100);
+}
+
+/** Sparkline of real per-assessment values. Renders a caption when there is no trend yet. */
+function Sparkline({
+  values, color = '#7c3aed', width = 112, height = 30, unit = '%', emptyLabel = 'no trend yet',
+}: { values: number[]; color?: string; width?: number; height?: number; unit?: string; emptyLabel?: string }) {
+  const pts = values.filter(v => typeof v === 'number' && Number.isFinite(v));
+  const flat = pts.length > 1 && Math.max(...pts) === Math.min(...pts);
+  if (pts.length < 2 || flat) {
+    return (
+      <div style={{ height, display: 'flex', alignItems: 'center', fontSize: 10.5, fontWeight: 600, color: '#c2c9d6' }}>
+        {pts.length === 0
+          ? emptyLabel
+          : pts.length === 1
+            ? `1 assessment · ${formatScore(pts[0])}${unit}`
+            : `flat at ${formatScore(pts[0])}${unit}`}
+      </div>
+    );
+  }
+  const max = Math.max(...pts);
+  const min = Math.min(...pts);
+  const span = max - min || 1;
+  const step = (width - 4) / (pts.length - 1);
+  const coords = pts.map((v, i) => {
+    const x = 2 + i * step;
+    const y = height - 4 - ((v - min) / span) * (height - 8);
+    return `${x.toFixed(1)},${y.toFixed(1)}`;
+  });
+  const last = coords[coords.length - 1].split(',');
+  return (
+    <svg width={width} height={height} aria-hidden="true" style={{ display: 'block' }}>
+      <polyline
+        points={coords.join(' ')}
+        fill="none"
+        stroke={color}
+        strokeWidth={2}
+        strokeLinecap="round"
+        strokeLinejoin="round"
+        opacity={0.9}
+      />
+      <circle cx={last[0]} cy={last[1]} r={2.6} fill={color} />
+    </svg>
+  );
+}
+
+/** Circular gauge for a student's pro-rated subject total. */
+function ScoreRing({ pct, size = 46 }: { pct: number | null; size?: number }) {
+  const radius = (size - 7) / 2;
+  const circumference = 2 * Math.PI * radius;
+  const value = pct == null ? 0 : Math.max(0, Math.min(100, pct));
+  const stroke = pct == null ? '#e5e9f2' : value >= 75 ? '#16a34a' : value >= 50 ? '#d97706' : '#dc2626';
+  return (
+    <div className={hub.ringWrap} style={{ width: size, height: size }}>
+      <svg width={size} height={size} className={hub.ringSvg} aria-hidden="true">
+        <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#eef1f7" strokeWidth={4} />
+        {pct != null && (
+          <circle
+            cx={size / 2}
+            cy={size / 2}
+            r={radius}
+            fill="none"
+            stroke={stroke}
+            strokeWidth={4}
+            strokeLinecap="round"
+            strokeDasharray={`${(value / 100) * circumference} ${circumference}`}
+          />
+        )}
+      </svg>
+      <div className={hub.ringText} style={{ color: pct == null ? '#b6becc' : '#0f172a' }}>
+        {pct == null ? '—' : Math.round(pct)}
+        {pct != null && <span className={hub.ringSub}>%</span>}
+      </div>
+    </div>
+  );
+}
 
 export default function GradingPage() {
   const [toast, setToast] = useState<string | null>(null);
@@ -167,6 +275,9 @@ export default function GradingPage() {
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedAssessment, setSelectedAssessment] = useState<string>('all'); // 'all' = Subject Rollup
   const [statusFilter, setStatusFilter] = useState<'all' | 'submitted' | 'graded' | 'not_submitted' | 'flagged'>('all');
+  // Gradebook row filter (rollup view) and the distribution metric toggle.
+  const [rollupFilter, setRollupFilter] = useState<'all' | 'review' | 'graded' | 'none'>('all');
+  const [distMetric, setDistMetric] = useState<'total' | 'graded'>('total');
   const [searchQuery, setSearchQuery] = useState<string>('');
 
   // Submissions & Experiment metadata state
@@ -408,15 +519,109 @@ export default function GradingPage() {
     return map;
   }, [plagiarismFlags]);
 
-  // Filtered rows by search & status
-  const filteredRollupStudents = useMemo(() => {
-    if (!gradeSummaryData?.students) return [];
-    if (!searchQuery.trim()) return gradeSummaryData.students as StudentDossierTarget[];
-    const q = searchQuery.toLowerCase();
-    return (gradeSummaryData.students as StudentDossierTarget[]).filter(s =>
-      s.full_name.toLowerCase().includes(q) || (s.roll_number || '').toLowerCase().includes(q)
+  // ── Hub analytics — every figure is derived from the grade-summary payload ──
+  // Nothing here is a placeholder: a value that cannot be computed is `null`
+  // and the UI renders an explicit empty state instead of a misleading zero.
+  const hubStats = useMemo(() => {
+    const items = gradeSummaryData?.experiments ?? [];
+    const students = (gradeSummaryData?.students ?? []) as StudentDossierTarget[];
+    const published = items.filter(a => a.is_published !== false);
+    const drafts = items.filter(a => a.is_published === false);
+    const subject = gradeSummaryData?.subject;
+
+    const rows: RollupRow[] = students.map(s => {
+      const gradedPcts: number[] = [];
+      let needsReview = false;
+      items.forEach(a => {
+        const raw = s.experiment_scores[a.id];
+        if (raw != null && Number.isFinite(raw)) {
+          gradedPcts.push((raw / (a.grade_scale || 100)) * 100);
+        } else if (s.experiment_details?.[a.id]?.submitted_at) {
+          needsReview = true;
+        }
+      });
+      return {
+        ...s,
+        pct: s.subject_percent ?? null,
+        gradedAvg: gradedPcts.length
+          ? Math.round((gradedPcts.reduce((x, y) => x + y, 0) / gradedPcts.length) * 10) / 10
+          : null,
+        needsReview,
+        gradedCount: gradedPcts.length,
+      };
+    });
+
+    const cellHasMark = (s: StudentDossierTarget, a: { id: string }) => s.experiment_scores[a.id] != null;
+    const gradedCells = rows.reduce((acc, r) => acc + r.gradedCount, 0);
+    const totalCells = rows.length * items.length;
+    const pendingSeries = items.map(
+      a => rows.filter(r => r.experiment_scores[a.id] == null && r.experiment_details?.[a.id]?.submitted_at).length
     );
-  }, [gradeSummaryData?.students, searchQuery]);
+    const submittedCells = items.reduce(
+      (acc, a) => acc + rows.filter(r => cellHasMark(r, a) || r.experiment_details?.[a.id]?.submitted_at).length,
+      0
+    );
+
+    const pctValues = rows.map(r => r.pct).filter((v): v is number => v != null);
+    const gradedAvgValues = rows.map(r => r.gradedAvg).filter((v): v is number => v != null);
+    const mean = (vals: number[]) =>
+      vals.length ? Math.round((vals.reduce((a, b) => a + b, 0) / vals.length) * 10) / 10 : null;
+
+    const avgSeries = published
+      .map(a => a.class_average_percent)
+      .filter((v): v is number => v != null);
+
+    const labels = ['0–40', '40–50', '50–60', '60–70', '70–80', '80–90', '90–100'];
+    const binOf = (v: number) => (v < 40 ? 0 : v < 50 ? 1 : v < 60 ? 2 : v < 70 ? 3 : v < 80 ? 4 : v < 90 ? 5 : 6);
+    const distTotal = labels.map(label => ({ label, count: 0 }));
+    const distGraded = labels.map(label => ({ label, count: 0 }));
+    rows.forEach(r => {
+      if (r.pct != null) distTotal[binOf(r.pct)].count += 1;
+      if (r.gradedAvg != null) distGraded[binOf(r.gradedAvg)].count += 1;
+    });
+
+    const totalMarks = subject?.total_marks ?? 100;
+    const allocated = subject?.total_weightage ?? 0;
+    return {
+      assessments: items,
+      assessmentCount: items.length,
+      publishedCount: published.length,
+      draftCount: drafts.length,
+      draftWeight: subject?.draft_weightage ?? drafts.reduce((acc, a) => acc + (a.weightage ?? 0), 0),
+      allocated,
+      totalMarks,
+      unallocatedMarks: Math.max(0, subject?.unallocated_marks ?? totalMarks - allocated),
+      overAllocation: Boolean(subject?.over_allocation),
+      students: rows.length,
+      rows,
+      classAvg: mean(pctValues),
+      classGradedAvg: mean(gradedAvgValues),
+      gradedCells,
+      totalCells,
+      pendingCells: pendingSeries.reduce((a, b) => a + b, 0),
+      submittedCells,
+      avgSeries,
+      pendingSeries,
+      needsReviewCount: rows.filter(r => r.needsReview).length,
+      gradedRowCount: rows.filter(r => !r.needsReview && r.gradedCount > 0).length,
+      notStartedCount: rows.filter(r => !r.needsReview && r.gradedCount === 0).length,
+      distTotal,
+      distGraded,
+    };
+  }, [gradeSummaryData]);
+
+  const rollupRows = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    return hubStats.rows.filter(r => {
+      if (q && !(r.full_name.toLowerCase().includes(q) || (r.roll_number || '').toLowerCase().includes(q))) {
+        return false;
+      }
+      if (rollupFilter === 'review') return r.needsReview;
+      if (rollupFilter === 'graded') return !r.needsReview && r.gradedCount > 0;
+      if (rollupFilter === 'none') return !r.needsReview && r.gradedCount === 0;
+      return true;
+    });
+  }, [hubStats.rows, rollupFilter, searchQuery]);
 
   const filteredSubmissions = useMemo(() => {
     return submissions.filter(s => {
@@ -653,7 +858,10 @@ export default function GradingPage() {
       gradeSummaryData.experiments.forEach(e => {
         r[`#${e.exp_number} ${e.title}`] = s.experiment_scores[e.id] ?? '—';
       });
-      r['Total Subject Score'] = s.subject_score;
+      r['Points Earned'] = s.points_earned ?? s.subject_score;
+      r['Points Allocated'] = s.points_allocated ?? gradeSummaryData.subject.total_weightage;
+      r['Pro-rated Total (%)'] = s.subject_percent ?? '';
+      r['Assessments Graded'] = `${s.assessed_count ?? 0}/${s.assessment_count ?? gradeSummaryData.experiments.length}`;
       r['Ceiling Max'] = gradeSummaryData.subject.total_marks;
       return r;
     });
@@ -712,24 +920,14 @@ export default function GradingPage() {
         </div>
       )}
 
-      {/* ═══ 5-LEVEL CASCADING ACADEMIC HIERARCHY FILTER BAR ═══ */}
-      <div style={{
-        background: '#ffffff',
-        border: '1px solid #e2e8f0',
-        borderRadius: 16,
-        padding: '16px 20px',
-        marginBottom: 20,
-        boxShadow: '0 4px 16px rgba(15,23,42,0.03)',
-      }}>
-        <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 12, alignItems: 'center' }}>
-          {/* 1. Department */}
-          <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-              <Building2 size={12} color="#7c3aed" /> Department
-            </label>
+      {/* ═══ STICKY SCOPE BAR — one line, remembers the academic context ═══ */}
+      <div className={hub.scopeBar}>
+        <div className={hub.scopeRail}>
+          <div className={hub.scopeChip}>
+            <span className={hub.scopeLabel}><Building2 size={9} /> Department</span>
             <select
-              className={styles.select}
-              style={{ width: '100%' }}
+              className={hub.scopeSelect}
+              title="Filter by department"
               value={selectedDept}
               onChange={e => {
                 setSelectedDept(e.target.value);
@@ -738,21 +936,18 @@ export default function GradingPage() {
                 setSelectedSection('all');
               }}
             >
-              <option value="all">All Departments</option>
+              <option value="all">All departments</option>
               {departments.map(d => (
-                <option key={d.code} value={d.code}>{d.name} ({d.code})</option>
+                <option key={d.code} value={d.code}>{d.code} · {d.name}</option>
               ))}
             </select>
           </div>
 
-          {/* 2. Academic Year */}
-          <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-              <Calendar size={12} color="#7c3aed" /> Academic Year
-            </label>
+          <div className={hub.scopeChip}>
+            <span className={hub.scopeLabel}><Calendar size={9} /> Year</span>
             <select
-              className={styles.select}
-              style={{ width: '100%' }}
+              className={hub.scopeSelect}
+              title="Filter by academic year"
               value={selectedYear}
               onChange={e => {
                 setSelectedYear(e.target.value);
@@ -760,67 +955,48 @@ export default function GradingPage() {
                 setSelectedSection('all');
               }}
             >
-              <option value="all">All Academic Years</option>
-              {academicYears.map(yr => (
-                <option key={yr} value={yr}>{yr}</option>
-              ))}
+              <option value="all">All years</option>
+              {academicYears.map(yr => <option key={yr} value={yr}>{yr}</option>)}
             </select>
           </div>
 
-          {/* 3. Batch */}
-          <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-              <Layers size={12} color="#7c3aed" /> Batch
-            </label>
+          <div className={hub.scopeChip}>
+            <span className={hub.scopeLabel}><Layers size={9} /> Batch</span>
             <select
-              className={styles.select}
-              style={{ width: '100%' }}
+              className={hub.scopeSelect}
+              title="Filter by batch"
               value={selectedBatch}
-              onChange={e => {
-                setSelectedBatch(e.target.value);
-                setSelectedSection('all');
-              }}
+              onChange={e => { setSelectedBatch(e.target.value); setSelectedSection('all'); }}
             >
-              <option value="all">All Batches ({availableBatches.length})</option>
-              {availableBatches.map(b => (
-                <option key={b.id} value={b.id}>{b.name}</option>
-              ))}
+              <option value="all">All batches ({availableBatches.length})</option>
+              {availableBatches.map(b => <option key={b.id} value={b.id}>{b.name}</option>)}
             </select>
           </div>
 
-          {/* 4. Section */}
-          <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-              <Users size={12} color="#7c3aed" /> Section
-            </label>
+          <div className={hub.scopeChip}>
+            <span className={hub.scopeLabel}><Users size={9} /> Section</span>
             <select
-              className={styles.select}
-              style={{ width: '100%' }}
+              className={hub.scopeSelect}
+              title="Filter by section"
               value={selectedSection}
               onChange={e => setSelectedSection(e.target.value)}
             >
-              <option value="all">All Sections ({availableSections.length})</option>
+              <option value="all">All sections ({availableSections.length})</option>
               {availableSections.map(s => (
                 <option key={s.section_id} value={s.section_id}>
-                  Section {s.section_name} {s.batch_name ? `(${s.batch_name})` : ''}
+                  Section {s.section_name}{s.batch_name ? ` (${s.batch_name})` : ''}
                 </option>
               ))}
             </select>
           </div>
 
-          {/* 5. Subject */}
-          <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-              <BookOpen size={12} color="#7c3aed" /> Subject
-            </label>
+          <div className={`${hub.scopeChip} ${hub.scopeChipWide}`}>
+            <span className={hub.scopeLabel}><BookOpen size={9} /> Subject</span>
             <select
-              className={styles.select}
-              style={{ width: '100%' }}
+              className={hub.scopeSelect}
+              title={availableSubjects.find(sub => sub.subject_id === selectedSubject)?.subject_name ?? 'Subject'}
               value={selectedSubject}
-              onChange={e => {
-                setSelectedSubject(e.target.value);
-                setSelectedAssessment('all');
-              }}
+              onChange={e => { setSelectedSubject(e.target.value); setSelectedAssessment('all'); }}
             >
               {availableSubjects.length === 0 && <option value="">No subjects assigned</option>}
               {availableSubjects.map(s => (
@@ -831,357 +1007,733 @@ export default function GradingPage() {
             </select>
           </div>
 
-          {/* 6. Assessment Scope Selector */}
-          <div>
-            <label style={{ display: 'flex', alignItems: 'center', gap: 5, fontSize: 11.5, fontWeight: 700, color: '#475569', marginBottom: 5, textTransform: 'uppercase', letterSpacing: '0.03em' }}>
-              <Award size={12} color="#7c3aed" /> Assessment View
-            </label>
+          <div className={`${hub.scopeChip} ${hub.scopeChipWide}`}>
+            <span className={hub.scopeLabel}><Award size={9} /> View</span>
             <select
-              className={styles.select}
-              style={{ width: '100%', fontWeight: selectedAssessment === 'all' ? 700 : 600 }}
+              className={hub.scopeSelect}
+              title="Choose the gradebook rollup or a single assessment"
               value={selectedAssessment}
               onChange={e => setSelectedAssessment(e.target.value)}
             >
-              <option value="all">⭐ Full Subject Gradebook Rollup</option>
+              <option value="all">Full subject gradebook</option>
               {subjectExperiments.length > 0 && (
-                <optgroup label="Laboratory Experiments">
+                <optgroup label="Laboratory experiments">
                   {subjectExperiments.map(e => (
                     <option key={e.id} value={e.id}>
-                      #{e.exp_number} — {e.title} {e.weightage ? `(${e.weightage} pts)` : ''}
+                      #{e.exp_number} — {e.title}{e.weightage ? ` (${e.weightage} pts)` : ''}
                     </option>
                   ))}
                 </optgroup>
               )}
               {subjectExams.length > 0 && (
-                <optgroup label="Timed Exams">
+                <optgroup label="Timed exams">
                   {subjectExams.map(ex => (
-                    <option key={ex.id} value={ex.id}>
-                      ⏱️ {ex.title} ({ex.exam_type.toUpperCase()})
-                    </option>
+                    <option key={ex.id} value={ex.id}>⏱ {ex.title} ({ex.exam_type.toUpperCase()})</option>
                   ))}
                 </optgroup>
               )}
             </select>
           </div>
         </div>
+
+        <div className={hub.scopeActions}>
+          <button type="button" className={hub.iconBtn} onClick={() => refetchSummary()} title="Re-fetch grades">
+            <History size={14} /> Refresh
+          </button>
+          <button
+            type="button"
+            className={hub.primaryBtn}
+            onClick={handleExportCSV}
+            disabled={!gradeSummaryData || gradeSummaryData.students.length === 0}
+          >
+            <Download size={14} /> Export CSV
+          </button>
+        </div>
       </div>
 
-      {/* ═══ VIEW 1: SUBJECT GRADE BOOK ROLLUP (ALL ASSESSMENTS) ═══ */}
+      {/* ═══ VIEW 1: SUBJECT GRADEBOOK ROLLUP ═══ */}
       {selectedAssessment === 'all' && (
         <>
-          {gradeSummaryData?.subject.over_allocation && (
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 12,
-              background: '#fffbeb', border: '1px solid #fef3c7', color: '#b45309',
-              padding: '12px 18px', borderRadius: 12, fontSize: 13.5, fontWeight: 600,
-              marginBottom: 16
-            }}>
-              <AlertTriangle size={18} color="#d97706" />
+          {hubStats.assessmentCount === 0 && (
+            <div className={`${hub.banner} ${hub.bannerInfo}`}>
+              <BookOpen size={16} style={{ flex: 'none', marginTop: 1 }} />
+              <span>
+                <strong>No assessments yet.</strong> Create a laboratory experiment or timed exam for{' '}
+                {gradeSummaryData?.subject.name ?? 'this subject'} — the gradebook fills in as soon as one exists.
+              </span>
+            </div>
+          )}
+
+          {hubStats.assessmentCount > 0 && hubStats.publishedCount === 0 && (
+            <div className={`${hub.banner} ${hub.bannerWarn}`}>
+              <AlertTriangle size={16} style={{ flex: 'none', marginTop: 1 }} />
+              <span>
+                <strong>Rollup paused — none of the {hubStats.assessmentCount} assessments are published.</strong>{' '}
+                Recorded scores are shown below, but nothing counts toward the subject total until an assessment is
+                published. Totals stay blank rather than reporting a misleading 0.
+              </span>
+            </div>
+          )}
+
+          {hubStats.publishedCount > 0 && hubStats.unallocatedMarks > 0 && (
+            <div className={`${hub.banner} ${hub.bannerWarn}`}>
+              <AlertTriangle size={16} style={{ flex: 'none', marginTop: 1 }} />
+              <span>
+                <strong>Only {hubStats.allocated.toFixed(2)} of {hubStats.totalMarks} marks are allocated</strong>{' '}
+                across {hubStats.publishedCount} published assessment{hubStats.publishedCount === 1 ? '' : 's'} — the
+                totals below are pro-rated to the allocated weight, not to the full subject ceiling.
+              </span>
+            </div>
+          )}
+
+          {hubStats.overAllocation && (
+            <div className={`${hub.banner} ${hub.bannerWarn}`}>
+              <AlertTriangle size={16} style={{ flex: 'none', marginTop: 1 }} />
+              <span>
+                <strong>Over-allocated:</strong> {hubStats.allocated.toFixed(2)} pts of weight is assigned to a subject
+                ceiling of {hubStats.totalMarks} marks.
+              </span>
+            </div>
+          )}
+
+          {/* KPI row — every number derived from the grade summary */}
+          <div className={hub.kpiGrid}>
+            <div className={`${hub.kpiCard} ${hub.kpiCardGreen}`}>
+              <div className={hub.kpiTop}>
+                <span className={hub.kpiLabel}>Class average</span>
+                <span className={hub.kpiIcon}><TrendingUp size={13} /></span>
+              </div>
+              <div className={hub.kpiValueRow}>
+                <span className={hub.kpiValue}>{hubStats.classAvg != null ? hubStats.classAvg.toFixed(1) : '—'}</span>
+                <span className={hub.kpiUnit}>/ 100</span>
+              </div>
+              <div className={hub.kpiSpark}>
+                <Sparkline
+                  values={hubStats.avgSeries}
+                  color="#16a34a"
+                  emptyLabel={hubStats.publishedCount === 0 ? 'publish to start the trend' : 'needs 2+ assessments'}
+                />
+              </div>
+              <span className={hub.kpiSub}>
+                {hubStats.classAvg != null
+                  ? `Pro-rated across ${hubStats.publishedCount} published assessment${hubStats.publishedCount === 1 ? '' : 's'} · ${hubStats.students} student${hubStats.students === 1 ? '' : 's'}`
+                  : 'No published assessment yet — nothing to average'}
+              </span>
+            </div>
+
+            <div className={`${hub.kpiCard}`}>
+              <div className={hub.kpiTop}>
+                <span className={hub.kpiLabel}>Graded</span>
+                <span className={hub.kpiIcon}><CheckCircle2 size={13} /></span>
+              </div>
+              <div className={hub.kpiValueRow}>
+                <span className={hub.kpiValue}>{hubStats.gradedCells}</span>
+                <span className={hub.kpiUnit}>of {hubStats.totalCells} cells</span>
+              </div>
+              <div className={hub.progressTrack}>
+                <div
+                  className={hub.progressFill}
+                  style={{ width: `${hubStats.totalCells ? Math.round((hubStats.gradedCells / hubStats.totalCells) * 100) : 0}%` }}
+                />
+              </div>
+              <span className={hub.kpiSub}>
+                {hubStats.totalCells
+                  ? `${Math.round((hubStats.gradedCells / hubStats.totalCells) * 100)}% of the gradebook carries a mark`
+                  : 'No student × assessment cells yet'}
+              </span>
+            </div>
+
+            <div className={`${hub.kpiCard} ${hubStats.pendingCells > 0 ? hub.kpiCardAmber : hub.kpiCardGreen}`}>
+              <div className={hub.kpiTop}>
+                <span className={hub.kpiLabel}>Pending review</span>
+                <span className={hub.kpiIcon}><ClipboardCheck size={13} /></span>
+              </div>
+              <div className={hub.kpiValueRow}>
+                <span className={hub.kpiValue}>{hubStats.pendingCells}</span>
+                <span className={hub.kpiUnit}>submission{hubStats.pendingCells === 1 ? '' : 's'}</span>
+              </div>
+              <div className={hub.kpiSpark}>
+                <Sparkline
+                  values={hubStats.pendingSeries}
+                  color="#d97706"
+                  unit=""
+                  emptyLabel={hubStats.assessmentCount ? 'steady across assessments' : 'no assessments'}
+                />
+              </div>
+              <span className={hub.kpiSub}>
+                {hubStats.pendingCells > 0
+                  ? `Submitted, still ungraded · ${hubStats.submittedCells} total submission${hubStats.submittedCells === 1 ? '' : 's'}`
+                  : 'Every submitted piece of work has a mark'}
+              </span>
+            </div>
+
+            <div className={`${hub.kpiCard} ${hubStats.overAllocation || hubStats.unallocatedMarks > 0 ? hub.kpiCardAmber : hub.kpiCardGreen}`}>
+              <div className={hub.kpiTop}>
+                <span className={hub.kpiLabel}>Marks allocated</span>
+                <span className={hub.kpiIcon}><Award size={13} /></span>
+              </div>
+              <div className={hub.kpiValueRow}>
+                <span className={hub.kpiValue}>{hubStats.allocated.toFixed(hubStats.allocated % 1 === 0 ? 0 : 2)}</span>
+                <span className={hub.kpiUnit}>/ {hubStats.totalMarks} marks</span>
+              </div>
+              <div className={hub.progressTrack}>
+                <div
+                  className={`${hub.progressFill} ${hubStats.overAllocation ? hub.progressFillAmber : ''}`}
+                  style={{ width: `${Math.min(100, hubStats.totalMarks ? (hubStats.allocated / hubStats.totalMarks) * 100 : 0)}%` }}
+                />
+              </div>
+              <span className={hub.kpiSub}>
+                {hubStats.publishedCount} published · {hubStats.draftCount} draft
+                {hubStats.draftWeight > 0 ? ` (${hubStats.draftWeight.toFixed(2)} pts excluded)` : ''}
+              </span>
+            </div>
+          </div>
+
+          {/* Gradebook */}
+          <div className={hub.panel}>
+            <div className={hub.panelHead}>
               <div>
-                <strong>Over-allocation Notice:</strong> Total assessment weightage ({gradeSummaryData.subject.total_weightage} pts) exceeds Subject Total Marks ({gradeSummaryData.subject.total_marks} pts).
+                <div className={hub.panelTitle}>Subject gradebook</div>
+                <div className={hub.panelSub}>
+                  {gradeSummaryData?.subject.name ?? 'Subject'} · {gradeSummaryData?.subject.code ?? '—'} ·{' '}
+                  {hubStats.assessmentCount} assessment{hubStats.assessmentCount === 1 ? '' : 's'}
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 4, fontSize: 10.5, color: '#94a3b8', fontWeight: 600 }}>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ width: 14, height: 4, borderRadius: 99, background: '#16a34a' }} /> ≥75%
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ width: 14, height: 4, borderRadius: 99, background: '#d97706' }} /> 50–74%
+                  </span>
+                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                    <span style={{ width: 14, height: 4, borderRadius: 99, background: '#dc2626' }} /> &lt;50%
+                  </span>
+                  <span>· bar = score on the assessment scale, +x.xx = weighted contribution</span>
+                </div>
               </div>
-            </div>
-          )}
-
-          {gradeSummaryData && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))', gap: 12, marginBottom: 16 }}>
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Subject Ceiling</span>
-                <span style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>{gradeSummaryData.subject.total_marks} Marks</span>
-                <span style={{ fontSize: 11.5, color: '#94a3b8' }}>{gradeSummaryData.subject.name} ({gradeSummaryData.subject.code})</span>
-              </div>
-
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Allocated Weightage</span>
-                <span style={{ fontSize: 22, fontWeight: 800, color: gradeSummaryData.subject.over_allocation ? '#d97706' : '#7c3aed' }}>
-                  {gradeSummaryData.subject.total_weightage} pts
-                </span>
-                <span style={{ fontSize: 11.5, color: '#94a3b8' }}>Across {gradeSummaryData.experiments.length} assessments</span>
-              </div>
-
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Enrolled Students</span>
-                <span style={{ fontSize: 22, fontWeight: 800, color: '#0f172a' }}>{gradeSummaryData.students.length}</span>
-                <span style={{ fontSize: 11.5, color: '#94a3b8' }}>Click any student or score cell to inspect</span>
-              </div>
-
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '14px 18px', display: 'flex', flexDirection: 'column', gap: 4 }}>
-                <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Class Rollup Average</span>
-                <span style={{ fontSize: 22, fontWeight: 800, color: '#059669' }}>
-                  {gradeSummaryData.students.length > 0
-                    ? `${(gradeSummaryData.students.reduce((acc, s) => acc + s.subject_score, 0) / gradeSummaryData.students.length).toFixed(1)} pts`
-                    : '—'}
-                </span>
-                <span style={{ fontSize: 11.5, color: '#94a3b8' }}>Weighted course average</span>
-              </div>
-            </div>
-          )}
-
-          {/* Rollup Table Card */}
-          <div className={styles.sectionCard} style={{ overflow: 'hidden' }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
-                <div style={{ position: 'relative' }}>
-                  <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
+              <div className={hub.panelHeadRight}>
+                <div className={hub.searchWrap}>
+                  <Search size={13} />
                   <input
-                    type="text"
-                    className={styles.input}
-                    placeholder="Search student or roll no..."
-                    style={{ paddingLeft: 30, maxWidth: 260, height: 36, fontSize: 13 }}
+                    className={hub.searchInput}
+                    placeholder="Search student or roll no…"
                     value={searchQuery}
                     onChange={e => setSearchQuery(e.target.value)}
                   />
                 </div>
-                <span className={styles.sectionSub}>
-                  Showing {filteredRollupStudents.length} of {gradeSummaryData?.students.length ?? 0} students · <strong>Click any student or score cell for full submission breakdown</strong>
-                </span>
+                <div className={hub.chipRow}>
+                  {([
+                    { id: 'all', label: 'All', count: hubStats.rows.length },
+                    { id: 'review', label: 'Needs review', count: hubStats.needsReviewCount },
+                    { id: 'graded', label: 'Graded', count: hubStats.gradedRowCount },
+                    { id: 'none', label: 'Not started', count: hubStats.notStartedCount },
+                  ] as const).map(f => (
+                    <button
+                      key={f.id}
+                      type="button"
+                      className={`${hub.chip} ${rollupFilter === f.id ? hub.chipActive : ''}`}
+                      onClick={() => setRollupFilter(f.id)}
+                    >
+                      {f.label}
+                      <span className={hub.chipCount}>{f.count}</span>
+                    </button>
+                  ))}
+                </div>
               </div>
-
-              <button
-                type="button"
-                className={styles.secondaryBtn}
-                style={{ height: 36, padding: '0 14px', fontSize: 12.5 }}
-                onClick={handleExportCSV}
-                disabled={!gradeSummaryData || gradeSummaryData.students.length === 0}
-              >
-                <Download size={14} /> Export Gradebook (CSV)
-              </button>
             </div>
 
             {gradeSummaryLoading ? (
-              <p className={styles.sectionSub} style={{ padding: 24 }}>Loading subject gradebook…</p>
-            ) : !selectedSubject ? (
-              <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                <BookOpen size={30} color="#d8b4fe" style={{ marginBottom: 8 }} />
-                <p className={styles.sectionSub}>Select a subject to view the gradebook.</p>
+              <div style={{ padding: 20, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {[0, 1, 2, 3].map(i => <div key={i} className={hub.skeleton} style={{ width: `${88 - i * 8}%` }} />)}
               </div>
-            ) : !gradeSummaryData || gradeSummaryData.experiments.length === 0 ? (
-              <div style={{ textAlign: 'center', padding: '32px 0' }}>
-                <ClipboardCheck size={30} color="#d8b4fe" style={{ marginBottom: 8 }} />
-                <p className={styles.sectionSub}>No experiments or exams found for this subject.</p>
+            ) : hubStats.assessmentCount === 0 ? (
+              <div className={hub.empty}>
+                <BookOpen size={30} color="#d8b4fe" />
+                <div className={hub.emptyTitle}>This subject has no assessments</div>
+                <div className={hub.emptyText}>
+                  Add a laboratory experiment or a timed exam to {gradeSummaryData?.subject.name ?? 'this subject'} and
+                  students will appear here with their rollup.
+                </div>
+              </div>
+            ) : rollupRows.length === 0 ? (
+              <div className={hub.empty}>
+                <Users size={30} color="#d8b4fe" />
+                <div className={hub.emptyTitle}>No students in this scope</div>
+                <div className={hub.emptyText}>
+                  {searchQuery
+                    ? `Nothing matches “${searchQuery}”.`
+                    : 'No enrolment matches the current department / year / section scope, or no filter is set.'}
+                </div>
               </div>
             ) : (
-              <div style={{ overflowX: 'auto', width: '100%' }}>
-                <table className={styles.table} style={{ minWidth: 780 }}>
+              <div className={hub.tableScroll}>
+                <table className={hub.gradeTable}>
                   <thead>
                     <tr>
-                      <th style={{ minWidth: 220, position: 'sticky', left: 0, background: '#f8fafc', zIndex: 1 }}>Student</th>
-                      {gradeSummaryData.experiments.map(e => (
-                        <th
-                          key={e.id}
-                          style={{ minWidth: 145, textAlign: 'center', cursor: 'pointer' }}
-                          onClick={() => setSelectedAssessment(e.id)}
-                          title={`Click to open all submissions for #${e.exp_number} ${e.title}`}
-                        >
-                          <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3 }}>
-                            <span style={{ fontSize: 11.5, fontWeight: 700, color: '#1e293b', textDecoration: 'underline', textDecorationColor: '#cbd5e1' }}>
-                              #{e.exp_number} {e.title.length > 18 ? e.title.slice(0, 18) + '…' : e.title}
-                            </span>
-                            <span style={{
-                              fontSize: 10,
-                              fontWeight: 700,
-                              padding: '1px 6px',
-                              borderRadius: 6,
-                              background: e.delivery_mode === 'exam' ? '#ede9fe' : '#e0f2fe',
-                              color: e.delivery_mode === 'exam' ? '#7c3aed' : '#0369a1',
-                            }}>
-                              {e.delivery_mode === 'exam' ? '⏱️ Exam' : '🧪 Lab'} ({e.weightage} pts)
-                            </span>
-                          </div>
+                      <th className={hub.studentCol}>Student</th>
+                      {hubStats.assessments.map(a => (
+                        <th key={a.id}>
+                          <button
+                            type="button"
+                            className={hub.colHeadBtn}
+                            onClick={() => setSelectedAssessment(a.id)}
+                            title={`Open all submissions for ${a.title}`}
+                          >
+                            <div className={hub.colHead}>
+                              <div className={hub.colHeadTop}>
+                                <span className={hub.colName}>
+                                  {(a.delivery_mode === 'exam' ? 'Exam ' : 'Lab ') + a.exp_number}
+                                </span>
+                                <span className={`${hub.weightTag} ${a.is_published === false ? hub.weightTagDraft : ''}`}>
+                                  {a.weightage ?? 0} pt{(a.weightage ?? 0) === 1 ? '' : 's'}
+                                </span>
+                              </div>
+                              <span className={hub.colFoot}>
+                                {a.class_average_percent != null
+                                  ? `avg ${a.class_average_percent.toFixed(1)}% · ${a.graded_count ?? 0}/${hubStats.students} graded`
+                                  : 'not graded yet'}
+                              </span>
+                            </div>
+                          </button>
                         </th>
                       ))}
-                      <th style={{ minWidth: 160, textAlign: 'right' }}>
-                        Subject Total ({gradeSummaryData.subject.total_marks} max)
-                      </th>
-                      <th style={{ minWidth: 110, textAlign: 'right' }}>Dossier</th>
+                      <th style={{ textAlign: 'right' }}>Subject total</th>
+                      <th style={{ textAlign: 'right' }}>Dossier</th>
                     </tr>
                   </thead>
                   <tbody>
-                    {filteredRollupStudents.map(s => {
-                      const pct = gradeSummaryData.subject.total_marks > 0
-                        ? Math.round((s.subject_score / gradeSummaryData.subject.total_marks) * 100)
-                        : 0;
-                      return (
-                        <tr key={s.student_id} style={{ cursor: 'pointer' }} onClick={() => setDossierStudent(s)}>
-                          <td style={{ position: 'sticky', left: 0, background: '#ffffff', zIndex: 1 }}>
-                            <div className={styles.tdStrong} style={{ color: '#4f46e5' }}>{s.full_name}</div>
-                            <div style={{ fontSize: 11.5, color: '#64748b' }}>
-                              {s.roll_number || s.student_id.slice(0, 8)}
+                    {rollupRows.map(row => (
+                      <tr key={row.student_id} className={hub.row} onClick={() => setDossierStudent(row)}>
+                        <td className={hub.studentCol}>
+                          <div className={hub.studentCell}>
+                            <span className={hub.avatar}>{initials(row.full_name)}</span>
+                            <div>
+                              <div className={hub.studentName}>{row.full_name}</div>
+                              <div className={hub.studentMeta}>{row.roll_number || row.student_id.slice(0, 8)}</div>
                             </div>
-                          </td>
-                          {gradeSummaryData.experiments.map(e => {
-                            const rawScore = s.experiment_scores[e.id];
-                            const det = s.experiment_details?.[e.id];
-                            const hasScore = rawScore !== undefined && rawScore !== null;
-                            const weighted = hasScore ? ((rawScore / (e.grade_scale || 100)) * (e.weightage || 0)) : 0;
-                            return (
-                              <td
-                                key={e.id}
-                                style={{ textAlign: 'center' }}
-                                onClick={(ev) => {
-                                  ev.stopPropagation();
-                                  setDossierStudent(s);
-                                }}
-                              >
-                                {hasScore ? (
-                                  <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 1 }}>
-                                    <span style={{ fontWeight: 700, fontSize: 13, color: '#0f172a' }}>
-                                      {rawScore} / {e.grade_scale}
-                                    </span>
-                                    <span style={{ fontSize: 11, color: '#059669', fontWeight: 600 }}>
-                                      +{weighted.toFixed(1)} pts
-                                    </span>
-                                    {det?.submitted_at && (
-                                      <span style={{ fontSize: 10, color: '#94a3b8' }}>
-                                        {new Date(det.submitted_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}
-                                      </span>
+                          </div>
+                        </td>
+                        {hubStats.assessments.map(a => {
+                          const raw = row.experiment_scores[a.id];
+                          const det = row.experiment_details?.[a.id];
+                          const scale = a.grade_scale || 100;
+                          const pct = raw != null ? Math.max(0, Math.min(100, (raw / scale) * 100)) : null;
+                          const weighted = raw != null ? (raw / scale) * (a.weightage ?? 0) : 0;
+                          return (
+                            <td key={a.id}>
+                              {pct != null ? (
+                                <div className={hub.scoreCell}>
+                                  <div className={hub.scoreTop}>
+                                    <span className={hub.scoreNum}>{formatScore(raw)}</span>
+                                    <span className={hub.scoreDen}>/ {scale}</span>
+                                    {a.is_published !== false && (
+                                      <span className={hub.scorePts}>+{weighted.toFixed(2)}</span>
                                     )}
                                   </div>
-                                ) : det?.submitted_at ? (
-                                  <span className={`${styles.pill} ${styles.pillAmber}`} style={{ fontSize: 10.5 }}>
-                                    Submitted · Needs Grade
-                                  </span>
-                                ) : (
-                                  <span style={{ fontSize: 12, color: '#cbd5e1' }}>Not Submitted</span>
-                                )}
-                              </td>
-                            );
-                          })}
-                          <td style={{ textAlign: 'right' }}>
-                            <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'flex-end', gap: 2 }}>
-                              <span style={{ fontWeight: 800, fontSize: 14, color: '#0f172a' }}>
-                                {s.subject_score.toFixed(1)} / {gradeSummaryData.subject.total_marks}
+                                  <div className={hub.barTrack}>
+                                    <div
+                                      className={`${hub.barFill} ${pct >= 75 ? hub.barGreen : pct >= 50 ? hub.barAmber : hub.barRed}`}
+                                      style={{ width: `${pct}%` }}
+                                    />
+                                  </div>
+                                </div>
+                              ) : det?.submitted_at ? (
+                                <span className={hub.stateTag}>Needs grade</span>
+                              ) : (
+                                <span className={hub.stateMuted}>—</span>
+                              )}
+                            </td>
+                          );
+                        })}
+                        <td>
+                          <div className={hub.totalCell}>
+                            <div className={hub.totalMeta}>
+                              <span className={hub.totalPts}>
+                                {row.points_earned != null && row.points_allocated
+                                  ? `${row.points_earned.toFixed(2)} / ${row.points_allocated.toFixed(2)} pts`
+                                  : '0 pts allocated'}
                               </span>
-                              <span style={{
-                                fontSize: 11,
-                                fontWeight: 700,
-                                padding: '1px 7px',
-                                borderRadius: 8,
-                                background: pct >= 75 ? '#dcfce7' : pct >= 50 ? '#dbeafe' : '#fee2e2',
-                                color: pct >= 75 ? '#15803d' : pct >= 50 ? '#1d4ed8' : '#b91c1c'
-                              }}>
-                                {pct}%
+                              <span className={hub.totalCap}>
+                                {row.pct != null
+                                  ? `${row.pct.toFixed(1)}% of ${hubStats.totalMarks} marks`
+                                  : 'awaiting published marks'}
                               </span>
                             </div>
-                          </td>
-                          <td style={{ textAlign: 'right' }} onClick={ev => ev.stopPropagation()}>
-                            <button
-                              type="button"
-                              className={styles.ghostBtn}
-                              style={{ fontSize: 12, padding: '5px 10px' }}
-                              onClick={() => setDossierStudent(s)}
-                            >
-                              <Eye size={13} /> Breakdown
-                            </button>
-                          </td>
-                        </tr>
-                      );
-                    })}
+                            <ScoreRing pct={row.pct} />
+                          </div>
+                        </td>
+                        <td style={{ textAlign: 'right' }} onClick={ev => ev.stopPropagation()}>
+                          <button type="button" className={hub.dossierBtn} onClick={() => setDossierStudent(row)}>
+                            <Eye size={13} /> Open
+                          </button>
+                        </td>
+                      </tr>
+                    ))}
                   </tbody>
                 </table>
               </div>
             )}
           </div>
+
+          {/* Distribution + weightage health */}
+          {hubStats.assessmentCount > 0 && (
+            <div className={hub.bottomGrid}>
+              <div className={hub.panel}>
+                <div className={hub.panelHead}>
+                  <div>
+                    <div className={hub.panelTitle}>Grade distribution</div>
+                    <div className={hub.panelSub}>
+                      {distMetric === 'total'
+                        ? 'Pro-rated subject total — published assessments only'
+                        : 'Mean of every graded assessment, unweighted'}
+                    </div>
+                  </div>
+                  <div className={hub.panelHeadRight}>
+                    <div className={hub.chipRow}>
+                      <button
+                        type="button"
+                        className={`${hub.chip} ${distMetric === 'total' ? hub.chipActive : ''}`}
+                        onClick={() => setDistMetric('total')}
+                        disabled={hubStats.classAvg == null}
+                        style={hubStats.classAvg == null ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+                      >
+                        Subject total %
+                      </button>
+                      <button
+                        type="button"
+                        className={`${hub.chip} ${distMetric === 'graded' ? hub.chipActive : ''}`}
+                        onClick={() => setDistMetric('graded')}
+                        disabled={hubStats.classGradedAvg == null}
+                        style={hubStats.classGradedAvg == null ? { opacity: 0.45, cursor: 'not-allowed' } : undefined}
+                      >
+                        Graded average %
+                      </button>
+                    </div>
+                  </div>
+                </div>
+                {(() => {
+                  const dist = distMetric === 'total' ? hubStats.distTotal : hubStats.distGraded;
+                  const max = Math.max(...dist.map(d => d.count), 0);
+                  const total = dist.reduce((a, d) => a + d.count, 0);
+                  if (total === 0) {
+                    return (
+                      <div className={hub.empty}>
+                        <TrendingUp size={28} color="#d8b4fe" />
+                        <div className={hub.emptyTitle}>Nothing to plot yet</div>
+                        <div className={hub.emptyText}>
+                          {distMetric === 'total'
+                            ? 'No published assessment carries a mark, so there is no distribution to draw.'
+                            : 'No assessment has been graded yet.'}
+                        </div>
+                      </div>
+                    );
+                  }
+                  return (
+                    <>
+                      <div className={hub.distChart}>
+                        {dist.map((d, i) => (
+                          <div key={d.label} className={hub.distCol} title={`${d.count} student${d.count === 1 ? '' : 's'} in ${d.label}`}>
+                            <span className={hub.distCount} style={{ opacity: d.count === 0 ? 0.35 : 1 }}>{d.count}</span>
+                            <div
+                              className={`${hub.distBar} ${d.count === 0 ? hub.distBarEmpty : ''}`}
+                              style={{ height: `${max ? Math.max(3, (d.count / max) * 128) : 3}px` }}
+                            />
+                          </div>
+                        ))}
+                      </div>
+                      <div className={hub.distAxis}>
+                        {dist.map(d => (
+                          <span key={'axis-' + d.label} className={hub.distTick}>{d.label}</span>
+                        ))}
+                      </div>
+                    </>
+                  );
+                })()}
+              </div>
+
+              <div className={hub.panel}>
+                <div className={hub.panelHead}>
+                  <div>
+                    <div className={hub.panelTitle}>Assessment weightage health</div>
+                    <div className={hub.panelSub}>
+                      What counts toward the {hubStats.totalMarks}-mark subject ceiling
+                    </div>
+                  </div>
+                  <div className={hub.panelHeadRight}>
+                    <span className={`${hub.healthStatus} ${hubStats.overAllocation ? hub.statusWarn : hub.statusOk}`}>
+                      {hubStats.overAllocation ? <AlertTriangle size={11} /> : <CheckCircle2 size={11} />}
+                      {hubStats.allocated.toFixed(2)} / {hubStats.totalMarks}
+                    </span>
+                  </div>
+                </div>
+                <table className={hub.healthTable}>
+                  <thead>
+                    <tr>
+                      <th>Assessment</th>
+                      <th style={{ textAlign: 'right', width: 92 }}>Weightage</th>
+                      <th style={{ width: 150 }}>Status</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {hubStats.assessments.map(a => (
+                      <tr key={a.id}>
+                        <td>
+                          <div style={{ fontWeight: 650, color: '#1e293b' }}>
+                            {(a.delivery_mode === 'exam' ? 'Exam ' : 'Lab ') + a.exp_number} — {a.title}
+                          </div>
+                        </td>
+                        <td className={hub.healthNum}>
+                          {a.weightage ?? 0} / {hubStats.totalMarks}
+                        </td>
+                        <td>
+                          {a.is_published === false ? (
+                            <span className={`${hub.healthStatus} ${hub.statusWarn}`}>
+                              <AlertTriangle size={11} /> Draft — not counted
+                            </span>
+                          ) : (
+                            <span className={`${hub.healthStatus} ${hub.statusOk}`}>
+                              <CheckCircle2 size={11} /> Published
+                            </span>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+                <div className={`${hub.healthFoot} ${!hubStats.overAllocation && hubStats.unallocatedMarks === 0 && hubStats.draftWeight === 0 ? hub.healthFootOk : ''}`}>
+                  {hubStats.overAllocation ? (
+                    <>
+                      <AlertTriangle size={14} />
+                      Over-allocated by {(hubStats.allocated - hubStats.totalMarks).toFixed(2)} marks — rebalance weights before publishing.
+                    </>
+                  ) : hubStats.unallocatedMarks === 0 && hubStats.draftWeight === 0 ? (
+                    <>
+                      <CheckCircle2 size={14} />
+                      All {hubStats.totalMarks} marks are allocated across {hubStats.publishedCount} published assessments.
+                    </>
+                  ) : (
+                    <>
+                      <AlertTriangle size={14} />
+                      {hubStats.unallocatedMarks.toFixed(2)} of {hubStats.totalMarks} marks unallocated
+                      {hubStats.draftWeight > 0 ? ` · ${hubStats.draftWeight.toFixed(2)} pts sit in ${hubStats.draftCount} draft assessment${hubStats.draftCount === 1 ? '' : 's'}` : ''}
+                    </>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
         </>
       )}
 
       {/* ═══ VIEW 2: SPECIFIC ASSESSMENT SUBMISSIONS (LAB OR EXAM) ═══ */}
       {selectedAssessment !== 'all' && (
         <>
-          {/* Assessment KPI Summary Bar */}
+          {/* ── Assessment context header: what this scope is and how it is marked ── */}
           {!isSelectedExam && (
-            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(175px, 1fr))', gap: 12, marginBottom: 16 }}>
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '12px 16px' }}>
-                <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>Experiment Rubric</span>
-                <div style={{ fontSize: 16, fontWeight: 800, color: '#0f172a', marginTop: 2 }}>
-                  {experimentMeta ? `${experimentMeta.weightage} pts · Scale /${experimentMeta.grade_scale}` : '100 pts'}
+            <div className={hub.panel}>
+              <div className={hub.assessHead}>
+                <div style={{ flex: '1 1 320px', minWidth: 0 }}>
+                  <div className={hub.assessTitle}>
+                    Lab {experimentMeta?.exp_number ?? '—'} · {experimentMeta?.title ?? 'Loading assessment…'}
+                  </div>
+                  <div className={hub.assessMeta}>
+                    <span className={`${hub.metaTag} ${hub.metaTagViolet}`}>
+                      {experimentMeta?.weightage ?? 0} pts of {gradeSummaryData?.subject.total_marks ?? 100} subject marks
+                    </span>
+                    <span className={hub.metaTag}>marked on /{experimentMeta?.grade_scale ?? 100}</span>
+                    <span className={hub.metaTag}>{subStats.total} student{subStats.total === 1 ? '' : 's'} in scope</span>
+                    <span className={`${hub.metaTag} ${hub.metaTagAmber}`}>
+                      {subStats.submittedCount > 0 ? `${subStats.submittedCount} awaiting a mark` : 'nothing awaiting review'}
+                    </span>
+                  </div>
                 </div>
-                <span style={{ fontSize: 11, color: '#7c3aed', fontWeight: 600 }}>
-                  TC {experimentMeta?.rubric.test_cases ?? 60}% · Lab {experimentMeta?.rubric.lab_report ?? 20}% · Qual {experimentMeta?.rubric.code_quality ?? 10}% · Viva {experimentMeta?.rubric.viva ?? 10}%
+                <div className={hub.scopeActions}>
+                  <button type="button" className={hub.iconBtn} onClick={() => setSelectedAssessment('all')}>
+                    <ChevronLeft size={14} /> Subject rollup
+                  </button>
+                  <button
+                    type="button"
+                    className={hub.primaryBtn}
+                    onClick={() => { setShowCurve(true); setCurvePreview(null); }}
+                  >
+                    <TrendingUp size={14} /> Curve grades
+                  </button>
+                </div>
+              </div>
+
+              {/* Rubric weights — the same numbers the grade is computed from */}
+              <div className={hub.rubricStrip}>
+                {([
+                  { key: 'test_cases', label: 'Test cases' },
+                  { key: 'lab_report', label: 'Lab report' },
+                  { key: 'code_quality', label: 'Code quality' },
+                  { key: 'viva', label: 'Viva' },
+                  { key: 'quiz', label: 'Quiz' },
+                ] as const).map(item => {
+                  const weight = experimentMeta?.rubric?.[item.key] ?? 0;
+                  return (
+                    <div key={item.key} className={hub.rubricItem} style={{ opacity: weight === 0 ? 0.42 : 1 }}>
+                      <span className={hub.rubricLabel}>{item.label}</span>
+                      <span className={hub.rubricValue}>{weight}%</span>
+                      <div className={hub.rubricBar}>
+                        <div className={hub.rubricBarFill} style={{ width: `${Math.min(100, weight)}%` }} />
+                      </div>
+                    </div>
+                  );
+                })}
+                <span style={{ marginLeft: 'auto', fontSize: 11, color: '#94a3b8', fontWeight: 600, alignSelf: 'center' }}>
+                  0% components are not part of the mark
                 </span>
-              </div>
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '12px 16px' }}>
-                <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>Graded / Submitted</span>
-                <div style={{ fontSize: 20, fontWeight: 800, color: '#059669', marginTop: 2 }}>
-                  {subStats.gradedCount} Graded · {subStats.submittedCount} Pending
-                </div>
-                <span style={{ fontSize: 11, color: '#94a3b8' }}>{subStats.notSubmittedCount} not yet submitted</span>
-              </div>
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '12px 16px' }}>
-                <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>Experiment Average</span>
-                <div style={{ fontSize: 20, fontWeight: 800, color: '#4f46e5', marginTop: 2 }}>
-                  {subStats.avgScore}%
-                </div>
-                <span style={{ fontSize: 11, color: '#94a3b8' }}>Across graded & auto-scored runs</span>
-              </div>
-              <div style={{ background: '#ffffff', border: '1px solid #e2e8f0', borderRadius: 14, padding: '12px 16px' }}>
-                <span style={{ fontSize: 11.5, color: '#64748b', fontWeight: 600 }}>Integrity Alerts</span>
-                <div style={{ fontSize: 20, fontWeight: 800, color: subStats.flaggedCount > 0 ? '#dc2626' : '#10b981', marginTop: 2 }}>
-                  {subStats.flaggedCount > 0 ? `${subStats.flaggedCount} Flagged` : 'All Clean'}
-                </div>
-                <span style={{ fontSize: 11, color: '#94a3b8' }}>AST & token similarity check</span>
               </div>
             </div>
           )}
 
-          {/* Toolbar: Search, Status Pills, Back to Rollup & Curve */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14, flexWrap: 'wrap', gap: 10 }}>
-            <div style={{ display: 'flex', alignItems: 'center', gap: 8, flexWrap: 'wrap' }}>
-              <button
-                type="button"
-                className={styles.ghostBtn}
-                onClick={() => setSelectedAssessment('all')}
-                style={{ height: 34, padding: '0 12px', fontSize: 12.5 }}
-              >
-                <ChevronLeft size={14} /> Subject Rollup
-              </button>
-              <div style={{ position: 'relative' }}>
-                <Search size={14} style={{ position: 'absolute', left: 10, top: '50%', transform: 'translateY(-50%)', color: '#94a3b8' }} />
-                <input
-                  type="text"
-                  className={styles.input}
-                  placeholder="Filter student or roll no..."
-                  style={{ paddingLeft: 30, maxWidth: 230, height: 34, fontSize: 13 }}
-                  value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                />
+          {/* ── Assessment KPI row ── */}
+          {!isSelectedExam && (
+            <div className={hub.kpiGrid}>
+              <div className={`${hub.kpiCard} ${hub.kpiCardGreen}`}>
+                <div className={hub.kpiTop}>
+                  <span className={hub.kpiLabel}>Graded</span>
+                  <span className={hub.kpiIcon}><CheckCircle2 size={13} /></span>
+                </div>
+                <div className={hub.kpiValueRow}>
+                  <span className={hub.kpiValue}>{subStats.gradedCount}</span>
+                  <span className={hub.kpiUnit}>of {subStats.total} student{subStats.total === 1 ? '' : 's'}</span>
+                </div>
+                <div className={hub.progressTrack}>
+                  <div
+                    className={`${hub.progressFill} ${hub.progressFillGreen}`}
+                    style={{ width: `${subStats.total ? Math.round((subStats.gradedCount / subStats.total) * 100) : 0}%` }}
+                  />
+                </div>
+                <span className={hub.kpiSub}>
+                  {subStats.total ? `${Math.round((subStats.gradedCount / subStats.total) * 100)}% of the roster has a published mark` : 'No roster in scope'}
+                </span>
               </div>
-              {!isSelectedExam && (
-                <div className={styles.tabRow} style={{ gap: 6 }}>
+
+              <div className={`${hub.kpiCard} ${subStats.submittedCount > 0 ? hub.kpiCardAmber : hub.kpiCardSlate}`}>
+                <div className={hub.kpiTop}>
+                  <span className={hub.kpiLabel}>Awaiting review</span>
+                  <span className={hub.kpiIcon}><ClipboardCheck size={13} /></span>
+                </div>
+                <div className={hub.kpiValueRow}>
+                  <span className={hub.kpiValue}>{subStats.submittedCount}</span>
+                  <span className={hub.kpiUnit}>submitted</span>
+                </div>
+                <span className={hub.kpiSub}>
+                  {subStats.notSubmittedCount} not submitted · {subStats.total} in scope
+                </span>
+              </div>
+
+              <div className={`${hub.kpiCard}`}>
+                <div className={hub.kpiTop}>
+                  <span className={hub.kpiLabel}>Assessment average</span>
+                  <span className={hub.kpiIcon}><TrendingUp size={13} /></span>
+                </div>
+                <div className={hub.kpiValueRow}>
+                  <span className={hub.kpiValue}>{subStats.avgScore}</span>
+                  <span className={hub.kpiUnit}>% unweighted</span>
+                </div>
+                <span className={hub.kpiSub}>
+                  Mean of graded and auto-scored runs · not the weighted subject contribution
+                </span>
+              </div>
+
+              <div className={`${hub.kpiCard} ${subStats.flaggedCount > 0 ? hub.kpiCardRed : hub.kpiCardGreen}`}>
+                <div className={hub.kpiTop}>
+                  <span className={hub.kpiLabel}>Integrity flags</span>
+                  <span className={hub.kpiIcon}><ShieldAlert size={13} /></span>
+                </div>
+                <div className={hub.kpiValueRow}>
+                  <span className={hub.kpiValue}>{subStats.flaggedCount}</span>
+                  <span className={hub.kpiUnit}>of {subStats.total}</span>
+                </div>
+                <span className={hub.kpiSub}>
+                  {subStats.flaggedCount > 0 ? 'AST / token similarity match found' : 'No similarity match above threshold'}
+                </span>
+              </div>
+            </div>
+          )}
+
+          {/* ── Toolbar: search, status chips, back to rollup ── */}
+          {!isSelectedExam && (
+            <div className={hub.panel} style={{ padding: '11px 14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <div className={hub.searchWrap}>
+                  <Search size={13} />
+                  <input
+                    className={hub.searchInput}
+                    placeholder="Filter student or roll no…"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <div className={hub.chipRow}>
                   {([
-                    { id: 'all', label: `All (${subStats.total})` },
-                    { id: 'submitted', label: `Needs Review (${subStats.submittedCount})` },
-                    { id: 'graded', label: `Graded (${subStats.gradedCount})` },
-                    { id: 'not_submitted', label: `Not Submitted (${subStats.notSubmittedCount})` },
-                    { id: 'flagged', label: `Flagged (${subStats.flaggedCount})` },
+                    { id: 'all', label: 'All', count: subStats.total },
+                    { id: 'submitted', label: 'Needs review', count: subStats.submittedCount },
+                    { id: 'graded', label: 'Graded', count: subStats.gradedCount },
+                    { id: 'not_submitted', label: 'Not submitted', count: subStats.notSubmittedCount },
+                    { id: 'flagged', label: 'Flagged', count: subStats.flaggedCount },
                   ] as const).map(f => (
                     <button
                       key={f.id}
                       type="button"
-                      className={`${styles.tabChip} ${statusFilter === f.id ? styles.tabChipActive : ''}`}
+                      className={`${hub.chip} ${statusFilter === f.id ? hub.chipActive : ''}`}
                       onClick={() => setStatusFilter(f.id)}
-                      style={{ fontSize: 12, padding: '5px 10px' }}
                     >
                       {f.label}
+                      <span className={hub.chipCount}>{f.count}</span>
                     </button>
                   ))}
                 </div>
-              )}
+                <span style={{ marginLeft: 'auto', fontSize: 11.5, color: '#94a3b8', fontWeight: 600 }}>
+                  Click any row to inspect the submission and grade it
+                </span>
+              </div>
             </div>
+          )}
 
-            {!isSelectedExam && (
-              <button
-                className={styles.secondaryBtn}
-                onClick={() => { setShowCurve(true); setCurvePreview(null); }}
-                style={{ height: 34, padding: '0 12px', fontSize: 12.5 }}
-              >
-                <TrendingUp size={14} /> Curve Grades
-              </button>
-            )}
-          </div>
+          {isSelectedExam && (
+            <div className={hub.panel} style={{ padding: '11px 14px' }}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 12, flexWrap: 'wrap' }}>
+                <button type="button" className={hub.iconBtn} onClick={() => setSelectedAssessment('all')}>
+                  <ChevronLeft size={14} /> Subject rollup
+                </button>
+                <div className={hub.searchWrap}>
+                  <Search size={13} />
+                  <input
+                    className={hub.searchInput}
+                    placeholder="Filter student…"
+                    value={searchQuery}
+                    onChange={e => setSearchQuery(e.target.value)}
+                  />
+                </div>
+                <span style={{ marginLeft: 'auto', fontSize: 11.5, color: '#94a3b8', fontWeight: 600 }}>
+                  Timed exam — attempts are auto-scored, no rubric grading needed
+                </span>
+              </div>
+            </div>
+          )}
 
           {/* Submissions Table Card */}
-          <div className={styles.sectionCard}>
+          <div className={hub.panel}>
+            <div className={hub.panelHead}>
+              <div>
+                <div className={hub.panelTitle}>{isSelectedExam ? 'Exam attempts' : 'Submissions'}</div>
+                <div className={hub.panelSub}>
+                  {isSelectedExam
+                    ? `${filteredExamAttempts.length} attempt${filteredExamAttempts.length === 1 ? '' : 's'} recorded`
+                    : `${filteredSubmissions.length} of ${subStats.total} student${subStats.total === 1 ? '' : 's'} shown`}
+                </div>
+              </div>
+              <div className={hub.panelHeadRight}>
+                {!isSelectedExam && (
+                  <span className={hub.panelSub}>Rubric total is recomputed live when you grade</span>
+                )}
+              </div>
+            </div>
+            <div style={{ padding: '4px 6px 6px' }}>
             {isSelectedExam ? (
               examAttemptsLoading ? (
                 <p className={styles.sectionSub}>Loading exam attempts…</p>
@@ -1254,15 +1806,15 @@ export default function GradingPage() {
                   <table className={styles.table}>
                     <thead>
                       <tr>
-                        <th>Student</th>
-                        <th>Status & When Submitted</th>
-                        <th>Language & Code</th>
-                        <th>Test Cases</th>
-                        <th>Viva & Quiz</th>
-                        <th>Rubric Breakdown</th>
-                        <th>Final Score</th>
+                        <th style={{ minWidth: 190 }}>Student</th>
+                        <th>Status</th>
+                        <th>Submission</th>
+                        <th>Test cases</th>
+                        <th>Viva / quiz</th>
+                        <th>Rubric</th>
+                        <th>Final score</th>
                         <th>Integrity</th>
-                        <th style={{ textAlign: 'right' }}>Inspect & Grade</th>
+                        <th style={{ textAlign: 'right' }}>Action</th>
                       </tr>
                     </thead>
                     <tbody>
@@ -1301,15 +1853,17 @@ export default function GradingPage() {
                             <td>
                               {isNotSub ? (
                                 <span style={{ fontSize: 12, color: '#cbd5e1' }}>—</span>
-                              ) : (
+                              ) : (sub.code_text || (sub.files && Object.keys(sub.files).length > 0)) ? (
                                 <div style={{ display: 'flex', flexDirection: 'column', gap: 2 }}>
                                   <span className={`${styles.pill} ${styles.pillBlue}`} style={{ width: 'fit-content' }}>
                                     {sub.language}
                                   </span>
                                   <span style={{ fontSize: 11, color: '#64748b' }}>
-                                    {sub.loc != null ? `${sub.loc} LOC` : 'Module/Quiz'} {sub.quality_grade ? `· Quality ${sub.quality_grade}` : ''}
+                                    {sub.loc != null ? `${sub.loc} LOC` : ''} {sub.quality_grade ? `· Quality ${sub.quality_grade}` : ''}
                                   </span>
                                 </div>
+                              ) : (
+                                <span style={{ fontSize: 11.5, color: '#94a3b8', fontWeight: 600 }}>No code — rubric only</span>
                               )}
                             </td>
                             <td>
@@ -1323,17 +1877,17 @@ export default function GradingPage() {
                             </td>
                             <td onClick={ev => ev.stopPropagation()}>
                               <div style={{ display: 'flex', flexDirection: 'column', gap: 3 }}>
-                                {viva ? (
+                                {viva || sub.viva_grade != null ? (
                                   <button
                                     type="button"
                                     onClick={() => openWorkbench(sub, 'viva')}
-                                    style={{
-                                      border: 'none', background: '#f5f3ff', color: '#7c3aed',
-                                      padding: '3px 8px', borderRadius: 6, cursor: 'pointer',
-                                      fontSize: 11.5, fontWeight: 700, display: 'flex', alignItems: 'center', gap: 4, width: 'fit-content'
-                                    }}
+                                    className={hub.vivaTag}
+                                    style={{ cursor: 'pointer', border: 'none' }}
                                   >
-                                    <Mic2 size={11} /> Viva: {viva.total_score != null ? `${viva.total_score}%` : viva.status}
+                                    <Mic2 size={11} /> Viva{' '}
+                                    {sub.viva_grade != null
+                                      ? `${sub.viva_grade}%`
+                                      : viva?.total_score != null ? `${viva.total_score}%` : viva?.status}
                                   </button>
                                 ) : (
                                   <span style={{ fontSize: 11.5, color: '#94a3b8' }}>Viva: —</span>
@@ -1379,10 +1933,10 @@ export default function GradingPage() {
                             <td style={{ textAlign: 'right' }} onClick={ev => ev.stopPropagation()}>
                               <button
                                 className={styles.primaryBtn}
-                                style={{ padding: '6px 12px', fontSize: 12 }}
+                                style={{ padding: '6px 12px', fontSize: 12, whiteSpace: 'nowrap' }}
                                 onClick={() => openWorkbench(sub, 'code')}
                               >
-                                <ClipboardCheck size={13} /> Inspect & Grade
+                                <ClipboardCheck size={13} /> Inspect &amp; grade
                               </button>
                             </td>
                           </tr>
@@ -1393,6 +1947,7 @@ export default function GradingPage() {
                 </div>
               )
             )}
+            </div>
           </div>
         </>
       )}
@@ -1411,10 +1966,44 @@ export default function GradingPage() {
                   {dossierStudent.full_name} — Subject Assessment Dossier
                 </h2>
                 <p className={styles.sectionSub} style={{ margin: 0 }}>
-                  Roll No: <strong>{dossierStudent.roll_number || '—'}</strong> · Subject: <strong>{gradeSummaryData.subject.name} ({gradeSummaryData.subject.code})</strong> · Total Score: <strong>{dossierStudent.subject_score.toFixed(1)} / {gradeSummaryData.subject.total_marks} pts</strong>
+                  Roll No: <strong>{dossierStudent.roll_number || '—'}</strong> · Subject:{' '}
+                  <strong>{gradeSummaryData.subject.name} ({gradeSummaryData.subject.code})</strong>
                 </p>
               </div>
               <button className={styles.closeBtn} onClick={() => setDossierStudent(null)}><X size={16} /></button>
+            </div>
+
+            {/* Dossier summary — pro-rated total, published points and coverage */}
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(150px, 1fr))', gap: 10, padding: '0 0 14px' }}>
+              <div style={{ border: '1px solid #eef1f7', borderRadius: 12, padding: '10px 13px' }}>
+                <div className={hub.rubricLabel}>Pro-rated total</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a' }}>
+                  {dossierStudent.subject_percent != null
+                    ? `${dossierStudent.subject_percent.toFixed(1)}%`
+                    : '—'}
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: '#94a3b8', marginLeft: 4 }}>
+                    of {gradeSummaryData.subject.total_marks}
+                  </span>
+                </div>
+              </div>
+              <div style={{ border: '1px solid #eef1f7', borderRadius: 12, padding: '10px 13px' }}>
+                <div className={hub.rubricLabel}>Published points</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a' }}>
+                  {dossierStudent.points_earned != null ? dossierStudent.points_earned.toFixed(2) : '0.00'}
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: '#94a3b8', marginLeft: 4 }}>
+                    / {dossierStudent.points_allocated != null ? dossierStudent.points_allocated.toFixed(2) : '0.00'} pts
+                  </span>
+                </div>
+              </div>
+              <div style={{ border: '1px solid #eef1f7', borderRadius: 12, padding: '10px 13px' }}>
+                <div className={hub.rubricLabel}>Assessments graded</div>
+                <div style={{ fontSize: 20, fontWeight: 800, color: '#0f172a' }}>
+                  {dossierStudent.assessed_count ?? 0}
+                  <span style={{ fontSize: 11.5, fontWeight: 600, color: '#94a3b8', marginLeft: 4 }}>
+                    / {dossierStudent.assessment_count ?? gradeSummaryData.experiments.length}
+                  </span>
+                </div>
+              </div>
             </div>
 
             <div style={{ overflowY: 'auto', paddingRight: 4 }}>
@@ -1443,6 +2032,9 @@ export default function GradingPage() {
                           <div className={styles.tdStrong}>#{exp.exp_number} {exp.title}</div>
                           <div style={{ fontSize: 11.5, color: '#64748b' }}>
                             {exp.delivery_mode === 'exam' ? 'Timed Exam' : 'Lab Experiment'} · Weightage: {exp.weightage} pts
+                            {exp.is_published === false && (
+                              <span style={{ color: '#b45309', fontWeight: 700 }}> · draft, not counted</span>
+                            )}
                           </div>
                         </td>
                         <td>
@@ -1481,14 +2073,18 @@ export default function GradingPage() {
                         <td style={{ fontWeight: 800, color: '#0f172a' }}>
                           {hasScore ? `${raw} / ${exp.grade_scale}` : '—'}
                         </td>
-                        <td style={{ fontWeight: 700, color: '#059669' }}>
-                          {hasScore ? `+${weighted.toFixed(1)} pts` : '0.0 pts'}
+                        <td style={{ fontWeight: 700, color: exp.is_published === false ? '#b45309' : '#059669' }}>
+                          {!hasScore
+                            ? '—'
+                            : exp.is_published === false
+                              ? `+${weighted.toFixed(2)} pts (excluded)`
+                              : `+${weighted.toFixed(2)} pts`}
                         </td>
                         <td style={{ textAlign: 'right' }}>
                           <button
                             type="button"
                             className={styles.primaryBtn}
-                            style={{ padding: '5px 10px', fontSize: 11.5 }}
+                            style={{ padding: '5px 10px', fontSize: 11.5, whiteSpace: 'nowrap' }}
                             onClick={() => {
                               const targetSid = dossierStudent.student_id;
                               setDossierStudent(null);
@@ -1501,7 +2097,7 @@ export default function GradingPage() {
                               }, 250);
                             }}
                           >
-                            Open Submission &rarr;
+                            Open &rarr;
                           </button>
                         </td>
                       </tr>
@@ -1547,7 +2143,10 @@ export default function GradingPage() {
                   </span>
                 </div>
                 <p style={{ margin: '3px 0 0', fontSize: 12.5, color: '#64748b' }}>
-                  {experimentMeta ? `#${experimentMeta.exp_number} ${experimentMeta.title}` : 'Experiment Submission'} · Submitted: <strong>{fmt(grading.submitted_at)}</strong> · Language: <strong>{grading.language}</strong>
+                  {experimentMeta ? `#${experimentMeta.exp_number} ${experimentMeta.title}` : 'Experiment Submission'} · Submitted: <strong>{fmt(grading.submitted_at)}</strong>
+                  {grading.code_text || (grading.files && Object.keys(grading.files).length > 0)
+                    ? <> · Language: <strong>{grading.language}</strong></>
+                    : <> · <span style={{ color: '#b45309', fontWeight: 650 }}>no code submitted</span></>}
                 </p>
               </div>
 
@@ -1583,13 +2182,13 @@ export default function GradingPage() {
               {/* LEFT PANE: STUDENT SUBMISSION & ANSWER INSPECTOR */}
               <div style={{ borderRight: '1px solid #e2e8f0', display: 'flex', flexDirection: 'column', overflow: 'hidden' }}>
                 {/* Inspector Sub-Tabs */}
-                <div style={{ display: 'flex', gap: 6, padding: '10px 18px', borderBottom: '1px solid #f1f5f9', background: '#ffffff', flexWrap: 'wrap' }}>
+                <div style={{ display: 'flex', gap: 6, padding: '10px 18px', borderBottom: '1px solid #f1f5f9', background: '#ffffff', flexWrap: 'nowrap', overflowX: 'auto' }}>
                   <button
                     type="button"
                     className={`${styles.tabChip} ${workbenchTab === 'code' ? styles.tabChipActive : ''}`}
                     onClick={() => setWorkbenchTab('code')}
                   >
-                    <Code2 size={13} /> Submitted Code & Output
+                    <Code2 size={13} /> Code &amp; output
                   </button>
                   <button
                     type="button"
@@ -1603,7 +2202,7 @@ export default function GradingPage() {
                     className={`${styles.tabChip} ${workbenchTab === 'viva' ? styles.tabChipActive : ''}`}
                     onClick={() => setWorkbenchTab('viva')}
                   >
-                    <Mic2 size={13} /> Viva Q&A & Modules
+                    <Mic2 size={13} /> Viva Q&amp;A
                   </button>
                   <button
                     type="button"
@@ -1661,8 +2260,15 @@ export default function GradingPage() {
                           {displayedCode}
                         </pre>
                       ) : (
-                        <div style={{ background: '#f8fafc', border: '1px dashed #cbd5e1', borderRadius: 12, padding: 28, textAlign: 'center', color: '#64748b', fontSize: 13 }}>
-                          {loadingReplay ? 'Loading student code snapshots…' : 'No code file submitted for this experiment yet.'}
+                        <div className={hub.empty} style={{ background: '#fcfdff', border: '1px dashed #dbe1ee', borderRadius: 12, padding: '38px 28px' }}>
+                          <Code2 size={26} color="#d8b4fe" />
+                          <div className={hub.emptyTitle}>
+                            {loadingReplay ? 'Loading student code snapshots…' : 'No code file for this submission'}
+                          </div>
+                          <div className={hub.emptyText}>
+                            This mark was built from the rubric components on the right — there is no source file to
+                            review here. Use the other tabs for test-case results, viva answers and the integrity check.
+                          </div>
                         </div>
                       )}
 
@@ -1804,30 +2410,42 @@ export default function GradingPage() {
 
               {/* RIGHT PANE: RUBRIC BREAKDOWN & INSTRUCTOR GRADING CONTROLS */}
               <div style={{ padding: 20, background: '#ffffff', display: 'flex', flexDirection: 'column', gap: 14, overflowY: 'auto' }}>
-                <div>
-                  <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800, color: '#0f172a' }}>Rubric & Score Breakdown</h3>
-                  <p style={{ margin: '2px 0 0', fontSize: 12, color: '#64748b' }}>
-                    Auto-computed components combine with your instructor evaluation score.
-                  </p>
+                <div className={hub.wbHead}>
+                  <div>
+                    <h3 className={hub.wbTitle}>Rubric &amp; score</h3>
+                    <p className={hub.wbSub}>
+                      Tick a component only when it has actually been assessed — ticked components are
+                      re-normalised into the final mark, unticked ones are excluded rather than scored zero.
+                    </p>
+                  </div>
+                  <ScoreRing pct={livePreview.final != null
+                    ? (livePreview.final / (experimentMeta?.grade_scale ?? 100)) * 100
+                    : null} />
                 </div>
 
                 {/* Rubric components — only those the rubric actually uses are scored */}
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 14, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+                  <div className={hub.rubricHeadRow}>
+                    <span>Include</span>
+                    <span>Component</span>
+                    <span style={{ textAlign: 'right' }}>Score</span>
+                    <span style={{ textAlign: 'right' }}>Adds</span>
+                  </div>
                   {([
-                    { key: 'test_cases',   label: 'Automated Test Cases',  auto: true  },
-                    { key: 'lab_report',   label: 'Lab Report / Evaluation', auto: false },
-                    { key: 'code_quality', label: 'Code Quality',          auto: true  },
-                    { key: 'viva',         label: 'Oral Viva',             auto: true  },
-                    { key: 'quiz',         label: 'Pre-Lab Quiz',          auto: true  },
+                    { key: 'test_cases',   label: 'Test cases',   auto: true  },
+                    { key: 'lab_report',   label: 'Lab report',   auto: false },
+                    { key: 'code_quality', label: 'Code quality', auto: true  },
+                    { key: 'viva',         label: 'Oral viva',    auto: true  },
+                    { key: 'quiz',         label: 'Pre-lab quiz', auto: true  },
                   ] as const).map(({ key, label, auto }) => {
                     const weight = Number((rubricOf as Record<string, number>)[key] || 0);
                     const value = componentValue(key);
 
                     if (!weight) {
                       return (
-                        <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5, opacity: 0.55 }}>
+                        <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 11.5, opacity: 0.6, padding: '2px 10px' }}>
                           <span style={{ color: '#475569' }}>{label}</span>
-                          <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>not used (0%)</span>
+                          <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>0% — not part of this rubric</span>
                         </div>
                       );
                     }
@@ -1840,23 +2458,25 @@ export default function GradingPage() {
                       ? (value * weight) / (livePreview.weightUsed || weight)
                       : null;
                     return (
-                      <div key={key} style={{ display: 'grid', gridTemplateColumns: '26px 1fr 84px 74px', gap: 8, alignItems: 'center',
-                                               opacity: ticked ? 1 : 0.55 }}>
-                        <input
-                          type="checkbox"
-                          checked={ticked}
-                          title={ticked ? 'Graded — included in the mark' : 'Not graded — excluded from the mark'}
-                          onChange={e => setAssessed(prev => ({ ...prev, [key]: e.target.checked }))}
-                          style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#7c3aed' }}
-                        />
-                        <div>
-                          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>
-                            {label}
-                            <span style={{ fontWeight: 500, color: '#7c3aed' }}> · {weight}%</span>
-                            {!ticked && <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: '#94a3b8' }}>EXCLUDED</span>}
+                      <div key={key} className={`${hub.compRow} ${ticked ? hub.compRowOn : hub.compRowOff}`}>
+                        <button
+                          type="button"
+                          className={`${hub.tickBtn} ${ticked ? hub.tickBtnOn : ''}`}
+                          aria-pressed={ticked}
+                          title={ticked ? 'Ticked — counted in the final mark' : 'Unticked — excluded, not marked zero'}
+                          onClick={() => setAssessed(prev => ({ ...prev, [key]: !prev[key] }))}
+                        >
+                          {ticked ? <CheckCircle2 size={11} /> : <span style={{ fontSize: 12 }}>○</span>}
+                          {ticked ? 'Assessed' : 'Skip'}
+                        </button>
+                        <div style={{ minWidth: 0 }}>
+                          <div className={hub.compName}>
+                            <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+                            <span className={hub.compWeight}>{weight}%</span>
                           </div>
-                          <div style={{ fontSize: 11, color: '#94a3b8' }}>
-                            {auto ? 'auto-computed — edit to override' : 'your score (0–100)'}
+                          <div className={hub.compHint}>
+                            {auto ? 'auto-computed — type to override' : 'your score, 0–100'}
+                            {!ticked ? ' · excluded from the mark' : ''}
                           </div>
                         </div>
                         <input
@@ -1866,35 +2486,41 @@ export default function GradingPage() {
                           placeholder="—"
                           disabled={!ticked}
                           onChange={e => setComponentScores(prev => ({ ...prev, [key]: e.target.value }))}
-                          style={{ padding: '6px 8px', fontSize: 13 }}
+                          style={{ padding: '6px 8px', fontSize: 13, textAlign: 'right' }}
                         />
-                        <span style={{ fontSize: 12, color: marksAdded != null ? '#059669' : '#94a3b8', textAlign: 'right', fontWeight: 600 }}>
+                        <span className={`${hub.compAdds} ${marksAdded == null ? hub.compAddsMuted : ''}`}>
                           {marksAdded != null ? `+${marksAdded.toFixed(1)}` : '—'}
                         </span>
                       </div>
                     );
                   })}
 
-                  <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#4f46e5' }}>
-                      Final Score
+                  <div className={hub.finalBar}>
+                    <div>
+                      <div className={hub.finalLabel}>Final score</div>
+                      <div className={hub.finalValue}>
+                        {livePreview.final ?? '—'}
+                        <span className={hub.finalScale}> / {experimentMeta?.grade_scale ?? 100}</span>
+                      </div>
                       {grading.hint_deduction ? (
-                        <span style={{ fontWeight: 500, color: '#b45309', fontSize: 11.5 }}>
-                          {' '}(after −{grading.hint_deduction} hint deduction)
-                        </span>
+                        <div className={hub.finalNote}>after −{grading.hint_deduction} hint deduction</div>
                       ) : null}
-                    </span>
-                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {livePreview.provisional && (
+                    </div>
+                    <div style={{ textAlign: 'right', display: 'flex', flexDirection: 'column', gap: 4, alignItems: 'flex-end' }}>
+                      {livePreview.provisional ? (
                         <span style={{ fontSize: 10.5, fontWeight: 700, color: '#b45309', background: '#fef3c7',
                                        border: '1px solid #fcd34d', borderRadius: 999, padding: '2px 8px' }}>
                           PROVISIONAL · {livePreview.weightUsed}% assessed
                         </span>
+                      ) : (
+                        <span className={`${hub.healthStatus} ${hub.statusOk}`}>
+                          <CheckCircle2 size={11} /> 100% assessed
+                        </span>
                       )}
-                      <span style={{ fontSize: 18, fontWeight: 800, color: '#059669' }}>
-                        {livePreview.final ?? '—'} / {experimentMeta?.grade_scale ?? 100}
+                      <span style={{ fontSize: 10.5, color: '#94a3b8', fontWeight: 600 }}>
+                        weighted over the ticked components
                       </span>
-                    </span>
+                    </div>
                   </div>
                 </div>
 
@@ -1953,7 +2579,7 @@ export default function GradingPage() {
                   </div>
                 )}
 
-                <div style={{ marginTop: 'auto', display: 'flex', gap: 8, paddingTop: 8 }}>
+                <div className={hub.wbFooter}>
                   <button
                     className={styles.secondaryBtn}
                     disabled={saving || (grading.is_locked && !overrideLock)}

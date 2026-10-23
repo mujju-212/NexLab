@@ -148,7 +148,14 @@ export interface SubjectGradeSummary {
     name: string;
     code: string;
     total_marks: number;
+    /** Weighted points that actually count (published assessments only). */
     total_weightage: number;
+    published_weightage?: number;
+    draft_weightage?: number;
+    planned_total_weightage?: number;
+    published_count?: number;
+    draft_count?: number;
+    unallocated_marks?: number;
     over_allocation: boolean;
   };
   experiments: Array<{
@@ -158,13 +165,27 @@ export interface SubjectGradeSummary {
     delivery_mode?: 'lab' | 'exam' | 'practice';
     weightage: number;
     grade_scale: number;
+    /** Drafts are visible in the gradebook but do not count toward the total. */
+    is_published?: boolean;
+    graded_count?: number;
+    submitted_count?: number;
+    class_average_percent?: number | null;
   }>;
   students: Array<{
     student_id: string;
     full_name: string;
     roll_number: string | null;
+    email?: string | null;
     experiment_scores: Record<string, number>;
+    experiment_details?: Record<string, Record<string, unknown>>;
+    /** Weighted points earned out of `subject.total_weightage`. */
     subject_score: number;
+    points_earned?: number;
+    points_allocated?: number;
+    /** Pro-rated percentage of the marks currently allocated (null if none). */
+    subject_percent?: number | null;
+    assessed_count?: number;
+    assessment_count?: number;
   }>;
 }
 
