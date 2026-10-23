@@ -3387,7 +3387,7 @@ def platform_list_institutions(search: str = None, **_):
             'subdomain': inst.subdomain,
             'plan': inst.plan,
             'status': inst.status,
-            'students': f"{stu_cnt}/{inst.max_students or 200}",
+            'students': f"{stu_cnt}/{inst.max_students or 0}",
             'instructors': f"{instr_cnt}/{inst.max_instructors or 10}",
             'total_ai_tokens': int(tkns),
         })

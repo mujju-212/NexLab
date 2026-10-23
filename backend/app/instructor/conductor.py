@@ -265,9 +265,29 @@ def live_state(session_id):
             for m in modules
         ]
 
+    # ── Live proctor feed (last 40 events, newest first) ───────────────────
+    # A proctor console has to show what is happening, not just a count per
+    # student: severity, who, when, and what they did.
+    feed_q = ProctorEvent.query.filter(ProctorEvent.session_id == session_id,
+                                       ProctorEvent.event_type != 'force_submit')
+    feed_rows = feed_q.order_by(ProctorEvent.recorded_at.desc()).limit(40).all()
+    pe_names = {u.id: u.full_name for u in User.query.filter(
+        User.id.in_({e.student_id for e in feed_rows})).all()} if feed_rows else {}
+    proctor_feed = [{
+        'id':           e.id,
+        'student_id':   e.student_id,
+        'student_name': pe_names.get(e.student_id, ''),
+        'event_type':   e.event_type,
+        'severity':     e.severity or 'low',
+        'payload':      e.payload or {},
+        'recorded_at':  e.recorded_at.isoformat() if e.recorded_at else None,
+    } for e in feed_rows]
+
     return jsonify({
         'session': sess.to_dict(),
         'mode': sess.current_mode or 'briefing',
+        'proctor_feed': proctor_feed,
+        'focus_ml_enabled': bool(sess.focus_ml_enabled),
         'mode_rules': MODE_RULES.get(sess.current_mode or 'briefing', {}),
         'live_page_state': lps.to_dict() if lps else None,
         'experiment': exp.to_dict() if exp else None,
@@ -328,6 +348,30 @@ def set_mode(session_id):
         'from': from_mode,
         'reason': reason,
     }, room=f"session_{session_id}_students")
+
+    # Personal rooms are joined at connect and survive a missed session-room
+    # join, so mode changes reach every student even after a reconnect.
+    from app.models.academic import SectionSubject as _SS, SectionStudent as _SStu
+    _ss = _SS.query.get(sess.section_subject_id)
+    _roster = [e.student_id for e in
+               _SStu.query.filter_by(section_id=_ss.section_id).all()] if _ss else []
+    for _sid in _roster:
+        socketio.emit('session_mode_changed', {
+            'mode': to_mode,
+            'rules': MODE_RULES.get(to_mode, {}),
+            'from': from_mode,
+            'reason': reason,
+        }, room=f"user_{_sid}")
+
+    # Ending by mode change is still an end. The /end route emits session_ended,
+    # but the conductor's End button goes through here — so without this the
+    # student was never told, kept their LIVE badge and kept sharing their screen.
+    if to_mode == 'ended':
+        _ended_payload = {'session_id': session_id,
+                          'message': 'Session has ended. Please submit if you have not already.'}
+        socketio.emit('session_ended', _ended_payload, room=f"session_{session_id}_students")
+        for _sid in _roster:
+            socketio.emit('session_ended', _ended_payload, room=f"user_{_sid}")
 
     return jsonify({
         'mode': to_mode,
@@ -447,12 +491,23 @@ def set_proctor(session_id):
         db.session.add(pol)
     for k, v in changes.items():
         setattr(pol, k, v)
+
+    # The Focus ML switch is not just a UI preference: it decides whether the
+    # behavioural pipeline runs at all. Keep the session-level flag (which the
+    # socket handler and the student both read) in step with the policy, or the
+    # instructor sees focus scores for monitoring they switched off.
+    if 'focus_ml' in changes:
+        sess.focus_ml_enabled = changes['focus_ml']
+    if 'lockdown_fullscreen' in changes:
+        sess.lockdown_enabled = changes['lockdown_fullscreen']
     db.session.commit()
 
     policy = pol.to_dict()
     socketio.emit('proctor_policy_updated', {
         'policy': policy,
         'page_id': page_id,
+        'focus_ml_enabled': bool(sess.focus_ml_enabled),
+        'lockdown_enabled': bool(sess.lockdown_enabled),
     }, room=f"session_{session_id}_students")
 
     return jsonify({'policy': policy, 'page_id': page_id}), 200
@@ -468,20 +523,48 @@ def force_submit(session_id):
 
     data = request.get_json() or {}
     student_id = data.get('student_id')
-    reason = data.get('reason', 'Session ended by instructor')
+    # A force-submit is not the end of the session; saying it is confuses the
+    # student about whether they can keep working.
+    reason = data.get('reason') or 'The instructor submitted your work'
+
+    payload = {'reason': reason, 'timestamp': datetime.utcnow().isoformat()}
+
+    # Who is this for?  Resolve the roster so the order can be delivered to each
+    # student's own room as well as the session room, and so it can be recorded
+    # against them (a missed socket event must not mean a missed submission).
+    from app.models.academic import SectionSubject, SectionStudent
+    ss = SectionSubject.query.get(sess.section_subject_id)
+    targets = []
+    if student_id:
+        targets = [student_id]
+    elif ss:
+        targets = [e.student_id for e in
+                   SectionStudent.query.filter_by(section_id=ss.section_id).all()]
+
+    from app.models.proctor_event import ProctorEvent
+    for tid in targets:
+        db.session.add(ProctorEvent(
+            institution_id=sess.institution_id,
+            session_id=session_id,
+            student_id=tid,
+            event_type='force_submit',
+            severity='low',
+            payload={'reason': reason,
+                     'target': student_id or 'all',
+                     'by': g.user_id},
+        ))
+    db.session.commit()
 
     if student_id:
-        socketio.emit('force_submission', {
-            'reason': reason,
-            'timestamp': datetime.utcnow().isoformat(),
-        }, room=f"student_{student_id}")
+        socketio.emit('force_submission', payload, room=f"student_{student_id}")
+        socketio.emit('force_submission', payload, room=f"user_{student_id}")
     else:
-        socketio.emit('force_submission', {
-            'reason': reason,
-            'timestamp': datetime.utcnow().isoformat(),
-        }, room=f"session_{session_id}_students")
+        socketio.emit('force_submission', payload, room=f"session_{session_id}_students")
+        for tid in targets:
+            socketio.emit('force_submission', payload, room=f"user_{tid}")
 
-    return jsonify({'ok': True, 'target': student_id or 'all'}), 200
+    return jsonify({'ok': True, 'target': student_id or 'all',
+                    'delivered_to': len(targets)}), 200
 
 
 @conductor_bp.route('/sessions/<session_id>/broadcast', methods=['POST'])
@@ -513,6 +596,20 @@ def broadcast(session_id):
     payload['from_name'] = sender_name
     socketio.emit('chat_message', payload, room=f"session_{session_id}_students")
     socketio.emit('chat_message', payload, room=f"session_{session_id}_instructor")
+
+    # Belt and braces: the session room only works if the student's socket joined
+    # it. Their personal room is joined at connect, so a broadcast still lands
+    # after a reconnect or a late join.
+    from app.models.academic import SectionSubject, SectionStudent
+    ss = SectionSubject.query.get(sess.section_subject_id)
+    if ss:
+        for e in SectionStudent.query.filter_by(section_id=ss.section_id).all():
+            socketio.emit('instructor_message', {
+                'message': message,
+                'from': sender_name,
+                'timestamp': datetime.utcnow().isoformat(),
+            }, room=f"user_{e.student_id}")
+            socketio.emit('chat_message', payload, room=f"user_{e.student_id}")
 
     return jsonify({'message': payload}), 200
 
@@ -914,7 +1011,12 @@ def finalize_grades(session_id):
         return jsonify({'error': 'Session has no experiment to grade.'}), 400
 
     updated, count = _finalize_grades_core(sess)
-    return jsonify({'updated': updated, 'count': count}), 200
+    return jsonify({
+        'updated': updated,
+        'count': count,
+        'ungraded': getattr(_finalize_grades_core, 'last_ungraded', []),
+        'ungraded_count': len(getattr(_finalize_grades_core, 'last_ungraded', [])),
+    }), 200
 
 
 def _finalize_grades_core(sess):
@@ -967,9 +1069,10 @@ def _finalize_grades_core(sess):
 
     from app.services.grading_service import sync_student_experiment_grade
     updated = []
+    ungraded = []
     for sid in student_ids:
         grade = sync_student_experiment_grade(sid, exp.id, session_id=session_id)
-        if grade:
+        if grade and grade.final_grade is not None:
             updated.append({
                 'student_id': sid,
                 'auto_grade': grade.auto_grade,
@@ -977,7 +1080,12 @@ def _finalize_grades_core(sess):
                 'quality_grade': grade.code_quality_grade,
                 'final_grade': grade.final_grade,
             })
+        else:
+            # Nothing earned yet — report it rather than recording a 0.
+            ungraded.append(sid)
 
+    if ungraded:
+        _finalize_grades_core.last_ungraded = ungraded
     return updated, len(updated)
 
 

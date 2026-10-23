@@ -1366,29 +1366,6 @@ def upload_document():
     db.session.add(doc)
     db.session.commit()
 
-    # Index chunk embeddings for semantic retrieval (never blocks upload).
-    try:
-        from app.models.ai_documents import DocumentChunk
-        from app.ai.rag_embeddings import embed_chunks
-        chunk_texts = [c.get('text', '') for c in chunks]
-        vectors = embed_chunks(chunk_texts)
-        for i, (c, vec) in enumerate(zip(chunks, vectors)):
-            row = DocumentChunk(
-                document_id=doc.id,
-                institution_id=g.institution_id,
-                scope_type=scope_type,
-                scope_id=scope_id,
-                chunk_index=i,
-                chunk_id=c.get('chunk_id', f"{file_id}_{i}"),
-                text=c.get('text', ''),
-                page=c.get('page'),
-                embedding=vec,
-            )
-            db.session.add(row)
-        db.session.commit()
-    except Exception as exc:
-        current_app.logger.warning("[harness.rag] chunk embedding skipped for %s: %s", orig_filename, exc)
-
     if g.institution_id and g.role == 'institution_admin':
         try:
             from app.institution.audit import write_audit
@@ -1424,13 +1401,6 @@ def delete_document(doc_id):
     try:
         if os.path.exists(doc.file_path):
             os.remove(doc.file_path)
-    except Exception:
-        pass
-
-    try:
-        from app.models.ai_documents import DocumentChunk
-        DocumentChunk.query.filter_by(document_id=doc_id).delete()
-        db.session.commit()
     except Exception:
         pass
 

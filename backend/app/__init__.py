@@ -22,6 +22,15 @@ def create_app(config_name=None):
     # ── Initialize extensions ─────────────────────────────────────────────
     db.init_app(app)
 
+    # Analytics caches are invalidated by the writes themselves (see
+    # app/analytics/freshness.py) so no read can serve a pre-write number.
+    try:
+        from app.analytics.freshness import install_hooks, init_http_cache
+        install_hooks()
+        init_http_cache(app)
+    except Exception:  # never block boot on the cache layer
+        pass
+
     # ── High-Performance SQLite Connection Optimization ──────────────────
     with app.app_context():
         try:

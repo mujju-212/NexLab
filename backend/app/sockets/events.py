@@ -2,7 +2,7 @@
 Socket.io event handlers for live session real-time communication.
 All events here — zero ML logic. Pure routing and relay.
 """
-from flask import g
+from flask import g, current_app
 from flask_socketio import join_room, leave_room, emit
 from flask_jwt_extended import decode_token
 
@@ -232,6 +232,64 @@ def handle_join_session(data):
         }, room=f"session_{session_id}_instructor")
 
         emit('joined', {'room': 'student', 'session_id': session_id})
+
+        # ── State snapshot ────────────────────────────────────────────────
+        # Sockets are fire-and-forget: anything the instructor pushed while this
+        # student was connecting, reconnecting or on another tab was lost with no
+        # trace. Sending the whole current state on join means a student is
+        # always correct on arrival, whatever they missed.
+        try:
+            from app.instructor.conductor import MODES
+            from app.models.chat import ChatMessage as _Chat
+            from app.models.proctor_event import ProctorEvent as _PE
+
+            mode = sess.current_mode or 'briefing'
+            rules = MODES.get(mode, MODES.get('working'))
+
+            # Has the instructor force-submitted this student since they joined?
+            fs = (_PE.query
+                  .filter(_PE.session_id == session_id,
+                          _PE.event_type == 'force_submit',
+                          _PE.student_id == user['user_id'])
+                  .order_by(_PE.recorded_at.desc())
+                  .first())
+            force_payload = None
+            if fs and fs.payload:
+                force_payload = {
+                    'reason':    fs.payload.get('reason') or 'Session ended by instructor',
+                    'timestamp': fs.recorded_at.isoformat() if fs.recorded_at else None,
+                }
+
+            msgs = (_Chat.query.filter_by(session_id=session_id)
+                    .order_by(_Chat.created_at.desc()).limit(25).all())[::-1]
+            chat = []
+            for m in msgs:
+                d = m.to_dict()
+                try:
+                    from app.models.user import User as _U
+                    u = _U.query.get(m.from_id) if m.from_id else None
+                    d['from_name'] = u.full_name if u else 'Instructor'
+                except Exception:
+                    d['from_name'] = 'Instructor'
+                chat.append(d)
+
+            from app.instructor.conductor import _resolve_policy
+            emit('session_state', {
+                'session_id':        session_id,
+                'status':            sess.status,
+                'ended':             sess.status == 'ended',
+                'mode':              mode,
+                'rules':             rules,
+                'proctor_policy':    _resolve_policy(sess),
+                'focus_ml_enabled':  bool(sess.focus_ml_enabled),
+                'lockdown_enabled':  bool(sess.lockdown_enabled),
+                'force_submit':      force_payload,
+                'chat':              chat,
+            })
+        except Exception as exc:   # never block the join itself
+            print(f'[sock] session_state snapshot failed: {exc}', flush=True)
+            emit('session_state', {'session_id': session_id, 'status': sess.status,
+                                   'ended': sess.status == 'ended'})
 
 
 @socketio.on('leave_session')
@@ -815,6 +873,13 @@ def handle_behavioral_signals(data):
     session_id = data.get('session_id')
     student_id = user['user_id']
 
+    # The conductor's "Focus ML monitoring" switch must actually switch the
+    # pipeline off — otherwise the instructor sees focus scores for a data stream
+    # they deliberately turned off, and the student is scored while unmonitored.
+    sess_for_focus = _get_session_or_none(session_id)
+    if sess_for_focus is not None and not sess_for_focus.focus_ml_enabled:
+        return
+
     # Auto-resolve session_id if missing
     if not session_id:
         try:
@@ -863,19 +928,29 @@ def handle_behavioral_signals(data):
             + signals['window_focus_ratio'] * 20
         ))
 
-    # Persist to DB
+    # Persist to DB.
+    # NOTE: predict_focus_score() returns a numpy.float64. psycopg2 renders that
+    # as `np.float64(...)`, which Postgres rejects with
+    #   InvalidSchemaName: schema "np" does not exist
+    # and the old bare `except: rollback()` hid it, so NO focus score was ever
+    # stored — the live number appeared on screen but the sparkline, the
+    # spark_grid and the ranking engagement score all stayed empty. Coerce to a
+    # builtin float and log failures instead of swallowing them.
     if session_id:
         try:
             from app.models.knowledge import FocusScore as FocusScoreModel
             fs = FocusScoreModel(
                 student_id=student_id,
                 session_id=session_id,
-                focus_score=round(focus_score, 1),
+                focus_score=round(float(focus_score), 1),
                 signals=signals,
             )
             db.session.add(fs)
             db.session.commit()
-        except Exception:
+        except Exception as exc:
+            current_app.logger.warning(
+                'focus score not persisted (student=%s session=%s): %s',
+                student_id, session_id, exc)
             try:
                 db.session.rollback()
             except Exception:
@@ -898,7 +973,7 @@ def handle_behavioral_signals(data):
     emit('student_focus_update', {
         'student_id':  student_id,
         'full_name':   user.get('full_name', ''),
-        'focus_score': round(focus_score, 1),
+        'focus_score': round(float(focus_score), 1),
         'signals':     signals,
         'alerts':      alerts,
         'timestamp':   datetime.utcnow().isoformat(),

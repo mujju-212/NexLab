@@ -43,8 +43,6 @@ from app.ai.role_tools import get_tools_for_role, CONFIRM_ACTION_NAMES
 from app.models.user import User
 from app.models.institution import Institution
 from app.models.admin_copilot import AdminChatSession, AdminChatMessage, InstitutionDocument
-from app.ai.rag_embeddings import get_embedding, cosine_sim
-from app.models.ai_documents import DocumentChunk, HAS_PGVECTOR
 
 log = logging.getLogger(__name__)
 
@@ -138,68 +136,6 @@ def extract_multi_format_chunks(file_path: str, filename: str, file_id: str) -> 
     return chunks, max(1, len(pages_text)), doc_type
 
 
-def vector_search_scoped_documents(institution_id, user_id, role, query, doc_id=None, top_k=4):
-    """Semantic RAG retrieval over DocumentChunk embeddings (pgvector or JSON-list cosine)."""
-    if not query or not query.strip():
-        return []
-
-    q = InstitutionDocument.query
-    if doc_id:
-        q = q.filter(InstitutionDocument.id == doc_id)
-    elif institution_id:
-        q = q.filter(or_(
-            InstitutionDocument.institution_id == institution_id,
-            InstitutionDocument.uploaded_by == user_id,
-        ))
-    else:
-        q = q.filter(InstitutionDocument.uploaded_by == user_id)
-    docs = q.all()
-    if not docs:
-        return []
-
-    doc_ids = [d.id for d in docs]
-    chunk_rows = DocumentChunk.query.filter(DocumentChunk.document_id.in_(doc_ids)).all()
-    if not chunk_rows:
-        return []
-
-    query_emb = get_embedding(query)
-    doc_map = {d.id: d for d in docs}
-    scored = []
-    for ch in chunk_rows:
-        if ch.embedding is None:
-            continue
-        if HAS_PGVECTOR:
-            dist = ch.embedding.cosine_distance(query_emb) if hasattr(ch.embedding, 'cosine_distance') else None
-            score = None
-            # fall back to python cosine if pgvector object lacks method
-            try:
-                if dist is None:
-                    score = cosine_sim(list(ch.embedding), query_emb)
-                else:
-                    score = 1.0 - float(dist)
-            except Exception:
-                score = None
-        else:
-            score = cosine_sim(ch.embedding, query_emb)
-        if score is None:
-            continue
-        # keyword-overlap re-rank: penalise chunks sharing no tokens with query
-        q_tokens = set(query.lower().split())
-        ch_tokens = set((ch.text or '').lower().split())
-        if not (q_tokens & ch_tokens):
-            score *= 0.85
-        scored.append({
-            'doc_id': ch.document_id,
-            'filename': doc_map[ch.document_id].filename if ch.document_id in doc_map else 'document',
-            'page': ch.page or 1,
-            'text': ch.text,
-            'similarity_score': round(float(max(0.0, score)), 3),
-        })
-
-    scored.sort(key=lambda r: r['similarity_score'], reverse=True)
-    return scored[:top_k]
-
-
 def search_scoped_documents(institution_id: str, user_id: str, role: str,
                             query: str, doc_id: str = None, top_k: int = 4) -> list[dict]:
     if not query or not query.strip():
@@ -219,20 +155,6 @@ def search_scoped_documents(institution_id: str, user_id: str, role: str,
     docs = q.all()
     if not docs:
         return []
-
-    # Pgvector / semantic path first, when available; TF-IDF is the guaranteed fallback.
-    if HAS_PGVECTOR:
-        try:
-            has_chunks = DocumentChunk.query.filter(
-                DocumentChunk.document_id.in_([d.id for d in docs])
-            ).first() is not None
-            if has_chunks:
-                vec_results = vector_search_scoped_documents(
-                    institution_id, user_id, role, query, doc_id=doc_id, top_k=top_k)
-                if vec_results:
-                    return vec_results
-        except Exception as exc:
-            log.warning("[harness.rag] vector search failed, falling back to TF-IDF: %s", exc)
 
     corpus_chunks = []
     for d in docs:
@@ -790,7 +712,6 @@ def run_harness_turn(prompt: str, institution_id: str, user_id: str, role: str,
             if tool_name in CONFIRM_ACTION_NAMES or (isinstance(result, dict) and result.get('requires_confirmation')):
                 pending_action = result.get('draft') or result
                 _emit_ai_event(user_id, 'ai:confirm_action', {'pending_action': pending_action, 'session_id': session_id})
-                _emit_ai_event(user_id, 'ai:action_card', {'pending_action': pending_action, 'session_id': session_id})
 
             if isinstance(result, dict) and result.get('generated_document'):
                 generated_doc = result.get('generated_document')

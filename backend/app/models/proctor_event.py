@@ -24,8 +24,12 @@ class ProctorEvent(db.Model):
     id             = db.Column(db.String(36), primary_key=True,
                                default=lambda: str(uuid.uuid4()))
     institution_id = db.Column(db.String(36), nullable=False, index=True)
+    # An event belongs to EITHER a live session OR a timed exam attempt.
     session_id     = db.Column(db.String(36), db.ForeignKey('lab_sessions.id'),
-                               nullable=False)
+                               nullable=True)
+    exam_id        = db.Column(db.String(36), db.ForeignKey('exams.id'),
+                               nullable=True)
+    attempt_id     = db.Column(db.String(36), nullable=True)
     student_id     = db.Column(db.String(36), db.ForeignKey('users.id'),
                                nullable=False)
     event_type     = db.Column(db.String(40), nullable=False)  # tab_switch / fullscreen_exit / …
@@ -37,12 +41,16 @@ class ProctorEvent(db.Model):
         db.Index('ix_proctor_events_inst_session',   'institution_id', 'session_id'),
         db.Index('ix_proctor_events_inst_student',   'institution_id', 'student_id'),
         db.Index('ix_proctor_events_inst_date',      'institution_id', 'recorded_at'),
+        db.Index('ix_proctor_events_exam_attempt',   'exam_id', 'attempt_id'),
+        db.Index('ix_proctor_events_exam_student',   'exam_id', 'student_id'),
     )
 
     def to_dict(self):
         return {
             'id':             self.id,
             'session_id':     self.session_id,
+            'exam_id':        self.exam_id,
+            'attempt_id':     self.attempt_id,
             'student_id':     self.student_id,
             'event_type':     self.event_type,
             'payload':        self.payload or {},

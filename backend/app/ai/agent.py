@@ -90,22 +90,6 @@ def search_document_chunks(institution_id: str, query: str, doc_id: str = None, 
     if not docs:
         return []
 
-    # Pgvector semantic path first (when available); TF-IDF remains the fallback.
-    try:
-        from app.models.ai_documents import HAS_PGVECTOR, DocumentChunk
-        from app.ai.harness import vector_search_scoped_documents
-        if HAS_PGVECTOR:
-            has_chunks = DocumentChunk.query.filter(
-                DocumentChunk.document_id.in_([d.id for d in docs])
-            ).first() is not None
-            if has_chunks:
-                vec_results = vector_search_scoped_documents(
-                    institution_id, None, 'institution_admin', query, doc_id=doc_id, top_k=top_k)
-                if vec_results:
-                    return vec_results
-    except Exception:
-        pass  # fall through to existing TF-IDF logic unchanged
-
     corpus_chunks = []
     for d in docs:
         for ch in (d.chunks or []):
