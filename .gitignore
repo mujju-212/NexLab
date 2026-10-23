@@ -116,3 +116,12 @@ backend/check_admin.py
 backend/scratch_check.py
 backend/inspect_*.py
 
+
+# ── Local audit artefacts & scratch files ───────────────────────────────
+# Screenshot/JSON output from the UI audit harnesses, local runtime uploads
+# and per-machine scratch files are intentionally not part of the repo.
+ui-checks/
+uploads/
+backend/uploads/
+.config/
+.sudo_as_admin_successful
