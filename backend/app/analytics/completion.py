@@ -63,31 +63,29 @@ def compute_student_completion_rollup(
     exp_map = {e.id: e for e in all_experiments}
     assigned_count = len(all_experiments)
 
-    # Completed experiments: final submission or non-null grade
+    # A final submission is the completion event. A grade can be entered
+    # manually or imported without a student ever submitting the experiment,
+    # so grades are reported separately and never inflate completion.
     completed_submissions = (
         db.session.query(CodeAttempt.experiment_id)
         .filter(
             CodeAttempt.student_id == student_id,
             CodeAttempt.experiment_id.in_(scope_exp_ids),
-            CodeAttempt.is_final_submission == True,
+            CodeAttempt.is_final_submission.is_(True),
         )
         .distinct()
         .all()
     )
     completed_exp_ids = {r[0] for r in completed_submissions}
-
-    graded = (
-        db.session.query(Grade.experiment_id)
+    graded_exp_ids = {
+        r[0] for r in db.session.query(Grade.experiment_id)
         .filter(
             Grade.student_id == student_id,
             Grade.experiment_id.in_(scope_exp_ids),
             Grade.final_grade.isnot(None),
         )
-        .distinct()
-        .all()
-    )
-    for g in graded:
-        completed_exp_ids.add(g[0])
+        .distinct().all()
+    }
 
     completed_count = len(completed_exp_ids)
     pct = round(100.0 * (completed_count / max(1, assigned_count)), 1) if assigned_count > 0 else 0.0
@@ -110,6 +108,8 @@ def compute_student_completion_rollup(
     return {
         'assigned': assigned_count,
         'completed': completed_count,
+        'submitted': completed_count,
+        'graded': len(graded_exp_ids),
         'completion_pct': pct,
         'completed_experiments': completed_list,
         'pending_experiments': pending_list,

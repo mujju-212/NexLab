@@ -127,6 +127,12 @@ export function Student360Drawer({
   const attendance = profile?.attendance;
   const completion = profile?.completion;
   const ranks = profile?.ranks || {};
+  const integrityHasEvidence = Boolean(integrityData && integrityData.confidence_band !== 'no_data');
+  const integrityEvents = integrityData?.timeline || [];
+  const proctorFlagCount = integrityHasEvidence
+    ? Object.values(integrityData?.violation_counts || {}).reduce((sum, count) => sum + count, 0)
+    : null;
+  const plagiarismFlagCount = integrityHasEvidence ? (integrityData?.plagiarism_flags?.length ?? 0) : null;
 
   const studentName = student?.full_name || (student as any)?.name || '';
   const initials = studentName
@@ -329,7 +335,7 @@ export function Student360Drawer({
                 </div>
                 <div style={{ background: '#f8fafc', padding: '12px', borderRadius: 10, textAlign: 'center' }}>
                   <div style={{ fontSize: '0.7rem', color: '#64748b', fontWeight: 600, textTransform: 'uppercase' }}>
-                    Completion
+                    Final Submissions
                   </div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#06b6d4', marginTop: 2 }}>
                     {completion?.completed ?? 0}/{completion?.assigned ?? 0}
@@ -372,6 +378,9 @@ export function Student360Drawer({
                   <span style={{ fontSize: '0.75rem', fontWeight: 700, color: '#5b21b6' }}>
                     Cohort Standings
                     <span style={{ fontWeight: 500, color: '#7c3aed' }}> (composite: mastery · engagement · effort · efficiency · consistency)</span>:
+                  </span>
+                  <span style={{ flexBasis: '100%', marginLeft: 24, fontSize: 11, color: '#64748b' }}>
+                    Attendance is included only when every student in the cohort has at least 3 sessions. Missing signals are left out, not counted as zero.
                   </span>
                   {Object.entries(ranks).map(([scope, r]) => (
                     <span
@@ -606,7 +615,7 @@ export function Student360Drawer({
                         Proctor Flags
                       </div>
                       <div style={{ fontSize: '1.4rem', fontWeight: 800, color: '#374151', marginTop: 4 }}>
-                        {integrityData?.violations?.length || 0}
+                        {proctorFlagCount ?? '—'}
                       </div>
                     </div>
                     <div style={{ background: '#f8fafc', padding: 14, borderRadius: 10, textAlign: 'center' }}>
@@ -617,11 +626,11 @@ export function Student360Drawer({
                         style={{
                           fontSize: '1.4rem',
                           fontWeight: 800,
-                          color: (integrityData?.plagiarism_flags?.length || 0) > 0 ? '#ef4444' : '#10b981',
+                          color: plagiarismFlagCount == null ? '#64748b' : plagiarismFlagCount > 0 ? '#ef4444' : '#10b981',
                           marginTop: 4,
                         }}
                       >
-                        {integrityData?.plagiarism_flags?.length || 0}
+                        {plagiarismFlagCount ?? '—'}
                       </div>
                     </div>
                   </div>
@@ -631,9 +640,9 @@ export function Student360Drawer({
                     <h4 style={{ margin: '0 0 12px', fontSize: '0.9rem', fontWeight: 700, color: '#111827' }}>
                       Proctoring Violation Log
                     </h4>
-                    {integrityData?.violations && integrityData.violations.length > 0 ? (
+                    {integrityEvents.length > 0 ? (
                       <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                        {integrityData.violations.map((v, i) => (
+                        {integrityEvents.map((v, i) => (
                           <div
                             key={i}
                             style={{
@@ -660,14 +669,14 @@ export function Student360Drawer({
                               {v.severity.toUpperCase()}
                             </span>
                             <span style={{ color: '#9ca3af', fontSize: '0.72rem' }}>
-                              {new Date(v.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}
+                              {v.recorded_at ? new Date(v.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : '—'}
                             </span>
                           </div>
                         ))}
                       </div>
                     ) : (
                       <div style={{ color: '#10b981', fontSize: '0.8125rem' }}>
-                        No suspicious proctor events recorded.
+                        {!integrityData ? 'Loading integrity data…' : integrityData.confidence_band === 'no_data' ? 'No integrity evidence is available yet; this is not a clean-record result.' : 'No proctor flags recorded.'}
                       </div>
                     )}
                   </div>

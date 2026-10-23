@@ -2235,6 +2235,28 @@ def analytics_cohort_matrix():
     for gr in bulk_g_rows:
         grades_by_sid[gr.student_id].append(float(gr.final_grade))
 
+    # Completion is a final submission, not the existence of a grade row.
+    # A grade can be entered manually and must not make an unsubmitted lab look
+    # complete. Keep the submitted count distinct by experiment.
+    if exp_filter and exp_filter != 'all':
+        completion_exp_ids = [exp_filter] if exp_filter in my_exp_ids else []
+    else:
+        _scope_subject_ids = {x.subject_id for x in sec_subjs if x.subject_id}
+        completion_exp_ids = [e.id for e in Experiment.query.filter(
+            Experiment.subject_id.in_(_scope_subject_ids)
+        ).all()] if _scope_subject_ids else []
+    submitted_exp_by_sid = defaultdict(set)
+    if s_ids and completion_exp_ids:
+        from app.models.submission import CodeAttempt
+        for _student_id, _experiment_id in db.session.query(
+            CodeAttempt.student_id, CodeAttempt.experiment_id
+        ).filter(
+            CodeAttempt.student_id.in_(s_ids),
+            CodeAttempt.experiment_id.in_(completion_exp_ids),
+            CodeAttempt.is_final_submission.is_(True),
+        ).distinct().all():
+            submitted_exp_by_sid[_student_id].add(_experiment_id)
+
     last_submit_by_sid = {}
     if s_ids:
         from app.models.submission import CodeAttempt
@@ -2386,7 +2408,7 @@ def analytics_cohort_matrix():
             '_m': avg_mastery,
             '_g': avg_grade,
             '_a': att_rate,
-            '_completed_count': len(all_grades),
+            '_submitted_count': len(submitted_exp_by_sid.get(s.id, set())),
         })
 
     # Percentiles within cohort
@@ -2415,11 +2437,7 @@ def analytics_cohort_matrix():
     ranked_students = sorted(raw_list, key=lambda x: (x['grade_avg'], x['mastery_pct'], -x['risk_score']), reverse=True)
     rank_map = {st['student_id']: idx + 1 for idx, st in enumerate(ranked_students)}
 
-    if selected_ss and selected_ss.subject_id:
-        sub_exp_count = Experiment.query.filter_by(subject_id=selected_ss.subject_id).count()
-        comp_total = sub_exp_count or 5
-    else:
-        comp_total = len(my_exp_ids) or 5
+    comp_total = len(completion_exp_ids)
 
     for r in raw_list:
         rank = rank_map.get(r['student_id'], 1)
@@ -2428,11 +2446,11 @@ def analytics_cohort_matrix():
             'section_rank': f'#{rank} / {total_in_scope}',
             'cohort_rank': f'#{rank} / {total_in_scope}',
         }
-        comp_completed = r.pop('_completed_count', 0)
+        comp_completed = r.pop('_submitted_count', 0)
         r['completion'] = {
             'completed': comp_completed,
             'total': comp_total,
-            'pct': round((comp_completed / max(1, comp_total)) * 100),
+            'pct': round((comp_completed / comp_total) * 100) if comp_total else None,
         }
         r['integrity_confidence'] = max(60, 100 - r['violations_count'] * 8)
 

@@ -40,6 +40,37 @@ RANK_WEIGHTS = {
 }
 
 
+def gate_cohort_rank_samples(all_metrics, student_ids, min_attendance_sessions: int = 3):
+    """Exclude attendance from *everyone's* rank unless the whole cohort has
+    enough sessions to compare it fairly. This prevents a student with three
+    sessions from being scored on attendance while a classmate with one session
+    is not. The input metrics are copied only where an attendance box changes.
+    Returns whether attendance was retained as a cohort-wide rank factor.
+    """
+    if not student_ids:
+        return False
+    enough_for_all = all(
+        (all_metrics.get(sid, {}).get('attendance_rate') or {}).get('sample_size', 0)
+        >= min_attendance_sessions
+        for sid in student_ids
+    )
+    if not enough_for_all:
+        for sid in student_ids:
+            metrics = all_metrics.get(sid)
+            if metrics is None:
+                continue
+            box = metrics.get('attendance_rate')
+            if isinstance(box, dict):
+                metrics['attendance_rate'] = {
+                    **box,
+                    'value': None,
+                    'is_available': False,
+                    'is_sufficient': False,
+                    'rank_excluded': 'cohort_sample_too_thin',
+                }
+    return enough_for_all
+
+
 def score_students(student_ids, institution_id, all_metrics, users_map):
     """
     The ONE implementation of the holistic 5-factor score.
@@ -179,6 +210,7 @@ def compute_section_subject_ranks(section_subject_id: str, institution_id: str, 
         experiment_ids=exp_ids or None,
     )
     users_map = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()}
+    gate_cohort_rank_samples(all_metrics, student_ids)
     candidates, unranked = score_students(student_ids, institution_id, all_metrics, users_map)
     results = rank_positions(candidates, unranked, len(student_ids))
 
@@ -291,6 +323,7 @@ def compute_rank_for_scope(
         u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()
     } if student_ids else {}
 
+    gate_cohort_rank_samples(all_metrics, student_ids)
     candidates, unranked = score_students(
         student_ids, institution_id, all_metrics, users_map
     )

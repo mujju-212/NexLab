@@ -600,7 +600,7 @@ export default function ManagementPage() {
                       <th>Section & Batch</th>
                       <th>Status Band</th>
                       <th>Avg Score</th>
-                      <th>Labs Completed</th>
+                      <th title="Count of final submissions received, not grades entered">Final Submissions</th>
                       <th>Attendance</th>
                       <th>Mastery & Focus</th>
                       <th style={{ textAlign: 'right' }}>360° & Quick Actions</th>
@@ -1113,11 +1113,9 @@ function InsightsTab({ toast3 }: { toast3: (m: string) => void }) {
         <p className={styles.sectionTitle} style={{ marginBottom: 10 }}>Early Warning — Trend-Based Risk Detection</p>
         {warnings.length === 0 ? (
           <p className={styles.sectionSub}>
-            No students are trending at risk on the signals this model reads (submissions, mastery, focus, missed
-            sessions).
             {noDataCount > 0
-              ? ` ${noDataCount} student${noDataCount === 1 ? ' has' : 's have'} no activity data yet, so no risk can be scored for them.`
-              : ''}
+              ? `No risk status can be determined: ${noDataCount} student${noDataCount === 1 ? ' has' : 's have'} no activity data for this model (submissions, mastery, focus, missed sessions).`
+              : 'No students are trending at risk on the signals this model reads (submissions, mastery, focus, missed sessions).'}
           </p>
         ) : (
           <div className={styles.list}>

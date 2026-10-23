@@ -143,25 +143,32 @@ export interface PrerequisiteGraphData {
 
 export interface IntegrityConfidenceData {
   student_id: string;
-  integrity_confidence: number;
+  student_name: string;
+  integrity_confidence: number | null;
+  confidence_band: 'no_data' | 'trustworthy' | 'minor_flags' | 'suspicious' | 'high_risk' | string;
   review_recommended: boolean;
-  violation_density: number;
-  violations: Array<{
+  severity_breakdown: { high: number; medium: number; low: number };
+  violation_counts: Record<string, number>;
+  timeline: Array<{
+    id: string;
+    session_id: string | null;
     event_type: string;
     severity: string;
-    recorded_at: string;
-    payload?: Record<string, unknown>;
+    payload: Record<string, unknown>;
+    recorded_at: string | null;
   }>;
   plagiarism_flags: Array<{
+    id: string;
     similarity_pct: number;
     status: string;
     counterpart_name: string;
     detected_at: string | null;
   }>;
-  anomalies: Array<{
+  code_anomalies: Array<{
     type: string;
     description: string;
     attempt_number: number;
+    experiment_id: string;
     created_at: string | null;
   }>;
 }
