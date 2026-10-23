@@ -45,15 +45,17 @@ interface ExperimentsTabProps {
 
 // Mini SVG sparkline for KPI cards
 function MiniSparkline({ points, color }: { points: number[]; color: string }) {
-  if (!points || points.length === 0) return null;
-  const min = Math.min(...points);
-  const max = Math.max(...points);
+  // Real series can contain gaps; a single point is not a trend.
+  const vals = (points || []).filter((p) => typeof p === 'number' && Number.isFinite(p));
+  if (vals.length < 2) return null;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
   const range = max - min || 1;
   const width = 96;
   const height = 32;
 
-  const pts = points.map((p, idx) => {
-    const x = (idx / (points.length - 1)) * (width - 12) + 6;
+  const pts = vals.map((p, idx) => {
+    const x = (idx / (vals.length - 1)) * (width - 12) + 6;
     const y = height - 6 - ((p - min) / range) * (height - 12);
     return `${x},${y}`;
   });

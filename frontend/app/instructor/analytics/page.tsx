@@ -82,6 +82,9 @@ interface SectionLite {
   section_name: string;
   section_id?: string;
   student_count: number;
+  academic_year?: string;
+  department_code?: string;
+  department_name?: string;
 }
 
 interface AnalyticsTabItem {
@@ -119,8 +122,8 @@ function AnalyticsDashboard() {
   const [selectedExpId, setSelectedExpId] = useState<string>('');
   const [selectedSubject, setSelectedSubject] = useState<string>('');
   const [selectedMetric, setSelectedMetric] = useState<string>('all');
-  const [selectedDepartment, setSelectedDepartment] = useState<string>('CSE');
-  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('2024-2025');
+  const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
+  const [selectedAcademicYear, setSelectedAcademicYear] = useState<string>('all');
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('all');
   const [rankingScope, setRankingScope] = useState<string>('section');
   const [compareActive, setCompareActive] = useState<boolean>(false);
@@ -336,25 +339,66 @@ function AnalyticsDashboard() {
   });
   const sections = sectionsData || [];
 
-  const sectionACount = sections.find((s) => s.section_name === 'A' || s.section_name === 'Section A')?.student_count || 24;
-  const sectionBCount = sections.find((s) => s.section_name === 'B' || s.section_name === 'Section B')?.student_count || 12;
-  const totalSectionCount = sectionACount + sectionBCount || 36;
+  // ── Filter options derived from what this instructor actually teaches ──
+  // (previously hardcoded to "Section A/B", 24/12/36 students and 2024-2025)
+  const normSec = (v?: string) => (v || '').replace(/^Section\s+/i, '').trim();
+
+  const sectionOptions = useMemo(() => {
+    const m = new Map<string, number>();
+    sections.forEach((s) => {
+      const name = normSec(s.section_name);
+      if (!name) return;
+      // one row per section-subject; the student body is the same, so take the max
+      m.set(name, Math.max(m.get(name) || 0, s.student_count || 0));
+    });
+    return Array.from(m, ([name, count]) => ({ name, count })).sort((a, b) =>
+      a.name.localeCompare(b.name),
+    );
+  }, [sections]);
+
+  const academicYearOptions = useMemo(
+    () => Array.from(new Set(sections.map((s) => s.academic_year).filter(Boolean) as string[])).sort(),
+    [sections],
+  );
+  const departmentOptions = useMemo(
+    () =>
+      Array.from(
+        new Map(
+          sections
+            .filter((s) => s.department_code)
+            .map((s) => [s.department_code as string, s.department_name || s.department_code as string]),
+        ),
+      ).sort((a, b) => a[0].localeCompare(b[0])),
+    [sections],
+  );
+
+  const sectionsInScope = useMemo(
+    () =>
+      sections.filter(
+        (s) =>
+          (selectedSectionFilter === 'all' || normSec(s.section_name) === normSec(selectedSectionFilter)) &&
+          (selectedAcademicYear === 'all' || s.academic_year === selectedAcademicYear) &&
+          (selectedDepartment === 'all' || s.department_code === selectedDepartment),
+      ),
+    [sections, selectedSectionFilter, selectedAcademicYear, selectedDepartment],
+  );
+
+  const sectionCount = (name: string) =>
+    sectionOptions.find((o) => o.name === normSec(name))?.count || 0;
+  const totalSectionCount = sectionsInScope.reduce(
+    (sum, s) => sum + (s.student_count || 0),
+    0,
+  );
 
   // Cascading Available Subjects based on Section
   const availableSubjects = useMemo(() => {
     let rawList: Array<{ id: string; name: string; ss_id: string }> = [];
 
-    if (selectedSectionFilter === 'Section A') {
-      rawList = sections
-        .filter((s) => s.section_name === 'A' || s.section_name === 'Section A')
-        .map((s) => ({ id: s.subject_id || s.section_subject_id, name: s.subject_name, ss_id: s.section_subject_id }));
-    } else if (selectedSectionFilter === 'Section B') {
-      rawList = sections
-        .filter((s) => s.section_name === 'B' || s.section_name === 'Section B')
-        .map((s) => ({ id: s.subject_id || s.section_subject_id, name: s.subject_name, ss_id: s.section_subject_id }));
-    } else {
-      rawList = sections.map((s) => ({ id: s.subject_id || s.section_subject_id, name: s.subject_name, ss_id: s.section_subject_id }));
-    }
+    rawList = sectionsInScope.map((s) => ({
+      id: s.subject_id || s.section_subject_id,
+      name: s.subject_name,
+      ss_id: s.section_subject_id,
+    }));
 
     const seen = new Set<string>();
     const unique: Array<{ id: string; name: string; ss_id: string }> = [];
@@ -366,25 +410,16 @@ function AnalyticsDashboard() {
     });
 
     return unique;
-  }, [sections, selectedSectionFilter]);
+  }, [sectionsInScope]);
 
   // Handler for Level 3: Section Change
   const handleSectionChange = (newSec: string) => {
     setSelectedSectionFilter(newSec);
 
     // Filter available subjects for the new section
-    let newSecSubs: string[] = [];
-    if (newSec === 'Section A') {
-      newSecSubs = sections
-        .filter((s) => s.section_name === 'A' || s.section_name === 'Section A')
-        .map((s) => s.subject_name);
-    } else if (newSec === 'Section B') {
-      newSecSubs = sections
-        .filter((s) => s.section_name === 'B' || s.section_name === 'Section B')
-        .map((s) => s.subject_name);
-    } else {
-      newSecSubs = sections.map((s) => s.subject_name);
-    }
+    const newSecSubs = sections
+      .filter((s) => newSec === 'all' || normSec(s.section_name) === normSec(newSec))
+      .map((s) => s.subject_name);
 
     // If current selected subject is not in the new section, reset it
     let nextSubject = selectedSubject;
@@ -397,9 +432,7 @@ function AnalyticsDashboard() {
     // Find and synchronize ssId
     if (newSec !== 'all') {
       const match = sections.find((s) => {
-        const matchesSec = newSec === 'Section A'
-          ? s.section_name === 'A' || s.section_name === 'Section A'
-          : s.section_name === 'B' || s.section_name === 'Section B';
+        const matchesSec = normSec(s.section_name) === normSec(newSec);
         return matchesSec && (!nextSubject || s.subject_name === nextSubject);
       });
       setSsId(match?.section_subject_id || '');
@@ -415,11 +448,9 @@ function AnalyticsDashboard() {
 
     if (newSub) {
       const match = sections.find((s) => {
-        const matchesSec = selectedSectionFilter === 'all'
-          ? true
-          : selectedSectionFilter === 'Section A'
-          ? s.section_name === 'A' || s.section_name === 'Section A'
-          : s.section_name === 'B' || s.section_name === 'Section B';
+        const matchesSec =
+          selectedSectionFilter === 'all' ||
+          normSec(s.section_name) === normSec(selectedSectionFilter);
         return matchesSec && s.subject_name === newSub;
       });
       if (match) {
@@ -427,10 +458,8 @@ function AnalyticsDashboard() {
       }
     } else {
       if (selectedSectionFilter !== 'all') {
-        const match = sections.find((s) =>
-          selectedSectionFilter === 'Section A'
-            ? s.section_name === 'A' || s.section_name === 'Section A'
-            : s.section_name === 'B' || s.section_name === 'Section B'
+        const match = sections.find(
+          (s) => normSec(s.section_name) === normSec(selectedSectionFilter),
         );
         setSsId(match?.section_subject_id || '');
       } else {
@@ -441,8 +470,8 @@ function AnalyticsDashboard() {
 
   // Handler for Reset Filters
   const handleResetFilters = () => {
-    setSelectedAcademicYear('2024-2025');
-    setSelectedDepartment('CSE');
+    setSelectedAcademicYear('all');
+    setSelectedDepartment('all');
     setSelectedSectionFilter('all');
     setSelectedSubject('');
     setSelectedExpId('');
@@ -790,7 +819,7 @@ function AnalyticsDashboard() {
             {/* LEVEL 1: Academic Year / Batch */}
             <div
               className={`${instructorStyles.cascadingLevelItem} ${
-                selectedAcademicYear !== '2024-2025' ? instructorStyles.cascadingLevelItemActive : ''
+                selectedAcademicYear !== 'all' ? instructorStyles.cascadingLevelItemActive : ''
               }`}
             >
               <div className={instructorStyles.cascadingLevelHeader}>
@@ -808,8 +837,11 @@ function AnalyticsDashboard() {
                   aria-label="Academic Year / Batch"
                 >
                   <option value="all">All Years</option>
-                  <option value="2024-2025">2024–2025 (CSE 2nd Year)</option>
-                  <option value="2023-2024">2023–2024 (CSE 3rd Year)</option>
+                  {academicYearOptions.map((y) => (
+                    <option key={y} value={y}>
+                      {y}
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -822,7 +854,7 @@ function AnalyticsDashboard() {
             {/* LEVEL 2: Department / Program */}
             <div
               className={`${instructorStyles.cascadingLevelItem} ${
-                selectedDepartment !== 'CSE' ? instructorStyles.cascadingLevelItemActive : ''
+                selectedDepartment !== 'all' ? instructorStyles.cascadingLevelItemActive : ''
               }`}
             >
               <div className={instructorStyles.cascadingLevelHeader}>
@@ -839,8 +871,12 @@ function AnalyticsDashboard() {
                   onChange={(e) => setSelectedDepartment(e.target.value)}
                   aria-label="Department / Program"
                 >
-                  <option value="CSE">Computer Science & Engineering (CSE)</option>
-                  <option value="ECE">Electronics & Communication (ECE)</option>
+                  <option value="all">All Departments</option>
+                  {departmentOptions.map(([code, name]) => (
+                    <option key={code} value={code}>
+                      {name} ({code})
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -862,11 +898,7 @@ function AnalyticsDashboard() {
                   Section
                 </span>
                 <span className={instructorStyles.cascadingCountBadge}>
-                  {selectedSectionFilter === 'Section A'
-                    ? `${sectionACount} Students`
-                    : selectedSectionFilter === 'Section B'
-                    ? `${sectionBCount} Students`
-                    : `${totalSectionCount} Students`}
+                  {totalSectionCount} Students
                 </span>
               </div>
               <div className={instructorStyles.cascadingControlBody}>
@@ -877,9 +909,12 @@ function AnalyticsDashboard() {
                   onChange={(e) => handleSectionChange(e.target.value)}
                   aria-label="Section Filter"
                 >
-                  <option value="all">All My Sections (36 Students)</option>
-                  <option value="Section A">Section A (24 Students)</option>
-                  <option value="Section B">Section B (12 Students)</option>
+                  <option value="all">All My Sections ({totalSectionCount} Students)</option>
+                  {sectionOptions.map((o) => (
+                    <option key={o.name} value={`Section ${o.name}`}>
+                      Section {o.name} ({o.count} Students)
+                    </option>
+                  ))}
                 </select>
               </div>
             </div>
@@ -978,12 +1013,12 @@ function AnalyticsDashboard() {
                 {selectedAcademicYear === 'all' ? 'All Years' : selectedAcademicYear}
               </span>
               <span className={`${instructorStyles.cascadingActiveTag} ${instructorStyles.cascadingActiveTagHighlight}`}>
-                {selectedDepartment}
+                {selectedDepartment === 'all' ? 'All Departments' : selectedDepartment}
               </span>
               <span className={`${instructorStyles.cascadingActiveTag} ${instructorStyles.cascadingActiveTagHighlight}`}>
                 {selectedSectionFilter === 'all'
-                  ? `All Sections (36 Students)`
-                  : `${selectedSectionFilter} (${selectedSectionFilter === 'Section A' ? '24' : '12'} Students)`}
+                  ? `All Sections (${totalSectionCount} Students)`
+                  : `Section ${normSec(selectedSectionFilter)} (${totalSectionCount} Students)`}
               </span>
               {selectedSubject && (
                 <span className={`${instructorStyles.cascadingActiveTag} ${instructorStyles.cascadingActiveTagHighlight}`}>
@@ -996,8 +1031,8 @@ function AnalyticsDashboard() {
                 </span>
               )}
 
-              {(selectedAcademicYear !== '2024-2025' ||
-                selectedDepartment !== 'CSE' ||
+              {(selectedAcademicYear !== 'all' ||
+                selectedDepartment !== 'all' ||
                 selectedSectionFilter !== 'all' ||
                 selectedSubject ||
                 selectedExpId) && (

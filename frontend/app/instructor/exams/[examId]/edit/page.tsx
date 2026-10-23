@@ -1,6 +1,6 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, Plus, Trash2, Save, Loader2, Eye, EyeOff, HelpCircle, Code2,
@@ -10,7 +10,7 @@ import InstructorShell from '@/components/layout/InstructorShell';
 import styles from '../../../shared.module.css';
 import {
   examService, type Exam, type ExamQuestion, type QuestionType,
-  type ExamTestCase, type InstructorAttemptRow,
+  type ExamTestCase, type InstructorAttemptRow, type InstructorStudentRow,
 } from '@/services/exam.service';
 
 const toIso = (v: string): string | null => {
@@ -94,11 +94,14 @@ export default function EditExamPage({ params }: { params: Promise<{ examId: str
     title: '', description: '', exam_type: 'mcq' as Exam['exam_type'],
     available_from: '', due_at: '', duration_minutes: 30,
     max_attempts: 1, pass_threshold: 40, shuffle_questions: true,
+    proctor_focus_enabled: false, proctor_lockdown_enabled: false, max_violations: 0,
   });
   const [savingSettings, setSavingSettings] = useState(false);
 
   // Results
-  const [attempts, setAttempts] = useState<InstructorAttemptRow[]>([]);
+  const [studentResults, setStudentResults] = useState<InstructorStudentRow[]>([]);
+  const [openStudent, setOpenStudent] = useState<string | null>(null);
+  const [openAttempt, setOpenAttempt] = useState<string | null>(null);
   const [loadingAttempts, setLoadingAttempts] = useState(false);
 
   useEffect(() => {
@@ -120,6 +123,9 @@ export default function EditExamPage({ params }: { params: Promise<{ examId: str
         available_from: toLocalInput(e.available_from), due_at: toLocalInput(e.due_at),
         duration_minutes: e.duration_minutes, max_attempts: e.max_attempts,
         pass_threshold: e.pass_threshold, shuffle_questions: e.shuffle_questions,
+        proctor_focus_enabled: !!e.proctor_focus_enabled,
+        proctor_lockdown_enabled: !!e.proctor_lockdown_enabled,
+        max_violations: e.max_violations ?? 0,
       });
     } catch {
       setError('Could not load this exam.');
@@ -133,7 +139,10 @@ export default function EditExamPage({ params }: { params: Promise<{ examId: str
   useEffect(() => {
     if (tab === 'results' && examId) {
       setLoadingAttempts(true);
-      examService.getAttempts(examId).then(setAttempts).catch(() => setAttempts([])).finally(() => setLoadingAttempts(false));
+      examService.getStudentResults(examId)
+        .then(setStudentResults)
+        .catch(() => setStudentResults([]))
+        .finally(() => setLoadingAttempts(false));
     }
   }, [tab, examId]);
 
@@ -202,6 +211,9 @@ export default function EditExamPage({ params }: { params: Promise<{ examId: str
         available_from: from, due_at: due, duration_minutes: settings.duration_minutes,
         max_attempts: settings.max_attempts, pass_threshold: settings.pass_threshold,
         shuffle_questions: settings.shuffle_questions,
+        proctor_focus_enabled: settings.proctor_focus_enabled,
+        proctor_lockdown_enabled: settings.proctor_lockdown_enabled,
+        max_violations: settings.max_violations,
       });
       setExam(prev => prev ? { ...prev, ...updated } : prev);
       setToast('Settings saved ✓');
@@ -386,6 +398,51 @@ export default function EditExamPage({ params }: { params: Promise<{ examId: str
             <label className={styles.formLabel}>Pass Threshold (%): {settings.pass_threshold}</label>
             <input type="range" min={0} max={100} step={5} value={settings.pass_threshold} onChange={e => setSettings(s => ({ ...s, pass_threshold: Number(e.target.value) }))} style={{ width: '100%' }} />
           </div>
+
+          <div style={{ border: '1px solid #e5e7eb', borderRadius: 12, padding: 16, marginBottom: 16 }}>
+            <h3 style={{ margin: '0 0 4px', fontSize: 14, fontWeight: 700, color: '#111827' }}>Proctoring</h3>
+            <p style={{ margin: '0 0 12px', fontSize: 12.5, color: '#6b7280' }}>
+              Applies only to timed exams. Every violation is stored against the attempt and shown
+              to you on the Results tab.
+            </p>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, fontSize: 13.5, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={settings.proctor_focus_enabled}
+                onChange={e => setSettings(s => ({ ...s, proctor_focus_enabled: e.target.checked }))}
+                style={{ width: 17, height: 17, accentColor: '#7c3aed' }}
+              />
+              <span>
+                <strong>Focus tracking</strong>
+                <span style={{ color: '#6b7280' }}> — record tab switches and focus loss</span>
+              </span>
+            </label>
+
+            <label style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10, fontSize: 13.5, cursor: 'pointer' }}>
+              <input
+                type="checkbox"
+                checked={settings.proctor_lockdown_enabled}
+                onChange={e => setSettings(s => ({ ...s, proctor_lockdown_enabled: e.target.checked }))}
+                style={{ width: 17, height: 17, accentColor: '#7c3aed' }}
+              />
+              <span>
+                <strong>Lockdown</strong>
+                <span style={{ color: '#6b7280' }}> — block and record copy, paste and right-click</span>
+              </span>
+            </label>
+
+            {(settings.proctor_focus_enabled || settings.proctor_lockdown_enabled) && (
+              <div className={styles.formGroup} style={{ marginTop: 8, marginBottom: 0 }}>
+                <label className={styles.formLabel}>Auto-submit after violations (0 = never)</label>
+                <input
+                  type="number" min={0} className={styles.input}
+                  value={settings.max_violations}
+                  onChange={e => setSettings(s => ({ ...s, max_violations: Math.max(0, Number(e.target.value) || 0) }))}
+                />
+              </div>
+            )}
+          </div>
           <label style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 13.5, color: '#374151', fontWeight: 600, marginBottom: 20, cursor: 'pointer' }}>
             <input type="checkbox" checked={settings.shuffle_questions} onChange={e => setSettings(s => ({ ...s, shuffle_questions: e.target.checked }))} style={{ width: 16, height: 16 }} />
             Shuffle question order per attempt
@@ -401,33 +458,159 @@ export default function EditExamPage({ params }: { params: Promise<{ examId: str
         <section className={styles.tableCard}>
           <div className={styles.sectionHeader}>
             <div>
-              <h2 className={styles.sectionTitle}>Student Attempts</h2>
-              <p className={styles.sectionSub}>{attempts.length} attempt{attempts.length === 1 ? '' : 's'} recorded</p>
+              <h2 className={styles.sectionTitle}>Student Results</h2>
+              <p className={styles.sectionSub}>
+                {studentResults.length} student{studentResults.length === 1 ? '' : 's'}
+                {' · best score shown; expand for every attempt and the answers'}
+              </p>
             </div>
           </div>
           {loadingAttempts ? (
             <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#6b7280', fontSize: 13.5, padding: 20 }}><Loader2 size={16} className="spin" /> Loading results…</div>
-          ) : attempts.length === 0 ? (
+          ) : studentResults.length === 0 ? (
             <p style={{ color: '#9ca3af', fontSize: 13.5, margin: 0, padding: '16px 0' }}>No attempts yet.</p>
           ) : (
             <table className={styles.table}>
               <thead>
-                <tr><th>Student</th><th>Status</th><th>Score</th><th>Points</th><th>Result</th><th>Submitted</th></tr>
+                <tr>
+                  <th>Student</th><th>Attempts</th><th>Best Score</th><th>Result</th>
+                  <th>Violations</th><th>Last Activity</th><th></th>
+                </tr>
               </thead>
               <tbody>
-                {attempts.map(a => (
-                  <tr key={a.attempt_id}>
-                    <td><span className={styles.tdStrong}>{a.student_name}</span><br /><span style={{ fontSize: 11.5, color: '#9ca3af' }}>{a.student_email}</span></td>
-                    <td>
-                      <span className={`${styles.badge} ${a.status === 'submitted' ? styles.greenBadge : a.status === 'expired' ? styles.amberBadge : styles.blueBadge}`}>
-                        {a.status}
-                      </span>
-                    </td>
-                    <td><span className={styles.tdStrong}>{Math.round(a.score || 0)}%</span></td>
-                    <td>{(a.total_points ?? 0)} / {(a.max_points ?? 0)}</td>
-                    <td>{a.passed ? <span className={`${styles.badge} ${styles.greenBadge}`}>Passed</span> : <span className={`${styles.badge} ${styles.redBadge}`}>Failed</span>}</td>
-                    <td>{fmtDateTime(a.submitted_at)}</td>
-                  </tr>
+                {studentResults.map(st => (
+                  <Fragment key={st.student_id}>
+                    <tr>
+                      <td>
+                        <span className={styles.tdStrong}>{st.student_name}</span><br />
+                        <span style={{ fontSize: 11.5, color: '#9ca3af' }}>{st.student_email}</span>
+                      </td>
+                      <td>
+                        {st.attempts_used} / {exam?.max_attempts ?? '—'}
+                        {st.attempts_count > st.attempts_used && (
+                          <span style={{ fontSize: 11, color: '#9ca3af' }}> ({st.attempts_count} total)</span>
+                        )}
+                      </td>
+                      <td>
+                        {st.best_score != null
+                          ? <span className={styles.tdStrong}>{Math.round(st.best_score)}%</span>
+                          : <span style={{ color: '#9ca3af' }}>—</span>}
+                      </td>
+                      <td>
+                        {st.best_score == null
+                          ? <span className={`${styles.badge} ${styles.blueBadge}`}>{st.latest_status}</span>
+                          : st.best_passed
+                            ? <span className={`${styles.badge} ${styles.greenBadge}`}>Passed</span>
+                            : <span className={`${styles.badge} ${styles.redBadge}`}>Failed</span>}
+                      </td>
+                      <td>
+                        {st.violation_count > 0
+                          ? <span className={`${styles.badge} ${styles.redBadge}`} title="Proctoring violations across attempts">{st.violation_count}</span>
+                          : <span style={{ color: '#9ca3af', fontSize: 12 }}>none</span>}
+                      </td>
+                      <td>{fmtDateTime(st.latest_submitted_at)}</td>
+                      <td>
+                        <button
+                          type="button"
+                          className={styles.ghostBtn}
+                          onClick={() => { setOpenStudent(openStudent === st.student_id ? null : st.student_id); setOpenAttempt(null); }}
+                        >
+                          {openStudent === st.student_id ? 'Hide' : `View attempts (${st.attempts_count})`}
+                        </button>
+                      </td>
+                    </tr>
+
+                    {openStudent === st.student_id && st.attempts.map((a, idx) => (
+                      <Fragment key={a.attempt_id}>
+                        <tr style={{ background: '#fbfaff' }}>
+                          <td style={{ paddingLeft: 28 }}>
+                            <span style={{ fontWeight: 700, color: '#4c1d95' }}>Attempt {st.attempts.length - idx}</span>
+                            <br />
+                            <span style={{ fontSize: 11.5, color: '#9ca3af' }}>
+                              <span className={`${styles.badge} ${a.status === 'submitted' ? styles.greenBadge : a.status === 'expired' ? styles.amberBadge : styles.blueBadge}`}>{a.status}</span>
+                            </span>
+                          </td>
+                          <td>
+                            <span style={{ fontWeight: 700 }}>{Math.round(a.score ?? 0)}%</span>
+                            <br />
+                            <span style={{ fontSize: 11.5, color: '#9ca3af' }}>{a.total_points ?? 0} / {a.max_points ?? 0} pts</span>
+                          </td>
+                          <td>
+                            {a.status === 'in_progress'
+                              ? <span className={`${styles.badge} ${styles.blueBadge}`}>In progress</span>
+                              : a.passed
+                                ? <span className={`${styles.badge} ${styles.greenBadge}`}>Passed</span>
+                                : <span className={`${styles.badge} ${styles.redBadge}`}>Failed</span>}
+                          </td>
+                          <td>
+                            {(a.violation_count ?? 0) > 0
+                              ? <span style={{ color: '#b91c1c', fontWeight: 700, fontSize: 12.5 }}>{a.violation_count} ⚠️</span>
+                              : <span style={{ color: '#9ca3af', fontSize: 12 }}>—</span>}
+                          </td>
+                          <td>{fmtDateTime(a.submitted_at)}</td>
+                          <td>
+                            {a.answers && a.answers.length > 0 && (
+                              <button
+                                type="button"
+                                className={styles.ghostBtn}
+                                onClick={() => setOpenAttempt(openAttempt === a.attempt_id ? null : a.attempt_id)}
+                              >
+                                {openAttempt === a.attempt_id ? 'Hide' : `Answers (${a.answers.length})`}
+                              </button>
+                            )}
+                          </td>
+                          <td />
+                        </tr>
+
+                        {openAttempt === a.attempt_id && (a.violations?.length ?? 0) > 0 && (
+                          <tr>
+                            <td colSpan={7} style={{ background: '#fef2f2', padding: '10px 16px' }}>
+                              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>
+                                Proctoring violations
+                              </div>
+                              {a.violations!.map((v, vi) => (
+                                <div key={vi} style={{ fontSize: 12.5, color: '#7f1d1d' }}>
+                                  {fmtDateTime(v.recorded_at)} — <strong>{v.event_type.replace(/_/g, ' ')}</strong>
+                                  {v.severity ? ` (${v.severity})` : ''}
+                                  {v.payload?.detail ? ` · ${String(v.payload.detail)}` : ''}
+                                </div>
+                              ))}
+                            </td>
+                          </tr>
+                        )}
+
+                        {openAttempt === a.attempt_id && a.answers && a.answers.length > 0 && (
+                          <tr>
+                            <td colSpan={7} style={{ background: '#faf9ff', padding: '4px 16px 18px' }}>
+                              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                {a.answers.map((qq, qi) => (
+                                  <div key={qq.question_id} style={{ borderLeft: `3px solid ${qq.is_correct ? '#16a34a' : '#dc2626'}`, paddingLeft: 12 }}>
+                                    <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 4 }}>
+                                      {qi + 1}. {qq.prompt}
+                                    </div>
+                                    <div style={{ fontSize: 12.5, color: '#374151' }}>
+                                      Student answered:{' '}
+                                      <strong style={{ color: qq.is_correct ? '#16a34a' : '#dc2626' }}>
+                                        {qq.student_answer_text == null || qq.student_answer_text === '' ? '(left blank)' : String(qq.student_answer_text)}
+                                      </strong>
+                                    </div>
+                                    {!qq.is_correct && (
+                                      <div style={{ fontSize: 12.5, color: '#374151' }}>
+                                        Correct answer: <strong style={{ color: '#16a34a' }}>{String(qq.correct_answer_text ?? '—')}</strong>
+                                      </div>
+                                    )}
+                                    <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 2 }}>
+                                      {qq.earned != null ? `${qq.earned} / ${qq.points ?? '—'} points` : 'Ungraded'}
+                                    </div>
+                                  </div>
+                                ))}
+                              </div>
+                            </td>
+                          </tr>
+                        )}
+                      </Fragment>
+                    ))}
+                  </Fragment>
                 ))}
               </tbody>
             </table>

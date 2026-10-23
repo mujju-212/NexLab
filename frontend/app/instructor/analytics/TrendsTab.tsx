@@ -42,15 +42,17 @@ interface TrendsTabProps {
 
 // Mini SVG sparkline for KPI cards
 function MiniSparkline({ points, color }: { points: number[]; color: string }) {
-  if (!points || points.length === 0) return null;
-  const min = Math.min(...points);
-  const max = Math.max(...points);
+  // Real series can contain gaps; a single point is not a trend.
+  const vals = (points || []).filter((p) => typeof p === 'number' && Number.isFinite(p));
+  if (vals.length < 2) return null;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
   const range = max - min || 1;
   const width = 74;
   const height = 24;
 
-  const pts = points.map((p, idx) => {
-    const x = (idx / (points.length - 1)) * (width - 8) + 4;
+  const pts = vals.map((p, idx) => {
+    const x = (idx / (vals.length - 1)) * (width - 8) + 4;
     const y = height - 4 - ((p - min) / range) * (height - 8);
     return `${x},${y}`;
   });

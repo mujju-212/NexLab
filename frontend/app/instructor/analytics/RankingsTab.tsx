@@ -138,31 +138,31 @@ export function RankingsTab({
               <div className={styles.weightItem}>
                 <span className={styles.weightDot} style={{ background: '#7c3aed' }} />
                 <span className={styles.weightText}>
-                  Mastery <strong>{data.weights?.mastery || 30}%</strong>
+                  Mastery <strong>{data.weights?.mastery ?? 0}%</strong>
                 </span>
               </div>
               <div className={styles.weightItem}>
                 <span className={styles.weightDot} style={{ background: '#3b82f6' }} />
                 <span className={styles.weightText}>
-                  Engagement <strong>{data.weights?.engagement || 20}%</strong>
+                  Engagement <strong>{data.weights?.engagement ?? 0}%</strong>
                 </span>
               </div>
               <div className={styles.weightItem}>
                 <span className={styles.weightDot} style={{ background: '#f59e0b' }} />
                 <span className={styles.weightText}>
-                  Effort <strong>{data.weights?.effort || 20}%</strong>
+                  Effort <strong>{data.weights?.effort ?? 0}%</strong>
                 </span>
               </div>
               <div className={styles.weightItem}>
                 <span className={styles.weightDot} style={{ background: '#10b981' }} />
                 <span className={styles.weightText}>
-                  Efficiency <strong>{data.weights?.efficiency || 15}%</strong>
+                  Efficiency <strong>{data.weights?.efficiency ?? 0}%</strong>
                 </span>
               </div>
               <div className={styles.weightItem}>
                 <span className={styles.weightDot} style={{ background: '#ec4899' }} />
                 <span className={styles.weightText}>
-                  Consistency <strong>{data.weights?.consistency || 15}%</strong>
+                  Consistency <strong>{data.weights?.consistency ?? 0}%</strong>
                 </span>
               </div>
             </div>

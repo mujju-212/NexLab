@@ -645,7 +645,7 @@ export default function SessionsPage() {
 
                       <div className={styles.middleStatsPanel}>
                         <div className={styles.statCol}>
-                          <span className={styles.statVal}>{s.student_count || 12} / {s.student_count || 12}</span>
+                          <span className={styles.statVal}>{s.student_count || 0} / {s.student_count || 0}</span>
                           <span className={styles.metricSub}>Students Active</span>
                           <div className={styles.progressBarTrack}>
                             <div className={styles.progressBarFill} style={{ width: '100%' }} />
@@ -730,7 +730,7 @@ export default function SessionsPage() {
 
                     <div className={styles.middleStatsPanel}>
                       <div className={styles.statCol}>
-                        <span className={styles.statVal}>{s.student_count || 12} / {s.student_count || 12}</span>
+                        <span className={styles.statVal}>{s.student_count || 0} / {s.student_count || 0}</span>
                         <span className={styles.metricSub}>Students Active</span>
                         <div className={styles.progressBarTrack}>
                           <div className={styles.progressBarFill} style={{ width: '100%' }} />
@@ -806,7 +806,7 @@ export default function SessionsPage() {
 
                       <div className={styles.studentsGroup}>
                         <div className={styles.studentsText}>
-                          <span className={styles.registeredCount}>{s.student_count || 12}</span>
+                          <span className={styles.registeredCount}>{s.student_count || 0}</span>
                           <span className={styles.registeredSub}>Registered Students</span>
                         </div>
                       </div>
@@ -876,7 +876,7 @@ export default function SessionsPage() {
 
                     <div className={styles.studentsGroup}>
                       <div className={styles.studentsText}>
-                        <span className={styles.registeredCount}>{s.student_count || 12}</span>
+                        <span className={styles.registeredCount}>{s.student_count || 0}</span>
                         <span className={styles.registeredSub}>Registered Students</span>
                       </div>
                     </div>
@@ -930,14 +930,14 @@ export default function SessionsPage() {
 
                       <div className={styles.middleStatsPanel}>
                         <div className={styles.statCol}>
-                          <span className={styles.statVal}>{s.student_count || 12} / {s.student_count || 12}</span>
+                          <span className={styles.statVal}>{s.student_count || 0} / {s.student_count || 0}</span>
                           <span className={styles.metricSub}>Attended</span>
                           <div className={styles.progressBarTrack}>
                             <div className={styles.progressBarFill} style={{ width: '100%' }} />
                           </div>
                         </div>
                         <div className={styles.statCol}>
-                          <span className={styles.statVal}>{s.student_count || 10}</span>
+                          <span className={styles.statVal}>{s.student_count || 0}</span>
                           <span className={styles.metricSub}>Submitted</span>
                         </div>
                         <div className={styles.statCol}>
@@ -1005,14 +1005,14 @@ export default function SessionsPage() {
 
                     <div className={styles.middleStatsPanel}>
                       <div className={styles.statCol}>
-                        <span className={styles.statVal}>{s.student_count || 12} / {s.student_count || 12}</span>
+                        <span className={styles.statVal}>{s.student_count || 0} / {s.student_count || 0}</span>
                         <span className={styles.metricSub}>Attended</span>
                         <div className={styles.progressBarTrack}>
                           <div className={styles.progressBarFill} style={{ width: '100%' }} />
                         </div>
                       </div>
                       <div className={styles.statCol}>
-                        <span className={styles.statVal}>{s.student_count || 10}</span>
+                        <span className={styles.statVal}>{s.student_count || 0}</span>
                         <span className={styles.metricSub}>Submitted</span>
                       </div>
                       <div className={styles.statCol}>
@@ -1148,7 +1148,7 @@ export default function SessionsPage() {
                   <div className={styles.detailGrid}>
                     <div className={styles.detailTile}>
                       <span className={styles.tileLabel}>Enrolled Headcount</span>
-                      <span className={styles.tileValue}>{selectedDrawerSession.student_count || 12} Students</span>
+                      <span className={styles.tileValue}>{selectedDrawerSession.student_count || 0} Students</span>
                     </div>
                     <div className={styles.detailTile}>
                       <span className={styles.tileLabel}>Attendance Rate</span>

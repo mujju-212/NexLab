@@ -28,6 +28,9 @@ import {
   AreaChart,
   Area,
 } from 'recharts';
+import Sparkline from '@/components/analytics/Sparkline';
+import DeltaPill from '@/components/analytics/DeltaPill';
+import { MetricValue } from '@/components/analytics/MetricValue';
 import styles from './instructor-analytics.module.css';
 import {
   type InstructorOverviewData,
@@ -82,36 +85,6 @@ function TableSparkline({ trend }: { trend: 'deteriorating' | 'improving' | 'sta
         d={d}
         fill="none"
         stroke={strokeColor}
-        strokeWidth="2.2"
-        strokeLinecap="round"
-        strokeLinejoin="round"
-      />
-    </svg>
-  );
-}
-
-// Mini SVG sparkline for KPI card
-function KpiSparkline({ points, color }: { points: number[]; color: string }) {
-  const min = Math.min(...points);
-  const max = Math.max(...points);
-  const range = max - min || 1;
-  const width = 80;
-  const height = 26;
-
-  const coords = points.map((p, idx) => {
-    const x = (idx / (points.length - 1)) * width;
-    const y = height - ((p - min) / range) * (height - 6) - 3;
-    return `${x},${y}`;
-  });
-
-  const pathD = `M ${coords.join(' L ')}`;
-
-  return (
-    <svg width={width} height={height} viewBox={`0 0 ${width} ${height}`} style={{ overflow: 'visible' }}>
-      <path
-        d={pathD}
-        fill="none"
-        stroke={color}
         strokeWidth="2.2"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -192,11 +165,24 @@ export function OverviewTab({
   const [trendVisibility, setTrendVisibility] = useState({ critical: true, high: true, watch: true });
   const [selectedQualityGrade, setSelectedQualityGrade] = useState<string | null>(null);
 
+  // Honest empty state: zeros until the API answers. Never invented numbers.
   const kpis = data?.kpis || {
-    active_students: { value: 24, total_enrolled: 28, delta: 8.0, label: 'of 28 enrolled', sparkline: [20, 22, 24] },
-    class_avg_grade: { value: '68%', delta: 3.2, label: 'vs previous 30 days', sparkline: [62, 65, 68] },
-    focus_engagement: { value: '78%', delta: 1.5, label: 'active participation rate', sparkline: [75, 77, 78] },
-    needs_attention: { value: 2, total_at_risk: 5, delta: 2.0, label: 'students at risk', sparkline: [1, 2, 2] },
+    active_students: { value: null, total_enrolled: null, delta: null, label: 'enrolled', sparkline: [] },
+    class_avg_grade: { value: null, delta: null, label: 'class average score', sparkline: [] },
+    focus_engagement: { value: null, delta: null, label: 'active participation rate', sparkline: [] },
+    needs_attention: { value: null, total_at_risk: null, delta: null, label: 'students at risk', sparkline: [] },
+  };
+
+  // Delta badge: reflects the API's real delta, neutral when there's no movement.
+  const renderDelta = (kpi: { delta?: number; delta_direction?: string }) => {
+    const d = Number(kpi?.delta ?? 0);
+    if (!d) return <span className={styles.kpiBadgeNeutral}>—</span>;
+    const up = (kpi?.delta_direction || 'up') === 'up';
+    return (
+      <span className={up ? styles.kpiBadgeGreen : styles.kpiBadgeRed}>
+        {up ? '↑' : '↓'} {Math.abs(d)}%
+      </span>
+    );
   };
 
   const studentsList = data?.needs_attention_students || [];
@@ -256,22 +242,22 @@ export function OverviewTab({
 
   // Risk Distribution Data
   const riskDistBands = data?.risk_distribution?.bands || [
-    { name: 'Critical', count: 1, percentage: 4, color: '#ef4444' },
-    { name: 'High',     count: 3, percentage: 11, color: '#f97316' },
-    { name: 'Watch',    count: 6, percentage: 21, color: '#f59e0b' },
-    { name: 'On Track', count: 18, percentage: 64, color: '#10b981' },
+    { name: 'Critical', count: 0, percentage: 0, color: '#ef4444' },
+    { name: 'High',     count: 0, percentage: 0, color: '#f97316' },
+    { name: 'Watch',    count: 0, percentage: 0, color: '#f59e0b' },
+    { name: 'On Track', count: 0, percentage: 0, color: '#10b981' },
   ];
 
   // Active risk slice details for dynamic center display
   const activeRiskDetails = useMemo(() => {
     if (!hoveredRiskBand) {
       return {
-        value: data?.risk_distribution?.total_students || 28,
+        value: data?.risk_distribution?.total_students || 0,
         label: 'Students',
       };
     }
     const band = riskDistBands.find((b) => b.name === hoveredRiskBand);
-    if (!band) return { value: data?.risk_distribution?.total_students || 28, label: 'Students' };
+    if (!band) return { value: data?.risk_distribution?.total_students || 0, label: 'Students' };
     return {
       value: `${band.count} (${band.percentage}%)`,
       label: band.name,
@@ -279,22 +265,28 @@ export function OverviewTab({
   }, [hoveredRiskBand, data, riskDistBands]);
 
   // Risk Trend Data
-  const riskTrendData = data?.risk_trend || [
-    { date: 'Oct 1', critical: 1, high: 2, watch: 4 },
-    { date: 'Oct 8', critical: 1, high: 2, watch: 5 },
-    { date: 'Oct 15', critical: 1, high: 3, watch: 6 },
-    { date: 'Oct 22', critical: 2, high: 3, watch: 5 },
-    { date: 'Oct 30', critical: 1, high: 3, watch: 6 },
-  ];
+  // Real snapshot history from the backend; no synthetic points.
+  const riskTrendData = data?.risk_trend || [];
+
+  // Axis scale derived from the data we actually have (no fixed 0-15 scale).
+  const trendPeak = useMemo(
+    () =>
+      riskTrendData.reduce(
+        (m, d) => Math.max(m, d.critical || 0, d.high || 0, d.watch || 0),
+        0,
+      ),
+    [riskTrendData],
+  );
+  const trendTop = Math.max(4, trendPeak + 1);
 
   // Quality Distribution Data
   const qualityBreakdown = data?.quality_distribution?.breakdown || [
-    { grade: 'A (≥ 80%)', count: 35, percentage: 28, color: '#8b5cf6' },
-    { grade: 'B (60 – 79%)', count: 44, percentage: 35, color: '#0284c7' },
-    { grade: 'C (40 – 59%)', count: 31, percentage: 25, color: '#f59e0b' },
-    { grade: 'D (< 40%)', count: 16, percentage: 12, color: '#10b981' },
+    { grade: 'A (≥ 80%)', count: 0, percentage: 0, color: '#8b5cf6' },
+    { grade: 'B (60 – 79%)', count: 0, percentage: 0, color: '#0284c7' },
+    { grade: 'C (40 – 59%)', count: 0, percentage: 0, color: '#f59e0b' },
+    { grade: 'D (< 40%)', count: 0, percentage: 0, color: '#10b981' },
   ];
-  const totalSubmissions = data?.quality_distribution?.total_submissions || 126;
+  const totalSubmissions = data?.quality_distribution?.total_submissions || 0;
 
   // Active quality slice details for dynamic center display
   const activeQualityDetails = useMemo(() => {
@@ -339,17 +331,21 @@ export function OverviewTab({
               <div className={styles.kpiIconWrapper} style={{ background: '#f5f3ff', color: '#8b5cf6' }}>
                 <Users size={20} />
               </div>
-              <span className={styles.kpiBadgeGreen}>↑ 8%</span>
+              {renderDelta(kpis.active_students)}
             </div>
             <div className={styles.kpiLabel}>Active Students</div>
           </div>
           <div className={styles.kpiBottomRow}>
             <div>
-              <div className={styles.kpiNumber}>{kpis.active_students.value}</div>
-              <div className={styles.kpiSubtext}>of {kpis.active_students.total_enrolled || 28} enrolled</div>
+              <div className={styles.kpiNumber}>
+                <MetricValue value={kpis.active_students.value} />
+              </div>
+              <div className={styles.kpiSubtext}>
+                of <MetricValue value={kpis.active_students.total_enrolled} /> enrolled
+              </div>
             </div>
             <div className={styles.kpiSparkline}>
-              <KpiSparkline points={kpis.active_students.sparkline || [20, 22, 24]} color="#8b5cf6" />
+              <Sparkline points={kpis.active_students.sparkline} color="#8b5cf6" width={80} height={26} />
             </div>
           </div>
         </div>
@@ -364,17 +360,19 @@ export function OverviewTab({
               <div className={styles.kpiIconWrapper} style={{ background: '#eff6ff', color: '#3b82f6' }}>
                 <TrendingUp size={20} />
               </div>
-              <span className={styles.kpiBadgeGreen}>↑ 3.2%</span>
+              {renderDelta(kpis.class_avg_grade)}
             </div>
             <div className={styles.kpiLabel}>Class Avg Grade</div>
           </div>
           <div className={styles.kpiBottomRow}>
             <div>
-              <div className={styles.kpiNumber}>{kpis.class_avg_grade.value}</div>
+              <div className={styles.kpiNumber}>
+                {kpis.class_avg_grade.value ?? <MetricValue value={null} />}
+              </div>
               <div className={styles.kpiSubtext}>vs previous 30 days</div>
             </div>
             <div className={styles.kpiSparkline}>
-              <KpiSparkline points={kpis.class_avg_grade.sparkline || [62, 65, 68]} color="#3b82f6" />
+              <Sparkline points={kpis.class_avg_grade.sparkline} color="#3b82f6" width={80} height={26} />
             </div>
           </div>
         </div>
@@ -389,17 +387,19 @@ export function OverviewTab({
               <div className={styles.kpiIconWrapper} style={{ background: '#ecfdf5', color: '#10b981' }}>
                 <Zap size={20} />
               </div>
-              <span className={styles.kpiBadgeGreen}>↑ 1.5%</span>
+              {renderDelta(kpis.focus_engagement)}
             </div>
             <div className={styles.kpiLabel}>Focus Engagement</div>
           </div>
           <div className={styles.kpiBottomRow}>
             <div>
-              <div className={styles.kpiNumber}>{kpis.focus_engagement.value}</div>
+              <div className={styles.kpiNumber}>
+                {kpis.focus_engagement.value ?? <MetricValue value={null} />}
+              </div>
               <div className={styles.kpiSubtext}>active participation rate</div>
             </div>
             <div className={styles.kpiSparkline}>
-              <KpiSparkline points={kpis.focus_engagement.sparkline || [74, 76, 78]} color="#10b981" />
+              <Sparkline points={kpis.focus_engagement.sparkline} color="#10b981" width={80} height={26} />
             </div>
           </div>
         </div>
@@ -416,17 +416,19 @@ export function OverviewTab({
               <div className={styles.kpiIconWrapper} style={{ background: '#fef2f2', color: '#ef4444' }}>
                 <AlertTriangle size={20} />
               </div>
-              <span className={styles.kpiBadgeRed}>↑ 2%</span>
+              {renderDelta(kpis.needs_attention)}
             </div>
             <div className={styles.kpiLabel}>Needs Attention</div>
           </div>
           <div className={styles.kpiBottomRow}>
             <div>
-              <div className={styles.kpiNumber}>{kpis.needs_attention.value}</div>
+              <div className={styles.kpiNumber}>
+                <MetricValue value={kpis.needs_attention.value} />
+              </div>
               <div className={styles.kpiSubtext}>students at risk</div>
             </div>
             <div className={styles.kpiSparkline}>
-              <KpiSparkline points={kpis.needs_attention.sparkline || [1, 2, 2]} color="#ef4444" />
+              <Sparkline points={kpis.needs_attention.sparkline} color="#ef4444" width={80} height={26} />
             </div>
           </div>
         </div>
@@ -585,6 +587,24 @@ export function OverviewTab({
 
             {/* Recharts Area Chart */}
             <div style={{ width: '100%', height: 115, marginTop: 4 }}>
+              {riskTrendData.length === 0 ? (
+                <div
+                  style={{
+                    height: '100%',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    fontSize: 11,
+                    color: '#94a3b8',
+                    textAlign: 'center',
+                    lineHeight: 1.5,
+                  }}
+                >
+                  No risk snapshots recorded yet.
+                  <br />
+                  Trend appears after the nightly snapshot job runs.
+                </div>
+              ) : (
               <ResponsiveContainer width="100%" height="100%">
                 <AreaChart data={riskTrendData} margin={{ top: 8, right: 6, left: -26, bottom: 0 }}>
                   <XAxis
@@ -594,8 +614,8 @@ export function OverviewTab({
                     tickLine={false}
                   />
                   <YAxis
-                    domain={[0, 15]}
-                    ticks={[0, 5, 10, 15]}
+                    domain={[0, trendTop]}
+                    ticks={[0, Math.round(trendTop / 2), trendTop]}
                     tick={{ fontSize: 10, fill: '#64748b' }}
                     axisLine={false}
                     tickLine={false}
@@ -639,6 +659,7 @@ export function OverviewTab({
                   )}
                 </AreaChart>
               </ResponsiveContainer>
+              )}
             </div>
           </div>
 

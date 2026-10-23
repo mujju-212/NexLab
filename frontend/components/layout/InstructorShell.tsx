@@ -104,10 +104,10 @@ export default function InstructorShell({ activePage, children, title, subtitle,
   [activePage]);
 
   const initials = useMemo(
-    () => user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? 'DI',
+    () => user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? '',
     [user?.full_name],
   );
-  const fullName = user?.full_name || 'Dr. Priya Sharma';
+  const fullName = user?.full_name || '';
 
   return (
     <div className={styles.stage}>

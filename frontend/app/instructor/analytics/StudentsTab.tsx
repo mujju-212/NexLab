@@ -30,6 +30,7 @@ import {
   RefreshCw,
   Trophy,
 } from 'lucide-react';
+import DeltaPill from '@/components/analytics/DeltaPill';
 import styles from './students-tab.module.css';
 import { CohortMatrixData, CohortStudentItem, analyticsService } from '@/services/analytics.service';
 import { exportCSV, riskColor } from '@/lib/analytics-utils';
@@ -46,12 +47,6 @@ function getAvatarStyle(name: string, roll: string) {
     { bg: '#ec4899', text: '#ffffff' }, // Pink
     { bg: '#6366f1', text: '#ffffff' }, // Indigo
   ];
-  if (roll === 'NDU2024012' || name.toLowerCase().includes('aadhya')) return { bg: '#8b5cf6', text: '#ffffff' };
-  if (roll === 'NDU2024005' || name.toLowerCase().includes('aditya')) return { bg: '#3b82f6', text: '#ffffff' };
-  if (roll === 'NDU2024004' || name.toLowerCase().includes('ananya')) return { bg: '#f97316', text: '#ffffff' };
-  if (roll === 'NDU2024010' || name.toLowerCase().includes('rahul')) return { bg: '#f59e0b', text: '#ffffff' };
-  if (roll === 'NDU2024015' || name.toLowerCase().includes('sneha')) return { bg: '#10b981', text: '#ffffff' };
-  if (roll === 'NDU2024001' || name.toLowerCase().includes('amit')) return { bg: '#06b6d4', text: '#ffffff' };
 
   const code = (name || 'S').charCodeAt(0) + (name || 'S').charCodeAt(name.length - 1 || 0);
   return palettes[code % palettes.length];
@@ -59,15 +54,16 @@ function getAvatarStyle(name: string, roll: string) {
 
 // ── Mini SVG Sparkline for KPI Card ──────────────────────────────────────────
 function KpiSparkline({ points, color }: { points: number[]; color: string }) {
-  if (!points || points.length < 2) return null;
-  const min = Math.min(...points);
-  const max = Math.max(...points);
+  const vals = (points || []).filter((p) => typeof p === 'number' && Number.isFinite(p));
+  if (vals.length < 2) return null;  // a single point is not a trend
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
   const range = max - min || 1;
   const width = 84;
   const height = 28;
 
-  const coords = points.map((p, idx) => {
-    const x = (idx / (points.length - 1)) * width;
+  const coords = vals.map((p, idx) => {
+    const x = (idx / (vals.length - 1)) * width;
     const y = height - ((p - min) / range) * (height - 8) - 4;
     return `${x},${y}`;
   });
@@ -370,52 +366,43 @@ export function StudentsTab({
   };
 
   // KPI figures
+  // Honest empty state until the API responds.
   const kpis = data?.kpis || {
-    students_in_scope: { value: 124, total_enrolled: 128, delta: '+ 2%', sparkline: [120, 122, 123, 124] },
-    high_critical_risk: { value: 18, percentage: '(14.5%)', delta: '↓ 1%', sparkline: [20, 19, 18, 18] },
-    cohort_avg_mastery: { value: '76%', raw_value: 76, delta: '↑ 3%', sparkline: [73, 74, 75, 76] },
-    avg_grade: { value: '72 / 100', raw_value: 72, delta: '↑ 4%', sparkline: [68, 70, 71, 72] },
-    attendance: { value: '89%', raw_value: 89, delta: '↑ 2%', sparkline: [86, 87, 88, 89] },
+    students_in_scope: { value: null, total_enrolled: null, delta: null, sparkline: [] },
+    high_critical_risk: { value: null, percentage: '', delta: null, sparkline: [] },
+    cohort_avg_mastery: { value: null, raw_value: null, delta: null, sparkline: [] },
+    avg_grade: { value: null, raw_value: null, delta: null, sparkline: [] },
+    attendance: { value: null, raw_value: null, delta: null, sparkline: [] },
   };
 
   const riskDist = data?.risk_distribution?.bands || [
-    { name: 'Critical', count: 18, percentage: 14.5, color: '#ef4444' },
-    { name: 'High', count: 24, percentage: 19.4, color: '#f97316' },
-    { name: 'Watch', count: 31, percentage: 25.0, color: '#f59e0b' },
-    { name: 'On Track', count: 51, percentage: 41.1, color: '#10b981' },
+    { name: 'Critical', count: 0, percentage: 0, color: '#ef4444' },
+    { name: 'High', count: 0, percentage: 0, color: '#f97316' },
+    { name: 'Watch', count: 0, percentage: 0, color: '#f59e0b' },
+    { name: 'On Track', count: 0, percentage: 0, color: '#10b981' },
   ];
 
-  const riskBreakdown = data?.risk_breakdown || [
-    { name: 'Academic Performance', value: 65, color: '#8b5cf6' },
-    { name: 'Engagement', value: 72, color: '#3b82f6' },
-    { name: 'Attendance', value: 88, color: '#06b6d4' },
-    { name: 'Focus', value: 76, color: '#10b981' },
-    { name: 'Integrity', value: 96, color: '#6366f1' },
-  ];
+  const riskBreakdown: { name: string; value: number | null; color: string }[] =
+    data?.risk_breakdown || [
+      { name: 'Academic Performance', value: null, color: '#8b5cf6' },
+      { name: 'Engagement', value: null, color: '#3b82f6' },
+      { name: 'Attendance', value: null, color: '#06b6d4' },
+      { name: 'Focus', value: null, color: '#10b981' },
+      { name: 'Integrity', value: null, color: '#6366f1' },
+    ];
 
-  const insights = data?.insights || [
-    { type: 'critical', color: '#ef4444', text: '14.5% students are at Critical Risk.' },
-    { type: 'predictor', color: '#06b6d4', text: 'Focus is the strongest predictor of academic success (+96%).' },
-    { type: 'action', color: '#8b5cf6', text: 'Consider intervention for 18 high-risk students this week.' },
-  ];
+  // Insights are generated server-side from real metrics; never fabricated here.
+  const insights = data?.insights || [];
 
-  const sectionsList = data?.filters?.sections || [
-    { id: 'sec-a', label: 'Section A · Data Structures', section_name: 'A', subject_name: 'Data Structures', student_count: 32 },
-    { id: 'sec-b', label: 'Section B · Algorithms', section_name: 'B', subject_name: 'Algorithms', student_count: 28 },
-  ];
+  const sectionsList = data?.filters?.sections || [];
 
-  const expsList = data?.filters?.experiments || [
-    { id: 'all', label: 'All Experiments' },
-    { id: 'exp-1', label: 'Exp 1: Singly Linked Lists' },
-    { id: 'exp-2', label: 'Exp 2: Stack Expressions' },
-    { id: 'exp-3', label: 'Exp 3: Binary Search Trees' },
-  ];
+  const expsList = data?.filters?.experiments || [{ id: 'all', label: 'All Experiments' }];
 
   const timeWindows = data?.filters?.time_windows || [
     { id: 30, label: 'Last 30 Days' },
     { id: 14, label: 'Last 14 Days' },
     { id: 90, label: 'Last 90 Days' },
-  ];
+  ]; // time windows are UI options, not data
 
   return (
     <div className={styles.container}>
@@ -460,7 +447,7 @@ export function StudentsTab({
               }}
             >
               <option value="">
-                All My Sections ({sectionsList.reduce((acc, s) => acc + (s.student_count || 0), 0) || kpis.students_in_scope?.total_enrolled || 36} students)
+                All My Sections ({sectionsList.reduce((acc, s) => acc + (s.student_count || 0), 0) || kpis.students_in_scope?.total_enrolled || 0} students)
               </option>
               {sectionsList.map((sec) => (
                 <option key={sec.id} value={sec.id}>
@@ -544,11 +531,11 @@ export function StudentsTab({
               </div>
               <span className={styles.kpiTitle}>Students in Scope</span>
             </div>
-            <span className={styles.kpiBadgeGreen}>{kpis.students_in_scope?.delta || '+ 2%'}</span>
+            <DeltaPill delta={typeof kpis.students_in_scope?.delta === 'number' ? (kpis.students_in_scope!.delta as unknown as number) : null} direction={(kpis.students_in_scope as any)?.delta_direction} available={(kpis.students_in_scope as any)?.delta_available} unit="" higherIsBetter />
           </div>
           <div className={styles.kpiBottom}>
             <div>
-              <div className={styles.kpiMainValue}>{kpis.students_in_scope?.value}</div>
+              <div className={styles.kpiMainValue}>{kpis.students_in_scope?.value ?? '—'}</div>
               <div className={styles.kpiSubValue}>of {kpis.students_in_scope?.total_enrolled} enrolled</div>
             </div>
             <div className={styles.kpiSparklineWrap}>
@@ -573,11 +560,11 @@ export function StudentsTab({
               </div>
               <span className={styles.kpiTitle}>High / Critical Risk</span>
             </div>
-            <span className={styles.kpiBadgeRed}>{kpis.high_critical_risk?.delta || '↓ 1%'}</span>
+            <DeltaPill delta={typeof kpis.high_critical_risk?.delta === 'number' ? (kpis.high_critical_risk!.delta as unknown as number) : null} direction={(kpis.high_critical_risk as any)?.delta_direction} available={(kpis.high_critical_risk as any)?.delta_available} unit="" higherIsBetter={false} />
           </div>
           <div className={styles.kpiBottom}>
             <div>
-              <div className={styles.kpiMainValue}>{kpis.high_critical_risk?.value}</div>
+              <div className={styles.kpiMainValue}>{kpis.high_critical_risk?.value ?? '—'}</div>
               <div className={styles.kpiSubValue}>{kpis.high_critical_risk?.percentage}</div>
             </div>
             <div className={styles.kpiSparklineWrap}>
@@ -595,11 +582,11 @@ export function StudentsTab({
               </div>
               <span className={styles.kpiTitle}>Cohort Avg Mastery</span>
             </div>
-            <span className={styles.kpiBadgeBlue}>{kpis.cohort_avg_mastery?.delta || '↑ 3%'}</span>
+            <DeltaPill delta={typeof kpis.cohort_avg_mastery?.delta === 'number' ? (kpis.cohort_avg_mastery!.delta as unknown as number) : null} direction={(kpis.cohort_avg_mastery as any)?.delta_direction} available={(kpis.cohort_avg_mastery as any)?.delta_available} unit="%" higherIsBetter />
           </div>
           <div className={styles.kpiBottom}>
             <div>
-              <div className={styles.kpiMainValue}>{kpis.cohort_avg_mastery?.value}</div>
+              <div className={styles.kpiMainValue}>{kpis.cohort_avg_mastery?.value ?? '—'}</div>
               <div className={styles.kpiSubValue}>across subject concepts</div>
             </div>
             <div className={styles.kpiSparklineWrap}>
@@ -617,11 +604,11 @@ export function StudentsTab({
               </div>
               <span className={styles.kpiTitle}>Avg Grade</span>
             </div>
-            <span className={styles.kpiBadgeBlue}>{kpis.avg_grade?.delta || '↑ 4%'}</span>
+            <DeltaPill delta={typeof kpis.avg_grade?.delta === 'number' ? (kpis.avg_grade!.delta as unknown as number) : null} direction={(kpis.avg_grade as any)?.delta_direction} available={(kpis.avg_grade as any)?.delta_available} unit="%" higherIsBetter />
           </div>
           <div className={styles.kpiBottom}>
             <div>
-              <div className={styles.kpiMainValue}>{kpis.avg_grade?.value}</div>
+              <div className={styles.kpiMainValue}>{kpis.avg_grade?.value ?? '—'}</div>
               <div className={styles.kpiSubValue}>evaluated submissions</div>
             </div>
             <div className={styles.kpiSparklineWrap}>
@@ -639,11 +626,11 @@ export function StudentsTab({
               </div>
               <span className={styles.kpiTitle}>Attendance</span>
             </div>
-            <span className={styles.kpiBadgeGreen}>{kpis.attendance?.delta || '↑ 2%'}</span>
+            <DeltaPill delta={typeof kpis.attendance?.delta === 'number' ? (kpis.attendance!.delta as unknown as number) : null} direction={(kpis.attendance as any)?.delta_direction} available={(kpis.attendance as any)?.delta_available} unit="%" higherIsBetter />
           </div>
           <div className={styles.kpiBottom}>
             <div>
-              <div className={styles.kpiMainValue}>{kpis.attendance?.value}</div>
+              <div className={styles.kpiMainValue}>{kpis.attendance?.value ?? '—'}</div>
               <div className={styles.kpiSubValue}>active session rate</div>
             </div>
             <div className={styles.kpiSparklineWrap}>
@@ -715,7 +702,7 @@ export function StudentsTab({
                   </>
                 ) : (
                   <>
-                    <div className={styles.donutCenterNumber}>{kpis.students_in_scope?.value}</div>
+                    <div className={styles.donutCenterNumber}>{kpis.students_in_scope?.value ?? '—'}</div>
                     <div className={styles.donutCenterText}>Students</div>
                   </>
                 )}
@@ -767,13 +754,17 @@ export function StudentsTab({
               <div key={item.name} className={styles.breakdownItem}>
                 <div className={styles.breakdownHeader}>
                   <span className={styles.breakdownName}>{item.name}</span>
-                  <span className={styles.breakdownValue}>{item.value}%</span>
+                  <span className={styles.breakdownValue}>
+                    {item.value == null ? '—' : `${item.value}%`}
+                  </span>
                 </div>
                 <div className={styles.breakdownTrack}>
                   <div
                     className={styles.breakdownFill}
                     style={{
-                      width: `${item.value}%`,
+                      // An unmeasured factor gets no bar at all (a null width
+                      // used to fall through to a full-width bar).
+                      width: item.value == null ? 0 : `${Math.min(100, item.value)}%`,
                       background: item.color,
                     }}
                   />
@@ -1324,7 +1315,7 @@ export function StudentsTab({
                     </div>
                     <div className={styles.healthCheckItem}>
                       <CheckCircle2 size={15} color="#10b981" />
-                      <span>Integrity Confidence: {selectedStudent.integrity_confidence || 97}%</span>
+                      <span>Integrity Confidence: {selectedStudent.integrity_confidence ?? 0}%</span>
                     </div>
                   </div>
                 </div>
@@ -1401,7 +1392,7 @@ export function StudentsTab({
                   <div className={styles.radarBarItem}>
                     <div className={styles.radarBarHeader}>
                       <span>Proctor Integrity Confidence</span>
-                      <span style={{ fontWeight: 700 }}>{selectedStudent.integrity_confidence || 97}%</span>
+                      <span style={{ fontWeight: 700 }}>{selectedStudent.integrity_confidence ?? 0}%</span>
                     </div>
                     <div className={styles.radarBarTrack}>
                       <div className={styles.radarBarFill} style={{ width: `${selectedStudent.integrity_confidence || 97}%`, background: '#6366f1' }} />

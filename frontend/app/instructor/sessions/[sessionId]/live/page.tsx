@@ -7,6 +7,7 @@ import {
   Rocket, Code2, Presentation, MonitorPlay, MicOff, VideoOff, Focus, UserMinus,
   MessageSquare, MousePointer2, Contact, Users, ChevronLeft, ChevronRight,
   ChevronDown, ChevronUp, GripVertical, PanelRightClose, PanelRightOpen, Lock,
+  ShieldCheck, ShieldAlert, Share2, Clock3
 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
 import {
@@ -25,6 +26,7 @@ import type { ContentBlock } from '@/components/instructor/studio/blocks';
 import { LiveKitRoom } from '@livekit/components-react';
 import '@livekit/components-styles';
 import ConductorConference, { ShareBridge, type ShareApi } from '@/components/instructor/ConductorConference';
+import StudentScreenViewer from '@/components/instructor/StudentScreenViewer';
 import styles from '../../../shared.module.css';
 import chatStyles from './live.module.css';
 import { useAuthStore } from '@/store/auth-store';
@@ -37,13 +39,27 @@ const MODES = [
   { value: 'debrief',     label: 'Debrief',     icon: '📊' },
 ];
 
-const PROCTOR_FIELDS = [
-  { key: 'lockdown_fullscreen', label: 'Lockdown fullscreen' },
-  { key: 'block_copy_paste',    label: 'Block copy/paste' },
-  { key: 'block_tab_switch',    label: 'Block tab switch' },
-  { key: 'plagiarism_scan',     label: 'Plagiarism scan' },
-  { key: 'focus_ml',            label: 'Focus ML monitoring' },
-  { key: 'webcam_required',     label: 'Webcam required' },
+const PROCTOR_FIELDS: {
+  key: string; label: string; desc: string; effect: string; sev?: string;
+}[] = [
+  { key: 'lockdown_fullscreen', label: 'Lockdown fullscreen',
+    desc: 'Forces the workbench into fullscreen and re-enters it if the student escapes.',
+    effect: 'Leaving raises a medium violation', sev: 'medium' },
+  { key: 'block_copy_paste', label: 'Block copy/paste',
+    desc: 'Blocks Ctrl+C / Ctrl+V and right-click inside the workbench.',
+    effect: 'A blocked attempt is recorded', sev: 'medium' },
+  { key: 'block_tab_switch', label: 'Block tab switch',
+    desc: 'Notices when the tab loses focus or the student switches away.',
+    effect: 'Recorded as a tab switch', sev: 'medium' },
+  { key: 'plagiarism_scan', label: 'Plagiarism scan',
+    desc: 'Compares submissions across the class for copied solutions.',
+    effect: 'Flags appear in integrity', sev: 'high' },
+  { key: 'focus_ml', label: 'Focus ML monitoring',
+    desc: 'Scores attention from typing rhythm, idle time and tab switches every 30 s.',
+    effect: 'Off = no scores are collected at all' },
+  { key: 'webcam_required', label: 'Webcam required',
+    desc: 'Students must publish camera video to stay in the room.',
+    effect: 'Enforced at join' },
 ];
 
 type Tab = 'spark' | 'present' | 'video' | 'control';
@@ -104,6 +120,15 @@ export default function ConductorPage() {
   // Students already share their screen at join; frames stream every ~30s. We
   // keep them but do NOT display until the instructor clicks "Show screen".
   const [screenshots, setScreenshots] = useState<Record<string, ScreenshotEntry>>({});
+  // Which student's live screen the instructor has opened (click-to-view).
+  const [screenViewId, setScreenViewId] = useState<string | null>(null);
+  // End-session / force-submit confirmations. Native window.confirm() blocks the
+  // UI thread, cannot be styled, and is suppressed outright in kiosk and embedded
+  // browsers — where the action then silently does nothing.
+  const [confirmDialog, setConfirmDialog] = useState<
+    | { kind: 'end' }
+    | { kind: 'force'; studentId?: string; who: string }
+    | null>(null);
   const MAX_FRAMES = 5;
 
   // Video token — minted once when the session is active, kept for the
@@ -216,7 +241,18 @@ export default function ConductorPage() {
 
   useEffect(() => { loadState(); }, [loadState]);
 
+  // The proctor feed and the focus numbers are server-derived, so poll them while
+  // the conductor is open — a violation must show up within seconds, not on reload.
+  useEffect(() => {
+    if (state?.session?.status !== 'active') return;
+    const t = setInterval(() => { void loadState(); }, 20000);
+    return () => clearInterval(t);
+  }, [state?.session?.status, loadState]);
+
   const isLive = state?.session?.status === 'active';
+  // Focus scores only exist while the Focus ML control is switched on. Showing a
+  // number when collection is off would be inventing data.
+  const focusCollecting = !!(state?.focus_ml_enabled ?? state?.proctor_policy?.focus_ml);
   const experimentId = (state?.experiment?.id || (state?.session as { experiment_id?: string })?.experiment_id) as string | undefined;
 
   // ── Socket — one connection, stable callbacks ───────────────────────────
@@ -358,7 +394,7 @@ export default function ConductorPage() {
   };
 
   const endSession = async () => {
-    if (!confirm('End session for all students? Attendance is finalized and grades computed.')) return;
+    setConfirmDialog(null);
     setBusy('end');
     try {
       await experienceService.setMode(sessionId, 'ended');
@@ -390,8 +426,7 @@ export default function ConductorPage() {
   };
 
   const forceSubmit = async (studentId?: string) => {
-    const who = studentId ? state?.spark_grid.find(s => s.student_id === studentId)?.full_name : 'ALL students';
-    if (!confirm(`Force submit ${who}?`)) return;
+    setConfirmDialog(null);
     setBusy('force');
     try {
       await experienceService.forceSubmit(sessionId, studentId);
@@ -628,7 +663,7 @@ export default function ConductorPage() {
             <span style={{ fontVariantNumeric: 'tabular-nums', color: '#065f46' }}>{elapsed}</span>
           </span>
         )}
-        <button onClick={endSession} disabled={busy === 'end'}
+        <button onClick={() => setConfirmDialog({ kind: 'end' })} disabled={busy === 'end'}
           style={{ padding: '8px 16px', borderRadius: 10, border: 'none', cursor: 'pointer', background: '#ef4444', color: '#fff', fontWeight: 700, fontSize: 13 }}>
           {busy === 'end' ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />} End
         </button>
@@ -670,9 +705,15 @@ export default function ConductorPage() {
       {tab === 'spark' && (
         <div className={styles.kpiRow} style={{ marginBottom: 16, flexShrink: 0 }}>
           <div className={styles.kpiCard}><p className={styles.kpiLabel}>Students</p><p className={styles.kpiValue} style={{ color: '#7c3aed' }}>{grid.length}</p><p className={styles.kpiSub}>{connected} active</p></div>
-          <div className={styles.kpiCard}><p className={styles.kpiLabel}>Low Focus</p><p className={styles.kpiValue} style={{ color: lowFocus > 0 ? '#b45309' : '#16a34a' }}>{String(lowFocus).padStart(2, '0')}</p><p className={styles.kpiSub}>Focus below 60</p></div>
+          <div className={styles.kpiCard}>
+            <p className={styles.kpiLabel}>Low Focus</p>
+            <p className={styles.kpiValue} style={{ color: focusCollecting ? (lowFocus > 0 ? '#b45309' : '#16a34a') : '#9ca3af' }}>
+              {focusCollecting ? String(lowFocus).padStart(2, '0') : '—'}
+            </p>
+            <p className={styles.kpiSub}>{focusCollecting ? 'Focus below 60' : 'Monitoring off'}</p>
+          </div>
           <div className={styles.kpiCard}><p className={styles.kpiLabel}>Attempts</p><p className={styles.kpiValue} style={{ color: '#7c3aed' }}>{totalAttempts}</p><p className={styles.kpiSub}>Code executions</p></div>
-          <div className={styles.kpiCard}><p className={styles.kpiLabel}>Status</p><p className={styles.kpiValue} style={{ color: '#d946ef', textTransform: 'capitalize' }}>{isLive ? 'Active' : String(state.session?.status ?? '—')}</p><p className={styles.kpiSub}>{Object.keys(screenshots).length} sharing screen</p></div>
+          <div className={styles.kpiCard}><p className={styles.kpiLabel}>Status</p><p className={styles.kpiValue} style={{ color: '#d946ef', textTransform: 'capitalize' }}>{isLive ? 'Active' : String(state.session?.status ?? '—')}</p><p className={styles.kpiSub}>{Object.keys(screenshots).length} sending frames</p></div>
         </div>
       )}
 
@@ -684,7 +725,7 @@ export default function ConductorPage() {
               <h3 className={styles.sectionTitle}>SPARK Monitoring Grid</h3>
               <p className={styles.sectionSub}>
                 {filteredGrid.length} of {grid.length} student{grid.length !== 1 ? 's' : ''}
-                {cps.length > 0 ? ` · ${cps.length} checkpoints` : ''} · click <strong>View</strong> for the full dossier
+                {cps.length > 0 ? ` · ${cps.length} checkpoints` : ''} · click a row to watch their live screen
               </p>
             </div>
             <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap' }}>
@@ -721,7 +762,10 @@ export default function ConductorPage() {
                   const statusCls = row.focus_score === null ? styles.slateBadge : lowF ? styles.amberBadge : styles.greenBadge;
                   const allDone = cps.length > 0 && row.verified_checkpoints >= cps.length;
                   return (
-                    <tr key={row.student_id}>
+                    <tr key={row.student_id}
+                      onClick={() => setScreenViewId(row.student_id)}
+                      title={`View ${row.full_name}'s live screen`}
+                      style={{ cursor: 'pointer' }}>
                       <td style={{ color: '#9ca3af', fontSize: 12 }}>{i + 1}</td>
                       <td>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -733,9 +777,15 @@ export default function ConductorPage() {
                       </td>
                       <td style={{ color: '#6b7280', fontSize: 12.5 }}>{row.roll_number || '—'}</td>
                       <td style={{ textAlign: 'center' }}>
-                        <span className={row.focus_score === null ? styles.slateBadge : lowF ? styles.redBadge : styles.greenBadge}>
-                          {row.focus_score !== null ? `${Math.round(row.focus_score)}%` : '—'}
-                        </span>
+                        {focusCollecting ? (
+                          <span className={row.focus_score === null ? styles.slateBadge : lowF ? styles.redBadge : styles.greenBadge}>
+                            {row.focus_score !== null ? `${Math.round(row.focus_score)}%` : '—'}
+                          </span>
+                        ) : (
+                          <span className={styles.slateBadge} title="Focus monitoring is switched off for this session">
+                            off
+                          </span>
+                        )}
                       </td>
                       <td style={{ textAlign: 'center' }}>
                         <span style={{ fontSize: 12.5, fontWeight: 600, color: allDone ? '#16a34a' : '#d97706' }}>
@@ -747,10 +797,16 @@ export default function ConductorPage() {
                       </td>
                       <td style={{ textAlign: 'center' }}><span className={statusCls}>{statusLabel}</span></td>
                       <td style={{ textAlign: 'center' }}>
-                        <button className={styles.secondaryBtn} style={{ fontSize: 11.5, padding: '4px 12px', minHeight: 0 }}
-                          onClick={() => router.push(`/instructor/sessions/${sessionId}/student/${row.student_id}`)}>
-                          View
-                        </button>
+                        <div style={{ display: 'flex', gap: 6, justifyContent: 'center' }}>
+                          <button className={styles.secondaryBtn} style={{ fontSize: 11.5, padding: '4px 10px', minHeight: 0 }}
+                            onClick={(e) => { e.stopPropagation(); setScreenViewId(row.student_id); }}>
+                            Screen
+                          </button>
+                          <button className={styles.secondaryBtn} style={{ fontSize: 11.5, padding: '4px 10px', minHeight: 0 }}
+                            onClick={(e) => { e.stopPropagation(); router.push(`/instructor/sessions/${sessionId}/student/${row.student_id}`); }}>
+                            Dossier
+                          </button>
+                        </div>
                       </td>
                     </tr>
                   );
@@ -765,7 +821,9 @@ export default function ConductorPage() {
           </div>
 
           <p className={styles.sectionSub} style={{ marginTop: 14, fontSize: 12 }}>
-            Screens are shared but hidden by default — open a student and click <strong>Show screen</strong> to view their last 5 snapshots.
+            No screens are shown by default. Click a student's row (or <strong>Screen</strong>) to watch that one
+            student live — screen sharing is compulsory at join, so nothing is asked of them mid-session.
+            Screenshots keep recording every 30s in the background.
           </p>
         </div>
       )}
@@ -1119,6 +1177,17 @@ export default function ConductorPage() {
                 style={{ flex: 1, height: '100%', background: 'transparent' }}
                 onDisconnected={() => { setVideoToken(null); setVideoLeft(true); }}>
                 <ShareBridge apiRef={shareApiRef} onShareChange={onShareChange} />
+                {/* Click a student -> their live screen. Compulsory sharing at join means
+                    the track is already published, so no mid-session prompt is needed. */}
+                <StudentScreenViewer
+                  target={screenViewId ? (() => {
+                    const r = grid.find(g => g.student_id === screenViewId);
+                    return r ? { student_id: r.student_id, full_name: r.full_name, roll_number: r.roll_number } : null;
+                  })() : null}
+                  frameEntry={screenViewId ? screenshots[screenViewId] ?? null : null}
+                  onClose={() => setScreenViewId(null)}
+                  onOpenDossier={(sid) => router.push(`/instructor/sessions/${sessionId}/student/${sid}`)}
+                />
                 <ConductorConference
                   roster={grid.map(r => ({
                     id: r.student_id, name: r.full_name, roll: r.roll_number,
@@ -1650,7 +1719,7 @@ export default function ConductorPage() {
                         { Icon: MessageSquare, label: 'Message',        action: () => { setRightTab('chat'); setChatAudience('direct'); setTimeout(() => chatInputRef.current?.focus(), 50); } },
                         { Icon: Focus,         label: 'Focus Nudge',    action: () => sendFocusSignal(chatTarget) },
                         { Icon: Contact,       label: 'Full Dossier',   action: () => router.push(`/instructor/sessions/${sessionId}/student/${chatTarget}`) },
-                        { Icon: Square,        label: 'Force Submit',   action: () => forceSubmit(chatTarget) },
+                        { Icon: Square,        label: 'Force Submit',   action: () => setConfirmDialog({ kind: 'force', studentId: chatTarget, who: state?.spark_grid.find(r => r.student_id === chatTarget)?.full_name || 'this student' }) },
                       ].map(({ Icon, label, action }) => (
                         <button key={label} onClick={action} disabled={busy === `vc-${chatTarget}`}
                           style={{ display: 'flex', alignItems: 'center', gap: 7, padding: '8px 10px', borderRadius: 9, border: '1px solid #e5e7eb', background: '#fff', cursor: 'pointer', fontSize: 11.5, color: '#374151', fontWeight: 500 }}>
@@ -1678,18 +1747,117 @@ export default function ConductorPage() {
         </div>
 
       {/* ══ CONTROL & COMMS ══ */}
+      {confirmDialog && (
+        <div
+          onClick={() => setConfirmDialog(null)}
+          style={{
+            position: 'fixed', inset: 0, zIndex: 96000, background: 'rgba(10,7,20,.6)',
+            backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center',
+            justifyContent: 'center', padding: 20,
+          }}>
+          <div onClick={(e) => e.stopPropagation()} style={{
+            width: 'min(460px, 94vw)', background: '#fff', borderRadius: 14, padding: 22,
+            boxShadow: '0 24px 60px rgba(0,0,0,.3)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+              <div style={{
+                width: 36, height: 36, borderRadius: 10, flexShrink: 0,
+                background: confirmDialog.kind === 'end' ? '#fee2e2' : '#ede9fe',
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+              }}>
+                {confirmDialog.kind === 'end'
+                  ? <Square size={16} color="#b91c1c" />
+                  : <Send size={16} color="#7c3aed" />}
+              </div>
+              <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800, color: '#111827' }}>
+                {confirmDialog.kind === 'end' ? 'End this session?' : 'Force submission?'}
+              </h3>
+            </div>
+            <p style={{ margin: '0 0 6px', fontSize: 13, lineHeight: 1.6, color: '#475569' }}>
+              {confirmDialog.kind === 'end'
+                ? 'Attendance is finalised and grades are computed for every student in this lab. Students lose access to the workbench, and anyone still sharing stops being recorded.'
+                : `The current code of ${'who' in confirmDialog ? confirmDialog.who : 'the student'} is submitted as their final attempt. They are told immediately, and a record is kept against them.`}
+            </p>
+            <p style={{ margin: '0 0 18px', fontSize: 12, color: '#94a3b8' }}>
+              {confirmDialog.kind === 'end'
+                ? 'This cannot be undone from the conductor.'
+                : 'You can still regrade afterwards.'}
+            </p>
+            <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 9 }}>
+              <button onClick={() => setConfirmDialog(null)} style={{
+                padding: '9px 16px', borderRadius: 9, border: '1px solid #e5e7eb',
+                background: '#fff', color: '#374151', fontSize: 13, fontWeight: 600, cursor: 'pointer',
+              }}>
+                Cancel
+              </button>
+              <button
+                onClick={() => (confirmDialog.kind === 'end'
+                  ? void endSession()
+                  : void forceSubmit(confirmDialog.kind === 'force' ? confirmDialog.studentId : undefined))}
+                disabled={busy === 'end' || busy === 'force'}
+                style={{
+                  padding: '9px 16px', borderRadius: 9, border: 'none',
+                  background: confirmDialog.kind === 'end' ? '#dc2626' : '#7c3aed',
+                  color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer',
+                }}>
+                {confirmDialog.kind === 'end' ? 'End session' : 'Force submit'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {tab === 'control' && (
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
         <div className={styles.gridTwo}>
           {/* Proctor toggles */}
           <div className={styles.sectionCard}>
-            <h3 className={styles.sectionTitle}>Proctoring Controls</h3>
-            <p className={styles.sectionSub}>Toggle mid-session — relays to all students instantly.</p>
-            <div className={styles.list} style={{ marginTop: 14 }}>
+            <h3 className={styles.sectionTitle}>Proctoring</h3>
+            <p className={styles.sectionSub}>
+              Applies to every student immediately. Each switch says what the student
+              experiences, so nothing here is a guess.
+            </p>
+
+            {/* Non-negotiable part of the policy, stated up front. */}
+            <div style={{
+              display: 'flex', alignItems: 'flex-start', gap: 9, marginTop: 12,
+              padding: '9px 12px', borderRadius: 10, background: '#f5f3ff', border: '1px solid #ddd6fe',
+            }}>
+              <ShieldCheck size={15} color="#7c3aed" style={{ marginTop: 1, flexShrink: 0 }} />
+              <div>
+                <p style={{ margin: 0, fontSize: 12.5, fontWeight: 700, color: '#4c1d95' }}>
+                  Screen sharing is compulsory
+                </p>
+                <p style={{ margin: '2px 0 0', fontSize: 11.5, color: '#6d28d9', lineHeight: 1.5 }}>
+                  Every student shares from the moment they join until the session ends.
+                  Stopping it raises a <strong>high</strong> severity violation and re-blocks
+                  their room. No student screen is shown to you unless you open it.
+                </p>
+              </div>
+            </div>
+
+            <div className={styles.list} style={{ marginTop: 12 }}>
               {PROCTOR_FIELDS.map(t => (
-                <div key={t.key} className={styles.listRow} style={{ cursor: 'pointer' }}
+                <div key={t.key} className={styles.listRow} style={{ cursor: 'pointer', alignItems: 'flex-start' }}
                   onClick={() => toggleProctor(t.key, !proctor[t.key])}>
-                  <div className={styles.rowBody}><div className={styles.rowTitle}>{t.label}</div></div>
-                  <div className={styles.rowSide}>
+                  <div className={styles.rowBody}>
+                    <div className={styles.rowTitle} style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
+                      {t.label}
+                      {t.sev && (
+                        <span style={{
+                          fontSize: 10, fontWeight: 700, letterSpacing: '.03em', textTransform: 'uppercase',
+                          padding: '1px 6px', borderRadius: 999,
+                          background: t.sev === 'high' ? '#fee2e2' : '#fef3c7',
+                          color: t.sev === 'high' ? '#b91c1c' : '#92400e',
+                        }}>{t.sev}</span>
+                      )}
+                    </div>
+                    <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 2, lineHeight: 1.45 }}>{t.desc}</div>
+                    <div style={{ fontSize: 11, color: proctor[t.key] ? '#7c3aed' : '#9ca3af', marginTop: 3, fontWeight: 600 }}>
+                      {proctor[t.key] ? '● On — ' : '○ Off — '}{t.effect}
+                    </div>
+                  </div>
+                  <div className={styles.rowSide} style={{ paddingTop: 2 }}>
                     <div style={{ width: 44, height: 24, borderRadius: 12, padding: 2, transition: 'all .15s', background: proctor[t.key] ? '#7c3aed' : '#d1d5db' }}>
                       <div style={{ width: 20, height: 20, borderRadius: 10, background: '#fff', marginLeft: proctor[t.key] ? '22px' : '2px', transition: 'all .15s' }} />
                     </div>
@@ -1697,7 +1865,15 @@ export default function ConductorPage() {
                 </div>
               ))}
             </div>
-            <button className={styles.secondaryBtn} style={{ marginTop: 14 }} onClick={() => forceSubmit()} disabled={busy === 'force'}>
+
+            {!proctor.focus_ml && (
+              <p style={{ margin: '8px 0 0', fontSize: 11.5, color: '#92400e', background: '#fffbeb',
+                          border: '1px solid #fde68a', borderRadius: 8, padding: '8px 10px' }}>
+                Focus monitoring is off, so no attention scores are being collected or
+                shown for this session. Turn it on to score students every 30 seconds.
+              </p>
+            )}
+            <button className={styles.secondaryBtn} style={{ marginTop: 14 }} onClick={() => setConfirmDialog({ kind: 'force', who: 'ALL students' })} disabled={busy === 'force'}>
               {busy === 'force' ? <Loader2 size={14} className="animate-spin" /> : <Square size={14} />} Force Submit All
             </button>
           </div>
@@ -1729,6 +1905,56 @@ export default function ConductorPage() {
               ))}
             </div>
           </div>
+        </div>
+
+        {/* Live proctor feed — what actually happened, when, and to whom. */}
+        <div className={styles.sectionCard} style={{ marginTop: 14 }}>
+          <div className={styles.sectionHeader}>
+            <div>
+              <h3 className={styles.sectionTitle}>Proctor feed</h3>
+              <p className={styles.sectionSub}>
+                Newest first. Every event costs integrity by severity — high −6.0, medium −2.5, low −1.0.
+              </p>
+            </div>
+            <span style={{ fontSize: 12, color: '#6b7280' }}>
+              {(state.proctor_feed?.length ?? 0)} event{(state.proctor_feed?.length ?? 0) === 1 ? '' : 's'} this session
+            </span>
+          </div>
+          {!state.proctor_feed?.length ? (
+            <p style={{ margin: '10px 0 0', fontSize: 12.5, color: '#9891a6' }}>
+              Nothing has been flagged yet. Screen-share stops, tab switches, blocked
+              copy/paste and fullscreen exits will appear here the moment they happen.
+            </p>
+          ) : (
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6, marginTop: 10, maxHeight: 280, overflowY: 'auto' }}>
+              {state.proctor_feed.slice(0, 25).map(ev => {
+                const sev = ev.severity === 'high' ? { bg: '#fee2e2', fg: '#b91c1c' }
+                  : ev.severity === 'medium' ? { bg: '#fef3c7', fg: '#92400e' }
+                  : { bg: '#f1f5f9', fg: '#475569' };
+                const label = ev.event_type.replace(/_/g, ' ');
+                const when = ev.recorded_at ? new Date(ev.recorded_at).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }) : '';
+                return (
+                  <div key={ev.id} style={{
+                    display: 'flex', alignItems: 'center', gap: 10, padding: '8px 11px',
+                    borderRadius: 9, border: '1px solid #eceaf3', background: '#fff',
+                  }}>
+                    <span style={{
+                      fontSize: 10, fontWeight: 800, textTransform: 'uppercase', letterSpacing: '.04em',
+                      padding: '2px 7px', borderRadius: 999, background: sev.bg, color: sev.fg,
+                    }}>{ev.severity}</span>
+                    <span style={{ fontSize: 13, fontWeight: 600, color: '#111827', minWidth: 140 }}>
+                      {ev.student_name || 'Student'}
+                    </span>
+                    <span style={{ fontSize: 12.5, color: '#4b5563', textTransform: 'capitalize' }}>{label}</span>
+                    <span style={{ marginLeft: 'auto', fontSize: 11.5, color: '#9ca3af', display: 'flex', alignItems: 'center', gap: 4 }}>
+                      <Clock3 size={11} /> {when}
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
         </div>
       )}
 

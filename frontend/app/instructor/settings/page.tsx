@@ -185,7 +185,7 @@ export default function InstructorSettingsPage() {
   };
 
   const rubricSum = Object.values(settings.default_rubric || {}).reduce((a, b) => a + (b || 0), 0);
-  const fullName = user?.full_name ?? 'Dr. Priya Sharma';
+  const fullName = user?.full_name ?? '';
   const initials = fullName.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() || 'IN';
 
   return (

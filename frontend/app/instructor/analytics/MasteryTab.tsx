@@ -28,15 +28,17 @@ interface MasteryTabProps {
 
 // Mini SVG sparkline for KPI cards
 function MiniSparkline({ points, color }: { points: number[]; color: string }) {
-  if (!points || points.length === 0) return null;
-  const min = Math.min(...points);
-  const max = Math.max(...points);
+  // Real series can contain gaps; a single point is not a trend.
+  const vals = (points || []).filter((p) => typeof p === 'number' && Number.isFinite(p));
+  if (vals.length < 2) return null;
+  const min = Math.min(...vals);
+  const max = Math.max(...vals);
   const range = max - min || 1;
   const width = 88;
   const height = 30;
 
-  const pts = points.map((p, idx) => {
-    const x = (idx / (points.length - 1)) * (width - 10) + 5;
+  const pts = vals.map((p, idx) => {
+    const x = (idx / (vals.length - 1)) * (width - 10) + 5;
     const y = height - 5 - ((p - min) / range) * (height - 10);
     return `${x},${y}`;
   });
@@ -272,6 +274,13 @@ export function MasteryTab({ data, onSelectStudent }: MasteryTabProps) {
             </div>
           </div>
 
+          {(!data.heatmap?.columns?.length || !data.heatmap?.rows?.length) ? (
+            <div style={{ padding: '40px 24px', textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>
+              No concept mastery recorded for this cohort yet.
+              <br />
+              The matrix fills in as students attempt experiments with graded concepts.
+            </div>
+          ) : (
           <div className={styles.heatmapContainer}>
             <table className={styles.heatmapTable}>
               <thead>
@@ -306,7 +315,7 @@ export function MasteryTab({ data, onSelectStudent }: MasteryTabProps) {
                         {row.values.map((val, cIdx) => (
                           <td
                             key={cIdx}
-                            className={`${styles.heatmapCell} ${getScoreClass(val)}`}
+                            className={`${styles.heatmapCell} ${val == null ? '' : getScoreClass(val)}`}
                             onMouseEnter={(e) => {
                               const rect = e.currentTarget.getBoundingClientRect();
                               setHoveredCell({
@@ -319,7 +328,7 @@ export function MasteryTab({ data, onSelectStudent }: MasteryTabProps) {
                             }}
                             onMouseLeave={() => setHoveredCell(null)}
                           >
-                            {val}%
+                            {val == null ? '—' : `${val}%`}
                           </td>
                         ))}
                       </tr>
@@ -350,6 +359,7 @@ export function MasteryTab({ data, onSelectStudent }: MasteryTabProps) {
               </tbody>
             </table>
           </div>
+          )}
 
           {/* Legend */}
           <div className={styles.legendContainer}>

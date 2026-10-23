@@ -22,6 +22,7 @@ import {
   CheckCircle2,
 } from 'lucide-react';
 import { PieChart, Pie, Cell, ResponsiveContainer, Tooltip as RechartsTooltip } from 'recharts';
+import DeltaPill from '@/components/analytics/DeltaPill';
 import styles from './instructor-analytics.module.css';
 import type {
   IntegrityOverviewData,
@@ -174,15 +175,11 @@ export function IntegrityTab({
         value: d.count,
         color: d.color,
         percentage: d.percentage,
-      })) || [
-        { name: 'Proctor events', value: 6, color: '#6366f1', percentage: 46 },
-        { name: 'Plagiarism matches', value: 2, color: '#0ea5e9', percentage: 31 },
-        { name: 'Code anomalies', value: 1, color: '#f59e0b', percentage: 23 },
-      ]
+      })) || []
     );
   }, [data]);
 
-  const totalEvidenceStudents = data?.evidence_mix?.total_students ?? 9;
+  const totalEvidenceStudents = data?.evidence_mix?.total_students ?? 0;
 
   // Render icon based on type
   const renderEvidenceIcon = (type: string, key: number) => {
@@ -215,15 +212,16 @@ export function IntegrityTab({
   };
 
   // Sparkline SVG helper with interactive points
-  const renderSparkline = (points: number[], strokeColor: string) => {
-    if (!points || points.length === 0) return null;
-    const min = Math.min(...points);
-    const max = Math.max(...points);
+  const renderSparkline = (points: number[] | undefined | null, strokeColor: string) => {
+    const vals = (points || []).filter((p) => typeof p === 'number' && Number.isFinite(p));
+    if (vals.length < 2) return null;  // a single point is not a trend
+    const min = Math.min(...vals);
+    const max = Math.max(...vals);
     const range = max - min || 1;
     const width = 80;
     const height = 26;
-    const coords = points.map((p, i) => {
-      const x = (i / (points.length - 1)) * width;
+    const coords = vals.map((p, i) => {
+      const x = (i / (vals.length - 1)) * width;
       const y = height - ((p - min) / range) * (height - 6) - 3;
       return { x, y, val: p };
     });
@@ -276,18 +274,22 @@ export function IntegrityTab({
               <div className={styles.integrityKpiIcon} style={{ background: '#f5f3ff', color: '#7c3aed' }}>
                 <ShieldCheck size={18} />
               </div>
-              <span className={`${styles.integrityKpiBadge} ${styles.badgeGreen}`}>
-                ↑ 3%
-              </span>
+              <DeltaPill
+                delta={(data?.kpis?.integrity_confidence as any)?.delta}
+                direction={(data?.kpis?.integrity_confidence as any)?.direction}
+                available={(data?.kpis?.integrity_confidence as any)?.delta_available}
+                higherIsBetter={true}
+                unit="%"
+              />
             </div>
             <div className={styles.integrityKpiBody}>
               <span className={styles.integrityKpiLabel}>Integrity Confidence</span>
               <div className={styles.integrityKpiValueRow}>
                 <span className={styles.integrityKpiValue}>
-                  {data?.kpis?.integrity_confidence?.value || '94.2%'}
+                  {data?.kpis?.integrity_confidence?.value ?? '—'}
                 </span>
                 {renderSparkline(
-                  data?.kpis?.integrity_confidence?.sparkline || [88, 89, 90, 92, 91, 93, 94.2],
+                  data?.kpis?.integrity_confidence?.sparkline,
                   '#8b5cf6'
                 )}
               </div>
@@ -315,18 +317,22 @@ export function IntegrityTab({
               <div className={styles.integrityKpiIcon} style={{ background: '#fef2f2', color: '#ef4444' }}>
                 <AlertTriangle size={18} />
               </div>
-              <span className={`${styles.integrityKpiBadge} ${styles.badgeRed}`}>
-                ↑ 2
-              </span>
+              <DeltaPill
+                delta={(data?.kpis?.review_recommended as any)?.delta}
+                direction={(data?.kpis?.review_recommended as any)?.direction}
+                available={(data?.kpis?.review_recommended as any)?.delta_available}
+                higherIsBetter={false}
+                unit=""
+              />
             </div>
             <div className={styles.integrityKpiBody}>
               <span className={styles.integrityKpiLabel}>Review Recommended</span>
               <div className={styles.integrityKpiValueRow}>
                 <span className={styles.integrityKpiValue}>
-                  {data?.kpis?.review_recommended?.value ?? 5}
+                  {data?.kpis?.review_recommended?.value ?? '—'}
                 </span>
                 {renderSparkline(
-                  data?.kpis?.review_recommended?.sparkline || [2, 3, 3, 4, 3, 4, 5],
+                  data?.kpis?.review_recommended?.sparkline,
                   '#ef4444'
                 )}
               </div>
@@ -354,9 +360,13 @@ export function IntegrityTab({
               <div className={styles.integrityKpiIcon} style={{ background: '#eff6ff', color: '#0ea5e9' }}>
                 <FileText size={18} />
               </div>
-              <span className={`${styles.integrityKpiBadge} ${styles.badgeGreen}`}>
-                ↓ 1
-              </span>
+              <DeltaPill
+                delta={(data?.kpis?.plagiarism_matches as any)?.delta}
+                direction={(data?.kpis?.plagiarism_matches as any)?.direction}
+                available={(data?.kpis?.plagiarism_matches as any)?.delta_available}
+                higherIsBetter={false}
+                unit=""
+              />
             </div>
             <div className={styles.integrityKpiBody}>
               <span className={styles.integrityKpiLabel}>Plagiarism Matches</span>
@@ -365,7 +375,7 @@ export function IntegrityTab({
                   {data?.kpis?.plagiarism_matches?.value ?? 2}
                 </span>
                 {renderSparkline(
-                  data?.kpis?.plagiarism_matches?.sparkline || [4, 4, 3, 3, 2, 3, 2],
+                  data?.kpis?.plagiarism_matches?.sparkline,
                   '#0ea5e9'
                 )}
               </div>
@@ -393,9 +403,13 @@ export function IntegrityTab({
               <div className={styles.integrityKpiIcon} style={{ background: '#fdf2f8', color: '#db2777' }}>
                 <Activity size={18} />
               </div>
-              <span className={`${styles.integrityKpiBadge} ${styles.badgeGreen}`}>
-                ↓ 3
-              </span>
+              <DeltaPill
+                delta={(data?.kpis?.proctor_events as any)?.delta}
+                direction={(data?.kpis?.proctor_events as any)?.direction}
+                available={(data?.kpis?.proctor_events as any)?.delta_available}
+                higherIsBetter={false}
+                unit=""
+              />
             </div>
             <div className={styles.integrityKpiBody}>
               <span className={styles.integrityKpiLabel}>Proctor Events</span>
@@ -404,7 +418,7 @@ export function IntegrityTab({
                   {data?.kpis?.proctor_events?.value ?? 12}
                 </span>
                 {renderSparkline(
-                  data?.kpis?.proctor_events?.sparkline || [18, 16, 17, 15, 14, 13, 12],
+                  data?.kpis?.proctor_events?.sparkline,
                   '#db2777'
                 )}
               </div>

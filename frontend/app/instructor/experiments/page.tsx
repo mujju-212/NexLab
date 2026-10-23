@@ -2,7 +2,7 @@
 
 import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
-import { useQueryClient } from '@tanstack/react-query';
+import { useQuery, useQueryClient } from '@tanstack/react-query';
 import Image from 'next/image';
 import {
   FlaskConical, Plus, Pencil, Trash2, EyeOff,
@@ -16,6 +16,7 @@ import {
 import InstructorShell from '@/components/layout/InstructorShell';
 import { experimentService } from '@/services/experiment.service';
 import { sessionService } from '@/services/session.service';
+import { instructorService } from '@/services/instructor.service';
 import { experienceService, type InstructorExam } from '@/services/experience.service';
 import SubjectIconPicker from '@/components/ui/SubjectIconPicker';
 import { getSubjectIconDef } from '@/lib/subject-icons';
@@ -431,20 +432,34 @@ export default function ExperimentsPage() {
     return displaySubjects;
   }, [displaySubjects]);
 
-  // Calculated Dynamic Subject Analytics
+  // Real student feedback for the selected subject (drives Average Rating)
+  const { data: feedbackOverview } = useQuery({
+    queryKey: ['instructor', 'feedback-overview', selectedSubject?.subject_id, selectedSubject?.section_id],
+    queryFn: () =>
+      instructorService.getFeedbackOverview({
+        subject_id: (selectedSubject as any)?.subject_id,
+        section_id: (selectedSubject as any)?.section_id,
+      }),
+    staleTime: 5 * 60 * 1000,
+  });
+
+  // Calculated Dynamic Subject Analytics — all values real, zeros when unknown
   const subjectAnalytics = useMemo(() => {
     const totalExps = filteredExperiments.length;
     const publishedExps = filteredExperiments.filter(e => e.is_published).length;
-    const utilizationRate = totalExps > 0 ? Math.round((publishedExps / totalExps) * 100) : 75;
-    const studentHeadcount = selectedSubject?.student_count || 120;
+    const utilizationRate = totalExps > 0 ? Math.round((publishedExps / totalExps) * 100) : 0;
+    const studentHeadcount = selectedSubject?.student_count || 0;
+    const realRating = feedbackOverview?.averages?.overall_rating;
 
     return {
       totalExps,
       studentHeadcount,
       utilizationRate: `${utilizationRate}%`,
-      avgRating: 4.7,
+      // null (no feedback yet) is rendered as an em dash, never a made-up score
+      avgRating: typeof realRating === 'number' ? realRating.toFixed(1) : '—',
+      feedbackCount: feedbackOverview?.total ?? 0,
     };
-  }, [filteredExperiments, selectedSubject]);
+  }, [filteredExperiments, selectedSubject, feedbackOverview]);
 
   const clearFilters = () => {
     setSearchQuery('');
@@ -538,11 +553,25 @@ export default function ExperimentsPage() {
                   <Star size={24} />
                 </div>
                 <div className={styles.metricInfo}>
-                  <span className={styles.metricVal}>4.7</span>
+                  <span className={styles.metricVal}>{subjectAnalytics.avgRating}</span>
                   <span className={styles.metricLabel}>Average Rating</span>
                   <div className={styles.ratingRow}>
-                    <span>★★★★★</span>
-                    <span>4.7/5</span>
+                    <span>
+                      {[1, 2, 3, 4, 5].map((i) => {
+                        const r = parseFloat(String(subjectAnalytics.avgRating)) || 0;
+                        return (
+                          <span key={i} style={{ opacity: r >= i ? 1 : 0.25 }}>
+                            ★
+                          </span>
+                        );
+                      })}
+                    </span>
+                    <span>
+                      {subjectAnalytics.avgRating}
+                      {subjectAnalytics.avgRating === '—'
+                        ? ' (no feedback yet)'
+                        : ` / 5 · ${subjectAnalytics.feedbackCount} responses`}
+                    </span>
                   </div>
                 </div>
               </div>
@@ -1272,7 +1301,7 @@ export default function ExperimentsPage() {
                     </p>
                   </div>
                   <span style={{ fontSize: 12, fontWeight: 700, color: '#7c3aed', background: '#f5f3ff', padding: '4px 12px', borderRadius: 8 }}>
-                    {selectedSubject.student_count || 120} Enrolled Students
+                    {selectedSubject.student_count || 0} Enrolled Students
                   </span>
                 </div>
 
@@ -1335,7 +1364,7 @@ export default function ExperimentsPage() {
                     <input
                       type="text"
                       className={styles.formInput}
-                      value={`${selectedSubject.student_count || 120} Students`}
+                      value={`${selectedSubject.student_count || 0} Students`}
                       disabled
                       style={{ background: '#f8fafc', color: '#64748b' }}
                     />

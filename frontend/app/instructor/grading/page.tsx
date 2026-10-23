@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import {
   ClipboardCheck, CheckCircle2, History, Lock, Save, X,
@@ -177,7 +177,15 @@ export default function GradingPage() {
   // Split-Pane Grading Workbench Modal state
   const [grading, setGrading] = useState<SubmissionRow | null>(null);
   const [workbenchTab, setWorkbenchTab] = useState<'code' | 'tests' | 'viva' | 'integrity'>('code');
+  // Instructor explicitly overriding a grade the student already viewed
+  const [overrideLock, setOverrideLock] = useState(false);
   const [manualGrade, setManualGrade] = useState('');
+  // Per-component rubric scores, keyed exactly like Experiment.rubric_*.
+  // Empty string = "not entered" → falls back to the auto-computed value.
+  const [componentScores, setComponentScores] = useState<Record<string, string>>({});
+  // Explicit "graded" ticks per rubric component. Unticked = the weight is
+  // removed from the mark entirely (it is not counted as a zero).
+  const [assessed, setAssessed] = useState<Record<string, boolean>>({});
   const [feedback, setFeedback] = useState('');
   const [saving, setSaving] = useState(false);
   const [drafting, setDrafting] = useState(false);
@@ -445,6 +453,29 @@ export default function GradingPage() {
             ? String(sub.auto_grade)
             : ''
     );
+    setComponentScores({
+      test_cases: sub.auto_grade != null ? String(sub.auto_grade) : '',
+      lab_report: sub.manual_grade != null ? String(sub.manual_grade) : '',
+      code_quality: (sub as { code_quality_grade?: number | null }).code_quality_grade != null
+        ? String((sub as { code_quality_grade?: number | null }).code_quality_grade)
+        : '',
+      viva: (sub as { viva_grade?: number | null }).viva_grade != null
+        ? String((sub as { viva_grade?: number | null }).viva_grade)
+        : '',
+      quiz: (sub as { quiz_grade?: number | null }).quiz_grade != null
+        ? String((sub as { quiz_grade?: number | null }).quiz_grade)
+        : '',
+    });
+    setOverrideLock(false);
+    // A component starts ticked when it already carries a mark; the instructor
+    // can untick anything that has not really been assessed.
+    setAssessed({
+      test_cases: sub.auto_grade != null,
+      lab_report: sub.manual_grade != null,
+      code_quality: (sub as { code_quality_grade?: number | null }).code_quality_grade != null,
+      viva: (sub as { viva_grade?: number | null }).viva_grade != null,
+      quiz: (sub as { quiz_grade?: number | null }).quiz_grade != null,
+    });
     setFeedback(sub.manual_feedback || '');
     setSelectedVersionIdx(-1);
     setReplayVersions([]);
@@ -485,33 +516,53 @@ export default function GradingPage() {
   };
 
   // Calculate live blended final grade preview from rubric
-  const liveBlendedPreview = useMemo(() => {
-    if (!grading) return null;
-    const rub = experimentMeta?.rubric || { test_cases: 60, lab_report: 20, code_quality: 10, viva: 10, quiz: 0 };
-    const tcScore = grading.auto_grade ?? (
-      grading.test_cases_total ? Math.round(((grading.test_cases_passed ?? 0) / grading.test_cases_total) * 100) : 0
-    );
-    const manualVal = manualGrade !== '' && !Number.isNaN(parseFloat(manualGrade)) ? Math.min(100, Math.max(0, parseFloat(manualGrade))) : (grading.manual_grade ?? tcScore);
-    const qualRaw = grading.code_quality_grade ?? (grading.quality_grade === 'A' ? 95 : grading.quality_grade === 'B' ? 82 : grading.quality_grade === 'C' ? 70 : 75);
-    const qualScore = qualRaw > 0 && qualRaw <= 10 ? qualRaw * 10 : qualRaw;
-    const vivaScore = grading.viva_grade ?? (activeViva?.viva?.total_score ?? 0);
-    const quizScore = grading.quiz_grade ?? 0;
+  // Live preview: sum each component's score × its rubric weight. Components
+  // the rubric gives 0% to contribute nothing (they are not calculated at all).
+  const rubricOf = useMemo(
+    () => experimentMeta?.rubric || { test_cases: 60, lab_report: 20, code_quality: 10, viva: 10, quiz: 0 },
+    [experimentMeta],
+  );
 
-    const rubricSum = (rub.test_cases || 0) + (rub.lab_report || 0) + (rub.code_quality || 0) + (rub.viva || 0) + (rub.quiz || 0);
-    if (rubricSum <= 0 || (rub.lab_report === 0 && manualGrade !== '')) {
-      return Math.round(manualVal * 10) / 10;
+  const componentValue = useCallback((key: string): number | null => {
+    const raw = componentScores[key];
+    if (raw != null && raw !== '' && !Number.isNaN(parseFloat(raw))) {
+      return Math.min(100, Math.max(0, parseFloat(raw)));
     }
+    return null;
+  }, [componentScores]);
 
-    const blended =
-      tcScore * ((rub.test_cases || 0) / 100) +
-      manualVal * ((rub.lab_report || 0) / 100) +
-      qualScore * ((rub.code_quality || 0) / 100) +
-      vivaScore * ((rub.viva || 0) / 100) +
-      quizScore * ((rub.quiz || 0) / 100) -
-      (grading.hint_deduction || 0);
+  // Live preview mirrors the server: the mark is renormalised over the weight
+  // that has actually been assessed, so an unmarked component cannot read as 0.
+  const livePreview = useMemo(() => {
+    if (!grading) return { final: null as number | null, weightUsed: 0, provisional: false };
+    const rub = rubricOf as Record<string, number>;
+    const fallback: Record<string, number | null> = {
+      test_cases: grading.auto_grade ?? (
+        grading.test_cases_total
+          ? Math.round(((grading.test_cases_passed ?? 0) / grading.test_cases_total) * 100)
+          : null
+      ),
+      lab_report: grading.manual_grade ?? null,
+      code_quality: grading.code_quality_grade ?? null,
+      viva: grading.viva_grade ?? activeViva?.viva?.total_score ?? null,
+      quiz: grading.quiz_grade ?? null,
+    };
 
-    return Math.max(0, Math.round(blended * 10) / 10);
-  }, [grading, experimentMeta, manualGrade, activeViva]);
+    let earned = 0;
+    let weightUsed = 0;
+    Object.keys(rub).forEach(key => {
+      const weight = rub[key] || 0;
+      if (!weight || !assessed[key]) return;
+      const score = componentValue(key) ?? fallback[key];
+      if (score == null) return;
+      earned += score * weight;
+      weightUsed += weight;
+    });
+
+    if (weightUsed <= 0) return { final: null, weightUsed: 0, provisional: true };
+    const final = Math.max(0, Math.round((earned / weightUsed - (grading.hint_deduction || 0)) * 10) / 10);
+    return { final, weightUsed, provisional: weightUsed < 100 };
+  }, [grading, rubricOf, componentValue, assessed, activeViva]);
 
   const generateDraft = async () => {
     if (!grading) return;
@@ -526,18 +577,36 @@ export default function GradingPage() {
     } finally { setDrafting(false); }
   };
 
-  const saveGrade = async (advanceNext = false) => {
+  const saveGrade = async (advanceNext = false, overrideLock = false) => {
     if (!grading) return;
     setSaving(true);
     try {
+      // Send one score per rubric component. Components left blank fall back to
+      // the server's auto-computed value; 0%-weight components are ignored.
+      // Only score components the rubric actually uses; a 0% component is not
+      // part of the mark and must not be written either.
+      const components: Record<string, number> = {};
+      Object.entries(componentScores).forEach(([key, raw]) => {
+        const weight = Number((rubricOf as Record<string, number>)[key] || 0);
+        if (!weight) return;
+        if (raw !== '' && raw != null && !Number.isNaN(parseFloat(raw))) {
+          components[key] = Math.min(100, Math.max(0, parseFloat(raw)));
+        }
+      });
       await submissionService.gradeSubmission({
         student_id: grading.student_id,
         experiment_id: selectedAssessment,
         session_id: grading.session_id ?? undefined,
-        manual_grade: manualGrade === '' ? null : Math.min(100, Math.max(0, parseFloat(manualGrade))),
+        components: Object.keys(components).length ? components : undefined,
         manual_feedback: feedback || undefined,
+        // Only sent when the instructor explicitly chooses to correct a
+        // grade the student has already viewed.
+        assessed,
+        force: overrideLock || undefined,
       });
-      toast3(`Saved grade for ${grading.full_name}.`);
+      toast3(overrideLock
+        ? `Corrected the locked grade for ${grading.full_name}. The student sees the new mark.`
+        : `Saved grade for ${grading.full_name}.`);
       refetchSubmissions();
       refetchSummary();
       if (advanceNext && currentSubIndex >= 0 && currentSubIndex + 1 < filteredSubmissions.length) {
@@ -1742,57 +1811,90 @@ export default function GradingPage() {
                   </p>
                 </div>
 
-                {/* Rubric Component Breakdown Table */}
-                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
-                    <span style={{ color: '#475569' }}>1. Automated Test Cases ({experimentMeta?.rubric.test_cases ?? 60}%)</span>
-                    <strong style={{ color: '#0f172a' }}>{grading.auto_grade != null ? `${grading.auto_grade}%` : '—'}</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
-                    <span style={{ color: '#475569' }}>2. Code Quality / Radon ({experimentMeta?.rubric.code_quality ?? 10}%)</span>
-                    <strong style={{ color: '#0f172a' }}>{grading.quality_grade ? `Grade ${grading.quality_grade}` : (grading.code_quality_grade ?? '—')}</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
-                    <span style={{ color: '#475569' }}>3. Oral AI Viva ({experimentMeta?.rubric.viva ?? 10}%)</span>
-                    <strong style={{ color: '#0f172a' }}>{grading.viva_grade ?? activeViva?.viva?.total_score ?? '—'}%</strong>
-                  </div>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5 }}>
-                    <span style={{ color: '#475569' }}>4. Pre-Lab Quiz ({experimentMeta?.rubric.quiz ?? 0}%)</span>
-                    <strong style={{ color: '#0f172a' }}>{grading.quiz_grade != null ? `${grading.quiz_grade}%` : '—'}</strong>
-                  </div>
-                  <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <span style={{ fontSize: 13, fontWeight: 800, color: '#4f46e5' }}>Blended Final Score Preview</span>
-                    <span style={{ fontSize: 18, fontWeight: 800, color: '#059669' }}>
-                      {liveBlendedPreview ?? '—'} / {experimentMeta?.grade_scale ?? 100}
-                    </span>
-                  </div>
-                </div>
+                {/* Rubric components — only those the rubric actually uses are scored */}
+                <div style={{ background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12, padding: 12, display: 'flex', flexDirection: 'column', gap: 10 }}>
+                  {([
+                    { key: 'test_cases',   label: 'Automated Test Cases',  auto: true  },
+                    { key: 'lab_report',   label: 'Lab Report / Evaluation', auto: false },
+                    { key: 'code_quality', label: 'Code Quality',          auto: true  },
+                    { key: 'viva',         label: 'Oral Viva',             auto: true  },
+                    { key: 'quiz',         label: 'Pre-Lab Quiz',          auto: true  },
+                  ] as const).map(({ key, label, auto }) => {
+                    const weight = Number((rubricOf as Record<string, number>)[key] || 0);
+                    const value = componentValue(key);
 
-                {/* Manual / Instructor Evaluation Input */}
-                <div className={styles.formGroup} style={{ marginBottom: 0 }}>
-                  <label className={styles.formLabel}>
-                    Instructor / Lab Report Score (0–100) · Weight: {experimentMeta?.rubric.lab_report ?? 20}%
-                  </label>
-                  <div style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
-                    <input
-                      className={styles.input}
-                      type="number"
-                      min={0}
-                      max={100}
-                      value={manualGrade}
-                      onChange={e => setManualGrade(e.target.value)}
-                      placeholder="e.g. 88"
-                    />
-                    {grading.auto_grade != null && (
-                      <button
-                        type="button"
-                        className={styles.ghostBtn}
-                        style={{ whiteSpace: 'nowrap', fontSize: 11.5, padding: '8px 10px' }}
-                        onClick={() => setManualGrade(String(Math.round(grading.auto_grade!)))}
-                      >
-                        Match Auto ({Math.round(grading.auto_grade)}%)
-                      </button>
-                    )}
+                    if (!weight) {
+                      return (
+                        <div key={key} style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: 12.5, opacity: 0.55 }}>
+                          <span style={{ color: '#475569' }}>{label}</span>
+                          <span style={{ color: '#94a3b8', fontStyle: 'italic' }}>not used (0%)</span>
+                        </div>
+                      );
+                    }
+
+                    const ticked = !!assessed[key];
+                    const marked = value != null;
+                    // Marks this component adds to the FINAL mark (renormalised
+                    // over the assessed weight), matching what the server stores.
+                    const marksAdded = ticked && marked
+                      ? (value * weight) / (livePreview.weightUsed || weight)
+                      : null;
+                    return (
+                      <div key={key} style={{ display: 'grid', gridTemplateColumns: '26px 1fr 84px 74px', gap: 8, alignItems: 'center',
+                                               opacity: ticked ? 1 : 0.55 }}>
+                        <input
+                          type="checkbox"
+                          checked={ticked}
+                          title={ticked ? 'Graded — included in the mark' : 'Not graded — excluded from the mark'}
+                          onChange={e => setAssessed(prev => ({ ...prev, [key]: e.target.checked }))}
+                          style={{ width: 15, height: 15, cursor: 'pointer', accentColor: '#7c3aed' }}
+                        />
+                        <div>
+                          <div style={{ fontSize: 12.5, fontWeight: 600, color: '#0f172a' }}>
+                            {label}
+                            <span style={{ fontWeight: 500, color: '#7c3aed' }}> · {weight}%</span>
+                            {!ticked && <span style={{ marginLeft: 6, fontSize: 10.5, fontWeight: 700, color: '#94a3b8' }}>EXCLUDED</span>}
+                          </div>
+                          <div style={{ fontSize: 11, color: '#94a3b8' }}>
+                            {auto ? 'auto-computed — edit to override' : 'your score (0–100)'}
+                          </div>
+                        </div>
+                        <input
+                          className={styles.input}
+                          type="number" min={0} max={100}
+                          value={componentScores[key] ?? ''}
+                          placeholder="—"
+                          disabled={!ticked}
+                          onChange={e => setComponentScores(prev => ({ ...prev, [key]: e.target.value }))}
+                          style={{ padding: '6px 8px', fontSize: 13 }}
+                        />
+                        <span style={{ fontSize: 12, color: marksAdded != null ? '#059669' : '#94a3b8', textAlign: 'right', fontWeight: 600 }}>
+                          {marksAdded != null ? `+${marksAdded.toFixed(1)}` : '—'}
+                        </span>
+                      </div>
+                    );
+                  })}
+
+                  <div style={{ borderTop: '1px solid #e2e8f0', paddingTop: 8, display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
+                    <span style={{ fontSize: 13, fontWeight: 800, color: '#4f46e5' }}>
+                      Final Score
+                      {grading.hint_deduction ? (
+                        <span style={{ fontWeight: 500, color: '#b45309', fontSize: 11.5 }}>
+                          {' '}(after −{grading.hint_deduction} hint deduction)
+                        </span>
+                      ) : null}
+                    </span>
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      {livePreview.provisional && (
+                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#b45309', background: '#fef3c7',
+                                       border: '1px solid #fcd34d', borderRadius: 999, padding: '2px 8px' }}>
+                          PROVISIONAL · {livePreview.weightUsed}% assessed
+                        </span>
+                      )}
+                      <span style={{ fontSize: 18, fontWeight: 800, color: '#059669' }}>
+                        {livePreview.final ?? '—'} / {experimentMeta?.grade_scale ?? 100}
+                      </span>
+                    </span>
                   </div>
                 </div>
 
@@ -1821,15 +1923,41 @@ export default function GradingPage() {
                 </div>
 
                 {grading.is_locked && (
-                  <p style={{ fontSize: 12, color: '#b45309', display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
-                    <Lock size={12} /> Student has already viewed this published grade.
-                  </p>
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                    <p style={{ fontSize: 12, color: '#b45309', display: 'flex', gap: 6, alignItems: 'center', margin: 0 }}>
+                      <Lock size={12} /> Student has already viewed this published grade.
+                    </p>
+                    {overrideLock ? (
+                      <div style={{ border: '1px solid #fcd34d', background: '#fffbeb', borderRadius: 8, padding: '8px 10px', display: 'flex', flexDirection: 'column', gap: 6 }}>
+                        <span style={{ fontSize: 11.5, color: '#92400e', lineHeight: 1.45 }}>
+                          Overriding replaces the mark the student already saw. The correction is recorded and the student is shown the new mark.
+                        </span>
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <button type="button" className={styles.primaryBtn} disabled={saving}
+                            style={{ flex: 1, justifyContent: 'center', fontSize: 11.5, padding: '6px 10px' }}
+                            onClick={() => saveGrade(false, true)}>
+                            <CheckCircle2 size={13} /> {saving ? 'Saving…' : 'Confirm override & save'}
+                          </button>
+                          <button type="button" className={styles.secondaryBtn} disabled={saving}
+                            style={{ fontSize: 11.5, padding: '6px 10px' }}
+                            onClick={() => setOverrideLock(false)}>Cancel</button>
+                        </div>
+                      </div>
+                    ) : (
+                      <button type="button" className={styles.secondaryBtn}
+                        style={{ fontSize: 11.5, padding: '6px 10px', width: 'fit-content' }}
+                        onClick={() => setOverrideLock(true)}>
+                        <Lock size={12} /> Correct this mark anyway
+                      </button>
+                    )}
+                  </div>
                 )}
 
                 <div style={{ marginTop: 'auto', display: 'flex', gap: 8, paddingTop: 8 }}>
                   <button
                     className={styles.secondaryBtn}
-                    disabled={saving}
+                    disabled={saving || (grading.is_locked && !overrideLock)}
+                    title={grading.is_locked && !overrideLock ? 'Locked — use “Correct this mark anyway”' : undefined}
                     onClick={() => saveGrade(false)}
                     style={{ flex: 1, justifyContent: 'center' }}
                   >
@@ -1837,7 +1965,7 @@ export default function GradingPage() {
                   </button>
                   <button
                     className={styles.primaryBtn}
-                    disabled={saving}
+                    disabled={saving || (grading.is_locked && !overrideLock)}
                     onClick={() => saveGrade(true)}
                     style={{ flex: 1.3, justifyContent: 'center' }}
                   >
