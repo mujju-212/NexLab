@@ -22,6 +22,8 @@ def sync_student_experiment_grade(
     manual_grade: float = None,
     manual_feedback: str = None,
     graded_by: str = None,
+    component_scores: dict = None,
+    assessed: dict = None,
 ) -> Grade:
     """Synchronize, calculate, and persist a student's Grade for an experiment.
 
@@ -45,6 +47,7 @@ def sync_student_experiment_grade(
         experiment_id=experiment_id,
     ).first()
 
+    is_new_grade = False
     if not grade:
         grade = Grade(
             student_id=student_id,
@@ -52,6 +55,7 @@ def sync_student_experiment_grade(
             session_id=session_id,
         )
         db.session.add(grade)
+        is_new_grade = True
     elif session_id and not grade.session_id:
         grade.session_id = session_id
 
@@ -134,9 +138,50 @@ def sync_student_experiment_grade(
     hint_schedule = {0: 0.0, 1: 3.0, 2: 7.0, 3: 12.0}
     grade.hint_deduction = min(15.0, float(hint_schedule.get(hint_count, 15.0 if hint_count > 3 else 0.0)))
 
+    # 4b. Per-component overrides. The instructor scores each rubric component
+    # 0–100; components the rubric does not use (weight 0) are simply ignored by
+    # calculate_final(). Anything not supplied falls back to the auto value.
+    if component_scores:
+        field_map = {
+            'test_cases':   'auto_grade',
+            'lab_report':   'manual_grade',
+            'code_quality': 'code_quality_grade',
+            'viva':         'viva_grade',
+            'quiz':         'quiz_grade',
+        }
+        for key, attr in field_map.items():
+            if key not in component_scores:
+                continue
+            value = component_scores[key]
+            if value is None or value == '':
+                continue
+            if isinstance(value, (dict, list, bool)):
+                raise TypeError(f'{key} must be a number between 0 and 100.')
+            try:
+                numeric = float(value)
+            except (TypeError, ValueError):
+                raise TypeError(f'{key} must be a number between 0 and 100.')
+            if numeric < 0 or numeric > 100:
+                raise TypeError(f'{key} must be between 0 and 100.')
+            setattr(grade, attr, round(numeric, 2))
+
+    # 4c. "Graded" ticks. {component: bool}. Ticking a component includes its
+    # weight in the mark; leaving it unticked removes that weight altogether, so
+    # an unmarked component no longer drags the total down as a zero.
+    if assessed is not None:
+        if not isinstance(assessed, dict):
+            raise TypeError('assessed must be an object of {component: true/false}.')
+        merged = dict(grade.assessed_components or {})
+        for key in ('test_cases', 'lab_report', 'code_quality', 'viva', 'quiz'):
+            if key in assessed:
+                merged[key] = bool(assessed[key])
+        grade.assessed_components = merged
+
     # 5. Manual overrides
     if manual_grade is not None:
-        grade.manual_grade = float(manual_grade)
+        if isinstance(manual_grade, (dict, list)):
+            raise TypeError('manual_grade must be a number between 0 and 100.')
+        grade.manual_grade = max(0.0, min(100.0, float(manual_grade)))
     if manual_feedback is not None:
         grade.manual_feedback = manual_feedback
     if graded_by is not None:
@@ -145,7 +190,22 @@ def sync_student_experiment_grade(
     if not grade.graded_at:
         grade.graded_at = datetime.utcnow()
 
-    # 6. Recalculate final score with full rubric
-    grade.calculate_final(rubric)
+    # 6. Recalculate final score with full rubric.
+    # If there is no evidence at all for this student (no code run, no quiz, no
+    # viva, no manual grade) do NOT fabricate a 0 — that would record a real
+    # failing mark for someone who simply never submitted. Leave them ungraded.
+    has_evidence = any(v is not None for v in (
+        grade.auto_grade, grade.manual_grade, grade.quiz_grade,
+        grade.viva_grade, grade.code_quality_grade,
+    ))
+    if not has_evidence:
+        if is_new_grade:
+            # Nothing was earned: don't leave a blank Grade row behind.
+            db.session.expunge(grade)
+        else:
+            db.session.commit()
+        return None if is_new_grade else grade
+
+    grade.calculate_final(rubric, assessed=None)
     db.session.commit()
     return grade

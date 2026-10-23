@@ -155,34 +155,61 @@ def add_content_module(exp_id):
     db.session.commit()
 
     # If this is a quiz module and inline_questions were supplied, populate QuizQuestion rows
+    rejected = []
     if module_type == 'quiz':
         c_data = data.get('content_data') or {}
         inline_qs = c_data.get('inline_questions') or c_data.get('questions') or []
         if isinstance(inline_qs, list) and len(inline_qs) > 0:
-            letters = ['A', 'B', 'C', 'D']
-            for item in inline_qs:
-                if isinstance(item, dict):
-                    q_text = item.get('question') or item.get('question_text')
-                    opts = item.get('options')
-                    corr = item.get('correct_answer')
-                    if corr is None and 'correct_index' in item:
-                        idx = item['correct_index']
-                        if isinstance(idx, int) and 0 <= idx < len(letters):
-                            corr = letters[idx]
-                    if q_text and opts and len(opts) == 4 and corr in letters:
-                        qq = QuizQuestion(
-                            module_id=module.id,
-                            question_text=q_text,
-                            options=opts,
-                            correct_answer=corr,
-                            points=item.get('points', 1),
-                            explanation=item.get('explanation'),
-                        )
-                        db.session.add(qq)
+            # Authors may supply 2–6 options; the answer is stored as a letter.
+            letters = [chr(ord('A') + i) for i in range(26)]
+            for pos, item in enumerate(inline_qs, start=1):
+                if not isinstance(item, dict):
+                    rejected.append({'index': pos, 'reason': 'question must be an object'})
+                    continue
+                q_text = item.get('question') or item.get('question_text')
+                opts = item.get('options')
+                corr = item.get('correct_answer')
+                if corr is None and 'correct_index' in item:
+                    idx = item['correct_index']
+                    if isinstance(idx, int) and idx >= 0:
+                        corr = letters[idx]
+                if isinstance(corr, int):
+                    corr = letters[corr] if 0 <= corr < 26 else None
+                if isinstance(corr, str):
+                    corr = corr.strip().upper()[:1]
+                if not q_text:
+                    rejected.append({'index': pos, 'reason': 'missing question text'})
+                    continue
+                if not isinstance(opts, list) or len(opts) < 2:
+                    rejected.append({'index': pos, 'reason': 'needs at least 2 options'})
+                    continue
+                if corr not in letters[:len(opts)]:
+                    rejected.append({
+                        'index': pos,
+                        'reason': 'correct_answer must be one of the option letters '
+                                  f"{', '.join(letters[:len(opts)])}",
+                    })
+                    continue
+                db.session.add(QuizQuestion(
+                    module_id=module.id,
+                    question_text=q_text,
+                    options=opts,
+                    correct_answer=corr,
+                    points=item.get('points', 1),
+                    explanation=item.get('explanation'),
+                ))
             db.session.commit()
 
     mark_content_dirty(exp_id)
-    return jsonify({'module': _with_question_count(_module_dict(module))}), 201
+    payload = {'module': _with_question_count(_module_dict(module))}
+    if rejected:
+        # Never fail silently: the module exists, but say exactly what was dropped.
+        payload['rejected_questions'] = rejected
+        payload['warning'] = (
+            f"{len(rejected)} of {len(rejected) + payload['module'].get('question_count', 0)} "
+            'questions were not saved.'
+        )
+    return jsonify(payload), 201
 
 
 @content_bp.route('/experiments/<exp_id>/content/<module_id>', methods=['PATCH'])

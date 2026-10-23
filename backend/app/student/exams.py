@@ -235,36 +235,61 @@ def _finalize_attempt(exam, attempt, raw_answers, force_expired=False):
     expired = force_expired or (attempt.expires_at and now > attempt.expires_at + timedelta(seconds=_GRACE_SECONDS))
     attempt.status = 'expired' if expired else 'submitted'
 
-    # Sync exam result into the canonical Grade model so it rolls up to Subject total!
-    target_exp_id = attempt.experiment_id or (exam.id if hasattr(exam, 'id') else None)
-    if target_exp_id:
-        try:
-            from app.models.grading import Grade
-            from app.models.experiment import Experiment
-            exp_row = Experiment.query.get(target_exp_id)
-            if exp_row:
-                attempt.experiment_id = target_exp_id
-                grade = Grade.query.filter_by(
-                    student_id=attempt.student_id,
-                    experiment_id=target_exp_id
-                ).first()
-                if not grade:
-                    grade = Grade(
-                        student_id=attempt.student_id,
-                        experiment_id=target_exp_id,
-                    )
-                    db.session.add(grade)
-                current_final = grade.final_grade or 0.0
-                if attempt.score >= current_final or grade.final_grade is None:
-                    grade.final_grade = attempt.score
-                    grade.auto_grade = attempt.score
-                    grade.quiz_grade = attempt.score
-                    grade.graded_at = now
-        except Exception:
-            pass
+    # Sync the exam result into the canonical Grade model so it rolls up to the
+    # Subject total. A Grade row belongs to EITHER a lab Experiment (attempts on
+    # an Experiment delivered as an exam) OR a standalone Exam row.
+    from app.models.grading import Grade
+
+    grade = None
+    if attempt.experiment_id:
+        grade = Grade.query.filter_by(
+            student_id=attempt.student_id,
+            experiment_id=attempt.experiment_id,
+        ).first()
+        if not grade:
+            grade = Grade(student_id=attempt.student_id,
+                          experiment_id=attempt.experiment_id)
+            db.session.add(grade)
+    elif attempt.exam_id:
+        grade = Grade.query.filter_by(
+            student_id=attempt.student_id,
+            exam_id=attempt.exam_id,
+        ).first()
+        if not grade:
+            grade = Grade(student_id=attempt.student_id, exam_id=attempt.exam_id)
+            db.session.add(grade)
+
+    if grade is not None:
+        # Keep the best result across attempts; never let a worse retake
+        # overwrite a better score, and never overwrite a real 0 with null.
+        current_final = grade.final_grade
+        if current_final is None or attempt.score >= current_final:
+            grade.final_grade = attempt.score
+            grade.auto_grade = attempt.score
+            grade.quiz_grade = attempt.score
+        grade.graded_at = now
 
     db.session.commit()
     return attempt, None
+
+
+def _proctor_config(exam):
+    """Proctoring settings the student client must honour for this exam."""
+    return {
+        'focus_enabled':    bool(getattr(exam, 'proctor_focus_enabled', False)),
+        'lockdown_enabled': bool(getattr(exam, 'proctor_lockdown_enabled', False)),
+        'max_violations':   int(getattr(exam, 'max_violations', 0) or 0),
+    }
+
+
+def _violation_summary(exam_id, attempt_id):
+    """How many proctoring violations this attempt has accumulated."""
+    from app.models.proctor_event import ProctorEvent
+    rows = ProctorEvent.query.filter_by(exam_id=exam_id, attempt_id=attempt_id).all()
+    counts = {}
+    for r in rows:
+        counts[r.event_type] = counts.get(r.event_type, 0) + 1
+    return {'total': len(rows), 'by_type': counts}
 
 
 def _questions_for_attempt(exam, attempt):
@@ -447,9 +472,18 @@ def start_exam(exam_id):
     atts = _attempts_for(exam_id)
     in_progress = next((a for a in atts if a.status == 'in_progress'), None)
 
+    # Window state is evaluated before resume too: if the instructor has closed
+    # the exam, a live attempt is finalised rather than handed back.
+    state = exam.window_state(now)
+
     # Resume a live attempt, or auto-finalize a stale (expired) one.
     if in_progress:
-        if in_progress.expires_at and now > in_progress.expires_at + timedelta(seconds=_GRACE_SECONDS):
+        if state == 'closed':
+            _, ferr = _finalize_attempt(exam, in_progress, in_progress.answers or {}, force_expired=True)
+            if ferr:
+                return ferr
+            in_progress = None
+        elif in_progress.expires_at and now > in_progress.expires_at + timedelta(seconds=_GRACE_SECONDS):
             _, ferr = _finalize_attempt(exam, in_progress, in_progress.answers or {}, force_expired=True)
             if ferr:
                 return ferr
@@ -463,10 +497,12 @@ def start_exam(exam_id):
                 'expires_at': _iso_z(in_progress.expires_at),
                 'server_now': _iso_z(now),
                 'resumed': True,
+                'proctor': _proctor_config(exam),
+                'violations': _violation_summary(
+                    getattr(exam, 'id', exam_id), in_progress.id),
             }), 200
 
     # Window guards
-    state = exam.window_state(now)
     if state == 'upcoming':
         return jsonify({'error': 'This exam has not started yet.',
                         'available_from': _iso_z(exam.available_from)}), 403
@@ -503,6 +539,91 @@ def start_exam(exam_id):
         'expires_at': _iso_z(expires_at),
         'server_now': _iso_z(now),
         'resumed': False,
+        'proctor': _proctor_config(exam),
+        'violations': {'total': 0, 'by_type': {}},
+    }), 201
+
+
+_VIOLATION_TYPES = {
+    'tab_switch': 'high',
+    'focus_lost': 'medium',
+    'fullscreen_exit': 'high',
+    'copy': 'medium',
+    'paste': 'high',
+    'context_menu': 'low',
+    'devtools': 'high',
+    'screen_share_stop': 'high',
+}
+
+
+@student_exam_bp.route('/exams/<exam_id>/attempt/<attempt_id>/violation', methods=['POST'])
+@require_role('student')
+def record_violation(exam_id, attempt_id):
+    """Record one proctoring violation against a timed-exam attempt.
+
+    Only accepted when the instructor enabled proctoring for this exam, and only
+    while the attempt is live. When `max_violations` is reached the attempt is
+    finalised automatically so the result cannot be gamed by ignoring warnings.
+    """
+    exam, err = _visible_exam_or_404(exam_id)
+    if err:
+        return err
+
+    attempt = ExamAttempt.query.filter(
+        ExamAttempt.id == attempt_id,
+        ExamAttempt.student_id == g.user_id,
+    ).first_or_404()
+
+    cfg = _proctor_config(exam)
+    if not (cfg['focus_enabled'] or cfg['lockdown_enabled']):
+        return jsonify({'error': 'Proctoring is not enabled for this exam.'}), 400
+    if attempt.status != 'in_progress':
+        return jsonify({'error': 'This attempt is no longer active.',
+                        'finalized': True}), 409
+
+    data = request.get_json() or {}
+    event_type = str(data.get('event_type') or '').strip()
+    if event_type not in _VIOLATION_TYPES:
+        return jsonify({
+            'error': f'event_type must be one of: {", ".join(sorted(_VIOLATION_TYPES))}',
+        }), 400
+
+    from app.models.proctor_event import ProctorEvent
+    row = ProctorEvent(
+        institution_id=g.institution_id,
+        session_id=None,
+        exam_id=getattr(exam, 'id', exam_id),
+        attempt_id=attempt.id,
+        student_id=g.user_id,
+        event_type=event_type,
+        severity=_VIOLATION_TYPES[event_type],
+        payload={
+            'detail': (str(data.get('detail'))[:300] if data.get('detail') else None),
+            'client_ts': data.get('client_ts'),
+            'question_id': data.get('question_id'),
+        },
+    )
+    db.session.add(row)
+    db.session.commit()
+
+    summary = _violation_summary(row.exam_id, attempt.id)
+    limit = cfg['max_violations']
+    auto_submitted = False
+    if limit and summary['total'] >= limit:
+        _finalize_attempt(exam, attempt, attempt.answers or {}, force_expired=False)
+        attempt.status = 'submitted'
+        db.session.commit()
+        auto_submitted = True
+
+    return jsonify({
+        'recorded': True,
+        'event_type': event_type,
+        'severity': _VIOLATION_TYPES[event_type],
+        'violations': summary,
+        'max_violations': limit,
+        'remaining_before_auto_submit': max(0, limit - summary['total']) if limit else None,
+        'auto_submitted': auto_submitted,
+        'server_now': _iso_z(datetime.utcnow()),
     }), 201
 
 
@@ -520,6 +641,18 @@ def save_attempt(exam_id, attempt_id):
     ).first_or_404()
     if attempt.status != 'in_progress':
         return jsonify({'error': 'This attempt is no longer active.'}), 409
+
+    # The clock is the clock: once expires_at has passed (plus a small grace for
+    # network latency), answers can no longer be changed. The attempt stays
+    # in_progress until submit/next-start finalises it as 'expired'.
+    now = datetime.utcnow()
+    if attempt.expires_at and now > attempt.expires_at + timedelta(seconds=_GRACE_SECONDS):
+        return jsonify({
+            'error': 'Time is up for this attempt. Your saved answers have been submitted.',
+            'expired': True,
+            'expires_at': _iso_z(attempt.expires_at),
+            'server_now': _iso_z(now),
+        }), 403
 
     data = request.get_json() or {}
     raw = data.get('answers') or {}

@@ -951,6 +951,18 @@ def create_experiment():
     if experiment_type not in ('coding', 'quiz_only', 'mixed', 'reading'):
         return jsonify({'error': 'experiment_type must be coding, quiz_only, mixed or reading'}), 400
 
+    # Experiment numbers identify a lab within a subject — duplicates make the
+    # student grade sheet ambiguous.
+    dupe = Experiment.query.filter_by(
+        subject_id=data['subject_id'], institution_id=g.institution_id,
+        exp_number=data['exp_number'],
+    ).first()
+    if dupe:
+        return jsonify({
+            'error': f"Experiment {data['exp_number']} already exists in this subject.",
+            'existing': {'id': dupe.id, 'title': dupe.title},
+        }), 409
+
     exp = Experiment(
         institution_id=g.institution_id,
         subject_id=data['subject_id'],
@@ -1270,6 +1282,9 @@ def schedule_session():
     data = request.get_json() or {}
     section_subject_id = data.get('section_subject_id')
     experiment_id = data.get('experiment_id')
+
+    if not section_subject_id:
+        return jsonify({'error': 'section_subject_id is required (which class this session is for).'}), 400
 
     # ── Ownership: an instructor can only schedule their OWN section-subjects,
     # and can only attach experiments they authored. institution_admin may
@@ -1899,9 +1914,16 @@ def subject_grade_summary(subject_id):
 
     users = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
 
-    exam_weightage_sum = sum((x.grade_weight or 0.0) * (subject.total_marks or 100) for x in standalone_exams)
-    total_weightage = sum(e.weightage or 0 for e in exps) + exam_weightage_sum
     total_marks = subject.total_marks or 100
+    exam_weightage_sum = sum((x.grade_weight or 0.0) * total_marks for x in standalone_exams)
+
+    # The denominator students are graded against counts only what they can
+    # actually earn — published items. Unpublished drafts are shown to the
+    # instructor for planning under planned_total_weightage, but including them
+    # here made the instructor's "out of" disagree with the student's.
+    graded_exps = [e for e in exps if getattr(e, 'is_published', False)]
+    total_weightage = sum(e.weightage or 0 for e in graded_exps) + exam_weightage_sum
+    planned_total_weightage = sum(e.weightage or 0 for e in exps) + exam_weightage_sum
 
     students_out = []
     for sid in student_ids:
@@ -1911,7 +1933,7 @@ def subject_grade_summary(subject_id):
 
         rollup = sum(
             (exp_scores.get(e.id, 0) / (e.grade_scale or 100)) * (e.weightage or 0)
-            for e in exps
+            for e in graded_exps
         )
         # Add contribution from standalone exams
         for x in standalone_exams:
@@ -1966,6 +1988,7 @@ def subject_grade_summary(subject_id):
             'code': subject.code,
             'total_marks': total_marks,
             'total_weightage': round(total_weightage, 2),
+            'planned_total_weightage': round(planned_total_weightage, 2),
             'over_allocation': total_weightage > total_marks,
         },
         'experiments': out_items,
@@ -2153,7 +2176,7 @@ def list_submissions(experiment_id):
                 'input_data': tc.input_data,
                 'expected_output': tc.expected_output,
                 'is_hidden': tc.is_hidden,
-                'points': tc.points,
+                'points': tc.points_weight,
             } for tc in tcs],
         }
 
@@ -2169,26 +2192,113 @@ def save_grade():
     if not student_id or not experiment_id:
         return jsonify({'error': 'student_id and experiment_id are required.'}), 400
 
+    # Per-component rubric entry: {test_cases|lab_report|code_quality|viva|quiz: 0-100}
+    component_scores = data.get('components')
+    if component_scores is not None and not isinstance(component_scores, dict):
+        return jsonify({'error': 'components must be an object of {component: score}.'}), 400
+
+    # Explicit "graded" ticks: {component: true/false}. An unticked component is
+    # excluded from the mark instead of counting as zero.
+    assessed = data.get('assessed')
+    if assessed is not None and not isinstance(assessed, dict):
+        return jsonify({'error': 'assessed must be an object of {component: true/false}.'}), 400
+
+    manual_grade = data.get('manual_grade')
+    if manual_grade is not None:
+        if isinstance(manual_grade, (dict, list)) or isinstance(manual_grade, bool):
+            return jsonify({'error': 'manual_grade must be a single number between 0 and 100.'}), 400
+        try:
+            float(manual_grade)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'manual_grade must be a single number between 0 and 100.'}), 400
+
     grade = Grade.query.filter_by(
         student_id=student_id, experiment_id=experiment_id
     ).first()
 
+    # A viewed grade is locked against silent drift, but an instructor must be
+    # able to correct a mark (the lock previously made any typo permanent).
+    # Corrections require an explicit force flag and are recorded.
     if grade and grade.is_locked:
-        return jsonify({'error': 'Grade is locked (student has viewed it)'}), 409
+        if not data.get('force'):
+            return jsonify({
+                'error': 'Grade is locked because the student has already viewed it.',
+                'hint': "Re-send with force=true to override; the student will see the corrected mark.",
+                'is_locked': True,
+            }), 409
 
     from app.services.grading_service import sync_student_experiment_grade
-    grade = sync_student_experiment_grade(
-        student_id=student_id,
-        experiment_id=experiment_id,
-        session_id=data.get('session_id'),
-        manual_grade=data.get('manual_grade'),
-        manual_feedback=data.get('manual_feedback'),
-        graded_by=g.user_id,
-    )
+    try:
+        grade = sync_student_experiment_grade(
+            student_id=student_id,
+            experiment_id=experiment_id,
+            session_id=data.get('session_id'),
+            manual_grade=manual_grade,
+            manual_feedback=data.get('manual_feedback'),
+            graded_by=g.user_id,
+            component_scores=component_scores,
+            assessed=assessed,
+        )
+    except TypeError as exc:
+        return jsonify({'error': str(exc)}), 400
     if not grade:
         return jsonify({'error': 'Experiment not found.'}), 404
 
-    return jsonify({'grade': grade.to_dict()}), 200
+    out = grade.to_dict()
+    out['was_overridden'] = bool(data.get('force'))
+
+    # Send the breakdown back so the screen can show "what made this mark".
+    exp = Experiment.query.get(experiment_id)
+    if exp:
+        rubric = {
+            'test_cases':   exp.rubric_test_cases if exp.rubric_test_cases is not None else 60,
+            'lab_report':   exp.rubric_lab_report if exp.rubric_lab_report is not None else 20,
+            'code_quality': exp.rubric_code_quality if exp.rubric_code_quality is not None else 10,
+            'viva':         exp.rubric_viva if exp.rubric_viva is not None else 10,
+            'quiz':         exp.rubric_quiz if exp.rubric_quiz is not None else 0,
+        }
+        scores = {
+            'test_cases':   out.get('auto_grade'),
+            'lab_report':   out.get('manual_grade'),
+            'code_quality': out.get('code_quality_grade'),
+            'viva':         out.get('viva_grade'),
+            'quiz':         out.get('quiz_grade'),
+        }
+        out['rubric'] = rubric
+        assessed_map = grade.assessed_map(rubric)
+        weight_used = grade.assessed_weight(rubric)
+        # Contributions are shown as "marks of the experiment's 100", computed on
+        # the weight that was actually assessed. contribution_pct is the share of
+        # the final mark so the instructor can see what moved it.
+        # The final mark is renormalised over the graded weight, so each
+        # component's contribution is "marks it adds to the stored final".
+        graded_weighted = {}
+        for key in rubric:
+            if rubric[key] and assessed_map.get(key) and scores.get(key) is not None:
+                graded_weighted[key] = scores[key] * rubric[key]
+        total_weighted = sum(graded_weighted.values())
+
+        out['breakdown'] = {}
+        for key in rubric:
+            weight = rubric[key]
+            score = scores.get(key)
+            graded = bool(weight) and bool(assessed_map.get(key)) and score is not None
+            out['breakdown'][key] = {
+                'weight': weight,
+                'score': score,
+                'assessed': bool(weight) and bool(assessed_map.get(key)),
+                # marks this component adds to the stored final mark
+                'contribution': (round(graded_weighted[key] / weight_used, 2)
+                                 if graded and weight_used else 0.0),
+                # % of the final mark this component is responsible for
+                'contribution_pct': (round(100.0 * graded_weighted[key] / total_weighted, 1)
+                                     if graded and total_weighted else 0.0),
+                'used': graded,
+            }
+        out['assessed_weight'] = weight_used
+        out['provisional'] = weight_used < 100
+
+    return jsonify({'grade': out}), 200
 
 
 @instructor_bp.route('/grades/<grade_id>/inline-comment', methods=['POST'])

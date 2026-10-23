@@ -42,6 +42,25 @@ def _exam_or_404(exam_id):
 # EXAMS — CRUD
 # ══════════════════════════════════════════════════════════════════
 
+def _grade_weight(value):
+    """Exam weightage as a FRACTION of the subject total (0..1).
+
+    This used to be silently clamped, which turned an honest mistake -- sending
+    25 to mean '25 marks' -- into 1.0, i.e. an exam worth 100% of the subject,
+    with no error and a bogus over-allocation banner. Reject it instead.
+    """
+    if value is None or value == '':
+        return 0.0
+    try:
+        w = float(value)
+    except (TypeError, ValueError):
+        raise ValueError('grade_weight must be a number between 0 and 1 (a fraction of the subject total).')
+    if w < 0 or w > 1:
+        raise ValueError(
+            'grade_weight must be between 0 and 1 - it is a fraction of the subject '
+            'total (0.25 means 25%%); got %s.' % w)
+    return w
+
 @exam_bp.route('/exams', methods=['GET'])
 @require_role('instructor', 'institution_admin')
 def list_exams():
@@ -93,20 +112,27 @@ def create_exam():
     if exam_type not in ('mcq', 'coding', 'mixed'):
         return jsonify({'error': 'exam_type must be mcq, coding, or mixed.'}), 400
 
-    exam = Exam(
-        institution_id=g.institution_id,
-        subject_id=subject_id,
-        created_by=g.user_id,
-        title=title,
-        description=data.get('description'),
-        exam_type=exam_type,
-        duration_minutes=int(data.get('duration_minutes') or 30),
-        max_attempts=int(data.get('max_attempts') or 1),
-        pass_threshold=int(data.get('pass_threshold') if data.get('pass_threshold') is not None else 40),
-        shuffle_questions=bool(data.get('shuffle_questions', True)),
-        is_published=False,
-        grade_weight=max(0.0, min(1.0, float(data.get('grade_weight') or 0))),
-    )
+    try:
+        exam = Exam(
+            institution_id=g.institution_id,
+            subject_id=subject_id,
+            created_by=g.user_id,
+            title=title,
+            description=data.get('description'),
+            exam_type=exam_type,
+            duration_minutes=int(data.get('duration_minutes') or 30),
+            max_attempts=int(data.get('max_attempts') or 1),
+            pass_threshold=int(data.get('pass_threshold') if data.get('pass_threshold') is not None else 40),
+            shuffle_questions=bool(data.get('shuffle_questions', True)),
+            is_published=False,
+            grade_weight=_grade_weight(data.get('grade_weight')),
+            proctor_focus_enabled=bool(data.get('proctor_focus_enabled', False)),
+            proctor_lockdown_enabled=bool(data.get('proctor_lockdown_enabled', False)),
+            max_violations=max(0, int(data.get('max_violations') or 0)),
+        )
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+
     try:
         exam.available_from = _parse_dt(data.get('available_from'))
         exam.due_at = _parse_dt(data.get('due_at'))
@@ -140,7 +166,11 @@ def update_exam(exam_id):
 
     text_fields = ('title', 'description', 'exam_type')
     int_fields = ('duration_minutes', 'max_attempts', 'pass_threshold')
-    bool_fields = ('shuffle_questions', 'is_published')
+    bool_fields = ('shuffle_questions', 'is_published',
+                   'proctor_focus_enabled', 'proctor_lockdown_enabled')
+
+    # Snapshot before applying, so the publish guard sees the transition.
+    was_published = bool(exam.is_published)
 
     for f in text_fields:
         if f in data:
@@ -150,11 +180,26 @@ def update_exam(exam_id):
     for f in int_fields:
         if f in data and data[f] is not None:
             setattr(exam, f, int(data[f]))
+    if 'max_violations' in data and data['max_violations'] is not None:
+        exam.max_violations = max(0, int(data['max_violations']))
     for f in bool_fields:
         if f in data:
             setattr(exam, f, bool(data[f]))
     if 'grade_weight' in data and data['grade_weight'] is not None:
-        exam.grade_weight = max(0.0, min(1.0, float(data['grade_weight'])))
+        try:
+            exam.grade_weight = _grade_weight(data['grade_weight'])
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+
+    # Publishing an empty exam would hand students a blank paper and a 0 score.
+    if 'is_published' in data and bool(data['is_published']) and not was_published:
+        q_count = ExamQuestion.query.filter_by(exam_id=exam.id).count()
+        if q_count == 0:
+            db.session.rollback()
+            return jsonify({
+                'error': 'Add at least one question before publishing this exam.',
+                'question_count': 0,
+            }), 400
     for f in ('available_from', 'due_at'):
         if f in data:
             try:
@@ -293,9 +338,75 @@ def exam_attempts(exam_id):
     students = {u.id: u for u in User.query.filter(
         User.id.in_({a.student_id for a in attempts})).all()} if attempts else {}
 
+    # Question text/options so the instructor can read what the student answered.
+    questions = {q.id: q for q in ExamQuestion.query.filter_by(exam_id=exam.id).all()}
+
+    # Proctoring violations recorded during these attempts.
+    from app.models.proctor_event import ProctorEvent
+    violation_by_attempt = {}
+    if attempts:
+        vrows = ProctorEvent.query.filter(
+            ProctorEvent.attempt_id.in_([a.id for a in attempts])
+        ).order_by(ProctorEvent.recorded_at).all()
+        for v in vrows:
+            violation_by_attempt.setdefault(v.attempt_id, []).append({
+                'event_type': v.event_type,
+                'severity': v.severity,
+                'payload': v.payload or {},
+                'recorded_at': v.recorded_at.isoformat() + 'Z' if v.recorded_at else None,
+            })
+
     result = []
     for a in attempts:
         u = students.get(a.student_id)
+
+        # attempt.answers is {question_id: {answer, correct, earned, points, ...}}
+        # after grading. Hydrate it into readable per-question rows.
+        answers = []
+        stored = a.answers if isinstance(a.answers, dict) else {}
+        for qid, detail in stored.items():
+            q = questions.get(qid)
+            if not isinstance(detail, dict):
+                detail = {'answer': detail}
+            options = q.options if q is not None and isinstance(q.options, list) else []
+            given = detail.get('answer')
+
+            def _as_index(value):
+                """correct_answer is stored as a letter ("A") or index ("0")."""
+                if value is None:
+                    return None
+                if isinstance(value, int):
+                    return value
+                text = str(value).strip().upper()
+                if text.isdigit():
+                    return int(text)
+                if len(text) == 1 and 'A' <= text <= 'Z':
+                    return ord(text) - ord('A')
+                return None
+
+            def _as_text(value):
+                idx = _as_index(value)
+                if idx is not None and 0 <= idx < len(options):
+                    return options[idx]
+                return value
+
+            correct_answer = getattr(q, 'correct_answer', None) if q is not None else None
+            answers.append({
+                'question_id': qid,
+                'prompt': q.prompt if q is not None else '(question deleted)',
+                'question_type': q.question_type if q is not None else None,
+                'options': options,
+                'student_answer': given,
+                'student_answer_text': _as_text(given),
+                'correct_answer': correct_answer,
+                'correct_answer_text': _as_text(correct_answer),
+                'is_correct': detail.get('correct'),
+                'earned': detail.get('earned'),
+                'points': detail.get('points'),
+                'test_results': detail.get('results'),
+            })
+        answers.sort(key=lambda r: (r['prompt'] or ''))
+
         result.append({
             'attempt_id': a.id,
             'student_id': a.student_id,
@@ -306,7 +417,63 @@ def exam_attempts(exam_id):
             'total_points': a.total_points,
             'max_points': a.max_points,
             'passed': bool(a.passed),
+            'answers': answers,
+            'answered_count': len(answers),
+            'violations': violation_by_attempt.get(a.id, []),
+            'violation_count': len(violation_by_attempt.get(a.id, [])),
             'started_at': a.started_at.isoformat() + 'Z' if a.started_at else None,
             'submitted_at': a.submitted_at.isoformat() + 'Z' if a.submitted_at else None,
         })
-    return jsonify({'attempts': result, 'count': len(result), 'exam': exam.to_dict()}), 200
+
+    # ── One row per student: the instructor thinks in students, not attempts ──
+    grouped = {}
+    for row in result:
+        sid = row['student_id']
+        g = grouped.setdefault(sid, {
+            'student_id': sid,
+            'student_name': row['student_name'],
+            'student_email': row['student_email'],
+            'attempts': [],
+        })
+        g['attempts'].append(row)
+
+    students = []
+    for g in grouped.values():
+        ats = g['attempts']
+        scored = [x for x in ats if x['score'] is not None]
+        best = max(scored, key=lambda x: x['score']) if scored else None
+        latest = max(
+            ats,
+            key=lambda x: (x['submitted_at'] or x['started_at'] or ''),
+        )
+        students.append({
+            'student_id': g['student_id'],
+            'student_name': g['student_name'],
+            'student_email': g['student_email'],
+            'attempts_count': len(ats),
+            'attempts_used': len([x for x in ats if x['status'] in ('submitted', 'expired')]),
+            'best_score': best['score'] if best else None,
+            'best_attempt_id': best['attempt_id'] if best else None,
+            'best_passed': bool(best['passed']) if best else False,
+            'latest_status': latest['status'],
+            'latest_submitted_at': max(
+                (x['submitted_at'] for x in ats if x['submitted_at']),
+                default=None,
+            ),
+            'violation_count': sum(x['violation_count'] for x in ats),
+            'best_violations': best['violation_count'] if best else 0,
+            'attempts': sorted(
+                ats,
+                key=lambda x: (x['submitted_at'] or x['started_at'] or ''),
+                reverse=True,
+            ),
+        })
+
+    students.sort(key=lambda x: (x['best_score'] is None, -(x['best_score'] or 0)))
+    return jsonify({
+        'attempts': result,
+        'students': students,
+        'count': len(result),
+        'student_count': len(students),
+        'exam': exam.to_dict(),
+    }), 200

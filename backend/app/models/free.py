@@ -17,7 +17,7 @@ class FreeCourse(db.Model):
     title       = db.Column(db.Text, nullable=False)
     description = db.Column(db.Text)
     thumbnail_url = db.Column(db.Text)
-    difficulty  = db.Column(db.String(10), default='beginner')  # beginner|intermediate|advanced
+    difficulty  = db.Column(db.String(20), default='beginner')  # beginner|intermediate|advanced
     tags        = db.Column(db.JSON)                             # ["python", "arrays"]
     language    = db.Column(db.String(20), default='python')     # primary language
     is_published= db.Column(db.Boolean, default=False)
@@ -60,7 +60,7 @@ class FreeExercise(db.Model):
     title        = db.Column(db.Text, nullable=False)
     description  = db.Column(db.Text)       # problem statement (markdown)
     hint_text    = db.Column(db.Text)        # static hint (no AI needed)
-    difficulty   = db.Column(db.String(10), default='easy')  # easy|medium|hard
+    difficulty   = db.Column(db.String(20), default='easy')  # easy|medium|hard
 
     # Coding exercise fields
     starter_code     = db.Column(db.JSON)    # {"python": "def solve():\n    pass", "cpp": "..."}
@@ -99,7 +99,7 @@ class FreeExercise(db.Model):
             'exercise_type':self.exercise_type,
             'tags':         self.tags or [],
             'acceptance_rate': round(self.acceptance_rate or 70.0, 1),
-            'solves_count': self.solves_count or 1000,
+            'solves_count': self.solves_count or 0,
             'allowed_languages': self.allowed_languages or ['python'],
             'starter_code': self.starter_code or {},
             'xp_reward':    self.xp_reward,

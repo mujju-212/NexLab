@@ -47,6 +47,14 @@ class Exam(db.Model):
     # e.g. 0.3 means this exam counts as 30% of the overall grade.
     grade_weight      = db.Column(db.Float, default=0.0)
 
+    # ── Proctoring (timed exams) ─────────────────────────────────────────
+    # When enabled, the student client reports focus/lockdown violations and
+    # every one is persisted as a ProctorEvent against the attempt.
+    proctor_focus_enabled    = db.Column(db.Boolean, default=False)
+    proctor_lockdown_enabled = db.Column(db.Boolean, default=False)
+    # Auto-submit once this many violations are recorded. 0/NULL = never.
+    max_violations           = db.Column(db.Integer, default=0)
+
     created_at        = db.Column(db.DateTime, default=datetime.utcnow)
     updated_at        = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
 
@@ -82,6 +90,9 @@ class Exam(db.Model):
             'max_attempts': self.max_attempts,
             'pass_threshold': self.pass_threshold,
             'shuffle_questions': bool(self.shuffle_questions),
+            'proctor_focus_enabled': bool(self.proctor_focus_enabled),
+            'proctor_lockdown_enabled': bool(self.proctor_lockdown_enabled),
+            'max_violations': int(self.max_violations or 0),
             'is_published': bool(self.is_published),
             'grade_weight': float(self.grade_weight or 0.0),
             'window_state': self.window_state(),
