@@ -814,7 +814,7 @@ def _enriched_sessions(sessions):
         d['late_join_window_min'] = s.late_join_window_min
 
         exp = exp_map.get(s.experiment_id)
-        d['experiment_title'] = exp.title if exp else 'Unknown experiment'
+        d['experiment_title'] = exp.title if exp else (s.title or 'Scheduled lab session')
 
         ss = ss_map.get(s.section_subject_id)
         section_name = subject_name = None
@@ -1261,11 +1261,7 @@ def list_sessions():
     if g.role == 'institution_admin':
         query = LabSession.query.filter_by(institution_id=g.institution_id)
     else:
-        my_ss_ids = [
-            ss.id for ss in SectionSubject.query.filter_by(
-                institution_id=g.institution_id, instructor_id=g.user_id
-            ).all()
-        ]
+        my_ss_ids = [ss.id for ss in _instructor_ss_query().all()]
         if not my_ss_ids:
             return jsonify({'sessions': [], 'total': 0, 'page': 1,
                             'pages': 1, 'per_page': 25}), 200
@@ -1510,6 +1506,19 @@ def start_session(session_id):
     if session.status != 'scheduled':
         return jsonify({'error': f'Session is already {session.status}'}), 400
 
+    # A live session is not allowed to start unless the proctoring/video room can
+    # issue a token. This keeps the compulsory student screen-share gate real.
+    from app.livekit_helper import make_token
+    livekit_token = make_token(
+        room_name=session.jitsi_room_name,
+        identity=f"instructor-{g.user_id[:8]}",
+        name=getattr(g, 'full_name', None) or 'Instructor',
+        can_publish=True,
+        can_subscribe=True,
+    )
+    if not livekit_token:
+        return jsonify({'error': 'LiveKit is unavailable; the session cannot start without the required proctoring connection.'}), 503
+
     # Gate on the code execution engine — warn if Docker is disabled, but don't
     # block session start. Code submission will degrade gracefully if Docker is
     # down; refusing to start the session entirely is too aggressive for dev.
@@ -1573,18 +1582,9 @@ def start_session(session_id):
         session.live_page_state_id = lps.id
     db.session.commit()
 
-    # Create LiveKit room and generate instructor JWT token
-    livekit_token = None
-    if current_app.config.get('LIVEKIT_URL'):
-        from app.livekit_helper import create_room, make_token
-        create_room(session.jitsi_room_name)   # jitsi_room_name doubles as LiveKit room name
-        livekit_token = make_token(
-            room_name=session.jitsi_room_name,
-            identity=f"instructor-{g.user_id[:8]}",
-            name=getattr(g, 'full_name', None) or 'Instructor',
-            can_publish=True,
-            can_subscribe=True,
-        )
+    # Create the room after the state transition; the token was preflighted above.
+    from app.livekit_helper import create_room
+    create_room(session.jitsi_room_name)
 
     # Broadcast via Socket.io:
     # 1. Direct to enrolled students' personal user rooms

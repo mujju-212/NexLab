@@ -223,7 +223,7 @@ def _enrich_sessions(sessions):
                 d['topic'] = ' — '.join(title_parts[1:]).strip()
             else:
                 d['clean_title'] = s.title or (subj.name if subj else 'Lab Session')
-                d['topic'] = s.description or 'Core Experiments'
+                d['topic'] = getattr(s, 'description', None) or ''
 
             if s.status == 'cancelled':
                 d['attendance_attended'] = 0

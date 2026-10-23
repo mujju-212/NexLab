@@ -1137,7 +1137,6 @@ export default function LiveLabRoomPage() {
   const [focusMlLive,   setFocusMlLive]   = useState<boolean | null>(null);
   const [camGranted,    setCamGranted]    = useState(false);
   const [micGranted,    setMicGranted]    = useState(false);
-  const [screenGranted, setScreenGranted] = useState(false);
   const [permError,     setPermError]     = useState('');
   const [permBusy,      setPermBusy]      = useState(false);
   // Session display metadata for the join cards
@@ -1699,20 +1698,6 @@ export default function LiveLabRoomPage() {
       } else {
         setPermError('Microphone is in use by another application or unavailable.');
       }
-    } finally {
-      setPermBusy(false);
-    }
-  };
-
-  const requestScreen = async () => {
-    setPermBusy(true);
-    setPermError('');
-    try {
-      const stream = await navigator.mediaDevices.getDisplayMedia({ video: true });
-      stream.getTracks().forEach(t => t.stop());
-      setScreenGranted(true);
-    } catch {
-      setScreenGranted(true);
     } finally {
       setPermBusy(false);
     }
@@ -2366,35 +2351,15 @@ export default function LiveLabRoomPage() {
               />
             </LiveKitRoom>
           ) : (
-            <StudentLiveConferenceStandalone
-              user={user}
-              session={gate.session}
-              sessionId={sessionId}
-              instructorName={instructorName}
-              sessionTitleText={sessionTitleText}
-              chatLog={chatLog}
-              onSendChat={sendChat}
-              chatSending={chatSending}
-              roomTab={roomTab}
-              onTabChange={setRoomTab}
-              onReaction={(emoji) => {
-                setFloatingReaction(emoji);
-                setTimeout(() => setFloatingReaction(null), 3000);
-              }}
-              onLeave={() => router.push('/student/live-lab')}
-              pubAudio={pubAudio}
-              pubVideo={pubVideo}
-              expDetail={expDetail}
-              expModules={expModules}
-              expPages={expPages}
-              expLoading={expLoading}
-              onSelfReportCheckpoint={selfReportCheckpoint}
-              onCodeChange={(c) => { codeRef.current = c; }}
-              handleTab={handleTab}
-              language={language}
-              setLanguage={setLanguage}
-              mediaSignal={mediaSignal}
-            />
+            <div role="alert" style={{ margin: 'auto', maxWidth: 560, padding: 28, borderRadius: 16, background: '#fff7ed', border: '1px solid #fdba74', color: '#7c2d12', textAlign: 'center' }}>
+              <h2 style={{ margin: '0 0 10px', fontSize: 18 }}>Live room is unavailable</h2>
+              <p style={{ margin: '0 0 18px', fontSize: 14, lineHeight: 1.55 }}>
+                Secure live video and required screen sharing could not be connected. The session will not continue without the proctoring connection.
+              </p>
+              <button type="button" onClick={() => router.push('/student/sessions')} style={{ padding: '10px 16px', borderRadius: 9, border: 0, background: '#7c3aed', color: '#fff', fontWeight: 700, cursor: 'pointer' }}>
+                Return to sessions
+              </button>
+            </div>
           )}
           {showFeedbackModal && (
             <SessionFeedbackModal

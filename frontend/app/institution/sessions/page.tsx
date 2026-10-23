@@ -48,6 +48,19 @@ type CalViewMode = 'day' | 'week' | 'month' | 'agenda';
 const DAY_NAMES = ['Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday', 'Sunday'];
 const DAY_SHORT = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
+function defaultPlannerDateRange() {
+  const start = new Date();
+  start.setHours(0, 0, 0, 0);
+  const end = new Date(start);
+  const originalDay = end.getDate();
+  end.setDate(1);
+  end.setMonth(end.getMonth() + 3);
+  const lastDayOfTargetMonth = new Date(end.getFullYear(), end.getMonth() + 1, 0).getDate();
+  end.setDate(Math.min(originalDay, lastDayOfTargetMonth));
+  const toDateInput = (d: Date) => `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`;
+  return { start_date: toDateInput(start), end_date: toDateInput(end) };
+}
+
 const statusColor: Record<string, string> = {
   scheduled: '#7c3aed', active: '#22c55e', ended: '#2563eb', cancelled: '#ef4444',
 };
@@ -251,18 +264,19 @@ function projectRecurringOccurrences(
     if (plan.status !== 'active') continue;
 
     const days = plan.schedule_days || [];
+    if (!days.length || !plan.start_date || !plan.end_date) continue;
     const targetDays: number[] = [];
     for (const d of days) {
       const idx = DAY_MAP_LOOKUP[String(d).toLowerCase().trim()];
       if (idx !== undefined && !targetDays.includes(idx)) targetDays.push(idx);
     }
-    if (targetDays.length === 0) targetDays.push(0); // Default to Monday
+    if (targetDays.length === 0) continue;
 
     const { hour, minute } = parseTimeStringToHourMinute(plan.raw_start_time || plan.start_time);
 
     // Date range bounds
-    const planStart = plan.start_date ? new Date(plan.start_date + 'T00:00:00') : windowStart;
-    const planEnd = plan.end_date ? new Date(plan.end_date + 'T23:59:59') : windowEnd;
+    const planStart = new Date(plan.start_date + 'T00:00:00');
+    const planEnd = new Date(plan.end_date + 'T23:59:59');
 
     const rangeStart = planStart > windowStart ? planStart : windowStart;
     const rangeEnd = planEnd < windowEnd ? planEnd : windowEnd;
@@ -270,8 +284,8 @@ function projectRecurringOccurrences(
     const cur = new Date(rangeStart.getFullYear(), rangeStart.getMonth(), rangeStart.getDate());
     const stop = new Date(rangeEnd.getFullYear(), rangeEnd.getMonth(), rangeEnd.getDate());
 
-    const planSecList = (plan.sections && plan.sections.length > 0) ? plan.sections : ['A'];
-    const firstSub = plan.subjects?.[0] || { name: plan.name, code: '' };
+    const planSecList = (plan.sections && plan.sections.length > 0) ? plan.sections : [];
+    const planSubList = plan.subjects?.length ? plan.subjects : [];
 
     let occNum = 1;
     while (cur <= stop) {
@@ -283,44 +297,45 @@ function projectRecurringOccurrences(
         const k = dayKey(slotDate);
 
         for (const rawSec of planSecList) {
-          const secName = typeof rawSec === 'object' ? (rawSec.name || rawSec.id || 'A') : String(rawSec);
-          const matchedSec = allSections.find(s => s.id === secName || s.name === secName);
-          const subName = firstSub.name || plan.name || 'Lab Session';
-
-          const hasCollision = existingSessions.some(s => {
-            if (!s.scheduled_at) return false;
-            const sd = new Date(s.scheduled_at);
-            if (dayKey(sd) !== k) return false;
-            if (sd.getHours() !== hour) return false;
-            const matchSec = (s.section_name && s.section_name === secName) || (s.section_id && matchedSec && s.section_id === matchedSec.id);
-            const matchSub = (s.subject_name && s.subject_name.toLowerCase() === subName.toLowerCase());
-            return matchSec || matchSub;
-          });
-
-          if (!hasCollision) {
-            projected.push({
-              id: `projected-${plan.id}-${k}-${secName}-${occNum}`,
-              title: `${plan.name} — Session ${occNum}`,
-              status: 'scheduled',
-              scheduled_at: slotDate.toISOString(),
-              duration_minutes: plan.duration_minutes || 60,
-              instructor_id: plan.instructor_id,
-              instructor_name: plan.instructor_name || 'Dr. Alan Turing',
-              subject_name: subName,
-              subject_code: firstSub.code || '',
-              section_id: matchedSec?.id,
-              section_name: secName,
-              batch_id: plan.batch_id,
-              batch_name: plan.batch_name || 'Batch 2026',
-              department_name: plan.department_name || 'Computer Science & Engineering',
-              department_code: plan.department_code || 'CSE',
-              academic_year_label: plan.academic_year_label || '2026 – 2027',
-              room: plan.room || 'Lab 1 (Main Block)',
-              student_count: 10,
-              students_total_count: 10,
-              students_online_count: 0,
-              is_recurring_projection: true,
+          const secToken = typeof rawSec === 'object' ? (rawSec.id || rawSec.name || '') : String(rawSec);
+          const matchedSec = allSections.find(s => s.id === secToken || s.name === secToken);
+          const sectionName = matchedSec?.name || (typeof rawSec === 'object' ? rawSec.name : String(rawSec));
+          for (const subject of planSubList) {
+            const subjectName = subject.name || plan.name || 'Lab Session';
+            const hasCollision = existingSessions.some(s => {
+              if (!s.scheduled_at) return false;
+              const sd = new Date(s.scheduled_at);
+              if (dayKey(sd) !== k || sd.getHours() !== hour || sd.getMinutes() !== minute) return false;
+              const sameSection = s.section_id === secToken || (matchedSec && s.section_id === matchedSec.id) || s.section_name === sectionName;
+              const sameSubject = (s.subject_name || '').toLowerCase() === subjectName.toLowerCase();
+              return sameSection && sameSubject;
             });
+
+            if (!hasCollision) {
+              projected.push({
+                id: `projected-${plan.id}-${k}-${secToken}-${subject.id || subjectName}-${occNum}`,
+                title: `${plan.name} — Session ${occNum}`,
+                status: 'scheduled',
+                scheduled_at: slotDate.toISOString(),
+                duration_minutes: plan.duration_minutes || 60,
+                instructor_id: plan.instructor_id,
+                instructor_name: plan.instructor_name || '',
+                subject_name: subjectName,
+                subject_code: subject.code || '',
+                section_id: matchedSec?.id,
+                section_name: sectionName,
+                batch_id: plan.batch_id,
+                batch_name: plan.batch_name || '',
+                department_name: plan.department_name || '',
+                department_code: plan.department_code || '',
+                academic_year_label: plan.academic_year_label || '',
+                room: plan.room || '',
+                student_count: 0,
+                students_total_count: 0,
+                students_online_count: 0,
+                is_recurring_projection: true,
+              });
+            }
           }
         }
         occNum++;
@@ -452,9 +467,9 @@ function SessionsPageContent() {
   const [upcomingSessions, setUpcomingSessions] = useState<SessionEnriched[]>([]);
   const [historySessions, setHistorySessions] = useState<SessionEnriched[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [historyTotal, setHistoryTotal] = useState(128);
+  const [historyTotal, setHistoryTotal] = useState(0);
   const [historyPage, setHistoryPage] = useState(1);
-  const [historyPages, setHistoryPages] = useState(18);
+  const [historyPages, setHistoryPages] = useState(0);
   const [historyPerPage, setHistoryPerPage] = useState(7);
   const [historySelectedSession, setHistorySelectedSession] = useState<SessionEnriched | null>(null);
   const [historySelectedIds, setHistorySelectedIds] = useState<Set<string>>(new Set());
@@ -483,36 +498,19 @@ function SessionsPageContent() {
   const [historyRosterLoading, setHistoryRosterLoading] = useState(false);
   const [historyRosterStudents, setHistoryRosterStudents] = useState<any[]>([]);
 
-  // Real KPI & Analytics Stats
-  const [historyStats, setHistoryStats] = useState({
-    total_sessions: 128,
-    completed: 112,
-    cancelled: 8,
-    rescheduled: 8,
-    success_rate: 87.5,
-    cancelled_percent: 6.2,
-    rescheduled_percent: 6.2,
-    avg_attendance: 82,
-    by_subject: [
-      { name: 'Data Structures', count: 28, color: '#7c3aed' },
-      { name: 'Python Programming', count: 24, color: '#0284c7' },
-      { name: 'Database Systems', count: 20, color: '#16a34a' },
-      { name: 'Computer Networks', count: 18, color: '#2563eb' },
-      { name: 'OOP Concepts', count: 16, color: '#f59e0b' },
-      { name: 'Others', count: 22, color: '#94a3b8' },
-    ],
-    by_status: [
-      { status: 'Completed', count: 112, color: '#16a34a' },
-      { status: 'Cancelled', count: 8, color: '#ef4444' },
-      { status: 'Rescheduled', count: 8, color: '#3b82f6' },
-    ],
-    attendance_trend: [
-      { label: '1 Sep', rate: 80 },
-      { label: '8 Sep', rate: 83 },
-      { label: '15 Sep', rate: 78 },
-      { label: '22 Sep', rate: 85 },
-      { label: '30 Sep', rate: 84 },
-    ],
+  // Empty until loaded from persisted session history; do not show demo metrics.
+  const [historyStats, setHistoryStats] = useState<any>({
+    total_sessions: 0,
+    completed: 0,
+    cancelled: 0,
+    rescheduled: 0,
+    success_rate: 0,
+    cancelled_percent: 0,
+    rescheduled_percent: 0,
+    avg_attendance: 0,
+    by_subject: [],
+    by_status: [],
+    attendance_trend: [],
   });
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -602,16 +600,16 @@ function SessionsPageContent() {
   const [plannerSubTab, setPlannerSubTab] = useState<'recurring' | 'generated' | 'conflicts' | 'templates'>('recurring');
   const [recurringPlans, setRecurringPlans] = useState<RecurringPlan[]>([]);
   const [plannerStats, setPlannerStats] = useState<PlannerStats>({
-    total_plans: 12,
-    active_plans: 12,
-    sessions_generated: 84,
-    sections_covered: 6,
+    total_plans: 0,
+    active_plans: 0,
+    sessions_generated: 0,
+    sections_covered: 0,
     conflict_rate: 0,
-    on_track_pct: 100,
+    on_track_pct: 0,
   });
   const [plannerLoading, setPlannerLoading] = useState(false);
   const [plannerSearch, setPlannerSearch] = useState('');
-  const [plannerYear, setPlannerYear] = useState('2026 – 2027');
+  const [plannerYear, setPlannerYear] = useState('all');
   const [plannerDept, setPlannerDept] = useState('all');
   const [plannerBatch, setPlannerBatch] = useState('all');
   const [plannerSection, setPlannerSection] = useState('all');
@@ -621,7 +619,7 @@ function SessionsPageContent() {
   const plannerPerPage = 8;
 
   // Drawer state (Create Recurring Plan)
-  const [isPlannerDrawerOpen, setIsPlannerDrawerOpen] = useState(true);
+  const [isPlannerDrawerOpen, setIsPlannerDrawerOpen] = useState(false);
   const [drawerStep, setDrawerStep] = useState<1 | 2 | 3 | 4>(1);
   const [editingPlanId, setEditingPlanId] = useState<string | null>(null);
   const [drawerForm, setDrawerForm] = useState({
@@ -630,18 +628,27 @@ function SessionsPageContent() {
     department_id: '',
     batch_id: '',
     academic_year_id: '',
-    sections: ['A', 'B'] as string[],
+    sections: [] as string[],
     subjects: [] as Array<{ id: string; name: string; code?: string }>,
-    schedule_days: ['Mon', 'Wed', 'Fri'] as string[],
-    start_time: '09:00 AM',
+    schedule_days: [] as string[],
+    start_time: '09:00',
     duration_minutes: 60,
-    start_date: '2026-09-01',
-    end_date: '2026-12-15',
+    ...defaultPlannerDateRange(),
     room: 'Lab 1 (Main Block)',
     instructor_id: '',
     status: 'active' as 'active' | 'draft' | 'paused',
   });
   const [drawerSubmitting, setDrawerSubmitting] = useState(false);
+  const plannerSections = useMemo(
+    () => drawerForm.batch_id ? allSections.filter(s => s.batch_id === drawerForm.batch_id) : [],
+    [allSections, drawerForm.batch_id]
+  );
+  const plannerSubjects = useMemo(
+    () => drawerForm.department_id
+      ? allSubjects.filter(s => !s.department_id || s.department_id === drawerForm.department_id)
+      : [],
+    [allSubjects, drawerForm.department_id]
+  );
 
   // Popovers & Modals
   const [openPlanMenuId, setOpenPlanMenuId] = useState<string | null>(null);
@@ -715,15 +722,7 @@ function SessionsPageContent() {
   const [selectedUpcomingSection, setSelectedUpcomingSection] = useState<string>('');
   const [selectedUpcomingSubject, setSelectedUpcomingSubject] = useState<string>('');
   const [selectedUpcomingInstructor, setSelectedUpcomingInstructor] = useState<string>('');
-  const [selectedUpcomingDateRange, setSelectedUpcomingDateRange] = useState<string>(() => {
-    const now = new Date();
-    const start = new Date(now);
-    const diff = (start.getDay() + 6) % 7;
-    start.setDate(start.getDate() - diff);
-    const end = new Date(start);
-    end.setDate(end.getDate() + 6);
-    return `This Week (${start.getDate()} – ${end.getDate()} ${start.toLocaleDateString('en-IN', { month: 'short' })})`;
-  });
+  const [selectedUpcomingDateRange, setSelectedUpcomingDateRange] = useState<string>('All Dates');
   const [selectedUpcomingStatus, setSelectedUpcomingStatus] = useState<string>('All Status');
   const [openUpcomingFilter, setOpenUpcomingFilter] = useState<string | null>(null);
   const [upcomingSearchQuery, setUpcomingSearchQuery] = useState<string>('');
@@ -752,7 +751,7 @@ function SessionsPageContent() {
     setSelectedUpcomingSection('');
     setSelectedUpcomingSubject('');
     setSelectedUpcomingInstructor('');
-    setSelectedUpcomingDateRange('This Week (7 – 13 Sept)');
+    setSelectedUpcomingDateRange('All Dates');
     setSelectedUpcomingStatus('All Status');
     setUpcomingSearchQuery('');
     setUpcomingSortBy('earliest');
@@ -1532,23 +1531,37 @@ function SessionsPageContent() {
       toast3('Please enter a plan name');
       return;
     }
+    if (!drawerForm.department_id || !drawerForm.batch_id || !drawerForm.academic_year_id) {
+      toast3('Choose a department, batch, and academic year');
+      setDrawerStep(1);
+      return;
+    }
+    if (!drawerForm.sections.length || !drawerForm.subjects.length || !drawerForm.schedule_days.length) {
+      toast3('Choose at least one section, subject, and weekday');
+      return;
+    }
+    if (!drawerForm.start_date || !drawerForm.end_date || drawerForm.end_date < drawerForm.start_date) {
+      toast3('Choose a valid start date and end date');
+      setDrawerStep(2);
+      return;
+    }
     try {
       setDrawerSubmitting(true);
       const payload: Partial<RecurringPlan> = {
         name: drawerForm.name,
         description: drawerForm.description,
-        department_id: drawerForm.department_id || (departments[0]?.id ?? undefined),
-        batch_id: drawerForm.batch_id || (batches[0]?.id ?? undefined),
-        academic_year_id: drawerForm.academic_year_id || (academicYears[0]?.id ?? undefined),
-        sections: drawerForm.sections.length > 0 ? drawerForm.sections : ['A', 'B'],
-        subjects: drawerForm.subjects.length > 0 ? drawerForm.subjects : (allSubjects.slice(0, 2).map(s => ({ id: s.id, name: s.name, code: s.code }))),
+        department_id: drawerForm.department_id,
+        batch_id: drawerForm.batch_id,
+        academic_year_id: drawerForm.academic_year_id,
+        sections: drawerForm.sections,
+        subjects: drawerForm.subjects,
         schedule_days: drawerForm.schedule_days,
         start_time: drawerForm.start_time,
         duration_minutes: drawerForm.duration_minutes,
         start_date: drawerForm.start_date,
         end_date: drawerForm.end_date,
         room: drawerForm.room,
-        instructor_id: drawerForm.instructor_id || (instructors[0]?.id ?? undefined),
+        instructor_id: drawerForm.instructor_id || undefined,
         status: drawerForm.status,
       };
 
@@ -1565,18 +1578,17 @@ function SessionsPageContent() {
       setDrawerForm({
         name: '',
         description: '',
-        department_id: departments[0]?.id || '',
-        batch_id: batches[0]?.id || '',
-        academic_year_id: academicYears[0]?.id || '',
-        sections: ['A', 'B'],
+        department_id: '',
+        batch_id: '',
+        academic_year_id: '',
+        sections: [],
         subjects: [],
-        schedule_days: ['Mon', 'Wed', 'Fri'],
-        start_time: '09:00 AM',
+        schedule_days: [],
+        start_time: '09:00',
         duration_minutes: 60,
-        start_date: '2026-09-01',
-        end_date: '2026-12-15',
-        room: 'Lab 1 (Main Block)',
-        instructor_id: instructors[0]?.id || '',
+        ...defaultPlannerDateRange(),
+        room: '',
+        instructor_id: '',
         status: 'active',
       });
       invalidateSessions();
@@ -1649,10 +1661,9 @@ function SessionsPageContent() {
       sections: p.sections.map(s => typeof s === 'string' ? s : s.name),
       subjects: p.subjects.map(s => ({ id: s.id || '', name: s.name, code: s.code })),
       schedule_days: p.schedule_days.length > 0 ? p.schedule_days : ['Mon'],
-      start_time: p.start_time || '09:00 AM',
+      start_time: p.raw_start_time || '09:00',
       duration_minutes: p.duration_minutes || 60,
-      start_date: p.start_date || '2026-09-01',
-      end_date: p.end_date || '2026-12-15',
+      ...(!p.start_date || !p.end_date ? defaultPlannerDateRange() : { start_date: p.start_date, end_date: p.end_date }),
       room: p.room || 'Lab 1 (Main Block)',
       instructor_id: p.instructor_id || '',
       status: p.status,
@@ -1683,6 +1694,7 @@ function SessionsPageContent() {
       if (plannerStatus !== 'all' && p.status !== plannerStatus) return false;
       if (plannerDept !== 'all' && p.department_id !== plannerDept && p.department_code?.toLowerCase() !== plannerDept.toLowerCase()) return false;
       if (plannerBatch !== 'all' && p.batch_id !== plannerBatch) return false;
+      if (plannerYear !== 'all' && p.academic_year_id !== plannerYear) return false;
       if (plannerSearch) {
         const q = plannerSearch.toLowerCase();
         const matchName = p.name.toLowerCase().includes(q);
@@ -1692,7 +1704,7 @@ function SessionsPageContent() {
       }
       return true;
     });
-  }, [recurringPlans, plannerStatus, plannerDept, plannerBatch, plannerSearch]);
+  }, [recurringPlans, plannerStatus, plannerDept, plannerBatch, plannerYear, plannerSearch]);
 
   const totalFilteredPages = Math.ceil(filteredPlans.length / plannerPerPage) || 1;
   const paginatedPlans = useMemo(() => {
@@ -3840,7 +3852,7 @@ function SessionsPageContent() {
                   </button>
                   {openUpcomingFilter === 'dateRange' && (
                     <div className={liveStyles.filterPopover}>
-                      {['This Week (7 – 13 Sept)', 'Today', 'All Time'].map(dr => (
+                      {['All Dates', 'Today', 'This Week'].map(dr => (
                         <div
                           key={dr}
                           className={`${liveStyles.filterOption} ${selectedUpcomingDateRange === dr ? liveStyles.filterOptionActive : ''}`}
@@ -4534,18 +4546,17 @@ function SessionsPageContent() {
                     setDrawerForm({
                       name: '',
                       description: '',
-                      department_id: departments[0]?.id || '',
-                      batch_id: batches[0]?.id || '',
-                      academic_year_id: academicYears[0]?.id || '',
-                      sections: ['A', 'B'],
+                      department_id: '',
+                      batch_id: '',
+                      academic_year_id: '',
+                      sections: [],
                       subjects: [],
-                      schedule_days: ['Mon', 'Wed', 'Fri'],
-                      start_time: '09:00 AM',
+                      schedule_days: [],
+                      start_time: '09:00',
                       duration_minutes: 60,
-                      start_date: '2026-09-01',
-                      end_date: '2026-12-15',
-                      room: 'Lab 1 (Main Block)',
-                      instructor_id: instructors[0]?.id || '',
+                      ...defaultPlannerDateRange(),
+                      room: '',
+                      instructor_id: '',
                       status: 'active',
                     });
                     setIsPlannerDrawerOpen(true);
@@ -4611,25 +4622,28 @@ function SessionsPageContent() {
                 onClick={() => setOpenPlannerFilter(openPlannerFilter === 'year' ? null : 'year')}
               >
                 <Calendar size={14} color="#7c3aed" />
-                <span>{plannerYear}</span>
+                <span>{academicYears.find(y => y.id === plannerYear)?.year_label || 'All academic years'}</span>
                 <ChevronDown size={13} color="#64748b" style={{ transform: openPlannerFilter === 'year' ? 'rotate(180deg)' : 'none', transition: 'transform 0.18s ease' }} />
 
                 {openPlannerFilter === 'year' && (
                   <div className={liveStyles.floatingDropdown} onClick={e => e.stopPropagation()}>
                     <div
-                      className={`${liveStyles.filterOptionItem} ${plannerYear === '2026 – 2027' ? liveStyles.filterOptionItemActive : ''}`}
-                      onClick={() => { setPlannerYear('2026 – 2027'); setOpenPlannerFilter(null); }}
+                      className={`${liveStyles.filterOptionItem} ${plannerYear === 'all' ? liveStyles.filterOptionItemActive : ''}`}
+                      onClick={() => { setPlannerYear('all'); setOpenPlannerFilter(null); }}
                     >
-                      <span>2026 – 2027</span>
-                      {plannerYear === '2026 – 2027' && <Check size={13} color="#7c3aed" />}
+                      <span>All academic years</span>
+                      {plannerYear === 'all' && <Check size={13} color="#7c3aed" />}
                     </div>
-                    <div
-                      className={`${liveStyles.filterOptionItem} ${plannerYear === '2025 – 2026' ? liveStyles.filterOptionItemActive : ''}`}
-                      onClick={() => { setPlannerYear('2025 – 2026'); setOpenPlannerFilter(null); }}
-                    >
-                      <span>2025 – 2026</span>
-                      {plannerYear === '2025 – 2026' && <Check size={13} color="#7c3aed" />}
-                    </div>
+                    {academicYears.map(year => (
+                      <div
+                        key={year.id}
+                        className={`${liveStyles.filterOptionItem} ${plannerYear === year.id ? liveStyles.filterOptionItemActive : ''}`}
+                        onClick={() => { setPlannerYear(year.id); setOpenPlannerFilter(null); }}
+                      >
+                        <span>{year.year_label}</span>
+                        {plannerYear === year.id && <Check size={13} color="#7c3aed" />}
+                      </div>
+                    ))}
                   </div>
                 )}
               </div>
@@ -4844,26 +4858,29 @@ function SessionsPageContent() {
                                     </div>
                                     <div>
                                       <div className={liveStyles.planTitleText}>{p.name}</div>
-                                      <div className={liveStyles.planDescText}>{p.description || 'Lab schedule'}</div>
+                                      <div className={liveStyles.planDescText}>{p.description || '—'}</div>
                                     </div>
                                   </div>
                                 </td>
 
                                 {/* Department */}
                                 <td className={liveStyles.plannerTd} style={{ fontWeight: 600, color: '#475569' }}>
-                                  {p.department_code || 'CSE'}
+                                  {p.department_code || '—'}
                                 </td>
 
                                 {/* Batch */}
                                 <td className={liveStyles.plannerTd} style={{ color: '#475569' }}>
-                                  {p.batch_name || '2026 (B.Tech)'}
+                                  {p.batch_name || '—'}
                                 </td>
 
                                 {/* Sections */}
                                 <td className={liveStyles.plannerTd}>
                                   <div style={{ display: 'flex', alignItems: 'center' }}>
                                     {p.sections.map((s, sIdx) => {
-                                      const sName = typeof s === 'string' ? s : s.name;
+                                      const token = typeof s === 'string' ? s : (s.id || s.name);
+                                      const sName = typeof s === 'string'
+                                        ? (allSections.find(sec => sec.id === token || sec.name === token)?.name || s)
+                                        : (s.name || allSections.find(sec => sec.id === s.id)?.name || s.id || '');
                                       return (
                                         <span key={sIdx} className={liveStyles.sectionBadge}>
                                           {sName}
@@ -4879,7 +4896,7 @@ function SessionsPageContent() {
                                     className={liveStyles.subjectPill}
                                     onClick={() => setOpenSubjectPopoverId(openSubjectPopoverId === p.id ? null : p.id)}
                                   >
-                                    {p.subject_count || 1} subject{(p.subject_count || 1) > 1 ? 's' : ''}
+                                    {p.subject_count} subject{p.subject_count === 1 ? '' : 's'}
                                   </button>
 
                                   {/* Subject popover */}
@@ -5114,7 +5131,7 @@ function SessionsPageContent() {
                           <select
                             className={liveStyles.drawerSelect}
                             value={drawerForm.department_id}
-                            onChange={e => setDrawerForm({ ...drawerForm, department_id: e.target.value })}
+                            onChange={e => setDrawerForm({ ...drawerForm, department_id: e.target.value, batch_id: '', academic_year_id: '', sections: [], subjects: [], instructor_id: '' })}
                           >
                             <option value="">Select department...</option>
                             {departments.map(d => (
@@ -5131,7 +5148,7 @@ function SessionsPageContent() {
                             <select
                               className={liveStyles.drawerSelect}
                               value={drawerForm.batch_id}
-                              onChange={e => setDrawerForm({ ...drawerForm, batch_id: e.target.value })}
+                              onChange={e => setDrawerForm({ ...drawerForm, batch_id: e.target.value, sections: [] })}
                             >
                               <option value="">Select batch...</option>
                               {batches.map(b => (
@@ -5142,21 +5159,23 @@ function SessionsPageContent() {
                           <div className={liveStyles.drawerField}>
                             <label className={liveStyles.drawerLabel}>Section(s) *</label>
                             <div style={{ display: 'flex', gap: 6, marginTop: 4 }}>
-                              {['A', 'B', 'C'].map(sec => {
-                                const active = drawerForm.sections.includes(sec);
+                              {plannerSections.length === 0 ? (
+                                <span style={{ fontSize: 12, color: '#64748b' }}>Select a batch to choose its sections.</span>
+                              ) : plannerSections.map(sec => {
+                                const active = drawerForm.sections.includes(sec.id) || drawerForm.sections.includes(sec.name);
                                 return (
                                   <button
-                                    key={sec}
+                                    key={sec.id}
                                     type="button"
                                     className={`${liveStyles.dayChip} ${active ? liveStyles.dayChipActive : ''}`}
                                     onClick={() => {
                                       const next = active
-                                        ? drawerForm.sections.filter(s => s !== sec)
-                                        : [...drawerForm.sections, sec];
-                                      setDrawerForm({ ...drawerForm, sections: next.length > 0 ? next : ['A'] });
+                                        ? drawerForm.sections.filter(s => s !== sec.id && s !== sec.name)
+                                        : [...drawerForm.sections, sec.id];
+                                      setDrawerForm({ ...drawerForm, sections: next });
                                     }}
                                   >
-                                    Sec {sec}
+                                    Sec {sec.name}
                                   </button>
                                 );
                               })}
@@ -5171,7 +5190,7 @@ function SessionsPageContent() {
                             value={drawerForm.academic_year_id}
                             onChange={e => setDrawerForm({ ...drawerForm, academic_year_id: e.target.value })}
                           >
-                            <option value="">2026 – 2027</option>
+                            <option value="">Select academic year...</option>
                             {academicYears.map(y => (
                               <option key={y.id} value={y.id}>{y.year_label}</option>
                             ))}
@@ -5230,7 +5249,7 @@ function SessionsPageContent() {
                         <div className={liveStyles.drawerField}>
                           <label className={liveStyles.drawerLabel}>Recurring Days *</label>
                           <div className={liveStyles.dayChipsGroup}>
-                            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'].map(day => {
+                            {['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'].map(day => {
                               const active = drawerForm.schedule_days.includes(day);
                               return (
                                 <button
@@ -5241,7 +5260,7 @@ function SessionsPageContent() {
                                     const next = active
                                       ? drawerForm.schedule_days.filter(d => d !== day)
                                       : [...drawerForm.schedule_days, day];
-                                    setDrawerForm({ ...drawerForm, schedule_days: next.length > 0 ? next : ['Mon'] });
+                                    setDrawerForm({ ...drawerForm, schedule_days: next });
                                   }}
                                 >
                                   {day}
@@ -5340,7 +5359,9 @@ function SessionsPageContent() {
                         <div className={liveStyles.drawerField}>
                           <label className={liveStyles.drawerLabel}>Select Lab Subject(s) *</label>
                           <div style={{ display: 'flex', flexDirection: 'column', gap: 6, maxHeight: 150, overflowY: 'auto', border: '1px solid #e2e8f0', borderRadius: 10, padding: 8 }}>
-                            {allSubjects.map(sub => {
+                            {plannerSubjects.length === 0 ? (
+                              <span style={{ fontSize: 12, color: '#64748b' }}>Choose a department with available subjects.</span>
+                            ) : plannerSubjects.map(sub => {
                               const checked = drawerForm.subjects.some(s => s.id === sub.id || s.name === sub.name);
                               return (
                                 <label key={sub.id} style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, cursor: 'pointer', padding: '4px 6px' }}>
@@ -5434,22 +5455,22 @@ function SessionsPageContent() {
                         <div style={{ background: '#f8fafc', borderRadius: 12, padding: 14, border: '1px solid #e2e8f0', fontSize: 13 }}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', paddingBottom: 6, borderBottom: '1px solid #f1f5f9' }}>
                             <span style={{ color: '#64748b' }}>Plan Name</span>
-                            <span style={{ fontWeight: 700, color: '#0f172a' }}>{drawerForm.name || 'CSE Core Labs'}</span>
+                            <span style={{ fontWeight: 700, color: '#0f172a' }}>{drawerForm.name || '—'}</span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
                             <span style={{ color: '#64748b' }}>Schedule</span>
                             <span style={{ fontWeight: 600, color: '#0f172a' }}>
-                              {drawerForm.schedule_days.join(', ')} @ {drawerForm.start_time}
+                              {drawerForm.schedule_days.length ? drawerForm.schedule_days.join(', ') : 'No weekdays selected'} @ {drawerForm.start_time}
                             </span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
                             <span style={{ color: '#64748b' }}>Sections</span>
-                            <span style={{ color: '#0f172a' }}>Sec {drawerForm.sections.join(', ')}</span>
+                            <span style={{ color: '#0f172a' }}>Sec {drawerForm.sections.map(value => plannerSections.find(sec => sec.id === value || sec.name === value)?.name || value).join(', ') || '—'}</span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', padding: '6px 0', borderBottom: '1px solid #f1f5f9' }}>
                             <span style={{ color: '#64748b' }}>Subjects</span>
                             <span style={{ color: '#0f172a' }}>
-                              {drawerForm.subjects.length > 0 ? `${drawerForm.subjects.length} selected` : 'Core Subjects'}
+                              {drawerForm.subjects.length > 0 ? `${drawerForm.subjects.length} selected` : '—'}
                             </span>
                           </div>
                           <div style={{ display: 'flex', justifyContent: 'space-between', paddingTop: 6 }}>
@@ -5463,7 +5484,7 @@ function SessionsPageContent() {
                           display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5, color: '#15803d'
                         }}>
                           <CheckCircle size={15} color="#16a34a" />
-                          <span>No timetable conflicts detected for chosen sections.</span>
+                          <span>Review generated sessions in the Conflicts tab before the first class.</span>
                         </div>
 
                         <div className={liveStyles.drawerFooter}>
@@ -5948,7 +5969,7 @@ function SessionsPageContent() {
 
                   {/* Legend List */}
                   <div className={liveStyles.historyLegendList}>
-                    {historyStats.by_subject.map(subj => (
+                    {historyStats.by_subject.map((subj: { name: string; count: number; color: string }) => (
                       <div key={subj.name} className={liveStyles.historyLegendItem}>
                         <div className={liveStyles.historyLegendDotName}>
                           <span className={liveStyles.historyLegendDot} style={{ background: subj.color }} />
@@ -5989,7 +6010,7 @@ function SessionsPageContent() {
 
                   {/* Legend List */}
                   <div className={liveStyles.historyLegendList}>
-                    {historyStats.by_status.map(st => (
+                    {historyStats.by_status.map((st: { status: string; count: number; color: string }) => (
                       <div key={st.status} className={liveStyles.historyLegendItem}>
                         <div className={liveStyles.historyLegendDotName}>
                           <span className={liveStyles.historyLegendDot} style={{ background: st.color }} />

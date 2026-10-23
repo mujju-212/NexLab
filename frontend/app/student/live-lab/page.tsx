@@ -16,6 +16,7 @@ import SessionFeedbackModal from '@/components/student/SessionFeedbackModal';
 import styles from './page.module.css';
 
 interface SessionWithMeta extends LabSession {
+  title?: string | null;
   my_attendance?: { status: string; joined_at?: string | null; feedback_submitted?: boolean };
   duration_minutes?: number | null;
   subject_name?: string;
@@ -98,7 +99,7 @@ export default function StudentLiveLabPage() {
         const sub = expToSubjectMap[s.experiment_id];
         return {
           ...s,
-          experiment_title: titles[s.experiment_id] || 'Laboratory Experiment',
+          experiment_title: titles[s.experiment_id] || s.title || 'Scheduled lab session',
           experiment_aim: aims[s.experiment_id] || '',
           subject_name: sub?.subject_name || 'Laboratory Subject',
           subject_code: sub?.subject_code || '',

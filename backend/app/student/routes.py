@@ -928,6 +928,23 @@ def check_gate(session_id):
 
     can_join_live = session.status == 'active' and window_open
 
+    # Mint the room token before creating attendance. If LiveKit is unavailable,
+    # fail closed: a student must not be admitted without compulsory screen share.
+    livekit_token = None
+    if can_join_live:
+        if not current_app.config.get('LIVEKIT_URL'):
+            return jsonify({'error': 'Live video is unavailable; screen sharing is required to join this session.'}), 503
+        from app.livekit_helper import make_token
+        livekit_token = make_token(
+            room_name=session.jitsi_room_name,
+            identity=f"student-{g.user_id[:8]}",
+            name=getattr(g, 'full_name', None) or 'Student',
+            can_publish=True,
+            can_subscribe=True,
+        )
+        if not livekit_token:
+            return jsonify({'error': 'Live video is unavailable; screen sharing is required to join this session.'}), 503
+
     # T2-10 â€” auto check-in: a gate-cleared student is marked joined the
     # moment they open the session, even before the socket connects.
     if can_join_live:
@@ -945,18 +962,6 @@ def check_gate(session_id):
         if not att.joined_at:
             att.joined_at = datetime.utcnow()
         db.session.commit()
-
-    # Generate a student LiveKit JWT when they are clear to join the live room
-    livekit_token = None
-    if can_join_live and current_app.config.get('LIVEKIT_URL'):
-        from app.livekit_helper import make_token
-        livekit_token = make_token(
-            room_name=session.jitsi_room_name,   # reused as LiveKit room name
-            identity=f"student-{g.user_id[:8]}",
-            name=getattr(g, 'full_name', None) or 'Student',
-            can_publish=True,    # camera + mic
-            can_subscribe=True,  # see/hear instructor
-        )
 
     feedback_receipt = SessionFeedbackReceipt.query.filter_by(
         session_id=session_id, student_id=g.user_id

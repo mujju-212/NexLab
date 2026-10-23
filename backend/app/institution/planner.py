@@ -1,6 +1,8 @@
 import json
+import re
 import uuid
 from datetime import datetime, timedelta, date
+from zoneinfo import ZoneInfo
 from flask import Blueprint, request, jsonify, g
 from app.auth.utils import require_role
 from app.extensions import db
@@ -19,21 +21,21 @@ DAY_MAP = {
 
 
 def _parse_time_str(t_str):
-    """Parses '09:00', '9:00 AM', '14:30', etc. into (hour, minute)"""
-    if not t_str:
-        return 9, 0
-    t_clean = t_str.strip().upper()
-    is_pm = 'PM' in t_clean
-    is_am = 'AM' in t_clean
-    t_clean = t_clean.replace('AM', '').replace('PM', '').strip()
-    parts = t_clean.split(':')
-    h = int(parts[0])
-    m = int(parts[1]) if len(parts) > 1 else 0
-    if is_pm and h < 12:
-        h += 12
-    elif is_am and h == 12:
-        h = 0
-    return h, m
+    """Parse 24-hour or AM/PM time strings into validated (hour, minute)."""
+    if not isinstance(t_str, str) or not t_str.strip():
+        raise ValueError('Start time is required')
+    match = re.fullmatch(r"\s*(\d{1,2}):(\d{2})\s*(AM|PM)?\s*", t_str, re.IGNORECASE)
+    if not match:
+        raise ValueError('Start time must look like 09:00, 14:30, or 2:30 PM')
+    hour, minute = int(match.group(1)), int(match.group(2))
+    suffix = (match.group(3) or '').upper()
+    if minute > 59 or (suffix and not 1 <= hour <= 12) or (not suffix and hour > 23):
+        raise ValueError('Start time is outside the valid clock range')
+    if suffix == 'PM' and hour < 12:
+        hour += 12
+    elif suffix == 'AM' and hour == 12:
+        hour = 0
+    return hour, minute
 
 
 @planner_bp.route('/recurring-plans', methods=['GET'])
@@ -118,22 +120,53 @@ def create_recurring_plan():
     if not name:
         return jsonify({'error': 'Plan Name is required'}), 400
 
-    start_date_s = data.get('start_date') or '2026-09-01'
-    end_date_s = data.get('end_date') or '2026-12-15'
-
     try:
-        start_date = datetime.strptime(start_date_s[:10], '%Y-%m-%d').date()
-        end_date = datetime.strptime(end_date_s[:10], '%Y-%m-%d').date()
-    except Exception:
-        start_date = date(2026, 9, 1)
-        end_date = date(2026, 12, 15)
+        start_date_s = data.get('start_date')
+        end_date_s = data.get('end_date')
+        if not start_date_s or not end_date_s:
+            raise ValueError('Start date and end date are required')
+        start_date = datetime.strptime(str(start_date_s)[:10], '%Y-%m-%d').date()
+        end_date = datetime.strptime(str(end_date_s)[:10], '%Y-%m-%d').date()
+        if end_date < start_date:
+            raise ValueError('End date must be on or after the start date')
+        schedule_days = data.get('schedule_days')
+        if not isinstance(schedule_days, list) or not schedule_days:
+            raise ValueError('Choose at least one weekday')
+        invalid_days = [d for d in schedule_days if d not in DAY_MAP]
+        if invalid_days:
+            raise ValueError('One or more selected weekdays are invalid')
+        start_time = data.get('start_time')
+        _parse_time_str(start_time)
+        duration = int(data.get('duration_minutes') or 0)
+        if not 15 <= duration <= 480:
+            raise ValueError('Duration must be between 15 and 480 minutes')
+        sections = data.get('sections')
+        subjects = data.get('subjects')
+        if not isinstance(sections, list) or not sections:
+            raise ValueError('Choose at least one section')
+        if not isinstance(subjects, list) or not subjects:
+            raise ValueError('Choose at least one subject')
+        status = (data.get('status') or 'active').lower()
+        if status not in ('active', 'draft', 'paused'):
+            raise ValueError('Plan status must be active, draft, or paused')
+    except (TypeError, ValueError) as exc:
+        return jsonify({'error': str(exc)}), 400
 
-    sections = data.get('sections') or ['A', 'B']
-    subjects = data.get('subjects') or []
-    schedule_days = data.get('schedule_days') or ['Mon', 'Wed', 'Fri']
-    start_time = data.get('start_time') or '09:00'
-    duration = int(data.get('duration_minutes') or 60)
-    status = data.get('status') or 'active'
+    department_id = data.get('department_id')
+    batch_id = data.get('batch_id')
+    academic_year_id = data.get('academic_year_id')
+    if department_id and not Department.query.filter_by(id=department_id, institution_id=g.institution_id).first():
+        return jsonify({'error': 'Selected department is not in this institution'}), 400
+    batch = Batch.query.filter_by(id=batch_id, institution_id=g.institution_id).first() if batch_id else None
+    if batch_id and not batch:
+        return jsonify({'error': 'Selected batch is not in this institution'}), 400
+    if batch and department_id and batch.department_id and batch.department_id != department_id:
+        return jsonify({'error': 'Selected batch does not belong to the selected department'}), 400
+    year = AcademicYear.query.filter_by(id=academic_year_id, institution_id=g.institution_id).first() if academic_year_id else None
+    if academic_year_id and not year:
+        return jsonify({'error': 'Selected academic year is not in this institution'}), 400
+    if batch and year and batch.year_id != year.id:
+        return jsonify({'error': 'Selected batch does not belong to the selected academic year'}), 400
 
     plan = RecurringPlan(
         institution_id=g.institution_id,
@@ -160,8 +193,12 @@ def create_recurring_plan():
 
     # Generate initial sessions if status is active
     if status == 'active':
-        created_count = _generate_sessions_for_plan(plan)
-        plan.sessions_generated_count = created_count
+        try:
+            created_count = _generate_sessions_for_plan(plan)
+            plan.sessions_generated_count = created_count
+        except ValueError as exc:
+            db.session.rollback()
+            return jsonify({'error': str(exc)}), 400
 
     db.session.commit()
     return jsonify({'plan': plan.to_dict(), 'message': 'Recurring plan created successfully'}), 201
@@ -184,6 +221,60 @@ def update_recurring_plan(plan_id):
         return jsonify({'error': 'Plan not found'}), 404
 
     data = request.get_json() or {}
+
+    # Existing generated instances have no plan foreign key, so changing the
+    # recurrence cannot be reconciled safely. Reject a changed schedule instead
+    # of silently changing the rule while leaving old dates in every role's view.
+    current_sections = plan.get_sections()
+    current_subjects = plan.get_subjects()
+    current_days = plan.get_schedule_days()
+    candidate_sections = data.get('sections', current_sections)
+    candidate_subjects = data.get('subjects', current_subjects)
+    candidate_days = data.get('schedule_days', current_days)
+    candidate_time = data.get('start_time', plan.start_time)
+    candidate_duration = data.get('duration_minutes', plan.duration_minutes)
+    candidate_start = plan.start_date
+    candidate_end = plan.end_date
+    try:
+        if 'start_date' in data:
+            candidate_start = datetime.strptime(str(data['start_date'])[:10], '%Y-%m-%d').date()
+        if 'end_date' in data:
+            candidate_end = datetime.strptime(str(data['end_date'])[:10], '%Y-%m-%d').date()
+        if candidate_end < candidate_start:
+            raise ValueError('End date must be on or after the start date')
+        if not isinstance(candidate_days, list) or not candidate_days or any(d not in DAY_MAP for d in candidate_days):
+            raise ValueError('Choose at least one valid weekday')
+        candidate_hour, candidate_minute = _parse_time_str(candidate_time)
+        candidate_duration = int(candidate_duration)
+        if not 15 <= candidate_duration <= 480:
+            raise ValueError('Duration must be between 15 and 480 minutes')
+    except (TypeError, ValueError) as exc:
+        return jsonify({'error': str(exc)}), 400
+
+    try:
+        old_hour, old_minute = _parse_time_str(plan.start_time)
+    except ValueError:
+        old_hour, old_minute = None, None
+    schedule_changed = any([
+        candidate_start != plan.start_date,
+        candidate_end != plan.end_date,
+        candidate_days != current_days,
+        (candidate_hour, candidate_minute) != (old_hour, old_minute),
+        candidate_duration != plan.duration_minutes,
+        candidate_sections != current_sections,
+        candidate_subjects != current_subjects,
+        data.get('batch_id', plan.batch_id) != plan.batch_id,
+        data.get('department_id', plan.department_id) != plan.department_id,
+        data.get('academic_year_id', plan.academic_year_id) != plan.academic_year_id,
+        data.get('instructor_id', plan.instructor_id) != plan.instructor_id,
+        data.get('room', plan.room) != plan.room,
+        data.get('name', plan.name) != plan.name,
+    ])
+    if (plan.sessions_generated_count or 0) > 0 and schedule_changed:
+        return jsonify({
+            'error': 'This plan already has generated sessions. Create a new plan or edit the individual scheduled sessions; the recurrence cannot safely rewrite existing class dates.'
+        }), 409
+
     if 'name' in data:
         plan.name = data['name'].strip()
     if 'description' in data:
@@ -203,7 +294,11 @@ def update_recurring_plan(plan_id):
     if 'start_time' in data:
         plan.start_time = data['start_time']
     if 'duration_minutes' in data:
-        plan.duration_minutes = int(data['duration_minutes'])
+        plan.duration_minutes = candidate_duration
+    if 'start_date' in data:
+        plan.start_date = candidate_start
+    if 'end_date' in data:
+        plan.end_date = candidate_end
     if 'room' in data:
         plan.room = data['room']
     if 'instructor_id' in data:
@@ -215,8 +310,12 @@ def update_recurring_plan(plan_id):
         if new_status in ('active', 'draft', 'paused'):
             plan.status = new_status
             if prev_status == 'draft' and new_status == 'active' and plan.sessions_generated_count == 0:
-                created_count = _generate_sessions_for_plan(plan)
-                plan.sessions_generated_count = created_count
+                try:
+                    created_count = _generate_sessions_for_plan(plan)
+                    plan.sessions_generated_count = created_count
+                except ValueError as exc:
+                    db.session.rollback()
+                    return jsonify({'error': str(exc)}), 400
 
     db.session.commit()
     return jsonify({'plan': plan.to_dict(), 'message': 'Plan updated successfully'}), 200
@@ -274,7 +373,7 @@ def trigger_generation(plan_id):
         return jsonify({'error': 'Plan not found'}), 404
 
     count = _generate_sessions_for_plan(plan)
-    plan.sessions_generated_count = count
+    plan.sessions_generated_count = (plan.sessions_generated_count or 0) + count
     plan.status = 'active'
     db.session.commit()
     return jsonify({
@@ -414,116 +513,132 @@ def check_plan_conflicts():
 
 
 def _resolve_plan_section_subjects(plan):
-    """
-    Resolves the plan's sections and subjects against the database, returning matching
-    SectionSubject rows. If none exist but sections and subjects are matched, creates them.
-    """
+    """Resolve every explicitly selected section/subject pair without broad fallbacks."""
     raw_sections = plan.get_sections()
     raw_subjects = plan.get_subjects()
+    if not raw_sections or not raw_subjects:
+        raise ValueError('Choose at least one section and one subject')
 
-    sec_q = Section.query.filter_by(institution_id=plan.institution_id)
+    section_query = Section.query.filter_by(institution_id=plan.institution_id)
     if plan.batch_id:
-        sec_q = sec_q.filter_by(batch_id=plan.batch_id)
-    all_secs = sec_q.all()
+        section_query = section_query.filter_by(batch_id=plan.batch_id)
+    available_sections = section_query.all()
+    selected_sections = []
+    for item in raw_sections:
+        token = str((item.get('id') or item.get('name')) if isinstance(item, dict) else item).strip()
+        match = next((s for s in available_sections if s.id == token), None)
+        if match is None:
+            matches = [s for s in available_sections if s.name.casefold() == token.casefold()]
+            if len(matches) != 1:
+                raise ValueError(f'Section "{token}" was not found in the selected batch')
+            match = matches[0]
+        if match not in selected_sections:
+            selected_sections.append(match)
 
-    sec_tokens = {
-        (s.get('id') or s.get('name') if isinstance(s, dict) else str(s)).strip()
-        for s in raw_sections if s
-    }
-    matched_secs = [
-        s for s in all_secs
-        if not sec_tokens or s.id in sec_tokens or s.name in sec_tokens
-    ] or all_secs
+    available_subjects = Subject.query.filter_by(institution_id=plan.institution_id).all()
+    selected_subjects = []
+    for item in raw_subjects:
+        if isinstance(item, dict):
+            token = str(item.get('id') or item.get('name') or item.get('code') or '').strip()
+        else:
+            token = str(item or '').strip()
+        match = next((s for s in available_subjects if s.id == token), None)
+        if match is None:
+            matches = [s for s in available_subjects if
+                       s.name.casefold() == token.casefold() or
+                       (s.code and s.code.casefold() == token.casefold())]
+            if len(matches) != 1:
+                raise ValueError(f'Subject "{token}" was not found in this institution')
+            match = matches[0]
+        if match not in selected_subjects:
+            selected_subjects.append(match)
 
-    all_subjs = Subject.query.filter_by(institution_id=plan.institution_id).all()
-    subj_tokens = set()
-    for sub in raw_subjects:
-        if isinstance(sub, dict):
-            for k in ('id', 'name', 'code'):
-                if sub.get(k):
-                    subj_tokens.add(str(sub[k]).strip())
-        elif sub:
-            subj_tokens.add(str(sub).strip())
+    instructor = None
+    if plan.instructor_id:
+        instructor = User.query.filter_by(
+            id=plan.instructor_id,
+            institution_id=plan.institution_id,
+            role='instructor',
+            is_active=True,
+        ).first()
+        if not instructor:
+            raise ValueError('Selected instructor is not an active instructor in this institution')
 
-    matched_subjs = [
-        sub for sub in all_subjs
-        if not subj_tokens or sub.id in subj_tokens or sub.name in subj_tokens or (sub.code and sub.code in subj_tokens)
-    ] or all_subjs
-
-    ss_rows = []
-    if matched_secs and matched_subjs:
-        sec_ids = [s.id for s in matched_secs]
-        sub_ids = [s.id for s in matched_subjs]
-        ss_rows = SectionSubject.query.filter(
-            SectionSubject.institution_id == plan.institution_id,
-            SectionSubject.section_id.in_(sec_ids),
-            SectionSubject.subject_id.in_(sub_ids),
-        ).all()
-
-        if not ss_rows and plan.instructor_id:
-            for sec in matched_secs:
-                for sub in matched_subjs:
-                    ss = SectionSubject(
-                        institution_id=plan.institution_id,
-                        section_id=sec.id,
-                        subject_id=sub.id,
-                        instructor_id=plan.instructor_id,
+    resolved = []
+    for section in selected_sections:
+        for subject in selected_subjects:
+            rows = SectionSubject.query.filter_by(
+                institution_id=plan.institution_id,
+                section_id=section.id,
+                subject_id=subject.id,
+            ).all()
+            if instructor:
+                assigned = [r for r in rows if r.instructor_id == instructor.id or r.co_instructor_id == instructor.id]
+                if assigned:
+                    resolved.append(assigned[0])
+                elif rows:
+                    raise ValueError(
+                        f'{instructor.full_name} is not assigned to {subject.name} for section {section.name}. '
+                        'Update the section subject assignment first.'
                     )
-                    db.session.add(ss)
-                    ss_rows.append(ss)
-            db.session.flush()
+                else:
+                    assignment = SectionSubject(
+                        institution_id=plan.institution_id,
+                        section_id=section.id,
+                        subject_id=subject.id,
+                        instructor_id=instructor.id,
+                    )
+                    db.session.add(assignment)
+                    resolved.append(assignment)
+            elif rows:
+                resolved.append(rows[0])
+            else:
+                raise ValueError(
+                    f'No instructor assignment exists for {subject.name}, section {section.name}. '
+                    'Assign an instructor or select one in the plan.'
+                )
 
-    if not ss_rows:
-        fallback_ss = SectionSubject.query.filter_by(institution_id=plan.institution_id).first()
-        if fallback_ss:
-            ss_rows = [fallback_ss]
-
-    return ss_rows
+    db.session.flush()
+    return resolved
 
 
 def _generate_sessions_for_plan(plan):
-    """
-    Helper to create real LabSession records for a RecurringPlan.
-    """
+    """Create idempotent LabSession records for each selected weekday and class."""
     hour, minute = _parse_time_str(plan.start_time)
     schedule_days = plan.get_schedule_days()
-    target_weekdays = [DAY_MAP[d] for d in schedule_days if d in DAY_MAP]
+    target_weekdays = sorted({DAY_MAP[d] for d in schedule_days if d in DAY_MAP})
     if not target_weekdays:
-        target_weekdays = [0]  # Monday default
+        raise ValueError('Choose at least one valid weekday')
 
     ss_rows = _resolve_plan_section_subjects(plan)
-    if not ss_rows:
-        return 0
-
+    campus_tz = ZoneInfo('Asia/Kolkata')
+    utc_tz = ZoneInfo('UTC')
     cur = plan.start_date
     created_count = 0
     session_num = 1
     while cur <= plan.end_date:
         if cur.weekday() in target_weekdays:
-            # Planner start_time is local campus time (IST = UTC+5:30). Convert to UTC naive datetime for DB.
-            local_dt = datetime(cur.year, cur.month, cur.day, hour, minute)
-            slot_time = local_dt - timedelta(hours=5, minutes=30)
+            local_dt = datetime(cur.year, cur.month, cur.day, hour, minute, tzinfo=campus_tz)
+            slot_time = local_dt.astimezone(utc_tz).replace(tzinfo=None)
             for ss in ss_rows:
-                title = f"{plan.name} — Session {session_num}"
                 existing = LabSession.query.filter_by(
                     institution_id=plan.institution_id,
                     section_subject_id=ss.id,
                     scheduled_at=slot_time,
                 ).first()
-
                 if not existing:
-                    sess = LabSession(
+                    base_room = re.sub(r'[^a-z0-9-]+', '-', (plan.room or 'lab').lower()).strip('-')[:24] or 'lab'
+                    unique_room = f'{base_room}-{plan.id[:8]}-{ss.id[:6]}-{cur:%Y%m%d}'
+                    db.session.add(LabSession(
                         institution_id=plan.institution_id,
                         section_subject_id=ss.id,
-                        title=title,
+                        title=f'{plan.name} — Session {session_num}',
                         scheduled_at=slot_time,
-                        duration_minutes=plan.duration_minutes or 60,
+                        duration_minutes=plan.duration_minutes,
                         status='scheduled',
-                        jitsi_room_name=plan.room or 'Lab 1 (Main Block)',
-                    )
-                    db.session.add(sess)
+                        jitsi_room_name=unique_room,
+                    ))
                     created_count += 1
             session_num += 1
         cur += timedelta(days=1)
-
     return created_count

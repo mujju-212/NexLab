@@ -94,7 +94,7 @@ interface Props {
 const initials = (name: string) =>
   name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
 
-const PAGE_SIZE = 8; // 4 × 2 tile pages, like the mockup carousel
+const PAGE_SIZE = 1; // Keep only one student's screen visible to the instructor at a time
 
 type Tile = {
   key: string; name: string; roll?: string | null; online: boolean; studentId?: string;

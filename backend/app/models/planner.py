@@ -68,7 +68,7 @@ class RecurringPlan(db.Model):
         schedule_days = self.get_schedule_days()
 
         # Format time for display (e.g. "09:00" -> "9:00 AM" or "14:00" -> "2:00 PM")
-        time_display = self.start_time or '09:00 AM'
+        time_display = self.start_time or ''
         if time_display and ':' in time_display and 'AM' not in time_display.upper() and 'PM' not in time_display.upper():
             try:
                 parts = time_display.split(':')
@@ -94,9 +94,9 @@ class RecurringPlan(db.Model):
                 e_fmt = f"{ed.day} {ed.strftime('%b %Y')}"
                 date_range_display = f"{s_fmt} – {e_fmt}"
         except Exception:
-            date_range_display = '1 Sep – 15 Dec 2026'
+            date_range_display = ''
 
-        schedule_display = ', '.join(schedule_days) if schedule_days else 'Mon'
+        schedule_display = ', '.join(schedule_days) if schedule_days else '—'
 
         return {
             'id': self.id,
@@ -104,12 +104,12 @@ class RecurringPlan(db.Model):
             'name': self.name,
             'description': self.description or '',
             'department_id': self.department_id,
-            'department_name': self.department.name if self.department else 'Computer Science',
-            'department_code': self.department.code if self.department else 'CSE',
+            'department_name': self.department.name if self.department else '',
+            'department_code': self.department.code if self.department else '',
             'batch_id': self.batch_id,
-            'batch_name': self.batch.name if self.batch else '2026 (B.Tech)',
+            'batch_name': self.batch.name if self.batch else '',
             'academic_year_id': self.academic_year_id,
-            'academic_year_label': self.academic_year.year_label if self.academic_year else '2026 – 2027',
+            'academic_year_label': self.academic_year.year_label if self.academic_year else '',
             'sections': sections,
             'subjects': subjects,
             'subject_count': len(subjects),
@@ -121,7 +121,7 @@ class RecurringPlan(db.Model):
             'start_date': self.start_date.isoformat() if self.start_date else None,
             'end_date': self.end_date.isoformat() if self.end_date else None,
             'date_range_display': date_range_display,
-            'room': self.room or 'Lab 1 (Main Block)',
+            'room': self.room or '',
             'instructor_id': self.instructor_id,
             'instructor_name': self.instructor.full_name if self.instructor else None,
             'status': self.status or 'active',

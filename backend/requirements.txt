@@ -11,7 +11,7 @@ simple-websocket>=1.0  # REQUIRED for websocket transport in "threading" async_m
 flask-limiter==3.7.0
 
 # ── Database ─────────────────────────────────────────────────────────────────
-psycopg2-binary==2.9.9
+psycopg2-binary==2.9.10
 sqlalchemy==2.0.36
 pgvector==0.3.0
 
@@ -57,6 +57,7 @@ duckduckgo-search>=7.0.0  # Web search for AI Copilot RAG
 
 # ── LiveKit (live session video — replaces Jitsi) ────────────────────────────
 livekit>=0.11
+livekit-api>=1.2
 
 # ── Dev / Testing ────────────────────────────────────────────────────────────
 pytest==8.2.2
