@@ -1922,7 +1922,9 @@ def subject_grade_summary(subject_id):
     # instructor for planning under planned_total_weightage, but including them
     # here made the instructor's "out of" disagree with the student's.
     graded_exps = [e for e in exps if getattr(e, 'is_published', False)]
-    total_weightage = sum(e.weightage or 0 for e in graded_exps) + exam_weightage_sum
+    published_weightage = sum(e.weightage or 0 for e in graded_exps)
+    draft_weightage = sum(e.weightage or 0 for e in exps if not getattr(e, 'is_published', False))
+    total_weightage = published_weightage + exam_weightage_sum
     planned_total_weightage = sum(e.weightage or 0 for e in exps) + exam_weightage_sum
 
     students_out = []
@@ -1940,6 +1942,18 @@ def subject_grade_summary(subject_id):
             exam_weight = (x.grade_weight or 0.0) * total_marks
             rollup += (exp_scores.get(x.id, 0) / 100.0) * exam_weight
 
+        # Points vs percentage. `subject_score` keeps its historical meaning —
+        # weighted points earned out of `total_weightage`. A subject that has
+        # allocated 3 of its 100 marks therefore yields at most "3.0", which
+        # reads as a failure in a "…/100" column. `subject_percent` normalises
+        # against the marks actually allocated so the hub can show an honest
+        # pro-rated mark, and `points_*` lets the UI print both without guessing.
+        lab_graded = grade_map.get(sid, {})
+        assessed_count = sum(1 for e in graded_exps if e.id in lab_graded)
+        assessed_count += sum(1 for x in standalone_exams if x.id in exam_grade_map.get(sid, {}))
+        assessed_total = len(graded_exps) + len(standalone_exams)
+        subject_percent = round((rollup / total_weightage) * 100, 1) if total_weightage > 0 else None
+
         u = users.get(sid)
         students_out.append({
             'student_id': sid,
@@ -1949,9 +1963,46 @@ def subject_grade_summary(subject_id):
             'experiment_scores': exp_scores,
             'experiment_details': detail_map.get(sid, {}),
             'subject_score': round(rollup, 2),
+            'points_earned': round(rollup, 2),
+            'points_allocated': round(total_weightage, 2),
+            'subject_percent': subject_percent,
+            'assessed_count': assessed_count,
+            'assessment_count': assessed_total,
         })
 
     students_out.sort(key=lambda x: (x['full_name'] or '').lower())
+
+    # Per-assessment class statistics — computed here so every column header can
+    # show a real class average / graded count instead of a placeholder.
+    def _pct(value, scale):
+        return (value / (scale or 100)) * 100.0
+
+    lab_stats = {}
+    for e in exps:
+        vals = [
+            _pct(float(s['experiment_scores'][e.id]), e.grade_scale)
+            for s in students_out
+            if s['experiment_scores'].get(e.id) is not None
+        ]
+        lab_stats[e.id] = {
+            'graded_count': len(vals),
+            'class_average_percent': round(sum(vals) / len(vals), 1) if vals else None,
+            'submitted_count': sum(
+                1 for s in students_out if s['experiment_details'].get(e.id, {}).get('submitted_at')
+            ),
+        }
+
+    exam_stats = {}
+    for x in standalone_exams:
+        vals = [
+            _pct(float(s['experiment_scores'][x.id]), 100)
+            for s in students_out
+            if s['experiment_scores'].get(x.id) is not None
+        ]
+        exam_stats[x.id] = {
+            'graded_count': len(vals),
+            'class_average_percent': round(sum(vals) / len(vals), 1) if vals else None,
+        }
 
     out_items = [
         {
@@ -1961,6 +2012,10 @@ def subject_grade_summary(subject_id):
             'delivery_mode': getattr(e, 'delivery_mode', 'lab') or 'lab',
             'weightage': e.weightage,
             'grade_scale': e.grade_scale,
+            'is_published': bool(getattr(e, 'is_published', False)),
+            'graded_count': lab_stats[e.id]['graded_count'],
+            'submitted_count': lab_stats[e.id]['submitted_count'],
+            'class_average_percent': lab_stats[e.id]['class_average_percent'],
             'rubric': {
                 'test_cases': e.rubric_test_cases or 0,
                 'lab_report': e.rubric_lab_report or 0,
@@ -1979,6 +2034,10 @@ def subject_grade_summary(subject_id):
             'delivery_mode': 'exam',
             'weightage': round((x.grade_weight or 0.0) * total_marks, 2),
             'grade_scale': 100,
+            'is_published': True,
+            'graded_count': exam_stats[x.id]['graded_count'],
+            'submitted_count': exam_stats[x.id]['graded_count'],
+            'class_average_percent': exam_stats[x.id]['class_average_percent'],
         })
 
     return jsonify({
@@ -1988,7 +2047,12 @@ def subject_grade_summary(subject_id):
             'code': subject.code,
             'total_marks': total_marks,
             'total_weightage': round(total_weightage, 2),
+            'published_weightage': round(published_weightage + exam_weightage_sum, 2),
+            'draft_weightage': round(draft_weightage, 2),
             'planned_total_weightage': round(planned_total_weightage, 2),
+            'published_count': len(graded_exps) + len(standalone_exams),
+            'draft_count': len(exps) - len(graded_exps),
+            'unallocated_marks': round(max(0.0, total_marks - total_weightage), 2),
             'over_allocation': total_weightage > total_marks,
         },
         'experiments': out_items,
