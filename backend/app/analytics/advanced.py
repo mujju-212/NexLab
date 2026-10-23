@@ -96,12 +96,20 @@ def compute_struggle_quadrant(
         outcome_vals.append(outcome)
 
     # Compute cohort medians
-    med_effort = round(statistics.median(effort_vals) if effort_vals else 50.0, 1)
-    med_outcome = round(statistics.median(outcome_vals) if outcome_vals else 50.0, 1)
+    med_effort = round(statistics.median(effort_vals) if effort_vals else 0.0, 1)
+    med_outcome = round(statistics.median(outcome_vals) if outcome_vals else 0.0, 1)
 
     quadrant_counts = {'thriving': 0, 'struggling': 0, 'coasting': 0, 'disengaged': 0}
 
     for r in records:
+        # No effort and no outcome => never assessed, not "thriving" by median tie.
+        if r['effort'] == 0 and r['outcome'] == 0:
+            r['quadrant'] = 'disengaged'
+            r['assessed'] = False
+            quadrant_counts['disengaged'] += 1
+            continue
+
+        r['assessed'] = True
         high_eff = r['effort'] >= med_effort
         high_out = r['outcome'] >= med_outcome
 

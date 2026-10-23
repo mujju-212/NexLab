@@ -19,6 +19,17 @@ from app.analytics.risk import compute_student_risk
 from app.analytics.mastery import compute_scoped_mastery
 from app.analytics.ranking import get_student_all_ranks
 
+# One definition of attendance credit for the whole platform: a late arrival is
+# not a no-show, and a partial attendance is half-way. Every analytics surface
+# (metrics layer, instructor tabs, institution tabs) imports this map.
+ATT_CREDIT_MAP = {
+    'present': 1.0,
+    'late': 0.8,
+    'partial': 0.6,
+    'inactive_present': 0.5,
+    'absent': 0.0,
+}
+
 
 def compute_student_completion_rollup(
     student_id: str,
@@ -136,15 +147,26 @@ def compute_student_attendance_rollup(
     active_count = 0
     late_count = 0
     absent_count = 0
+    partial_count = 0
+    credit_sum = 0.0
     sessions_history = []
+
+    # ONE attendance definition, shared with the instructor and institution
+    # surfaces: present 1.0, late 0.8, partial 0.6, inactive 0.5, absent 0.
+    ATT_CREDIT = ATT_CREDIT_MAP
 
     for att, sess in records:
         status = (att.status or 'absent').lower()
-        is_pres = status in ('present', 'late')
-        if is_pres:
+        credit = ATT_CREDIT.get(status, 0.0)
+        credit_sum += credit
+        is_pres = credit >= 0.5
+        if status == 'present':
             present_count += 1
-            if status == 'late':
-                late_count += 1
+        elif status == 'late':
+            present_count += 1
+            late_count += 1
+        elif status == 'partial':
+            partial_count += 1
         else:
             absent_count += 1
 
@@ -167,13 +189,14 @@ def compute_student_attendance_rollup(
             'experiment_title': exp_title,
         })
 
-    rate = round(100.0 * (present_count / max(1, scheduled_count)), 1) if scheduled_count > 0 else 0.0
-    active_rate = round(100.0 * (active_count / max(1, present_count)), 1) if present_count > 0 else 0.0
+    rate = round(100.0 * (credit_sum / scheduled_count), 1) if scheduled_count > 0 else None
+    active_rate = round(100.0 * (active_count / max(1, present_count)), 1) if present_count > 0 else None
 
     return {
         'scheduled': scheduled_count,
         'present': present_count,
         'late': late_count,
+        'partial': partial_count,
         'absent': absent_count,
         'active_participants': active_count,
         'attendance_rate': rate,

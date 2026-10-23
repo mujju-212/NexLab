@@ -28,20 +28,30 @@ def compute_metric_stats(values: List[float]) -> Dict[str, float]:
     }
 
 
-def compute_z_score(val: Optional[float], mean_val: float, stdev_val: float) -> float:
-    """Standard normal z-score."""
-    if val is None or stdev_val <= 1e-6:
-        return 0.0
+def compute_z_score(val: Optional[float], mean_val: float, stdev_val: float) -> Optional[float]:
+    """Standard normal z-score.
+
+    None when the value is unmeasured or the cohort has no dispersion: a single
+    section (or a cohort where everybody scores the same) is not "exactly at the
+    campus mean", it simply cannot be standardised.
+    """
+    if val is None or stdev_val is None or stdev_val <= 1e-6:
+        return None
     return round((float(val) - mean_val) / stdev_val, 2)
 
 
-def compute_percentile(val: Optional[float], all_values: List[float]) -> float:
-    """Percentile rank (0–100) within cohort."""
+def compute_percentile(val: Optional[float], all_values: List[float], min_cohort: int = 5) -> Optional[float]:
+    """
+    Percentile rank (0–100) within a cohort.
+
+    Returns None when either the value is unmeasured or the cohort is too small
+    for a percentile to mean anything (a lone section is not "50th percentile").
+    """
     if val is None or not all_values:
-        return 50.0
+        return None
     valid = sorted([float(v) for v in all_values if v is not None])
-    if not valid:
-        return 50.0
+    if len(valid) < max(2, min_cohort):
+        return None
     n = len(valid)
     less = sum(1 for v in valid if v < val)
     equal = sum(1 for v in valid if v == val)
@@ -88,11 +98,14 @@ def compute_cohort_benchmarks(
             z = compute_z_score(val, stats['mean'], stats['stdev'])
             pct = compute_percentile(val, distributions[k])
 
-            status = 'average'
-            if z >= 1.0:
+            if z is None:
+                status = 'unbenchmarkable'
+            elif z >= 1.0:
                 status = 'above_average'
             elif z <= -1.0:
                 status = 'below_average'
+            else:
+                status = 'average'
 
             benchmarks[k] = {
                 'value': val,

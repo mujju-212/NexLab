@@ -124,9 +124,11 @@ def record_daily_snapshot_for_institution(
         'avg_risk_score': cohort_risk['avg_risk_score'],
         'bands': cohort_risk['bands'],
         'top_risk_drivers': cohort_risk['top_risk_drivers'],
-        'avg_grade': round(sum(valid_grades) / len(valid_grades), 1) if valid_grades else 0.0,
-        'avg_attendance': round(sum(valid_atts) / len(valid_atts), 1) if valid_atts else 0.0,
-        'avg_focus': round(sum(valid_focus) / len(valid_focus), 1) if valid_focus else 50.0,
+        # Unmeasured averages persist as NULL: a stored 0.0 / 50.0 would become
+        # "history" that later trend reads would treat as real.
+        'avg_grade': round(sum(valid_grades) / len(valid_grades), 1) if valid_grades else None,
+        'avg_attendance': round(sum(valid_atts) / len(valid_atts), 1) if valid_atts else None,
+        'avg_focus': round(sum(valid_focus) / len(valid_focus), 1) if valid_focus else None,
     }
 
     existing_kpi = InstitutionDailyKPI.query.filter_by(

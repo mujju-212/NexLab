@@ -115,16 +115,17 @@ def compute_integrity_confidence(
         prev_passed = passed
         prev_total = total
 
-    # 4. Specification E: Integrity Confidence Calculation
-    # Confidence = max(50.0, 100.0 - sum(w_i * count(event_i)))
-    # where w_plagiarism = 15, w_fullscreen = 5, w_tab_switch = 2, w_paste = 4
+    # 4. Integrity confidence.
+    # Severity-weighted via the shared scorer so this endpoint and the
+    # instructor integrity list can never disagree (they used to: one ignored
+    # severity entirely, the other hardcoded four event types).
+    from app.analytics.integrity_score import score_events
+    scored = score_events([
+        {'event_type': ev.event_type, 'severity': ev.severity} for ev in events
+    ])
     n_plag = len(plag_flags)
-    n_fullscreen = violation_counts.get('fullscreen_exit', 0) + violation_counts.get('fullscreen', 0)
-    n_tab_switch = violation_counts.get('tab_switch', 0)
-    n_paste = violation_counts.get('copy_paste', 0) + violation_counts.get('paste', 0)
-
-    deduction = (15.0 * n_plag) + (5.0 * n_fullscreen) + (2.0 * n_tab_switch) + (4.0 * n_paste)
-    confidence = max(50.0, round(100.0 - deduction, 1))
+    deduction = scored['penalty'] + (15.0 * n_plag)
+    confidence = max(0.0, round(100.0 - deduction, 1))
 
     review_recommended = bool(
         confidence < 70.0

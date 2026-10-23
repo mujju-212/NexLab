@@ -34,47 +34,68 @@ def compute_student_risk(
     w_focus = w_norm.get('focus', 0.15)
     w_recency = w_norm.get('recency', 0.10)
 
-    # Extract component values (bounded to 0–100)
-    grade_v = float(student_metrics.get('grade_avg', {}).get('value') or 0.0)
-    att_v = float(student_metrics.get('attendance_rate', {}).get('value') or 0.0)
-    mastery_v = float(student_metrics.get('mastery_avg', {}).get('value') or 0.0)
-    focus_v = float(student_metrics.get('focus_avg', {}).get('value') or 0.0)
+    # Extract component values (bounded to 0–100). P2/P4: a factor with no
+    # sample is absent, not zero and not a neutral prior — and the composite
+    # renormalises over whatever remains.
+    from app.analytics.composite import metric_value, weighted_composite
 
-    # D_recency: min(100, days_idle * 10)
-    days_idle = float(
-        student_metrics.get('days_idle', {}).get('value') or
-        student_metrics.get('submission_recency_days', {}).get('value') or
-        student_metrics.get('recency_days', {}).get('value') or 0.0
+    grade_v = metric_value(student_metrics.get('grade_avg'))
+    att_v = metric_value(student_metrics.get('attendance_rate'))
+    mastery_v = metric_value(student_metrics.get('mastery_avg'))
+    focus_v = metric_value(student_metrics.get('focus_avg'))
+
+    raw_recency = (
+        metric_value(student_metrics.get('days_idle'))
+        if metric_value(student_metrics.get('days_idle')) is not None
+        else metric_value(student_metrics.get('submission_recency_days'))
     )
-    d_recency = min(100.0, max(0.0, days_idle * 10.0))
+    days_idle = raw_recency
+    d_recency = None if days_idle is None else min(100.0, max(0.0, days_idle * 10.0))
 
-    g_s = max(0.0, min(100.0, grade_v))
-    a_s = max(0.0, min(100.0, att_v))
-    m_s = max(0.0, min(100.0, mastery_v))
-    f_s = max(0.0, min(100.0, focus_v))
+    def _bounded(v):
+        return None if v is None else max(0.0, min(100.0, float(v)))
+
+    g_s, a_s, m_s, f_s = _bounded(grade_v), _bounded(att_v), _bounded(mastery_v), _bounded(focus_v)
 
     components = {
-        'grade': round(g_s, 2),
-        'attendance': round(a_s, 2),
-        'mastery': round(m_s, 2),
-        'focus': round(f_s, 2),
-        'recency': round(d_recency, 2),
-        'days_idle': round(days_idle, 1),
+        'grade': None if g_s is None else round(g_s, 2),
+        'attendance': None if a_s is None else round(a_s, 2),
+        'mastery': None if m_s is None else round(m_s, 2),
+        'focus': None if f_s is None else round(f_s, 2),
+        'recency': None if d_recency is None else round(d_recency, 2),
+        'days_idle': None if days_idle is None else round(days_idle, 1),
     }
 
-    # Mathematical formulation:
-    # R(s) = 0.30 * (100 - G_s) + 0.25 * (100 - A_s) + 0.20 * (100 - M_s) + 0.15 * (100 - F_s) + 0.10 * D_recency
-    risk_score_raw = (
-        w_grade * (100.0 - g_s) +
-        w_att * (100.0 - a_s) +
-        w_mastery * (100.0 - m_s) +
-        w_focus * (100.0 - f_s) +
-        w_recency * d_recency
-    )
-    risk_score = round(max(0.0, min(100.0, risk_score_raw)), 1)
+    # R(s) = weighted mean of the factor deficits, renormalised over the factors
+    # that actually have data.
+    deficits = {
+        'grade': None if g_s is None else 100.0 - g_s,
+        'attendance': None if a_s is None else 100.0 - a_s,
+        'mastery': None if m_s is None else 100.0 - m_s,
+        'focus': None if f_s is None else 100.0 - f_s,
+        'recency': d_recency,
+    }
+    composite = weighted_composite(deficits, dict(weights))
 
-    # Risk band categorization:
-    # Critical: R(s) >= 70, High: 50 <= R(s) < 70, Watch: 35 <= R(s) < 50, On Track: R(s) < 35
+    if composite['score'] is None:
+        return {
+            'risk_score': None,
+            'risk_band': 'unknown',
+            'is_at_risk': False,
+            'primary_reason': 'Not enough activity to assess risk',
+            'primary_component': None,
+            'trend_arrow': 'stable',
+            'risk_delta': None,
+            'components': components,
+            'risk_contributions': {},
+            'weights': {k: round(v, 4) for k, v in w_norm.items()},
+            'coverage': 0.0,
+            'factors_used': [],
+            'factors_missing': composite['missing'],
+        }
+
+    risk_score = round(max(0.0, min(100.0, composite['score'])), 1)
+
     crit_threshold = float(bands.get('critical', DEFAULT_RISK_BANDS['critical']))
     high_threshold = float(bands.get('high', DEFAULT_RISK_BANDS['high']))
     watch_threshold = float(bands.get('watch', DEFAULT_RISK_BANDS['watch']))
@@ -88,13 +109,12 @@ def compute_student_risk(
     else:
         band = 'ok'
 
-    # Explainability: deficit per factor
+    # Explainability: contribution of each *used* factor to the deficit
+    used_weights = composite['weights_used']
     risk_penalties = {
-        'grade': round(w_grade * (100.0 - g_s), 2),
-        'attendance': round(w_att * (100.0 - a_s), 2),
-        'mastery': round(w_mastery * (100.0 - m_s), 2),
-        'focus': round(w_focus * (100.0 - f_s), 2),
-        'recency': round(w_recency * d_recency, 2),
+        k: round(used_weights.get(k, 0.0) * deficits[k], 2)
+        for k in used_weights
+        if deficits.get(k) is not None
     }
 
     reason_labels = {
@@ -105,13 +125,16 @@ def compute_student_risk(
         'recency': 'Prolonged submission inactivity',
     }
 
-    # Primary reason: largest contributor to the risk deficit
-    max_k = max(risk_penalties.keys(), key=lambda k: risk_penalties[k])
-    primary_reason = reason_labels.get(max_k, 'Multiple risk factors') if risk_score >= watch_threshold else 'On track'
+    max_k = max(risk_penalties, key=lambda k: risk_penalties[k]) if risk_penalties else None
+    primary_reason = (
+        reason_labels.get(max_k, 'Multiple risk factors')
+        if (risk_score >= watch_threshold and max_k)
+        else 'On track'
+    )
 
     # Trend vs previous snapshot
     trend_arrow = 'stable'
-    risk_delta = 0.0
+    risk_delta = None
     if previous_risk is not None:
         risk_delta = round(risk_score - previous_risk, 1)
         if risk_delta >= 3.0:
@@ -130,6 +153,9 @@ def compute_student_risk(
         'components': components,
         'risk_contributions': risk_penalties,
         'weights': {k: round(v, 4) for k, v in w_norm.items()},
+        'coverage': composite['coverage'],
+        'factors_used': composite['available'],
+        'factors_missing': composite['missing'],
     }
 
 
@@ -152,14 +178,19 @@ def compute_cohort_risk_summary(
 
     band_counts = {'critical': 0, 'high': 0, 'watch': 0, 'ok': 0}
     reasons = {}
-    total_risk = 0.0
+    measured_risk = []          # students whose risk could actually be computed
+    unknown_count = 0
 
     for s in students_with_risk:
         r = s.get('risk', {})
-        band = r.get('risk_band', 'ok')
-        score = float(r.get('risk_score', 0.0))
+        band = r.get('risk_band') or 'unknown'
+        score = r.get('risk_score')
+        # An unmeasured student is not a 0-risk student: count them apart.
+        if not isinstance(score, (int, float)):
+            unknown_count += 1
+            continue
         band_counts[band] = band_counts.get(band, 0) + 1
-        total_risk += score
+        measured_risk.append(float(score))
 
         if band in ('critical', 'high', 'watch'):
             reason = r.get('primary_reason')
@@ -177,6 +208,8 @@ def compute_cohort_risk_summary(
         'band_percentages': {
             k: round((v / total) * 100.0, 1) for k, v in band_counts.items()
         },
-        'avg_risk_score': round(total_risk / total, 1),
+        'avg_risk_score': round(sum(measured_risk) / len(measured_risk), 1) if measured_risk else None,
+        'measured_students': len(measured_risk),
+        'unknown_risk_students': unknown_count,
         'top_risk_drivers': reasons,
     }

@@ -43,12 +43,20 @@ def resolve_window(from_date: Optional[str] = None,
 
 
 def _metric_box(value: float, sample_size: int, min_sample_size: int = 3, window_days: int = 30) -> Dict[str, Any]:
-    """Helper to wrap metric with confidence metadata."""
+    """
+    Wrap a metric with confidence metadata.
+
+    P2: a metric with no sample is ``None`` — never a neutral prior. Callers that
+    build composites must renormalise over ``is_available`` factors instead of
+    imputing a value (see app/analytics/composite.py).
+    """
+    has_value = value is not None
     return {
-        'value': round(float(value), 2) if value is not None else None,
+        'value': round(float(value), 2) if has_value else None,
         'sample_size': int(sample_size),
         'window_days': int(window_days),
-        'is_sufficient': bool(sample_size >= min_sample_size),
+        'is_available': bool(has_value),
+        'is_sufficient': bool(has_value and sample_size >= min_sample_size),
     }
 
 
@@ -259,8 +267,8 @@ def batch_student_atomic_metrics(
             mastery_avg_val = sum_weighted / sum_weights
             mastery_breadth_val = len({x['concept'] for x in m_items})
         else:
-            mastery_avg_val = 0.0
-            mastery_breadth_val = 0
+            mastery_avg_val = None
+            mastery_breadth_val = None
 
         # B. Grades
         g_items = grade_map.get(sid, [])
@@ -281,9 +289,9 @@ def batch_student_atomic_metrics(
             else:
                 grade_trend_val = 0.0
         else:
-            grade_avg_val = 0.0
-            consistency_val = 100.0
-            grade_trend_val = 0.0
+            grade_avg_val = None
+            consistency_val = None
+            grade_trend_val = None
 
         # C. Attendance & Effort
         att_items = att_map.get(sid, [])
@@ -300,13 +308,13 @@ def batch_student_atomic_metrics(
             attendance_rate_val = min(100.0, (equiv_sum / att_sample) * 100.0)
             effort_hours_val = sum(x['seconds'] for x in att_items) / 3600.0
         else:
-            attendance_rate_val = 0.0
-            effort_hours_val = 0.0
+            attendance_rate_val = None
+            effort_hours_val = None
 
         # D. Focus
         f_items = focus_map.get(sid, [])
         f_sample = len(f_items)
-        focus_avg_val = statistics.mean(f_items) if f_sample > 0 else 50.0
+        focus_avg_val = statistics.mean(f_items) if f_sample > 0 else None
 
         # E. Efficiency (attempts curve)
         eff_items = eff_map.get(sid, [])
@@ -316,10 +324,10 @@ def batch_student_atomic_metrics(
             # 1 attempt = 100, 2 attempts = 85, 3 = 70...
             efficiency_val = max(0.0, min(100.0, 100.0 - (avg_attempts - 1.0) * 15.0))
         else:
-            efficiency_val = 70.0  # neutral prior
+            efficiency_val = None  # no code attempts -> not measured
 
         # F. Submission Recency
-        recency_days_val = last_submit_map.get(sid, 99.0)
+        recency_days_val = last_submit_map.get(sid)
 
         # G. Integrity & Proctoring
         p_items = proctor_map.get(sid, [])

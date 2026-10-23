@@ -31,6 +31,180 @@ _RANK_CACHE: Dict[tuple, tuple] = {}
 _RANK_CACHE_TTL = 300  # 5 minutes cache
 
 
+RANK_WEIGHTS = {
+    'mastery': 0.30,
+    'engagement': 0.20,
+    'effort': 0.20,
+    'efficiency': 0.15,
+    'consistency': 0.15,
+}
+
+
+def score_students(student_ids, institution_id, all_metrics, users_map):
+    """
+    The ONE implementation of the holistic 5-factor score.
+
+    Every surface (student card, cohort leaderboard, instructor rankings,
+    institution rollups) goes through this function, so the same student can
+    never hold two different composite scores.
+    """
+    from app.analytics.composite import metric_value, weighted_composite
+
+    candidates, unranked = [], []
+    for sid in student_ids:
+        u = users_map.get(sid)
+        display_name = (u.full_name if (u and getattr(u, 'full_name', None))
+                        else (getattr(u, 'name', None) if u else None)) or 'Student'
+        m = all_metrics.get(sid, {})
+
+        mastery = metric_value(m.get('mastery_avg'))
+        att_rate = metric_value(m.get('attendance_rate'))
+        focus = metric_value(m.get('focus_avg'))
+        if att_rate is not None and focus is not None:
+            engagement = att_rate * 0.4 + focus * 0.6
+        elif att_rate is not None:
+            engagement = att_rate
+        elif focus is not None:
+            engagement = focus
+        else:
+            engagement = None
+
+        hours = metric_value(m.get('effort_hours'))
+        effort = min(100.0, (hours / 40.0) * 100.0) if hours is not None else None
+        efficiency = metric_value(m.get('efficiency'))
+        consistency = metric_value(m.get('consistency'))
+
+        composite = weighted_composite(
+            {'mastery': mastery, 'engagement': engagement, 'effort': effort,
+             'efficiency': efficiency, 'consistency': consistency},
+            RANK_WEIGHTS,
+        )
+
+        row = {
+            'student_id': sid,
+            'name': display_name,
+            'student_name': display_name,
+            'full_name': display_name,
+            'roll_number': getattr(u, 'roll_number', None) if u else None,
+            'avatar_url': getattr(u, 'profile_pic_url', None) if u else None,
+            'mastery_score': None if mastery is None else round(mastery, 1),
+            'engagement_score': None if engagement is None else round(engagement, 1),
+            'effort_score': None if effort is None else round(effort, 1),
+            'efficiency_score': None if efficiency is None else round(efficiency, 1),
+            'consistency_score': None if consistency is None else round(consistency, 1),
+            'rank_score': composite['score'],
+            'score_coverage': composite['coverage'],
+            'score_factors_available': composite['available'],
+            'score_factors_missing': composite['missing'],
+        }
+        (candidates if row['rank_score'] is not None else unranked).append(row)
+    return candidates, unranked
+
+
+def rank_positions(candidates, unranked, cohort_size, min_cohort: int = 5):
+    """Attach rank position + (only when meaningful) percentile."""
+    from app.analytics.composite import percentile_of
+
+    candidates.sort(key=lambda x: x['rank_score'], reverse=True)
+    population = [c['rank_score'] for c in candidates]
+
+    results, current_pos = [], 1
+    for idx, c in enumerate(candidates):
+        if idx > 0 and c['rank_score'] < candidates[idx - 1]['rank_score']:
+            current_pos = idx + 1
+        c['rank_position'] = current_pos
+        c['cohort_size'] = cohort_size
+        c['percentile'] = percentile_of(c['rank_score'], population, min_cohort=min_cohort)
+        c['percentile_available'] = c['percentile'] is not None
+        results.append(c)
+
+    for c in unranked:
+        c['rank_position'] = None
+        c['cohort_size'] = cohort_size
+        c['percentile'] = None
+        c['percentile_available'] = False
+        results.append(c)
+    return results
+
+
+def compute_section_subject_ranks(section_subject_id: str, institution_id: str, persist: bool = True):
+    """
+    Canonical ranking for one section-subject cohort.
+    Used by the student's own rankings view and by the instructor ranking tab.
+    """
+    from app.models.academic import SectionSubject, SectionStudent
+    from app.models.experiment import Experiment
+    from app.models.knowledge import StudentRanking
+
+    ss = db.session.get(SectionSubject, section_subject_id)
+    if not ss:
+        return []
+
+    section_students = SectionStudent.query.filter_by(section_id=ss.section_id).all()
+    student_ids = [x.student_id for x in section_students]
+    if not student_ids:
+        return []
+
+    exp_ids = [e.id for e in Experiment.query.filter_by(
+        subject_id=ss.subject_id, instructor_id=ss.instructor_id
+    ).all()]
+
+    # Same window as the scope engine ('live' == 90 days) so both surfaces
+    # produce the identical score for the identical student.
+    window_end = datetime.utcnow()
+    window_start = window_end - timedelta(days=90)
+
+    all_metrics = batch_student_atomic_metrics(
+        student_ids=student_ids,
+        institution_id=institution_id,
+        window_start=window_start,
+        window_end=window_end,
+        experiment_ids=exp_ids or None,
+    )
+    users_map = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()}
+    candidates, unranked = score_students(student_ids, institution_id, all_metrics, users_map)
+    results = rank_positions(candidates, unranked, len(student_ids))
+
+    if persist:
+        _persist_student_rankings(results, section_subject_id, institution_id)
+    return results
+
+
+def _persist_student_rankings(results, section_subject_id: str, institution_id: str):
+    """Write-through cache of the canonical scores into student_rankings."""
+    from app.models.knowledge import StudentRanking
+    try:
+        existing = {
+            r.student_id: r for r in StudentRanking.query.filter_by(
+                section_subject_id=section_subject_id
+            ).all()
+        }
+        for c in results:
+            row = existing.get(c['student_id'])
+            if row is None:
+                row = StudentRanking(
+                    student_id=c['student_id'],
+                    section_subject_id=section_subject_id,
+                    institution_id=institution_id,
+                )
+                db.session.add(row)
+            if c['rank_score'] is not None:
+                row.mastery_score = c['mastery_score']
+                row.engagement_score = c['engagement_score']
+                row.effort_score = c['effort_score']
+                row.efficiency_score = c['efficiency_score']
+                row.consistency_score = c['consistency_score']
+                row.rank_score = c['rank_score']
+            else:
+                row.mastery_score = row.engagement_score = row.effort_score = None
+                row.efficiency_score = row.consistency_score = row.rank_score = None
+            row.rank_position = c['rank_position']
+            row.updated_at = datetime.utcnow()
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
 def compute_rank_for_scope(
     scope_level: str,
     scope_id: Optional[str] = None,
@@ -100,61 +274,11 @@ def compute_rank_for_scope(
         u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()
     } if student_ids else {}
 
-    candidates = []
-    for sid in student_ids:
-        u = users_map.get(sid)
-        display_name = u.full_name if (u and u.full_name) else (u.name if (u and u.name) else 'Student')
-        metrics = all_metrics.get(sid, {})
-        mastery = float(metrics.get('mastery_avg', {}).get('value') or 0.0)
-        att_rate = float(metrics.get('attendance_rate', {}).get('value') or 0.0)
-        focus = float(metrics.get('focus_avg', {}).get('value') or 50.0)
-        engagement = (att_rate * 0.4) + (focus * 0.6)
-        effort_hours = float(metrics.get('effort_hours', {}).get('value') or 0.0)
-        if effort_hours > 0:
-            effort = min(100.0, (effort_hours / 40.0) * 100.0)
-        else:
-            sub_count = sub_counts.get(sid, 0)
-            effort = min(100.0, float(sub_count) * 20.0) if sub_count > 0 else 50.0
-        efficiency = float(metrics.get('efficiency', {}).get('value') or metrics.get('grade_avg', {}).get('value') or 50.0)
-        consistency = float(metrics.get('consistency', {}).get('value') or 50.0)
+    candidates, unranked = score_students(
+        student_ids, institution_id, all_metrics, users_map
+    )
 
-        rank_score = (
-            0.30 * mastery
-            + 0.20 * engagement
-            + 0.20 * effort
-            + 0.15 * efficiency
-            + 0.15 * consistency
-        )
-
-        candidates.append({
-            'student_id': sid,
-            'name': display_name,
-            'student_name': display_name,
-            'full_name': display_name,
-            'roll_number': u.roll_number if u else None,
-            'avatar_url': getattr(u, 'profile_pic_url', None) if u else None,
-            'mastery_score': round(mastery, 1),
-            'engagement_score': round(engagement, 1),
-            'effort_score': round(effort, 1),
-            'efficiency_score': round(efficiency, 1),
-            'consistency_score': round(consistency, 1),
-            'rank_score': round(rank_score, 2),
-        })
-
-    # Sort descending by rank_score
-    candidates.sort(key=lambda x: x['rank_score'], reverse=True)
-
-    # Compute dense positions & percentiles
-    results = []
-    current_pos = 1
-    for idx, c in enumerate(candidates):
-        if idx > 0 and c['rank_score'] < candidates[idx - 1]['rank_score']:
-            current_pos = idx + 1
-        pct = round(100.0 * (1.0 - (current_pos - 1) / max(1, cohort_size)), 1)
-        c['rank_position'] = current_pos
-        c['cohort_size'] = cohort_size
-        c['percentile'] = pct
-        results.append(c)
+    results = rank_positions(candidates, unranked, cohort_size, min_cohort=5)
 
     # Bulk upsert snapshots in 1 query
     try:
@@ -223,29 +347,45 @@ def _compute_experiment_rank(
     grade_map = {g.student_id: float(g.final_grade or 0.0) for g in grades}
     cohort_size = len(student_ids)
 
-    candidates = []
+    from app.analytics.composite import percentile_of
+
+    candidates, unranked = [], []
     for sid in student_ids:
-        score = grade_map.get(sid, 0.0)
-        candidates.append({
+        score = grade_map.get(sid)
+        row = {
             'student_id': sid,
-            'mastery_score': score,
-            'engagement_score': 100.0 if score > 0 else 0.0,
-            'effort_score': 100.0 if score > 0 else 0.0,
-            'efficiency_score': score,
-            'consistency_score': 100.0,
-            'rank_score': round(score, 2),
-        })
+            # Experiment scope ranks on the grade itself; the other four
+            # components of the holistic model are not defined for a single
+            # experiment, so they are reported as not measured rather than
+            # filled with 100/0.
+            'mastery_score': None if score is None else round(score, 1),
+            'engagement_score': None,
+            'effort_score': None,
+            'efficiency_score': None,
+            'consistency_score': None,
+            'rank_score': None if score is None else round(score, 2),
+            'score_coverage': 1.0 if score is not None else 0.0,
+            'score_factors_available': ['grade'] if score is not None else [],
+            'score_factors_missing': [] if score is not None else ['grade'],
+        }
+        (candidates if row['rank_score'] is not None else unranked).append(row)
 
     candidates.sort(key=lambda x: x['rank_score'], reverse=True)
-    results = []
-    current_pos = 1
+    population = [c['rank_score'] for c in candidates]
+    results, current_pos = [], 1
     for idx, c in enumerate(candidates):
         if idx > 0 and c['rank_score'] < candidates[idx - 1]['rank_score']:
             current_pos = idx + 1
-        pct = round(100.0 * (1.0 - (current_pos - 1) / max(1, cohort_size)), 1)
         c['rank_position'] = current_pos
         c['cohort_size'] = cohort_size
-        c['percentile'] = pct
+        c['percentile'] = percentile_of(c['rank_score'], population, min_cohort=5)
+        c['percentile_available'] = c['percentile'] is not None
+        results.append(c)
+    for c in unranked:
+        c['rank_position'] = None
+        c['cohort_size'] = cohort_size
+        c['percentile'] = None
+        c['percentile_available'] = False
         results.append(c)
 
     return results
@@ -329,8 +469,12 @@ def get_student_all_ranks(student_id: str, institution_id: Optional[str]) -> Dic
         .scalar() or 1
     )
     # Approximate platform rank based on percentile if platform size is large
-    inst_pct = ranks.get('institution', {}).get('percentile', 75.0)
-    plat_pos = max(1, int((1.0 - inst_pct / 100.0) * platform_total) + 1)
+    inst_pct = ranks.get('institution', {}).get('percentile')
+    # No percentile (cohort too small) => no approximated platform position.
+    plat_pos = (
+        max(1, int((1.0 - inst_pct / 100.0) * platform_total) + 1)
+        if isinstance(inst_pct, (int, float)) else None
+    )
     ranks['platform'] = {
         'scope_id': None,
         'scope_name': 'Global Platform Leaderboard',

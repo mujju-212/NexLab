@@ -181,3 +181,44 @@ def resolve_scope_entities(
         'section_subject_ids': list(ss_ids),
         'session_ids': list(session_ids),
     }
+
+
+# ── Grade scope rule ─────────────────────────────────────────────────────────
+def grade_scope_filter(query, experiment_ids: Optional[List[str]] = None,
+                       include_unattributed: bool = False):
+    """
+    The single definition of "which grades count".
+
+    A grade is attributable only when it points at an experiment. Every
+    analytics surface (instructor, student, institution) applies this rule, so a
+    student's average is the same number on every screen.
+
+    Grades with ``experiment_id IS NULL`` are counted as *unattributed* and
+    reported separately (``count_unattributed_grades``) instead of silently
+    bending an average.
+    """
+    from app.models.experiment import Experiment
+    from app.models.grading import Grade
+
+    if include_unattributed:
+        return query
+
+    query = query.filter(Grade.experiment_id.isnot(None))
+    if experiment_ids is not None:
+        if not experiment_ids:
+            # An empty scope means "nothing matches", not "everything".
+            return query.filter(db.literal(False))
+        query = query.filter(Grade.experiment_id.in_(experiment_ids))
+    return query
+
+
+def count_unattributed_grades(student_ids: Optional[List[str]] = None) -> int:
+    """How many grade rows exist that cannot be attributed to an experiment."""
+    from app.models.grading import Grade
+    if not student_ids:
+        return 0
+    return Grade.query.filter(
+        Grade.student_id.in_(student_ids),
+        Grade.experiment_id.is_(None),
+        Grade.final_grade.isnot(None),
+    ).count()

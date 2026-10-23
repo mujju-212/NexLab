@@ -80,10 +80,12 @@ def focus_score():
     # Persist to DB when session is identified
     if session_id:
         try:
+            # float(): predict_focus_score returns numpy.float64, which psycopg2
+            # cannot adapt ("schema np does not exist").
             record = FocusScore(
                 student_id=g.user_id,
                 session_id=session_id,
-                focus_score=score,
+                focus_score=float(score),
                 signals=signals,
                 recorded_at=datetime.utcnow()
             )

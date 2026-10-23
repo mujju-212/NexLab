@@ -426,44 +426,61 @@ def compute_student_funnel(
     stuck_candidates.sort(key=lambda x: (x['risk_score'], x['days_in_stage']), reverse=True)
     stuck_students = stuck_candidates[:30]
 
-    # 8. Top 5 KPI Cards payload (real sparklines from trend intervals)
+    # 8. Top 5 KPI cards.
+    # Deltas are the real change across the requested window (first vs last
+    # interval of the same trend series). They used to be computed against
+    # hardcoded "expected" baselines of 50/40/30/20 percent, which invented
+    # movement out of nothing.
+    def _stage_delta(key: str) -> dict:
+        if not trend_dates:
+            return {'delta': None, 'direction': 'flat', 'is_available': False, 'is_positive': False}
+        first, last = trend_dates[0], trend_dates[-1]
+        if not first.get('enrolled') or not last.get('enrolled'):
+            return {'delta': None, 'direction': 'flat', 'is_available': False, 'is_positive': False}
+        first_pct = 100.0 * first[key] / first['enrolled']
+        last_pct = 100.0 * last[key] / last['enrolled']
+        d = round(last_pct - first_pct, 1)
+        return {
+            'delta': d,
+            'direction': 'up' if d > 0.05 else ('down' if d < -0.05 else 'flat'),
+            'is_available': True,
+            'is_positive': d >= 0,
+        }
+
     kpis = {
         'total_enrolled': {
             'count': total_enrolled,
-            'delta': 0.0,
-            'is_positive': True,
+            **{k: v for k, v in _stage_delta('enrolled').items() if k != 'is_available'},
+            'delta': None,  # enrolment is a stock, not a movement
+            'is_available': True,
             'note': 'enrolled cohort',
             'sparkline': [pt['enrolled'] for pt in trend_dates],
         },
         'started': {
             'count': started_count,
             'pct': stages_out[1]['pct'],
-            'delta': round(stages_out[1]['pct'] - 50.0, 1),
-            'is_positive': stages_out[1]['pct'] >= 50.0,
+            **_stage_delta('started'),
             'note': f"{stages_out[1]['pct']}% of enrolled",
             'sparkline': [pt['started'] for pt in trend_dates],
         },
         'attempted': {
             'count': attempted_count,
             'pct': stages_out[2]['pct'],
-            'delta': round(stages_out[2]['pct'] - 40.0, 1),
-            'is_positive': stages_out[2]['pct'] >= 40.0,
+            **_stage_delta('attempted'),
             'note': f"{stages_out[2]['pct']}% of enrolled",
             'sparkline': [pt['attempted'] for pt in trend_dates],
         },
         'completed': {
             'count': completed_count,
             'pct': stages_out[3]['pct'],
-            'delta': round(stages_out[3]['pct'] - 30.0, 1),
-            'is_positive': stages_out[3]['pct'] >= 30.0,
+            **_stage_delta('completed'),
             'note': f"{stages_out[3]['pct']}% of enrolled",
             'sparkline': [pt['completed'] for pt in trend_dates],
         },
         'mastered': {
             'count': mastered_count,
             'pct': stages_out[4]['pct'],
-            'delta': round(stages_out[4]['pct'] - 20.0, 1),
-            'is_positive': stages_out[4]['pct'] >= 20.0,
+            **_stage_delta('mastery'),
             'note': f"{stages_out[4]['pct']}% of enrolled",
             'sparkline': [pt['mastery'] for pt in trend_dates],
         },
