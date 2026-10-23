@@ -393,13 +393,18 @@ def build_concept_breakdowns(knowledge_map: List[Dict[str, Any]]) -> Dict[str, L
 
 
 def build_summary_kpis(
-    average_blended: float,
+    average_blended: Optional[float],
     completion: Dict[str, Any],
     platform: Dict[str, Any],
     knowledge_map: List[Dict[str, Any]],
+    progress_points: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Builds the 4 primary KPI summary cards shown in Row 2."""
     mastered_count = sum(1 for k in knowledge_map if (k.get('blended_score') or 0) >= 75)
+    # Real observations of "overall progress" over time, in chronological order.
+    progress_series = sorted(
+        [float(p['pct']) for p in (progress_points or []) if p.get('pct') is not None]
+    )
     total_concepts = len(knowledge_map)
 
     assigned = int(completion.get('assigned', 0) or 0)
@@ -411,13 +416,17 @@ def build_summary_kpis(
     med = int(platform.get('medium_solved', 0) or 0)
     hard = int(platform.get('hard_solved', 0) or 0)
 
-    overall_val = int(round(average_blended)) if average_blended > 0 else 0
+    overall_val = int(round(average_blended)) if (average_blended or 0) > 0 else None
 
     return {
+        # Sparkline: only real progress observations, otherwise None.
+        # (This used to emit [val-10, val-5, val], i.e. a guaranteed rising
+        # trend line for every student on the platform.)
         'overall_progress': {
             'value': overall_val,
-            'delta': f'{overall_val}%',
-            'sparkline': [max(0, overall_val - 10), max(0, overall_val - 5), overall_val],
+            'delta': None,
+            'delta_available': False,
+            'sparkline': progress_series if len(progress_series) >= 2 else None,
         },
         'concepts_mastered': {
             'mastered': mastered_count,

@@ -21,6 +21,13 @@ from sqlalchemy import or_
 student_bp = Blueprint('student', __name__)
 
 
+def _iso_z(dt):
+    """ISO-8601 with a trailing Z, or None."""
+    if dt is None:
+        return None
+    return dt.isoformat().rstrip('Z') + 'Z'
+
+
 def _parse_iso_z(raw):
     """Parse an ISO-8601 timestamp ('Z' or ±HH:MM) into a naive-UTC datetime.
 
@@ -295,6 +302,78 @@ def list_experiments(subject_id):
             d['score'] = None
         enriched.append(d)
 
+    # ── Standalone exams belong in the same list ──────────────────────────
+    # A student should see "Assessments & Labs", not labs only. Exams are
+    # emitted with kind='exam' and carry their own window/attempt state so the
+    # UI can offer a Take/Continue button straight from the subject page.
+    from app.models.exam import Exam
+    from app.models.subject import Subject as _Subject
+    _subj = _Subject.query.get(subject_id)
+    _total_marks = (_subj.total_marks if _subj and _subj.total_marks else 100)
+    subject_exams = Exam.query.filter(
+        Exam.subject_id == subject_id,
+        Exam.is_published.is_(True),
+    ).filter(
+        or_(Exam.institution_id == g.institution_id, Exam.institution_id.is_(None))
+    ).order_by(Exam.created_at).all()
+
+    exam_ids = [x.id for x in subject_exams]
+    student_exam_attempts = ExamAttempt.query.filter(
+        ExamAttempt.student_id == g.user_id,
+        ExamAttempt.exam_id.in_(exam_ids),
+    ).order_by(ExamAttempt.started_at.desc()).all() if exam_ids else []
+    attempts_by_exam = {}
+    for ea in student_exam_attempts:
+        attempts_by_exam.setdefault(ea.exam_id, []).append(ea)
+
+    for x in subject_exams:
+        mine = attempts_by_exam.get(x.id, [])
+        live = next((a for a in mine if a.status == 'in_progress'), None)
+        submitted = [a for a in mine if a.status in ('submitted', 'expired')]
+        best = max((a.score for a in submitted if a.score is not None), default=None)
+        state = x.window_state() if hasattr(x, 'window_state') else 'open'
+        attempts_used = len(submitted)
+
+        enriched.append({
+            'id': x.id,
+            'exam_id': x.id,
+            'kind': 'exam',
+            'exp_number': None,
+            'title': x.title,
+            'aim': x.description or '',
+            'concept_tags': [],
+            'difficulty_level': None,
+            'experiment_type': x.exam_type or 'mcq',
+            'delivery_mode': 'exam',
+            'is_published': True,
+            'weightage': round((x.grade_weight or 0.0) * _total_marks, 2),
+            'student_status': (
+                'completed' if best is not None
+                else 'in_progress' if live
+                else 'not_started'
+            ),
+            'completed_at': (
+                max(submitted, key=lambda a: a.submitted_at or a.started_at).submitted_at.strftime('%b %d, %Y')
+                if submitted and submitted[-1].submitted_at else None
+            ),
+            'score': best,
+            'window_state': state,
+            'available_from': x.available_from.isoformat() + 'Z' if x.available_from else None,
+            'due_at': x.due_at.isoformat() + 'Z' if x.due_at else None,
+            'duration_minutes': x.duration_minutes,
+            'max_attempts': x.max_attempts,
+            'attempts_used': attempts_used,
+            'attempts_remaining': max(0, (x.max_attempts or 1) - attempts_used),
+            'can_attend': (
+                state != 'closed' and attempts_used < (x.max_attempts or 1)
+            ),
+            'in_progress_attempt_id': live.id if live else None,
+            'link': f'/student/exams/{x.id}',
+        })
+
+    # Labs first, then exams; each group in its own natural order.
+    enriched.sort(key=lambda d: (d.get('kind') == 'exam', d.get('exp_number') or 0))
+
     return jsonify({'experiments': enriched}), 200
 
 
@@ -326,8 +405,28 @@ def my_subject_grade_summary(subject_id):
         Grade.experiment_id.in_(exp_ids)
     ).all()} if exp_ids else {}
 
-    total_weightage = sum(e.weightage or 0 for e in exps)
+    # ── Standalone exams are first-class marks too ────────────────────────
+    # grade_weight is a fraction of the subject's total marks (0.25 -> 25 marks),
+    # matching the instructor rollup so both views agree.
+    from app.models.exam import Exam
     total_marks = subject.total_marks or 100
+    standalone_exams = Exam.query.filter(
+        Exam.subject_id == subject_id,
+        Exam.is_published.is_(True),
+    ).filter(
+        or_(Exam.institution_id == g.institution_id, Exam.institution_id.is_(None))
+    ).order_by(Exam.created_at).all()
+
+    exam_grades = {}
+    if standalone_exams:
+        rows = Grade.query.filter(
+            Grade.student_id == g.user_id,
+            Grade.exam_id.in_([x.id for x in standalone_exams]),
+        ).all()
+        exam_grades = {r.exam_id: r for r in rows}
+
+    total_weightage = sum(e.weightage or 0 for e in exps)
+    total_weightage += sum((x.grade_weight or 0.0) * total_marks for x in standalone_exams)
 
     items = []
     earned_weighted_score = 0.0
@@ -355,6 +454,32 @@ def my_subject_grade_summary(subject_id):
             'window_state': e.window_state() if hasattr(e, 'window_state') else 'always_open',
             'available_from': e.available_from.isoformat() if getattr(e, 'available_from', None) else None,
             'due_at': e.due_at.isoformat() if getattr(e, 'due_at', None) else None,
+        })
+
+    for x in standalone_exams:
+        gr = exam_grades.get(x.id)
+        raw_score = float(gr.final_grade) if gr and gr.final_grade is not None else None
+        weight = round((x.grade_weight or 0.0) * total_marks, 2)
+        scale = 100.0
+        weighted_score = (raw_score / scale) * weight if raw_score is not None else None
+        if weighted_score is not None:
+            earned_weighted_score += weighted_score
+        items.append({
+            'experiment_id': None,
+            'exam_id': x.id,
+            'kind': 'exam',
+            'exp_number': None,
+            'title': x.title,
+            'delivery_mode': 'exam',
+            'weightage': weight,
+            'grade_scale': scale,
+            'raw_score': raw_score,
+            'weighted_score': round(weighted_score, 2) if weighted_score is not None else None,
+            'is_graded': raw_score is not None,
+            'status': 'completed' if raw_score is not None else 'pending',
+            'window_state': x.window_state() if hasattr(x, 'window_state') else 'always_open',
+            'available_from': x.available_from.isoformat() if getattr(x, 'available_from', None) else None,
+            'due_at': x.due_at.isoformat() if getattr(x, 'due_at', None) else None,
         })
 
     return jsonify({
@@ -783,7 +908,23 @@ def check_gate(session_id):
     # Live join is gated ONLY by session status â€” the pre-lab quiz is
     # informational now (product decision: the gate was breaking the join
     # flow). gate_passed is still returned so the UI can show a nudge.
-    can_join_live = session.status == 'active'
+    # The live room is only open inside the scheduled window. A session left
+    # 'active' past its end time must not keep handing out room access.
+    from datetime import timedelta as _td
+    now_utc = datetime.utcnow()
+    starts_at = session.scheduled_at
+    ends_at = (starts_at + _td(minutes=session.duration_minutes or 60)) if starts_at else None
+    window_open = True
+    window_state = 'open'
+    if ends_at is not None:
+        if now_utc < starts_at:
+            window_open = False
+            window_state = 'upcoming'
+        elif now_utc > ends_at:
+            window_open = False
+            window_state = 'closed'
+
+    can_join_live = session.status == 'active' and window_open
 
     # T2-10 â€” auto check-in: a gate-cleared student is marked joined the
     # moment they open the session, even before the socket connects.
@@ -825,6 +966,15 @@ def check_gate(session_id):
         'lockdown_enabled': session.lockdown_enabled,
         'session_status':   session.status,
         'can_join_live':    can_join_live,
+        'window_state':     window_state,
+        'window_starts_at': _iso_z(starts_at) if starts_at else None,
+        'window_ends_at':   _iso_z(ends_at) if ends_at else None,
+        'server_now':       _iso_z(now_utc),
+        'window_message':   (
+            'This session has ended — live access is closed.' if window_state == 'closed'
+            else 'This session has not started yet.' if window_state == 'upcoming'
+            else None
+        ),
     }), 200
 
 
@@ -869,37 +1019,54 @@ def my_rankings():
         SectionSubject.institution_id == g.institution_id
     ).all() if sec_ids else []
 
-    from app.ml.ranking import compute_rankings_for_section_subject
-    for ss in sec_subjects:
-        has_rank = StudentRanking.query.filter_by(section_subject_id=ss.id).first()
-        if not has_rank:
-            try:
-                compute_rankings_for_section_subject(ss.id, g.institution_id)
-            except Exception:
-                pass
+    # ONE engine: the canonical scoring in app/analytics/ranking.py.
+    # student_rankings is now a write-through cache of that engine, so the
+    # student's own card and the cohort leaderboard can never diverge.
+    from app.analytics.ranking import compute_section_subject_ranks
 
-    rankings = StudentRanking.query.filter_by(student_id=g.user_id).all()
     visible = []
-    for r in rankings:
-        ss = SectionSubject.query.get(r.section_subject_id)
-        if not ss:
-            continue
+    for ss in sec_subjects:
         latest = (Experiment.query.filter_by(
             subject_id=ss.subject_id, instructor_id=ss.instructor_id,
             is_published=True,
         ).order_by(Experiment.exp_number.desc()).first())
         if latest and latest.ranking_visible is False:
             continue
-        rd = r.to_dict()
+
+        try:
+            rows = compute_section_subject_ranks(ss.id, g.institution_id)
+        except Exception:
+            rows = []
+
+        mine = next((r for r in rows if r['student_id'] == g.user_id), None)
+        if not mine or mine.get('rank_score') is None:
+            continue
+
         subj = Subject.query.get(ss.subject_id) if ss.subject_id else None
-        if subj:
-            rd['subject_name'] = subj.name
-            rd['subject_code'] = subj.code or ''
-            rd['subject_color'] = subj.color or '#7c3aed'
-            rd['subject_icon'] = subj.icon or 'datastruct'
-        cohort_count = StudentRanking.query.filter_by(section_subject_id=ss.id).count()
-        rd['cohort_size'] = cohort_count or 1
-        visible.append(rd)
+        visible.append({
+            'section_subject_id': ss.id,
+            'student_id': mine['student_id'],
+            'rank_position': mine['rank_position'],
+            'rank_score': mine['rank_score'],
+            'percentile': mine['percentile'],
+            'percentile_available': mine['percentile_available'],
+            'cohort_size': len(rows),
+            'score_coverage': mine['score_coverage'],
+            'score_factors_available': mine['score_factors_available'],
+            'score_factors_missing': mine['score_factors_missing'],
+            'components': {
+                'mastery': mine['mastery_score'],
+                'engagement': mine['engagement_score'],
+                'effort': mine['effort_score'],
+                'efficiency': mine['efficiency_score'],
+                'consistency': mine['consistency_score'],
+            },
+            'updated_at': datetime.utcnow().isoformat(),
+            'subject_name': subj.name if subj else None,
+            'subject_code': (subj.code or '') if subj else '',
+            'subject_color': (subj.color or '#7c3aed') if subj else '#7c3aed',
+            'subject_icon': (subj.icon or 'datastruct') if subj else 'datastruct',
+        })
     return jsonify({'rankings': visible}), 200
 
 
@@ -1033,11 +1200,17 @@ def dashboard():
         student_id=g.user_id, institution_id=g.institution_id
     ).order_by(StudentRanking.rank_score.desc()).first()
 
-    # Grades summary
-    grades = Grade.query.filter_by(student_id=g.user_id).all()
-    avg_grade = (sum(g2.final_grade for g2 in grades if g2.final_grade is not None) /
-                 len([g2 for g2 in grades if g2.final_grade is not None])) if any(
-        g2.final_grade is not None for g2 in grades) else None
+    # Grades summary — same grade-scope rule as the analytics pages: only grades
+    # attached to an experiment count, so the dashboard headline matches the
+    # Submissions page and the instructor's view of the same student.
+    grades = Grade.query.filter(
+        Grade.student_id == g.user_id,
+        Grade.final_grade.isnot(None),
+        Grade.experiment_id.isnot(None),
+    ).all()
+    avg_grade = (
+        sum(g2.final_grade for g2 in grades) / len(grades)
+    ) if grades else None
 
     # Unread notifications
     unread_count = Notification.query.filter_by(

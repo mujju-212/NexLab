@@ -91,9 +91,14 @@ def build_academic_dashboard_payload(
             enrolled_subjects = filtered_subjs
 
     # 2. Fetch Grades for Student
+    # Grade-scope rule: unattributed grades (no experiment) never enter an
+    # average; they are surfaced separately as `unattributed_grades`.
+    from app.analytics.scope import count_unattributed_grades
     grades_query = (
         Grade.query
-        .filter(Grade.student_id == student_id, Grade.final_grade.isnot(None))
+        .filter(Grade.student_id == student_id,
+                Grade.final_grade.isnot(None),
+                Grade.experiment_id.isnot(None))
     )
 
     now = datetime.utcnow()
@@ -141,27 +146,46 @@ def build_academic_dashboard_payload(
     present_sessions = int(attendance_data.get('present', 0) or 0)
     absent_sessions = int(attendance_data.get('absent', 0) or 0)
     late_sessions = int(attendance_data.get('late', 0) or 0)
-    attendance_rate = float(attendance_data.get('attendance_rate', 0.0) or 0.0)
+    attendance_rate = attendance_data.get('attendance_rate')
+
+    # One bar per real session (oldest -> newest), from the same credit table.
+    _ATT_CREDIT = {'present': 1.0, 'late': 0.8, 'partial': 0.6,
+                   'inactive_present': 0.5, 'absent': 0.0}
+    attendance_bars = [
+        round(100 * _ATT_CREDIT.get((s.get('status') or 'absent').lower(), 0.0))
+        for s in list(reversed(attendance_data.get('sessions', [])))[-9:]
+    ]
 
     # 5. Overall Academic Score & Sparkline
     if all_grades:
         computed_avg = round(sum(float(g.final_grade or 0) for g in all_grades) / len(all_grades), 1)
         overall_score = round(computed_avg)
     else:
-        overall_score = 0
-    overall_delta = 0.0
+        overall_score = None      # no graded work => unmeasured, not 0%
+    # Real delta: latest grade vs the mean of everything before it. With a
+    # single grade there is no prior period, so it stays None (UI prints "—").
+    if len(all_grades) >= 2:
+        _chrono = sorted(all_grades, key=lambda g: (g.graded_at or g.created_at))
+        _prior = [float(g.final_grade) for g in _chrono[:-1] if g.final_grade is not None]
+        _last = float(_chrono[-1].final_grade) if _chrono[-1].final_grade is not None else None
+        if _prior and _last is not None:
+            _base = sum(_prior) / len(_prior)
+            overall_delta = round(_last - _base, 1) if _base else None
+        else:
+            overall_delta = None
+    else:
+        overall_delta = None
 
     # Sparkline from chronological grades
     chronological_grades = list(reversed(all_grades))
     if len(chronological_grades) >= 7:
         sparkline_overall = [round(float(g.final_grade or 0)) for g in chronological_grades[-7:]]
     elif chronological_grades:
-        pts = [round(float(g.final_grade or 0)) for g in chronological_grades]
-        while len(pts) < 7:
-            pts.insert(0, pts[0])
-        sparkline_overall = pts
+        # Real points only — the series used to be left-padded by repeating the
+        # first grade, which drew a flat run that never happened.
+        sparkline_overall = [round(float(g.final_grade or 0)) for g in chronological_grades]
     else:
-        sparkline_overall = [0, 0, 0, 0, 0, 0, 0]
+        sparkline_overall = []
 
     enrolled_count = len(enrolled_subjects)
     on_track_count = 0
@@ -192,21 +216,26 @@ def build_academic_dashboard_payload(
             avg_g = round(sum(float(g.final_grade or 0) for g in s_grades) / len(s_grades))
             completed_s = len({g.experiment_id for g in s_grades if g.final_grade is not None})
         else:
-            avg_g = 0
+            # No graded work in this subject: unmeasured, not zero.
+            avg_g = None
             completed_s = 0
 
         c_pct = round((completed_s / max(1, subj_assigned)) * 100) if subj_assigned > 0 else 0
-        if avg_g >= 65:
+        if avg_g is not None and avg_g >= 65:
             on_track_count += 1
 
-        # Sparkline for subject
-        if s_grades:
-            s_pts = [round(float(g.final_grade or 0)) for g in reversed(s_grades)]
-            while len(s_pts) < 6:
-                s_pts.insert(0, s_pts[0])
-            s_spark = s_pts[-6:]
+        # Sparkline: real graded points only, oldest -> newest. The old code
+        # repeated the first grade until it had six points, drawing a flat line
+        # that implied a stable history the student never had.
+        ordered = sorted(s_grades, key=lambda g: (g.graded_at or g.created_at))
+        s_spark = [round(float(g.final_grade)) for g in ordered if g.final_grade is not None]
+
+        # Real trend: latest grade vs the mean of the earlier ones in this subject.
+        if len(s_spark) >= 2:
+            _prev = sum(s_spark[:-1]) / len(s_spark[:-1])
+            trend_pct = round(s_spark[-1] - _prev, 1) if _prev else None
         else:
-            s_spark = [0, 0, 0, 0, 0, 0]
+            trend_pct = None
 
         subject_performance_list.append({
             'id': subj.id,
@@ -217,7 +246,7 @@ def build_academic_dashboard_payload(
             'completed': completed_s,
             'total': subj_assigned,
             'completion_pct': c_pct,
-            'trend_pct': avg_g,
+            'trend_pct': trend_pct,
             'sparkline': s_spark,
             'color': st['color'],
             'bg': st['bg'],
@@ -226,9 +255,9 @@ def build_academic_dashboard_payload(
         })
 
     # 6. Academic Rank from Multi-Scope Ranking Engine
-    rank_pos = 1
+    rank_pos = None            # unranked students must not display "#1"
     cohort_size = max(1, enrolled_count)
-    rank_percentile = 100
+    rank_percentile = None
     try:
         ranks_data = get_student_all_ranks(student_id=student_id, institution_id=iid)
         inst_rank = ranks_data.get('institution') or ranks_data.get('section') or {}
@@ -236,13 +265,20 @@ def build_academic_dashboard_payload(
             rank_pos = inst_rank['position']
         if inst_rank.get('cohort_size'):
             cohort_size = inst_rank['cohort_size']
-        if inst_rank.get('percentile'):
+        if inst_rank.get('percentile') is not None:
             rank_percentile = round(inst_rank['percentile'])
     except Exception:
         pass
 
-    top_pct = max(1, 100 - rank_percentile)
-    sparkline_rank = [rank_pos] * 7
+    if cohort_size < 2:
+        rank_text = 'Only student in cohort'
+    elif cohort_size < 5 or rank_percentile is None:
+        rank_text = 'Cohort too small for a percentile'
+    else:
+        rank_text = f"Top {max(1, 100 - round(rank_percentile))}% in Cohort"
+    # Rank history must come from real snapshots; a repeated current rank is not
+    # a trend. Empty list => the UI renders no sparkline.
+    sparkline_rank = []
 
     # 7. Performance Trend (12 Weeks Real Series)
     weeks = [f"W{i+1}" for i in range(12)]
@@ -261,25 +297,28 @@ def build_academic_dashboard_payload(
                 s_c = _normalize_subject_code(exp.subject.code if getattr(exp, 'subject', None) else 'DSA')
                 subject_weekly_buckets[s_c][w_idx].append(val)
 
+    # P3: weeks with no graded work are gaps (None) — they used to be filled
+    # with the student's *current* average, which drew a flat 12-week line
+    # asserting stability that was never measured.
     overall_trend = []
-    last_known = overall_score
     for i in range(12):
-        if weekly_overall_buckets[i]:
-            last_known = round(sum(weekly_overall_buckets[i]) / len(weekly_overall_buckets[i]))
-        overall_trend.append(last_known)
+        bucket = weekly_overall_buckets.get(i)
+        overall_trend.append(round(sum(bucket) / len(bucket)) if bucket else None)
 
+    # One series per subject the student is ACTUALLY enrolled in. Previously this
+    # iterated a hardcoded ['DSA','DBMS','CN','OS','SE'] list, so every student
+    # saw five subjects on the chart regardless of enrolment.
     trend_subjects = []
-    for s_code in ['DSA', 'DBMS', 'CN', 'OS', 'SE']:
+    for item in subject_performance_list:
+        s_code = item['code']
         st = SUBJECT_STYLE_MAP.get(s_code, SUBJECT_STYLE_MAP['DSA'])
         s_data = []
-        last_s = next((item['avg_grade'] for item in subject_performance_list if item['code'] == s_code), 0)
         for i in range(12):
-            if subject_weekly_buckets[s_code][i]:
-                last_s = round(sum(subject_weekly_buckets[s_code][i]) / len(subject_weekly_buckets[s_code][i]))
-            s_data.append(last_s)
+            bucket = subject_weekly_buckets.get(s_code, {}).get(i)
+            s_data.append(round(sum(bucket) / len(bucket)) if bucket else None)
         trend_subjects.append({
             'code': s_code,
-            'name': s_code,
+            'name': item.get('name') or s_code,
             'color': st['color'],
             'data': s_data,
         })
@@ -321,7 +360,7 @@ def build_academic_dashboard_payload(
 
     # 9. Real Attendance Breakdown Donut
     attendance_donut = {
-        'rate': round(attendance_rate),
+        'rate': None if attendance_rate is None else round(attendance_rate),
         'present': present_sessions,
         'absent': absent_sessions,
         'excused': late_sessions,
@@ -331,8 +370,8 @@ def build_academic_dashboard_payload(
 
     # 10. Real Risk & Guidance from Risk Engine
     risk_guidance = {
-        'status': 'On Track' if overall_score >= 65 and attendance_rate >= 75 else 'Needs Attention',
-        'status_color': 'green' if overall_score >= 65 and attendance_rate >= 75 else 'orange',
+        'status': 'On Track' if (overall_score or 0) >= 65 and (attendance_rate or 0) >= 75 else 'Needs Attention',
+        'status_color': 'green' if (overall_score or 0) >= 65 and (attendance_rate or 0) >= 75 else 'orange',
         'subtitle': 'Academic metrics are healthy.' if overall_score >= 65 else 'Review upcoming lab sessions and complete pending experiments.',
         'items': [],
     }
@@ -353,7 +392,7 @@ def build_academic_dashboard_payload(
             'type': 'warning',
             'icon': 'alert-triangle',
         })
-    if attendance_rate < 80 and scheduled_sessions > 0:
+    if attendance_rate is not None and attendance_rate < 80 and scheduled_sessions > 0:
         risk_guidance['items'].append({
             'id': 'g3',
             'title': 'Attendance Alert',
@@ -436,16 +475,19 @@ def build_academic_dashboard_payload(
             'experiments_completed': completed_exps,
             'experiments_total': total_assigned_exps,
             'experiments_completion_pct': round(completion_pct),
-            'attendance_rate': round(attendance_rate),
+            'attendance_rate': None if attendance_rate is None else round(attendance_rate),
             'attendance_period': 'This month' if period == '30d' else 'This semester',
-            'attendance_mini_bars': [round(attendance_rate)] * 9 if scheduled_sessions > 0 else [0] * 9,
-            'academic_rank': f"#{rank_pos} / {cohort_size}",
+            # One bar per real session, oldest -> newest (was the same rate
+            # duplicated nine times).
+            'attendance_mini_bars': attendance_bars,
+            'academic_rank': f"#{rank_pos} / {cohort_size}" if rank_pos else 'Not ranked yet',
             'rank_position': rank_pos,
             'rank_cohort': cohort_size,
-            'rank_delta': '0',
-            'rank_percentile_text': f"Top {top_pct}% in Cohort",
+            'rank_delta': None,
+            'rank_percentile_text': rank_text,
             'sparkline_rank': sparkline_rank,
         },
+        'unattributed_grades': count_unattributed_grades([student_id]),
         'performance_trend': trend_series,
         'subject_performance': subject_performance_list,
         'concept_mastery': concept_mastery_list,

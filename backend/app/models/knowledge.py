@@ -52,16 +52,21 @@ class StudentRanking(db.Model):
     )
 
     def to_dict(self):
+        # Components are nullable: a student with no measurable factor keeps
+        # NULLs so the UI can print an em dash instead of a fake 0.0.
+        def _r(v):
+            return None if v is None else round(v, 1)
+
         return {
             'section_subject_id': self.section_subject_id,
-            'rank_score': round(self.rank_score, 1),
+            'rank_score': _r(self.rank_score),
             'rank_position': self.rank_position,
             'components': {
-                'mastery': round(self.mastery_score, 1),
-                'engagement': round(self.engagement_score, 1),
-                'effort': round(self.effort_score, 1),
-                'efficiency': round(self.efficiency_score, 1),
-                'consistency': round(self.consistency_score, 1),
+                'mastery': _r(self.mastery_score),
+                'engagement': _r(self.engagement_score),
+                'effort': _r(self.effort_score),
+                'efficiency': _r(self.efficiency_score),
+                'consistency': _r(self.consistency_score),
             },
             'updated_at': self.updated_at.isoformat() if self.updated_at else None,
         }

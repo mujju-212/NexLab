@@ -116,8 +116,13 @@ def student_analytics_overview():
     # 6. Enriched Visual & Telemetry Modules for Growth Dashboard
     student_profile = build_growth_student_profile(student_id, g.institution_id)
 
-    avg_grade = academic_360.get('grades', {}).get('avg_grade', 78.0) or 78.0
-    rating_val = platform_standing.get('rating', 1540.0) or 1540.0
+    # No invented defaults: a student with no graded work has a 0 average and no
+    # rating yet. (Was 78.0 / 1540.0, which reported a passing grade to students
+    # who had never submitted anything.)
+    avg_grade = academic_360.get('grades', {}).get('avg_grade')  # None == not graded yet
+    rating_val = platform_standing.get('rating')
+    if rating_val is None:
+        rating_val = 0
     learning_trend = build_learning_trend_12_weeks(student_id, target_grade=avg_grade, target_rating=rating_val, period=period)
 
     recent_activity = build_recent_activity(student_id, period=period)
@@ -129,7 +134,7 @@ def student_analytics_overview():
     achievements = build_achievements(student_id, platform_standing)
     concept_breakdown = build_concept_breakdowns(blended_map.get('knowledge_map', []))
     summary_kpis = build_summary_kpis(
-        average_blended=blended_map.get('average_blended_mastery', 72.0),
+        average_blended=blended_map.get('average_blended_mastery'),
         completion=academic_360.get('completion', {}),
         platform=platform_standing,
         knowledge_map=blended_map.get('knowledge_map', []),
@@ -647,6 +652,37 @@ def student_platform_dashboard():
 # ══════════════════════════════════════════════════════════════════════════════
 # PUBLIC / PLATFORM LEADERBOARDS (Track 2)
 # ══════════════════════════════════════════════════════════════════════════════
+
+@platform_public_bp.route('/public-stats', methods=['GET'])
+def platform_public_stats():
+    """Real, unauthenticated platform counters for the sign-in / sign-up hero.
+
+    Tenancy-safe: only aggregate counts, no names or per-tenant detail.
+    """
+    from app.models.user import User
+    from app.models.institution import Institution
+    from app.models.experiment import Experiment
+
+    try:
+        active_students = User.query.filter_by(role='student', is_active=True).count()
+        institutions = Institution.query.count()
+        experiments = Experiment.query.filter_by(is_published=True).count()
+    except Exception:
+        # Never fabricate a number if the probe fails.
+        return jsonify({
+            'active_students': None,
+            'institutions': None,
+            'experiments': None,
+            'available': False,
+        }), 200
+
+    return jsonify({
+        'active_students': active_students,
+        'institutions': institutions,
+        'experiments': experiments,
+        'available': True,
+    }), 200
+
 
 @platform_public_bp.route('/leaderboard', methods=['GET'])
 @require_auth
