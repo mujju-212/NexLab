@@ -700,7 +700,7 @@ export const experienceService = {
 
   // ── Tier 2/3 enhancements ─────────────────────────────────────────────────
 
-  async earlyWarning(ssId: string): Promise<{ students: EarlyWarningRow[] }> {
+  async earlyWarning(ssId: string): Promise<{ students: EarlyWarningRow[]; not_enough_data?: number }> {
     const { data } = await apiClient.get(`/instructor/early-warning/${ssId}`);
     return data;
   },

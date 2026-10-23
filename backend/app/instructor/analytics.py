@@ -2295,12 +2295,22 @@ def analytics_cohort_matrix():
         })
 
     # Percentiles within cohort
+    # A percentile against a cohort of 1-4 is noise; report None ("n/a").
+    # compute_percentile also returns None for a student whose own metric is
+    # unmeasured — wrapping it in int() crashed the whole cohort matrix with a
+    # TypeError for any class containing a student without mastery data.
+    _min_cohort = 5
+
+    def _cohort_percentile(value, dist):
+        if len(dist) < _min_cohort:
+            return None
+        pct = compute_percentile(value, dist)
+        return int(pct) if pct is not None else None
+
     for r in raw_list:
-        # A percentile against a cohort of 1-4 is noise; report None ("n/a").
-        _min_cohort = 5
-        r['mastery_p'] = int(compute_percentile(r['_m'], mastery_dist)) if len(mastery_dist) >= _min_cohort else None
-        r['grade_p'] = int(compute_percentile(r['_g'], grade_dist)) if len(grade_dist) >= _min_cohort else None
-        r['attendance_p'] = int(compute_percentile(r['_a'], att_dist)) if len(att_dist) >= _min_cohort else None
+        r['mastery_p'] = _cohort_percentile(r['_m'], mastery_dist)
+        r['grade_p'] = _cohort_percentile(r['_g'], grade_dist)
+        r['attendance_p'] = _cohort_percentile(r['_a'], att_dist)
         del r['_m']
         del r['_g']
         del r['_a']

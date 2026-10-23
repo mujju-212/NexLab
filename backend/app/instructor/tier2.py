@@ -71,6 +71,11 @@ def early_warning(ss_id):
       focus_decline  (×1): avg focus < 50
       missing_grades (×1): ended sessions of mine with no grade row yet
     Score ≥ 6 → high, 3–5 → medium, else low.
+
+    Students with *no* evidence at all in any signal (no mastery, no focus, no
+    submission, no missed session) are reported as `not_enough_data` instead of
+    being scored. Before this, a brand-new cohort came back as 100% "medium
+    risk — no submissions recorded", which made the early-warning list useless.
     """
     ss = SectionSubject.query.filter_by(
         id=ss_id, institution_id=g.institution_id).first()
@@ -149,6 +154,7 @@ def early_warning(ss_id):
                 missing_grades[sid] = missing_grades.get(sid, 0) + 1
 
     out = []
+    not_enough_data = 0
     for sid in enrolled:
         u = users.get(sid)
         if not u:
@@ -157,6 +163,12 @@ def early_warning(ss_id):
         last_sub = last_submission.get(sid)
         f = focus_avg.get(sid)
         missing = missing_grades.get(sid, 0)
+
+        # No signal in any dimension → we know nothing about this student, which
+        # is not the same thing as "medium risk".
+        if m is None and f is None and last_sub is None and missing == 0:
+            not_enough_data += 1
+            continue
 
         score = 0
         reasons = []
@@ -208,7 +220,8 @@ def early_warning(ss_id):
             })
 
     out.sort(key=lambda x: x['risk_score'], reverse=True)
-    return jsonify({'students': out, 'ss_id': ss_id}), 200
+    return jsonify({'students': out, 'ss_id': ss_id,
+                    'not_enough_data': not_enough_data}), 200
 
 
 # ══════════════════════════════════════════════════════════════════════════════

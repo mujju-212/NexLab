@@ -61,6 +61,29 @@ const OUTCOME_COLORS: Record<string, string> = {
 const fmtDT = (iso?: string | null) =>
   iso ? new Date(iso).toLocaleString('en-IN', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' }) : '—';
 
+/**
+ * The analytics API returns risk bands `critical | high | watch | ok | low | unknown`.
+ * The page used to compare them against invented names ("at_risk", "excelling",
+ * "steady"), so "On Track" matched the *watch* band and "Excelling" matched every
+ * merely-ok student. These helpers are the single source of that mapping.
+ */
+function bandOf(st: any): string {
+  return String(st?.status_band || st?.risk_band || 'ok').toLowerCase();
+}
+function isAtRisk(st: any): boolean {
+  const b = bandOf(st);
+  return b === 'critical' || b === 'high';
+}
+function needsAttention(st: any): boolean {
+  return bandOf(st) === 'watch';
+}
+function isExcelling(st: any): boolean {
+  const mastery = st?.mastery_pct ?? st?.mastery_score;
+  const avg = st?.grade_avg ?? st?.avg_score;
+  if (mastery != null && mastery >= 80) return true;
+  return avg != null && avg >= 85;
+}
+
 function cellColor(v: number | null, threshold: number) {
   if (v == null) return { background: '#f3f0fa', color: '#c9c2d8' };
   if (v < threshold * 0.5) return { background: '#dc2626', color: '#fff' };
@@ -83,7 +106,7 @@ export default function ManagementPage() {
   const [selectedSection, setSelectedSection] = useState<string>('all');
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
   const [searchQuery, setSearchQuery] = useState<string>('');
-  const [riskFilter, setRiskFilter] = useState<'all' | 'at_risk' | 'top' | 'on_track'>('all');
+  const [riskFilter, setRiskFilter] = useState<'all' | 'at_risk' | 'attention' | 'top' | 'on_track'>('all');
 
   const toast3 = (m: string) => { setToast(m); setTimeout(() => setToast(null), 3200); };
 
@@ -183,13 +206,17 @@ export default function ManagementPage() {
 
   const activeSsId = matchingSectionSubjects.length === 1 ? matchingSectionSubjects[0].section_subject_id : '';
   const activeSectionName = useMemo(() => {
-    if (selectedSection === 'all') return undefined;
-    return availableSections.find(s => s.section_id === selectedSection)?.section_name;
-  }, [selectedSection, availableSections]);
+    if (selectedSection !== 'all') return availableSections.find(s => s.section_id === selectedSection)?.section_name;
+    // Unfiltered, but the instructor only teaches one class: name it rather than
+    // printing the generic "Assigned Section" in every row.
+    if (matchingSectionSubjects.length === 1) return matchingSectionSubjects[0].section_name;
+    return undefined;
+  }, [selectedSection, availableSections, matchingSectionSubjects]);
   const activeSubjectName = useMemo(() => {
-    if (selectedSubject === 'all') return undefined;
-    return availableSubjects.find(s => s.subject_id === selectedSubject)?.subject_name;
-  }, [selectedSubject, availableSubjects]);
+    if (selectedSubject !== 'all') return availableSubjects.find(s => s.subject_id === selectedSubject)?.subject_name;
+    if (matchingSectionSubjects.length === 1) return matchingSectionSubjects[0].subject_name;
+    return undefined;
+  }, [selectedSubject, availableSubjects, matchingSectionSubjects]);
 
   // Fetch Rich Cohort Matrix for Class Roster & Student 360
   const { data: cohortData, isLoading: loadingCohort } = useQuery({
@@ -212,10 +239,10 @@ export default function ManagementPage() {
   const cohortStudents = useMemo(() => {
     const raw = cohortData?.students ?? [];
     return raw.filter((st: any) => {
-      const band = st.status_band || st.risk_band || 'ok';
-      if (riskFilter === 'at_risk' && band !== 'at_risk' && band !== 'critical' && band !== 'high') return false;
-      if (riskFilter === 'top' && band !== 'top' && band !== 'excelling' && band !== 'ok') return false;
-      if (riskFilter === 'on_track' && band !== 'on_track' && band !== 'steady' && band !== 'watch') return false;
+      if (riskFilter === 'at_risk' && !isAtRisk(st)) return false;
+      if (riskFilter === 'attention' && !needsAttention(st)) return false;
+      if (riskFilter === 'top' && !isExcelling(st)) return false;
+      if (riskFilter === 'on_track' && (isAtRisk(st) || needsAttention(st))) return false;
       if (searchQuery.trim()) {
         const q = searchQuery.toLowerCase();
         return (
@@ -455,9 +482,10 @@ export default function ManagementPage() {
             <div className={styles.kpiCard}>
               <p className={styles.kpiLabel}>Top Performers</p>
               <p className={styles.kpiValue} style={{ color: '#7c3aed' }}>
-                {(cohortData?.kpis as any)?.top_performers_count ?? cohortStudents.filter((s: any) => s.risk_band === 'ok' || s.mastery_pct >= 80).length}
+                {(cohortData?.kpis as any)?.top_performers_count
+                  ?? (cohortData?.students ?? []).filter((s: any) => isExcelling(s)).length}
               </p>
-              <p className={styles.kpiSub}>Avg mastery ≥ 80%</p>
+              <p className={styles.kpiSub}>Mastery ≥ 80% or average ≥ 85%</p>
             </div>
           </div>
 
@@ -480,6 +508,7 @@ export default function ManagementPage() {
                   {([
                     { id: 'all', label: 'All Students' },
                     { id: 'at_risk', label: 'At-Risk' },
+                    { id: 'attention', label: 'Needs Attention' },
                     { id: 'on_track', label: 'On Track' },
                     { id: 'top', label: 'Excelling' },
                   ] as const).map(f => (
@@ -526,13 +555,15 @@ export default function ManagementPage() {
                   </thead>
                   <tbody>
                     {cohortStudents.map((st: any) => {
-                      const band = st.status_band || st.risk_band || 'ok';
-                      const isRisk = band === 'at_risk' || band === 'critical' || band === 'high';
-                      const isTop = band === 'top' || band === 'excelling' || band === 'ok' || (st.mastery_pct ?? st.mastery_score ?? 0) >= 80;
+                      const isRisk = isAtRisk(st);
+                      const watch = needsAttention(st);
+                      const isTop = isExcelling(st);
                       const avgScore = st.avg_score ?? st.grade_avg ?? 0;
                       const completedExps = st.completed_experiments ?? st.completion?.completed ?? 0;
                       const totalExps = st.total_experiments ?? st.completion?.total ?? 0;
-                      const masteryScore = st.mastery_score ?? st.mastery_pct ?? 0;
+                      // `?? 0` here used to render "Mastery 0%" for every student
+                      // whose mastery was never measured — a fake number, not a dash.
+                      const masteryScore = st.mastery_score ?? st.mastery_pct ?? null;
                       return (
                         <tr
                           key={st.student_id}
@@ -557,9 +588,10 @@ export default function ManagementPage() {
                           </td>
                           <td>
                             <span className={`${styles.pill} ${
-                              isRisk ? styles.pillRed : isTop ? styles.pillGreen : styles.pillBlue
+                              isRisk ? styles.pillRed : watch ? styles.pillAmber : styles.pillGreen
                             }`}>
-                              {isRisk ? '⚠️ At-Risk' : isTop ? '⭐ Excelling' : '✓ On Track'}
+                              {isRisk ? '⚠ At risk' : watch ? '👀 Needs attention' : '✓ On track'}
+                              {isTop && <span style={{ marginLeft: 4 }}>· ⭐</span>}
                             </span>
                           </td>
                           <td>
@@ -873,6 +905,7 @@ function InsightsTab({ toast3 }: { toast3: (m: string) => void }) {
   const [sectionSubjects, setSectionSubjects] = useState<Array<{ section_subject_id: string; subject_name: string; section_name: string }>>([]);
   const [ssId, setSsId] = useState('');
   const [warnings, setWarnings] = useState<Array<import('@/services/experience.service').EarlyWarningRow>>([]);
+  const [noDataCount, setNoDataCount] = useState(0);
   const [experiments, setExperiments] = useState<Array<{ id: string; title: string }>>([]);
   const [expId, setExpId] = useState('');
   const [hint, setHint] = useState<import('@/services/experience.service').HintEffectiveness | null>(null);
@@ -892,11 +925,12 @@ function InsightsTab({ toast3 }: { toast3: (m: string) => void }) {
     setLoading(true);
     try {
       const [w, h, er] = await Promise.all([
-        ssId ? experienceService.earlyWarning(ssId) : Promise.resolve({ students: [] }),
+        ssId ? experienceService.earlyWarning(ssId) : Promise.resolve({ students: [], not_enough_data: 0 }),
         expId ? experienceService.hintEffectiveness(expId) : Promise.resolve(null),
         expId ? experienceService.errorAnalysis(expId) : Promise.resolve(null),
       ]);
       setWarnings(w.students);
+      setNoDataCount(w.not_enough_data ?? 0);
       setHint(h);
       setErrors(er);
     } catch { /* keep old data */ }
@@ -924,7 +958,13 @@ function InsightsTab({ toast3 }: { toast3: (m: string) => void }) {
       <div className={styles.sectionCard} style={{ marginBottom: 16 }}>
         <p className={styles.sectionTitle} style={{ marginBottom: 10 }}>Early Warning — Trend-Based Risk Detection</p>
         {warnings.length === 0 ? (
-          <p className={styles.sectionSub}>No students currently trending at risk for this section.</p>
+          <p className={styles.sectionSub}>
+            No students are trending at risk on the signals this model reads (submissions, mastery, focus, missed
+            sessions).
+            {noDataCount > 0
+              ? ` ${noDataCount} student${noDataCount === 1 ? ' has' : 's have'} no activity data yet, so no risk can be scored for them.`
+              : ''}
+          </p>
         ) : (
           <div className={styles.list}>
             {warnings.slice(0, 10).map(w => (
