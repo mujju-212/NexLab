@@ -48,6 +48,7 @@ from app.models.admin_copilot import (
     AdminChatSession, AdminChatMessage, InstitutionDocument,
     AIGeneratedDocument, AIConversation, AIMessage,
 )
+from app.models.ai_documents import DocumentChunk
 from app.models.analytics_config import AnalyticsConfig
 from app.models.analytics_snapshot import StudentMetricSnapshot, InstitutionDailyKPI
 from app.models.analytics_rank import RankSnapshot
@@ -88,6 +89,7 @@ __all__ = [
     'FAQArticle', 'SupportTicket',
     'AIUserQuota', 'AIFeatureConfig', 'SecurityEvent', 'ComplianceSetting',
     'AdminChatSession', 'AdminChatMessage', 'InstitutionDocument',
+    'DocumentChunk',
     'AIGeneratedDocument', 'AIConversation', 'AIMessage',
     'AnalyticsConfig', 'StudentMetricSnapshot', 'InstitutionDailyKPI',
     'RankSnapshot', 'ExperimentConcept', 'ConceptPrereq',
