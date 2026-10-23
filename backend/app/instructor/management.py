@@ -21,8 +21,17 @@ from datetime import datetime
 
 mgmt_bp = Blueprint('instructor_mgmt', __name__)
 
-VALID_ACTIONS = ('talked_to_student', 'extended_deadline', 're_graded',
-                 'contacted_guardian', 'tutoring', 'resources_shared', 'other')
+# One vocabulary for every surface that can log an intervention: the class
+# Interventions tab, the Student 360 drawer and the analytics API. The drawer
+# used to send '1_on_1_review' and friends, which this endpoint rejected with 400
+# while /api/analytics/interventions stored them unvalidated — same table, two
+# vocabularies, unlabelable rows in the list.
+VALID_ACTIONS = (
+    'talked_to_student', 'extended_deadline', 're_graded', 'contacted_guardian',
+    'tutoring', 'resources_shared', 'other',
+    '1_on_1_review', 'practice_assignment', 'peer_tutoring', 'counseling',
+    'deadline_extension',
+)
 VALID_OUTCOMES = ('open', 'improved', 'no_change', 'worsened')
 
 

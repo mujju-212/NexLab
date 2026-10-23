@@ -125,16 +125,23 @@ def compute_integrity_confidence(
     ])
     n_plag = len(plag_flags)
     deduction = scored['penalty'] + (15.0 * n_plag)
-    confidence = max(0.0, round(100.0 - deduction, 1))
+
+    # No proctor events, no submitted attempts and no flags is *absence of
+    # evidence*, not proof of integrity: a student who never logged in used to
+    # come back as a green "100% trustworthy".
+    has_evidence = bool(events or attempts or plag_flags)
+    confidence = max(0.0, round(100.0 - deduction, 1)) if has_evidence else None
 
     review_recommended = bool(
-        confidence < 70.0
+        confidence is not None and confidence < 70.0
         or severity_counts['high'] >= 1
         or len(plag_flags) > 0
         or len(anomalies) > 0
     )
 
-    if confidence >= 85.0:
+    if confidence is None:
+        band = 'no_data'
+    elif confidence >= 85.0:
         band = 'trustworthy'
     elif confidence >= 70.0:
         band = 'minor_flags'

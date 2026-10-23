@@ -27,14 +27,46 @@ from app.analytics.interventions import (
     list_interventions,
 )
 from app.analytics.config import get_analytics_config, save_analytics_config
+from sqlalchemy import or_
+from app.models.user import User
 
 student_analytics_bp = Blueprint('student_analytics', __name__)
 
 
 def _enforce_self_scope(target_student_id: str):
-    """Ensure student roles can only access their own analytics."""
-    if g.role == 'student' and g.user_id != target_student_id:
-        return jsonify({'error': 'Access denied: students may only access their own analytics'}), 403
+    """Tenant + role scoping for every student-scoped analytics endpoint.
+
+    Students may only read themselves. Instructors may only read students who are
+    enrolled in a section they actually teach — before this, any instructor could
+    pull the full 360 profile of any student in the institution just by holding
+    the id, and the lookup itself (`User.query.get`) had no tenant filter, so a
+    student from another institution resolved too.
+    """
+    if g.role == 'student':
+        if g.user_id != target_student_id:
+            return jsonify({'error': 'Access denied: students may only access their own analytics'}), 403
+        return None
+
+    student = User.query.get(target_student_id)
+    if not student:
+        return jsonify({'error': 'Student not found'}), 404
+    if student.institution_id and g.institution_id and student.institution_id != g.institution_id:
+        return jsonify({'error': 'Student is not part of this institution'}), 404
+
+    if g.role == 'instructor':
+        from app.models.academic import SectionSubject, SectionStudent
+        mine = SectionSubject.query.filter(
+            SectionSubject.institution_id == g.institution_id,
+            or_(SectionSubject.instructor_id == g.user_id,
+                SectionSubject.co_instructor_id == g.user_id),
+        ).all()
+        section_ids = {ss.section_id for ss in mine}
+        enrolled = bool(section_ids) and SectionStudent.query.filter(
+            SectionStudent.student_id == target_student_id,
+            SectionStudent.section_id.in_(section_ids),
+        ).first() is not None
+        if not enrolled:
+            return jsonify({'error': 'This student is not enrolled in any of your classes'}), 403
     return None
 
 
@@ -359,12 +391,26 @@ def manage_interventions():
     if not student_id or not action_type:
         return jsonify({'error': 'student_id and action_type are required'}), 400
 
+    from app.instructor.management import VALID_ACTIONS
+    if action_type not in VALID_ACTIONS:
+        return jsonify({'error': f'action_type must be one of: {", ".join(VALID_ACTIONS)}'}), 400
+
+    # The Student 360 drawer sends `target_date`; the class interventions tab
+    # sends `follow_up_at`. Only the latter was read, so a follow-up date picked
+    # in the drawer was silently dropped and the "due" reminder never fired.
+    follow_up_str = follow_up_str or payload.get('target_date')
+
     follow_up_at = None
     if follow_up_str:
         try:
-            follow_up_at = datetime.fromisoformat(follow_up_str.replace('Z', ''))
+            follow_up_at = datetime.fromisoformat(str(follow_up_str).replace('Z', ''))
         except Exception:
             pass
+
+    # Same enrolment rule as the read paths: no logging actions on strangers.
+    blocked = _enforce_self_scope(student_id)
+    if blocked:
+        return blocked
 
     created = record_intervention(
         student_id=student_id,

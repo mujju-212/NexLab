@@ -470,14 +470,21 @@ export default function ManagementPage() {
               <p className={styles.kpiValue} style={{ color: '#059669' }}>
                 {cohortData?.kpis?.avg_grade?.value ?? ((cohortData?.kpis as any)?.avg_score != null ? `${(cohortData?.kpis as any).avg_score.toFixed(1)}%` : '—')}
               </p>
-              <p className={styles.kpiSub}>Weighted across completed labs</p>
+              <p className={styles.kpiSub}>
+                {(() => {
+                  const cov = cohortData?.kpis?.avg_grade?.coverage;
+                  if (!cov || cov.sample_size === 0) return 'No graded work yet';
+                  if (cov.is_representative) return `Mean of ${cov.sample_size} graded students`;
+                  return `Only ${cov.sample_size} of ${cov.cohort_size} students graded`;
+                })()}
+              </p>
             </div>
             <div className={styles.kpiCard}>
               <p className={styles.kpiLabel}>At-Risk Students</p>
               <p className={styles.kpiValue} style={{ color: '#dc2626' }}>
                 {cohortData?.kpis?.high_critical_risk?.value ?? (cohortData?.kpis as any)?.at_risk_count ?? 0}
               </p>
-              <p className={styles.kpiSub}>Requires intervention or relief</p>
+              <p className={styles.kpiSub}>Critical or high risk band</p>
             </div>
             <div className={styles.kpiCard}>
               <p className={styles.kpiLabel}>Top Performers</p>
@@ -485,7 +492,7 @@ export default function ManagementPage() {
                 {(cohortData?.kpis as any)?.top_performers_count
                   ?? (cohortData?.students ?? []).filter((s: any) => isExcelling(s)).length}
               </p>
-              <p className={styles.kpiSub}>Mastery ≥ 80% or average ≥ 85%</p>
+              <p className={styles.kpiSub}>Average grade ≥ 85% (mastery not yet measured)</p>
             </div>
           </div>
 

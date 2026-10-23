@@ -2358,6 +2358,16 @@ def analytics_cohort_matrix():
         vals = [s[key] for s in raw_list if s.get(key) is not None]
         return round(statistics.mean(vals)) if vals else None
 
+    def _coverage(key):
+        """How many students actually contributed to a cohort average.
+
+        A cohort mean computed from 1 of 9 students is a real number but not a
+        class figure; the UI needs the denominator to say so.
+        """
+        n = sum(1 for s in raw_list if s.get(key) is not None)
+        return {'sample_size': n, 'cohort_size': total_students,
+                'is_representative': n >= max(1, total_students) * 0.6}
+
     mean_mastery = _mean_of('mastery_pct')
     mean_grade = _mean_of('grade_avg')
     mean_att = _mean_of('attendance_rate')
@@ -2433,6 +2443,7 @@ def analytics_cohort_matrix():
                 'value': None if mean_mastery is None else f'{mean_mastery}%',
                 'raw_value': mean_mastery,
                 'is_available': mean_mastery is not None,
+                'coverage': _coverage('mastery_pct'),
                 'delta': _m_delta,
                 'delta_direction': _m_dir,
                 'delta_available': _m_delta is not None,
@@ -2442,6 +2453,7 @@ def analytics_cohort_matrix():
                 'value': None if mean_grade is None else f'{mean_grade} / 100',
                 'raw_value': mean_grade,
                 'is_available': mean_grade is not None,
+                'coverage': _coverage('grade_avg'),
                 'delta': _g_delta,
                 'delta_direction': _g_dir,
                 'sparkline': _g_spark,
@@ -2450,6 +2462,7 @@ def analytics_cohort_matrix():
                 'value': None if mean_att is None else f'{mean_att}%',
                 'raw_value': mean_att,
                 'is_available': mean_att is not None,
+                'coverage': _coverage('attendance_rate'),
                 'delta': _a_delta,
                 'delta_direction': _a_dir,
                 'sparkline': _a_spark,

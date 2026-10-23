@@ -324,7 +324,7 @@ export function Student360Drawer({
                     Mastery
                   </div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#7c3aed', marginTop: 2 }}>
-                    {Math.round(mastery?.scope_avg || 0)}%
+                    {mastery?.scope_avg == null ? '—' : `${Math.round(mastery.scope_avg)}%`}
                   </div>
                 </div>
                 <div style={{ background: '#f8fafc', padding: '12px', borderRadius: 10, textAlign: 'center' }}>
@@ -340,7 +340,7 @@ export function Student360Drawer({
                     Attendance
                   </div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#10b981', marginTop: 2 }}>
-                    {Math.round(attendance?.attendance_rate || 0)}%
+                    {attendance?.attendance_rate == null ? '—' : `${Math.round(attendance.attendance_rate)}%`}
                   </div>
                 </div>
                 <div style={{ background: '#f8fafc', padding: '12px', borderRadius: 10, textAlign: 'center' }}>
@@ -348,7 +348,7 @@ export function Student360Drawer({
                     Avg Grade
                   </div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 800, color: '#f59e0b', marginTop: 2 }}>
-                    {Math.round(grades?.average || 0)}%
+                    {grades?.average == null ? '—' : `${Math.round(grades.average)}%`}
                   </div>
                 </div>
               </div>
@@ -574,11 +574,18 @@ export function Student360Drawer({
                         style={{
                           fontSize: '1.4rem',
                           fontWeight: 800,
-                          color: (integrityData?.integrity_confidence ?? 100) >= 80 ? '#10b981' : '#ef4444',
+                          color:
+                            integrityData?.integrity_confidence == null
+                              ? '#64748b'
+                              : integrityData.integrity_confidence >= 80
+                              ? '#10b981'
+                              : '#ef4444',
                           marginTop: 4,
                         }}
                       >
-                        {Math.round(integrityData?.integrity_confidence ?? 100)}%
+                        {integrityData?.integrity_confidence == null
+                          ? '—'
+                          : `${Math.round(integrityData.integrity_confidence)}%`}
                       </div>
                     </div>
                     <div style={{ background: '#f8fafc', padding: 14, borderRadius: 10, textAlign: 'center' }}>

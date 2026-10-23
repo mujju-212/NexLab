@@ -25,7 +25,7 @@ def compute_scoped_mastery(
     Returns:
     {
         'scope': {'level': scope_level, 'id': scope_id},
-        'scope_avg': float,
+        'scope_avg': float | None,
         'concepts': [
             {
                 'concept': str,
@@ -106,7 +106,9 @@ def compute_scoped_mastery(
     concepts_data.sort(key=lambda x: x['mastery_score'])
 
     sample_size = len(concepts_data)
-    scope_avg = round(total_score / sample_size, 1) if sample_size > 0 else 0.0
+    # An empty sample has no average. Reporting 0.0 made every student without
+    # knowledge-tracing data look like they had mastered nothing.
+    scope_avg = round(total_score / sample_size, 1) if sample_size > 0 else None
 
     return {
         'scope': {'level': scope_level, 'id': scope_id},

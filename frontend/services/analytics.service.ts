@@ -619,13 +619,21 @@ export interface CohortStudentItem {
 }
 
 
+// How many students actually contributed to a cohort average — a mean built
+// from 1 of 9 students is real but not a class figure, so the UI must say so.
+export interface MetricCoverage {
+  sample_size: number;
+  cohort_size: number;
+  is_representative: boolean;
+}
+
 export interface CohortMatrixData {
   kpis: {
     students_in_scope: { value: number; total_enrolled: number; delta: string; sparkline: number[] };
     high_critical_risk: { value: number; percentage: string; delta: string; sparkline: number[] };
-    cohort_avg_mastery: { value: string; raw_value: number; delta: string; sparkline: number[] };
-    avg_grade: { value: string; raw_value: number; delta: string; sparkline: number[] };
-    attendance: { value: string; raw_value: number; delta: string; sparkline: number[] };
+    cohort_avg_mastery: { value: string | null; raw_value: number | null; is_available?: boolean; coverage?: MetricCoverage; delta: string; sparkline: number[] };
+    avg_grade: { value: string; raw_value: number; is_available?: boolean; coverage?: MetricCoverage; delta: string; sparkline: number[] };
+    attendance: { value: string | null; raw_value: number | null; is_available?: boolean; coverage?: MetricCoverage; delta: string; sparkline: number[] };
   };
   risk_distribution: {
     total_students: number;

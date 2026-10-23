@@ -306,7 +306,11 @@ def batch_student_atomic_metrics(
         if att_sample > 0:
             equiv_sum = sum(equiv_weights.get(x['status'], 0.0) for x in att_items)
             attendance_rate_val = min(100.0, (equiv_sum / att_sample) * 100.0)
-            effort_hours_val = sum(x['seconds'] for x in att_items) / 3600.0
+            # Attendance rows carry `seconds` only when the session actually
+            # measured active time. A sum of 0 means "unmeasured", not "the
+            # student did nothing", so effort stays None instead of 0.
+            total_seconds = sum(x['seconds'] or 0 for x in att_items)
+            effort_hours_val = (total_seconds / 3600.0) if total_seconds > 0 else None
         else:
             attendance_rate_val = None
             effort_hours_val = None
