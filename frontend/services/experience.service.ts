@@ -1,4 +1,5 @@
 import { apiClient } from './api-client';
+import type { AxiosResponse } from 'axios';
 
 // Instructor Experience service — analytics (6 tabs), Live Conductor,
 // checkpoints/rubric, bulk grading, settings, dashboard attention, reports.
@@ -617,28 +618,69 @@ export const experienceService = {
   },
 
   async downloadReport(reportId: string, fmt: 'csv' | 'xlsx' | 'pdf' = 'csv') {
-    const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
-    const token = (await import('js-cookie')).default.get('access_token');
-    const res = await fetch(`${base}/instructor/reports/${reportId}/download?format=${fmt}`, {
-      headers: token ? { Authorization: `Bearer ${token}` } : {},
-    });
-    if (!res.ok) {
-      let msg = 'Download failed';
-      try { msg = (await res.json()).error ?? msg; } catch { /* keep */ }
-      throw new Error(msg);
+    const expectedType: Record<typeof fmt, string> = {
+      csv: 'text/csv',
+      xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+      pdf: 'application/pdf',
+    };
+    let response: AxiosResponse<Blob>;
+    try {
+      response = await apiClient.get<Blob>(
+        `/instructor/reports/${encodeURIComponent(reportId)}/download`,
+        {
+          params: { format: fmt },
+          responseType: 'blob',
+          headers: { Accept: expectedType[fmt] },
+        },
+      );
+    } catch (error: any) {
+      // Axios returns an error Blob for responseType='blob'; decode JSON so the
+      // user sees the backend's actual message (e.g. "Report not ready").
+      const body = error?.response?.data;
+      let backendMessage: string | undefined;
+      if (body instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await body.text());
+          backendMessage = typeof parsed?.error === 'string' ? parsed.error : undefined;
+        } catch { /* non-JSON error body */ }
+      }
+      throw new Error(backendMessage || error?.response?.data?.error || error?.message || 'Report download failed.');
     }
-    const blob = await res.blob();
+
+    const blob = response.data;
+    const contentType = String(response.headers['content-type'] || blob.type || '')
+      .split(';', 1)[0].trim().toLowerCase();
+    if (fmt === 'pdf') {
+      const signature = new TextDecoder().decode(await blob.slice(0, 5).arrayBuffer());
+      if (signature !== '%PDF-' || (contentType && contentType !== 'application/pdf' && contentType !== 'application/octet-stream')) {
+        throw new Error('The server did not return the generated PDF report. No file was downloaded.');
+      }
+    } else if (contentType === 'text/html') {
+      throw new Error('The server returned a web page instead of the report file. No file was downloaded.');
+    }
+
+    const disposition = String(response.headers['content-disposition'] || '');
+    const encodedName = disposition.match(/filename\*=UTF-8''([^;]+)/i)?.[1];
+    const plainName = disposition.match(/filename="?([^";]+)"?/i)?.[1];
+    const serverName = encodedName
+      ? decodeURIComponent(encodedName)
+      : plainName;
+    const fallbackName = `report_${reportId.slice(0, 8)}.${fmt}`;
+    const downloadName = serverName && /\.[a-z0-9]{2,5}$/i.test(serverName)
+      ? serverName
+      : fallbackName;
+
     const url = URL.createObjectURL(blob);
     const a = document.createElement('a');
     a.href = url;
-    a.download = fmt === 'xlsx'
-      ? `report_${reportId.slice(0, 8)}.xlsx`
-      : `report_${reportId.slice(0, 8)}.csv`;
+    a.download = downloadName;
     document.body.appendChild(a);
     a.click();
     a.remove();
-    URL.revokeObjectURL(url);
+    // Defer revocation so browsers have time to start consuming the blob URL.
+    window.setTimeout(() => URL.revokeObjectURL(url), 1000);
   },
+
 
   // ── Tier 1: management tools ──────────────────────────────────────────────
 

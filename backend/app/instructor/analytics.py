@@ -2432,9 +2432,26 @@ def analytics_cohort_matrix():
         del r['_g']
         del r['_a']
 
-    # Compute real ranks and completion per student
+    # Compute real ranks and completion per student. Keep unmeasured grade or
+    # mastery values unavailable and sort them after measured values; comparing
+    # None with a numeric score raises TypeError for mixed-evidence cohorts.
     total_in_scope = len(raw_list)
-    ranked_students = sorted(raw_list, key=lambda x: (x['grade_avg'], x['mastery_pct'], -x['risk_score']), reverse=True)
+
+    def _rank_sort_value(value, *, descending=True):
+        if value is None:
+            return (0, 0.0)
+        numeric = float(value)
+        return (1, numeric if descending else -numeric)
+
+    ranked_students = sorted(
+        raw_list,
+        key=lambda x: (
+            _rank_sort_value(x.get('grade_avg')),
+            _rank_sort_value(x.get('mastery_pct')),
+            _rank_sort_value(x.get('risk_score'), descending=False),
+        ),
+        reverse=True,
+    )
     rank_map = {st['student_id']: idx + 1 for idx, st in enumerate(ranked_students)}
 
     comp_total = len(completion_exp_ids)

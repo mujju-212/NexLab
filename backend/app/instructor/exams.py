@@ -14,7 +14,10 @@ from sqlalchemy import func
 
 from app.auth.utils import require_role
 from app.extensions import db
-from app.models.exam import Exam, ExamQuestion, ExamAttempt
+from app.models.exam import (
+    Exam, ExamQuestion, ExamAttempt,
+    normalize_mcq_options, normalize_mcq_correct_answer,
+)
 from app.models.user import User
 from app.models.subject import Subject
 
@@ -226,7 +229,7 @@ def delete_exam(exam_id):
 # ══════════════════════════════════════════════════════════════════
 
 def _apply_question_fields(q, data):
-    """Copy whitelisted fields from `data` onto an ExamQuestion."""
+    """Copy whitelisted fields while canonicalizing MCQ labels and answer keys."""
     if 'question_type' in data:
         q.question_type = data['question_type']
     if 'prompt' in data:
@@ -237,11 +240,15 @@ def _apply_question_fields(q, data):
         q.display_order = int(data['display_order'])
     if 'explanation' in data:
         q.explanation = data['explanation']
-    # MCQ
+    # MCQ. Normalize imported object options to strings so answer flags can
+    # never be persisted as student-visible choices.
     if 'options' in data:
-        q.options = data['options']
-    if 'correct_answer' in data:
-        q.correct_answer = data['correct_answer']
+        q.options = (normalize_mcq_options(data['options'])
+                     if q.question_type == 'mcq' else data['options'])
+    if q.question_type == 'mcq' and ('options' in data or 'correct_answer' in data):
+        raw_options = data.get('options', q.options)
+        raw_answer = data.get('correct_answer', q.correct_answer)
+        q.correct_answer = normalize_mcq_correct_answer(raw_options, raw_answer)
     # Coding
     if 'language' in data:
         q.language = data['language']

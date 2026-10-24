@@ -1131,6 +1131,7 @@ export default function LiveLabRoomPage() {
   });
   // Why the compulsory screen-share gate is showing, if it is.
   const [sharePrompt,   setSharePrompt]   = useState<'instructor' | 'reshare' | 'required' | null>(null);
+  const [screenShareReady, setScreenShareReady] = useState(false);
   // Set when the backend announces the end of the session.
   const [sessionEnded,  setSessionEnded]  = useState(false);
   // Live copy of the session's Focus ML switch, refreshed by the poll above.
@@ -1337,7 +1338,9 @@ export default function LiveLabRoomPage() {
           emitTabSwitch, emitFullscreenExit, emitLockdownViolation, emitCheckpointPassed,
           emitScreenShareStopped } = useSocket({
     sessionId,
-    enabled: !!gate,
+    // Only join the attendance/proctor socket after the required screen track
+    // has actually been published. The pre-join gate read is not attendance.
+    enabled: !!gate && joinStep === 'room' && screenShareReady,
     // The instructor ended the session: stop capturing the student's screen the
     // moment it is over (privacy), and drop the "LIVE" state in the header.
     onSessionEnded: useCallback(() => {
@@ -2340,9 +2343,17 @@ export default function LiveLabRoomPage() {
                 setLanguage={setLanguage}
                 mediaSignal={mediaSignal}
                 sharePrompt={sharePrompt}
-                onShareFailed={() => setSharePrompt('required')}
+                onShareFailed={() => {
+                  setScreenShareReady(false);
+                  setSharePrompt('required');
+                }}
+                onShareStarted={() => {
+                  setScreenShareReady(true);
+                  setSharePrompt(null);
+                }}
                 sessionEnded={sessionEnded}
                 onShareLost={() => {
+                  setScreenShareReady(false);
                   setSharePrompt('reshare');
                   // Tells the backend: high-severity proctor event + alert to the
                   // instructor + an automatic reshare prompt back to this student.
@@ -2400,6 +2411,8 @@ interface StudentConferenceProps {
   sharePrompt?: 'instructor' | 'reshare' | 'required' | null;
   /** Called when the browser refused the screen-share request. */
   onShareFailed?: () => void;
+  /** Fired only after the local screen capture track is actually live. */
+  onShareStarted?: () => void;
   /** The live screen track ended (browser "Stop sharing"), not a refusal. */
   onShareLost?: () => void;
   /** The session is over — stop capturing, stop gating. */
@@ -2459,6 +2472,7 @@ function StudentLiveConference({
   mediaSignal,
   sharePrompt,
   onShareFailed,
+  onShareStarted,
   onShareLost,
   sessionEnded = false,
 }: StudentConferenceProps) {
@@ -2632,6 +2646,10 @@ function StudentLiveConference({
   const watchScreenTrack = useCallback((t: MediaStreamTrack) => {
     if (watchedRef.current === t) return;
     watchedRef.current = t;
+    if (t.readyState === 'live') {
+      setShareEnded(false);
+      onShareStarted?.();
+    }
     if (pollRef.current) clearInterval(pollRef.current);
     let fired = false;
     const lost = () => {
@@ -2648,7 +2666,7 @@ function StudentLiveConference({
     pollRef.current = setInterval(() => {
       if (t.readyState === 'ended') lost();
     }, 1500);
-  }, [onShareLost, localParticipant]);
+  }, [onShareLost, onShareStarted, localParticipant]);
 
   useEffect(() => () => { if (pollRef.current) clearInterval(pollRef.current); }, []);
 

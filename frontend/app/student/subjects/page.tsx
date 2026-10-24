@@ -428,7 +428,7 @@ export default function StudentSubjectsPage() {
                         <div className={styles.drawerBody}>
                           <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12, flexWrap: 'wrap', gap: 8 }}>
                             <h3 className={styles.drawerTitle} style={{ margin: 0 }}>
-                              Assessments & Labs ({sub.total_experiments ?? experiments.length})
+                              Assessments & Labs ({isExpsLoading ? (sub.total_experiments ?? 0) : experiments.length})
                             </h3>
                             <button
                               type="button"

@@ -335,7 +335,8 @@ export const examService = {
 
   async getMyExam(id: string): Promise<{
     exam: Exam; server_now: string; attempts_used: number; attempts_remaining: number;
-    can_start: boolean; in_progress_attempt: ExamAttempt | null; latest_attempt: ExamAttempt | null;
+    can_start: boolean; code_execution_available?: boolean;
+    in_progress_attempt: ExamAttempt | null; latest_attempt: ExamAttempt | null;
   }> {
     const { data } = await apiClient.get(`/student/exams/${id}`);
     return data;

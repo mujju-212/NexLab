@@ -27,6 +27,7 @@ export default function StudentExamDetailPage({ params }: { params: Promise<{ ex
   const [attemptsUsed, setAttemptsUsed] = useState(0);
   const [attemptsRemaining, setAttemptsRemaining] = useState(0);
   const [canStart, setCanStart] = useState(false);
+  const [codeExecutionAvailable, setCodeExecutionAvailable] = useState(true);
   const [inProgress, setInProgress] = useState<ExamAttempt | null>(null);
   const [latest, setLatest] = useState<ExamAttempt | null>(null);
   const [loading, setLoading] = useState(true);
@@ -45,6 +46,7 @@ export default function StudentExamDetailPage({ params }: { params: Promise<{ ex
       setAttemptsUsed(res.attempts_used);
       setAttemptsRemaining(res.attempts_remaining);
       setCanStart(res.can_start);
+      setCodeExecutionAvailable(res.code_execution_available !== false);
       setInProgress(res.in_progress_attempt);
       setLatest(res.latest_attempt);
     } catch (e) {
@@ -85,6 +87,12 @@ export default function StudentExamDetailPage({ params }: { params: Promise<{ ex
       </div>
 
       {error && <div className={styles.errorBox}>⚠️ {error}</div>}
+      {!codeExecutionAvailable && (
+        <div role="alert" className={styles.errorBox} style={{ display: 'flex', alignItems: 'flex-start', gap: 9, marginBottom: 16 }}>
+          <AlertTriangle size={16} style={{ flexShrink: 0, marginTop: 2 }} />
+          <span>Coding execution is unavailable on this server, so this coding assessment cannot be started or resumed here.</span>
+        </div>
+      )}
 
       {exam && (
         <>
@@ -132,18 +140,23 @@ export default function StudentExamDetailPage({ params }: { params: Promise<{ ex
               )}
 
               {inProgress ? (
-                <button type="button" className={styles.primaryBtn} onClick={() => router.push(`/student/exams/${examId}/take`)}>
-                  <Play size={17} /> Resume Attempt
-                </button>
+                codeExecutionAvailable ? (
+                  <button type="button" className={styles.primaryBtn} onClick={() => router.push(`/student/exams/${examId}/take`)}>
+                    <Play size={17} /> Resume Attempt
+                  </button>
+                ) : (
+                  <button type="button" className={styles.primaryBtn} disabled>Code Runner Unavailable</button>
+                )
               ) : canStart ? (
                 <button type="button" className={styles.primaryBtn} onClick={() => router.push(`/student/exams/${examId}/take`)}>
                   <Play size={17} /> Start Exam
                 </button>
               ) : (
                 <button type="button" className={styles.primaryBtn} disabled>
-                  {exam.window_state === 'upcoming' ? 'Not Started Yet'
-                    : exam.window_state === 'closed' ? 'Deadline Passed'
-                      : attemptsRemaining <= 0 ? 'No Attempts Left' : 'Unavailable'}
+                  {!codeExecutionAvailable ? 'Code Runner Unavailable'
+                    : exam.window_state === 'upcoming' ? 'Not Started Yet'
+                      : exam.window_state === 'closed' ? 'Deadline Passed'
+                        : attemptsRemaining <= 0 ? 'No Attempts Left' : 'Unavailable'}
                 </button>
               )}
             </div>

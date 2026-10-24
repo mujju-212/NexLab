@@ -383,7 +383,7 @@ export default function ReportsPage() {
 
   const downloadReport = async (id: string, fmt: 'csv' | 'xlsx' | 'pdf' = 'csv') => {
     try { await experienceService.downloadReport(id, fmt); }
-    catch (e: any) { setError(e?.response?.data?.error || 'Download failed.'); }
+    catch (e: any) { setError(e?.message || e?.response?.data?.error || 'Download failed.'); }
   };
 
   const attendanceStats = useMemo(() => {

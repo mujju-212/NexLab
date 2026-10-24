@@ -945,23 +945,9 @@ def check_gate(session_id):
         if not livekit_token:
             return jsonify({'error': 'Live video is unavailable; screen sharing is required to join this session.'}), 503
 
-    # T2-10 â€” auto check-in: a gate-cleared student is marked joined the
-    # moment they open the session, even before the socket connects.
-    if can_join_live:
-        att = SessionAttendance.query.filter_by(
-            session_id=session_id, student_id=g.user_id).first()
-        if not att:
-            att = SessionAttendance(
-                session_id=session_id, student_id=g.user_id,
-                status='present', total_time_seconds=0, reconnect_count=0,
-            )
-            db.session.add(att)
-        else:
-            if att.status == 'absent':
-                att.status = 'present'
-        if not att.joined_at:
-            att.joined_at = datetime.utcnow()
-        db.session.commit()
+    # This endpoint is read-only with respect to attendance. The student is
+    # marked joined by the session socket only after the required screen
+    # share is live; opening the pre-join page alone is not attendance.
 
     feedback_receipt = SessionFeedbackReceipt.query.filter_by(
         session_id=session_id, student_id=g.user_id

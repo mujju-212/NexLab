@@ -19,6 +19,54 @@ from app.extensions import db
 from app.models.session import _iso_z
 
 
+def normalize_mcq_options(options):
+    """Return the student-safe display labels for legacy or current MCQ options.
+
+    The authoring UI stores strings, but older/imported payloads may contain
+    objects such as {text, is_correct}. Never serialize answer flags to students.
+    """
+    if not isinstance(options, list):
+        return []
+    labels = []
+    for option in options:
+        if isinstance(option, dict):
+            label = option.get('text', option.get('label', option.get('value', '')))
+        else:
+            label = option
+        labels.append('' if label is None else str(label))
+    return labels
+
+
+def normalize_mcq_correct_answer(options, correct_answer):
+    """Canonicalize an MCQ key to its zero-based option index when possible."""
+    raw_options = options if isinstance(options, list) else []
+    labels = normalize_mcq_options(raw_options)
+    if correct_answer is None or not str(correct_answer).strip():
+        for index, option in enumerate(raw_options):
+            if isinstance(option, dict) and option.get('is_correct') is True:
+                return str(index)
+        return None
+
+    answer = str(correct_answer).strip()
+    try:
+        index = int(answer)
+        if 0 <= index < len(labels):
+            return str(index)
+    except ValueError:
+        pass
+
+    if len(answer) == 1 and answer.isalpha():
+        index = ord(answer.upper()) - ord('A')
+        if 0 <= index < len(labels):
+            return str(index)
+
+    folded = answer.casefold()
+    for index, label in enumerate(labels):
+        if label.strip().casefold() == folded:
+            return str(index)
+    return answer
+
+
 class Exam(db.Model):
     __tablename__ = 'exams'
     __table_args__ = (
@@ -149,9 +197,12 @@ class ExamQuestion(db.Model):
             'explanation': self.explanation if instructor else None,
         }
         if (self.question_type or 'mcq') == 'mcq':
-            d['options'] = self.options or []
+            # Options may come from legacy/imported JSON as {text, is_correct}
+            # objects. Always expose plain labels; never leak answer flags or
+            # hand a React object child to the student exam UI.
+            d['options'] = normalize_mcq_options(self.options)
             if instructor:
-                d['correct_answer'] = self.correct_answer
+                d['correct_answer'] = normalize_mcq_correct_answer(self.options, self.correct_answer)
         else:
             d['language'] = self.language
             d['starter_code'] = self.starter_code

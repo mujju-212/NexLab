@@ -18,7 +18,10 @@ from flask import Blueprint, request, jsonify, g, current_app
 
 from app.auth.utils import require_role
 from app.extensions import db, limiter
-from app.models.exam import Exam, ExamQuestion, ExamAttempt
+from app.models.exam import (
+    Exam, ExamQuestion, ExamAttempt,
+    normalize_mcq_options, normalize_mcq_correct_answer,
+)
 from app.models.experiment import Experiment
 from app.models.academic import SectionSubject, SectionStudent
 from app.models.session import _iso_z
@@ -154,7 +157,8 @@ def _grade_attempt(exam, raw_answers):
         qtype = q.question_type or 'mcq'
 
         if qtype == 'mcq':
-            correct = _norm_mcq(raw) is not None and _norm_mcq(raw) == _norm_mcq(q.correct_answer)
+            correct_key = normalize_mcq_correct_answer(q.options, q.correct_answer)
+            correct = _norm_mcq(raw) is not None and _norm_mcq(raw) == _norm_mcq(correct_key)
             earned = pts if correct else 0.0
             earned_total += earned
             detail[q.id] = {'answer': raw, 'correct': correct, 'earned': earned, 'points': pts}
@@ -354,7 +358,8 @@ def list_exams():
     for e in all_assessment_items:
         atts = by_exam.get(e.id, [])
         latest = max(atts, key=lambda a: a.started_at or a.created_at) if atts else None
-        best_score = max([a.score for a in atts if a.score is not None], default=None)
+        completed_attempts = [a for a in atts if a.status in ('submitted', 'expired')]
+        best_score = max([a.score for a in completed_attempts if a.score is not None], default=None)
 
         q_count = 0
         if hasattr(e, 'questions') and e.questions:
@@ -377,7 +382,7 @@ def list_exams():
         submitted_at = None
         passed_any = False
         if atts:
-            passed_any = any(bool(a.passed) for a in atts)
+            passed_any = any(bool(a.passed) for a in completed_attempts)
             completed_atts = [a for a in atts if a.submitted_at]
             if completed_atts:
                 latest_sub = max(completed_atts, key=lambda a: a.submitted_at)
@@ -427,9 +432,22 @@ def exam_detail(exam_id):
     attempts_used = len(atts)
     attempts_remaining = max(0, (exam.max_attempts or 1) - attempts_used)
 
+    if isinstance(exam, Experiment):
+        from app.models.experiment import TestCase
+        has_coding = (
+            TestCase.query.filter_by(experiment_id=exam.id).first() is not None
+            or getattr(exam, 'starter_code', None) is not None
+        )
+    else:
+        has_coding = (
+            getattr(exam, 'exam_type', None) in ('coding', 'mixed')
+            or ExamQuestion.query.filter_by(exam_id=exam.id, question_type='coding').first() is not None
+        )
+    code_execution_available = not has_coding or bool(current_app.config.get('DOCKER_RUNNER_ENABLED', False))
     can_start = (
         exam.window_state(now) == 'open'
         and (in_progress is not None or attempts_remaining > 0)
+        and code_execution_available
     )
     exam_dict = exam.to_dict()
     from app.models.subject import Subject
@@ -445,6 +463,7 @@ def exam_detail(exam_id):
         'attempts_used': attempts_used,
         'attempts_remaining': attempts_remaining,
         'can_start': can_start,
+        'code_execution_available': code_execution_available,
         'in_progress_attempt': in_progress.to_dict() if in_progress else None,
         'latest_attempt': latest.to_dict() if latest else None,
     }), 200
@@ -728,8 +747,8 @@ def exam_result(exam_id):
             'explanation': q.explanation,
         }
         if (q.question_type or 'mcq') == 'mcq':
-            item['options'] = q.options or []
-            item['correct_answer'] = q.correct_answer   # revealed post-submission
+            item['options'] = normalize_mcq_options(q.options)
+            item['correct_answer'] = normalize_mcq_correct_answer(q.options, q.correct_answer)
         else:
             item['results'] = d.get('results', [])      # hidden cases already masked at grade time
         review.append(item)
