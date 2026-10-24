@@ -105,6 +105,7 @@ export default function StudentCompilerPage() {
   const [langId, setLangId] = useState('');
   const [catalogError, setCatalogError] = useState('');
   const [loadingCatalog, setLoadingCatalog] = useState(true);
+  const [dockerRunnerEnabled, setDockerRunnerEnabled] = useState<boolean | null>(null);
 
   // ── Buffer & Stdin ─────────────────────────────────────────────────────
   const [code, setCode] = useState('');
@@ -251,10 +252,11 @@ export default function StudentCompilerPage() {
   useEffect(() => {
     let alive = true;
     executionService.listLanguages()
-      .then(({ languages: list, groups: order }) => {
+      .then(({ languages: list, groups: order, docker_runner_enabled }) => {
         if (!alive) return;
         setLanguages(list);
         setGroups(order);
+        setDockerRunnerEnabled(docker_runner_enabled !== false);
         const saved = readLocal(LANG_KEY);
         const initial = list.find((l) => l.id === saved) ?? list.find((l) => l.id === 'python') ?? list[0];
         if (!initial) return;
@@ -453,6 +455,11 @@ export default function StudentCompilerPage() {
   const run = useCallback(async () => {
     if (!lang || running) return;
     if (isBrowserLang) return;
+    if (dockerRunnerEnabled === false) {
+      setRunError('The server-side code runner is currently disabled. HTML/CSS browser preview is still available.');
+      setResult(null);
+      return;
+    }
     if (!code.trim()) {
       setRunError('Write some code before running.');
       setResult(null);
@@ -471,7 +478,7 @@ export default function StudentCompilerPage() {
     } finally {
       setRunning(false);
     }
-  }, [code, isBrowserLang, lang, running, stdin]);
+  }, [code, dockerRunnerEnabled, isBrowserLang, lang, running, stdin]);
 
   // ── File Management ────────────────────────────────────────────────────
   const openFile = useCallback(async (id: string) => {
@@ -639,7 +646,7 @@ export default function StudentCompilerPage() {
           </div>
           <h1 className={styles.playgroundTitle}>Compiler Playground</h1>
           <p className={styles.playgroundSubtitle}>
-            Write, run and debug your code in 18+ languages — nothing here is graded, so experiment freely.
+            Write, run and debug your code in {languages.length ? `${languages.length} languages` : 'multiple languages'} — nothing here is graded, so experiment freely.
           </p>
         </div>
 
@@ -652,6 +659,20 @@ export default function StudentCompilerPage() {
           </div>
         </div>
       </div>
+
+      {dockerRunnerEnabled === false && !isBrowserLang && (
+        <div role="status" style={{
+          display: 'flex', alignItems: 'flex-start', gap: 11, margin: '0 0 14px',
+          padding: '12px 15px', borderRadius: 12, background: '#fff7ed',
+          border: '1px solid #fed7aa', color: '#7c2d12', fontSize: 13,
+        }}>
+          <AlertTriangle size={17} style={{ flexShrink: 0, marginTop: 1 }} />
+          <div>
+            <strong style={{ display: 'block', marginBottom: 3 }}>Server-side execution is unavailable</strong>
+            <span>The runner is disabled on this environment. You can still edit, save, or download code; HTML and CSS have browser-based live preview.</span>
+          </div>
+        </div>
+      )}
 
       {/* ═══════════════════════════════════════════════════════════════════
           2. TOP ACTION TOOLBAR
@@ -686,7 +707,8 @@ export default function StudentCompilerPage() {
             id="runCodeBtn"
             className={styles.primaryRunBtn}
             onClick={isBrowserLang ? undefined : run}
-            disabled={running || !lang || isBrowserLang}
+            disabled={running || !lang || isBrowserLang || dockerRunnerEnabled === false}
+            title={dockerRunnerEnabled === false && !isBrowserLang ? 'Server-side execution is unavailable' : undefined}
           >
             {running ? (
               <Loader2 size={15} className={styles.spin} />
@@ -1216,7 +1238,13 @@ export default function StudentCompilerPage() {
                 {/* TAB 1: REAL WORKING STEP-THROUGH VISUALIZATION */}
                 {activeRightTab === 'visualization' && (
                   <div>
-                    {lang?.id === 'python' ? (
+                    {dockerRunnerEnabled === false ? (
+                      <div className={styles.nonPythonVizBox}>
+                        <AlertTriangle size={28} color="#c2410c" />
+                        <h4>Visualizer unavailable</h4>
+                        <p>The step-through visualizer needs the server-side code runner, which is disabled here.</p>
+                      </div>
+                    ) : lang?.id === 'python' ? (
                       <CodeVisualizer
                         code={code}
                         stdin={stdin}
@@ -1399,7 +1427,7 @@ export default function StudentCompilerPage() {
                       <button
                         className={styles.generateVizBtn}
                         onClick={run}
-                        disabled={running}
+                        disabled={running || dockerRunnerEnabled === false}
                         style={{ marginTop: 12, marginBottom: 0 }}
                       >
                         {running ? <Loader2 size={14} className={styles.spin} /> : <Play size={14} fill="currentColor" />}
@@ -1513,7 +1541,7 @@ export default function StudentCompilerPage() {
       {/* ═══════════════════════════════════════════════════════════════════
           5. STEP-THROUGH VISUALIZER (PYTHON)
           ═══════════════════════════════════════════════════════════════════ */}
-      {vizOpen && lang?.id === 'python' && !isBrowserLang && (
+      {vizOpen && lang?.id === 'python' && !isBrowserLang && dockerRunnerEnabled !== false && (
         <CodeVisualizer code={code} stdin={stdin} onExit={() => setVizOpen(false)} />
       )}
 

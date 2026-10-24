@@ -18,27 +18,10 @@ interface LearningTrendCardProps {
   overview: UnifiedStudentOverview | null;
 }
 
-const DEFAULT_TREND = [
-  { week: 'W1', label: 'Week 1', academic_grade: 45, practice_rating_scaled: 30, practice_rating_raw: 450 },
-  { week: 'W2', label: 'Week 2', academic_grade: 48, practice_rating_scaled: 38, practice_rating_raw: 580 },
-  { week: 'W3', label: 'Week 3', academic_grade: 55, practice_rating_scaled: 44, practice_rating_raw: 690 },
-  { week: 'W4', label: 'Week 4', academic_grade: 63, practice_rating_scaled: 49, practice_rating_raw: 780 },
-  { week: 'W5', label: 'Week 5', academic_grade: 58, practice_rating_scaled: 45, practice_rating_raw: 710 },
-  { week: 'W6', label: 'Week 6', academic_grade: 68, practice_rating_scaled: 53, practice_rating_raw: 890 },
-  { week: 'W7', label: 'Week 7', academic_grade: 71, practice_rating_scaled: 56, practice_rating_raw: 980 },
-  { week: 'W8', label: 'Week 8', academic_grade: 69, practice_rating_scaled: 62, practice_rating_raw: 1120 },
-  { week: 'W9', label: 'Week 9', academic_grade: 75, practice_rating_scaled: 66, practice_rating_raw: 1280 },
-  { week: 'W10', label: 'Week 10', academic_grade: 78, practice_rating_scaled: 76, practice_rating_raw: 1520 },
-  { week: 'W11', label: 'Week 11', academic_grade: 82, practice_rating_scaled: 81, practice_rating_raw: 1610 },
-  { week: 'W12', label: 'Week 12', academic_grade: 86, practice_rating_scaled: 85, practice_rating_raw: 1690 },
-];
-
 export const LearningTrendCard: React.FC<LearningTrendCardProps> = ({ overview }) => {
   const [weeksFilter, setWeeksFilter] = useState<'12' | '6' | '4'>('12');
 
-  const rawTrend = overview?.learning_trend && overview.learning_trend.length > 0
-    ? overview.learning_trend
-    : DEFAULT_TREND;
+  const rawTrend = overview?.learning_trend ?? [];
 
   const data = weeksFilter === '4'
     ? rawTrend.slice(-4)
@@ -53,8 +36,8 @@ export const LearningTrendCard: React.FC<LearningTrendCardProps> = ({ overview }
         <div className={styles.customTooltip}>
           <span className={styles.tooltipTitle}>{point.label || label}</span>
           <div className={styles.tooltipMetrics}>
-            <span style={{ color: '#c084fc' }}>● Grade: {point.academic_grade}%</span>
-            <span style={{ color: '#38bdf8' }}>● Rating: {point.practice_rating_raw?.toLocaleString() || point.practice_rating_scaled}</span>
+            <span style={{ color: '#c084fc' }}>● Grade: {point.academic_grade != null ? `${point.academic_grade}%` : '—'}</span>
+            <span style={{ color: '#38bdf8' }}>● Rating: {point.practice_rating_raw != null ? point.practice_rating_raw.toLocaleString() : '—'}</span>
           </div>
         </div>
       );
@@ -98,7 +81,11 @@ export const LearningTrendCard: React.FC<LearningTrendCardProps> = ({ overview }
         </div>
       </div>
 
-      {/* Dual Line Chart */}
+      {data.length === 0 || !data.some((point) => point.academic_grade != null || point.practice_rating_scaled != null) ? (
+        <div className={styles.chartContainer} style={{ display: 'grid', placeItems: 'center', color: '#64748b' }}>
+          No historical grade or rating observations are available yet.
+        </div>
+      ) : (
       <div className={styles.chartContainer}>
         <ResponsiveContainer width="100%" height="100%">
           <LineChart data={data} margin={{ top: 10, right: 15, left: -20, bottom: 5 }}>
@@ -139,6 +126,7 @@ export const LearningTrendCard: React.FC<LearningTrendCardProps> = ({ overview }
           </LineChart>
         </ResponsiveContainer>
       </div>
+      )}
     </div>
   );
 };

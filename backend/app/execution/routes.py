@@ -495,7 +495,11 @@ def list_languages():
     if request.method == 'OPTIONS':
         return '', 204
     """Language catalog for the compiler picker (ids, versions, starter code)."""
-    return jsonify({'languages': catalog(), 'groups': GROUP_ORDER}), 200
+    return jsonify({
+        'languages': catalog(),
+        'groups': GROUP_ORDER,
+        'docker_runner_enabled': bool(current_app.config.get('DOCKER_RUNNER_ENABLED', False)),
+    }), 200
 
 
 @execution_bp.route('/playground', methods=['POST'])

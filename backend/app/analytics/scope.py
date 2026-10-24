@@ -42,7 +42,32 @@ def resolve_scope_entities(
     ss_ids: Set[str] = set()
     session_ids: Set[str] = set()
 
-    if scope_level == 'experiment' and scope_id:
+    if scope_level == 'student' and scope_id:
+        # A student's analytics scope is their own enrolled sections and the
+        # section-subject assignments attached to those sections — never every
+        # course/experiment in the institution.
+        enrolled = SectionStudent.query.filter_by(student_id=scope_id).all()
+        section_ids = {row.section_id for row in enrolled}
+        if section_ids:
+            section_q = Section.query.filter(Section.id.in_(section_ids))
+            if institution_id:
+                section_q = section_q.filter(Section.institution_id == institution_id)
+            section_ids = {row.id for row in section_q.all()}
+        if section_ids:
+            ss_q = SectionSubject.query.filter(SectionSubject.section_id.in_(section_ids))
+            if institution_id:
+                ss_q = ss_q.filter(SectionSubject.institution_id == institution_id)
+            ss_rows = ss_q.all()
+            ss_ids.update(row.id for row in ss_rows)
+            subject_ids = {row.subject_id for row in ss_rows}
+            exp_q = Experiment.query.filter(Experiment.subject_id.in_(subject_ids), Experiment.is_published.is_(True)) if subject_ids else Experiment.query.filter(db.literal(False))
+            if institution_id:
+                exp_q = exp_q.filter(Experiment.institution_id == institution_id)
+            experiment_ids.update(row.id for row in exp_q.all())
+            sessions = LabSession.query.filter(LabSession.section_subject_id.in_(ss_ids)).all() if ss_ids else []
+            session_ids.update(row.id for row in sessions)
+
+    elif scope_level == 'experiment' and scope_id:
         experiment_ids.add(scope_id)
         exp = Experiment.query.get(scope_id)
         if exp and exp.subject_id:
@@ -150,7 +175,7 @@ def resolve_scope_entities(
                 for sr in sess_rows:
                     session_ids.add(sr.id)
 
-    elif scope_level == 'institution' or (institution_id and not scope_id):
+    elif scope_level == 'institution':
         iid = institution_id
         if iid:
             users = User.query.filter_by(institution_id=iid, role='student', is_active=True).all()

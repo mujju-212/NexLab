@@ -239,12 +239,12 @@ def handle_join_session(data):
         # trace. Sending the whole current state on join means a student is
         # always correct on arrival, whatever they missed.
         try:
-            from app.instructor.conductor import MODES
-            from app.models.chat import ChatMessage as _Chat
+            from app.instructor.conductor import MODE_RULES
+            from app.models.conductor import ChatMessage as _Chat
             from app.models.proctor_event import ProctorEvent as _PE
 
             mode = sess.current_mode or 'briefing'
-            rules = MODES.get(mode, MODES.get('working'))
+            rules = MODE_RULES.get(mode, MODE_RULES.get('working'))
 
             # Has the instructor force-submitted this student since they joined?
             fs = (_PE.query
@@ -261,7 +261,7 @@ def handle_join_session(data):
                 }
 
             msgs = (_Chat.query.filter_by(session_id=session_id)
-                    .order_by(_Chat.created_at.desc()).limit(25).all())[::-1]
+                    .order_by(_Chat.at.desc()).limit(25).all())[::-1]
             chat = []
             for m in msgs:
                 d = m.to_dict()

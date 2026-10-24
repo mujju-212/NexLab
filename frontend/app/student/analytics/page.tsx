@@ -51,92 +51,24 @@ function StudentAnalyticsDashboard() {
     router.replace(`?${params.toString()}`);
   };
 
-  // Platform Leaderboard state
-  const [boardScope, setBoardScope] = useState<'global' | 'topic' | 'institution'>('global');
-  const [boardPeriod, setBoardPeriod] = useState<'all_time' | 'monthly' | 'weekly'>('all_time');
-  const [boardTopic, setBoardTopic] = useState('Arrays & Strings');
-
   // ── TanStack Queries ───────────────────────────────────────────────────────
   const {
     data: overview,
     isLoading: overviewLoading,
     isRefetching,
+    isError: overviewIsError,
+    error: overviewError,
     refetch,
   } = useQuery({
-    queryKey: ['student-analytics-overview', dateRange],
+    queryKey: ['student-analytics-overview', user?.id ?? 'anonymous', dateRange],
     queryFn: () => studentAnalyticsService.getOverview({ period: dateRange }),
     staleTime: 60 * 1000,
   });
 
-  const { data: subjects = [] } = useQuery({
-    queryKey: ['student-analytics-subjects'],
+  const { data: subjects } = useQuery({
+    queryKey: ['student-analytics-subjects', user?.id ?? 'anonymous'],
     queryFn: () => studentAnalyticsService.getSubjects(),
     staleTime: 60 * 1000,
-  });
-
-  const { data: ranks } = useQuery({
-    queryKey: ['student-analytics-ranks'],
-    queryFn: () => studentAnalyticsService.getRanks(),
-    staleTime: 60 * 1000,
-  });
-
-  const { data: standing } = useQuery({
-    queryKey: ['student-analytics-standing'],
-    queryFn: () => studentAnalyticsService.getStanding(),
-    staleTime: 60 * 1000,
-  });
-
-  const { data: attendance } = useQuery({
-    queryKey: ['student-analytics-attendance', selectedSubjectId],
-    queryFn: () => studentAnalyticsService.getAttendance(selectedSubjectId || undefined),
-    staleTime: 60 * 1000,
-  });
-
-  const { data: integrity } = useQuery({
-    queryKey: ['student-analytics-integrity'],
-    queryFn: () => studentAnalyticsService.getIntegrity(),
-    staleTime: 60 * 1000,
-  });
-
-  const { data: trends } = useQuery({
-    queryKey: ['student-analytics-trends'],
-    queryFn: () => studentAnalyticsService.getTrends(),
-    staleTime: 60 * 1000,
-  });
-
-  const { data: forecast } = useQuery({
-    queryKey: ['student-analytics-forecast'],
-    queryFn: () => studentAnalyticsService.getForecast(),
-    staleTime: 60 * 1000,
-  });
-
-  const { data: unlocks } = useQuery({
-    queryKey: ['student-analytics-unlocks'],
-    queryFn: () => studentAnalyticsService.getContentUnlocks(),
-    staleTime: 60 * 1000,
-  });
-
-  const { data: mastery } = useQuery({
-    queryKey: ['student-analytics-mastery', selectedSubjectId],
-    queryFn: () => studentAnalyticsService.getMastery(selectedSubjectId || undefined),
-    staleTime: 60 * 1000,
-  });
-
-  const { data: practiceMastery = [] } = useQuery({
-    queryKey: ['student-analytics-practice-mastery'],
-    queryFn: () => studentAnalyticsService.getPracticeMastery(),
-    staleTime: 60 * 1000,
-  });
-
-  const { data: leaderboardData, isLoading: leaderboardLoading } = useQuery({
-    queryKey: ['platform-leaderboard', boardScope, boardTopic, boardPeriod],
-    queryFn: () =>
-      studentAnalyticsService.getPlatformLeaderboard({
-        scope: boardScope,
-        scope_id: boardScope === 'topic' ? boardTopic : undefined,
-        period: boardPeriod,
-      }),
-    staleTime: 30 * 1000,
   });
 
   const handleRefresh = async () => {
@@ -146,7 +78,6 @@ function StudentAnalyticsDashboard() {
       queryClient.invalidateQueries({ queryKey: ['student-academic-dashboard'] }),
       queryClient.invalidateQueries({ queryKey: ['student-platform-dashboard'] }),
       queryClient.invalidateQueries({ queryKey: ['student-knowledge-map-dashboard'] }),
-      queryClient.invalidateQueries({ queryKey: ['platform-leaderboard'] }),
       queryClient.invalidateQueries({ queryKey: ['student-study-plans-overview'] }),
     ]);
     refetch();
@@ -173,7 +104,6 @@ function StudentAnalyticsDashboard() {
                 <option value="30">Last 30 Days</option>
                 <option value="60">Last 60 Days</option>
                 <option value="90">Last 90 Days</option>
-                <option value="semester">This Semester</option>
                 <option value="all">All Time</option>
               </select>
               <ChevronDown size={14} className={growthStyles.chevronIcon} />
@@ -241,9 +171,13 @@ function StudentAnalyticsDashboard() {
           <OverviewTab
             overview={overview ?? null}
             onNavigateTab={handleTabChange}
-            studentName={user?.full_name || 'Aditi Rao'}
+            studentName={user?.full_name}
             rollNumber={(user as any)?.roll_number}
-            department={(user as any)?.department || 'Computer Science'}
+            department={(user as any)?.department}
+            subjectCount={subjects?.length ?? null}
+            loading={overviewLoading}
+            error={overviewIsError ? (overviewError instanceof Error ? overviewError.message : 'Analytics request failed') : null}
+            onRetry={() => refetch()}
             dateRange={dateRange}
           />
         )}
@@ -261,17 +195,6 @@ function StudentAnalyticsDashboard() {
         {/* Tab 3: Platform Competitive & Leaderboards */}
         {currentTab === 'platform' && (
           <PlatformTab
-            standing={overview?.platform}
-            unlocks={unlocks || overview?.unlocks}
-            practiceMastery={practiceMastery}
-            leaderboardData={leaderboardData ?? null}
-            leaderboardLoading={leaderboardLoading}
-            boardScope={boardScope}
-            boardPeriod={boardPeriod}
-            boardTopic={boardTopic}
-            onScopeChange={setBoardScope}
-            onPeriodChange={setBoardPeriod}
-            onTopicChange={setBoardTopic}
             onNavigateTab={handleTabChange}
             dateRange={dateRange}
           />
@@ -282,7 +205,6 @@ function StudentAnalyticsDashboard() {
           <KnowledgeMapTab
             knowledgeMap={overview?.knowledge_map}
             focusTopics={overview?.highlights?.focus_topics}
-            prerequisiteBlocks={mastery?.prerequisite_blocks}
             onNavigateTab={handleTabChange}
             dateRange={dateRange}
           />

@@ -3,25 +3,26 @@
 import React from 'react';
 
 interface LevelRingProps {
-  level: number;
-  levelName?: string;
-  currentXp?: number;
-  nextXp?: number;
+  level: number | null;
+  levelName?: string | null;
+  currentXp?: number | null;
+  nextXp?: number | null;
   size?: number;
   strokeWidth?: number;
 }
 
 export const LevelRing: React.FC<LevelRingProps> = ({
   level,
-  levelName = 'Novice',
-  currentXp = 0,
-  nextXp = 1000,
+  levelName,
+  currentXp,
+  nextXp,
   size = 64,
   strokeWidth = 6,
 }) => {
   const radius = (size - strokeWidth) / 2;
   const circumference = 2 * Math.PI * radius;
-  const progress = Math.min(1, Math.max(0, nextXp > 0 ? currentXp / nextXp : 1));
+  const hasProgress = currentXp != null && nextXp != null && nextXp > 0;
+  const progress = hasProgress ? Math.min(1, Math.max(0, currentXp / nextXp)) : 0;
   const strokeDashoffset = circumference - progress * circumference;
 
   return (
@@ -79,19 +80,19 @@ export const LevelRing: React.FC<LevelRingProps> = ({
             lineHeight: 1,
           }}
         >
-          <span>Lv {level}</span>
+          <span>Lv {level ?? '—'}</span>
           <span style={{ fontSize: '0.6rem', color: '#64748b', marginTop: '2px' }}>
-            {Math.round(progress * 100)}%
+            {hasProgress ? `${Math.round(progress * 100)}%` : '—'}
           </span>
         </div>
       </div>
 
       <div>
         <div style={{ fontSize: '0.85rem', fontWeight: 700, color: '#0f172a' }}>
-          Level {level} · {levelName}
+          {level != null ? `Level ${level}` : 'Level unavailable'}{levelName ? ` · ${levelName}` : ''}
         </div>
         <div style={{ fontSize: '0.72rem', color: '#64748b', marginTop: '1px' }}>
-          {currentXp.toLocaleString()} / {nextXp.toLocaleString()} XP
+          {hasProgress ? `${currentXp.toLocaleString()} / ${nextXp.toLocaleString()} XP` : 'XP progress unavailable'}
         </div>
       </div>
     </div>

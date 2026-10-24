@@ -58,20 +58,16 @@ def get_course(course_id):
             user_id = claims.get('sub')
     except Exception:
         pass
-    if not user_id:
-        user_id = request.args.get('user_id')
 
-    # Topics syllabus mapping
-    TOPIC_DEFS = [
-        ("Arrays", [1, 2, 5, 9, 10, 11]),
-        ("Linked Lists", [7, 8, 12, 13]),
-        ("Stacks & Queues", [6, 14, 15, 16]),
-        ("Sorting", [2, 17, 18, 19]),
-        ("Searching", [1, 3, 20, 21]),
-        ("Trees", [23, 24, 25, 26]),
-        ("Graphs", [27, 28, 29, 30]),
-        ("Complexity Analysis", [22, 31, 32, 4]),
-    ]
+    # Topic summaries are derived only from tags actually attached to exercises.
+    topic_counts = {}
+    for exercise in exercises:
+        for topic in exercise.tags or []:
+            name = str(topic).strip()
+            if not name:
+                continue
+            topic_counts.setdefault(name, {'total': 0, 'solved': 0})
+            topic_counts[name]['total'] += 1
 
     solved_ids = set()
     attempted_ids = set()
@@ -83,53 +79,60 @@ def get_course(course_id):
             elif p.status == 'attempted':
                 attempted_ids.add(p.exercise_id)
 
-    # Compute topics summary
-    ex_by_order = {e.order_index: e for e in exercises}
-    topics_summary = []
-    for topic_name, order_list in TOPIC_DEFS:
-        matched_exs = [ex_by_order[idx] for idx in order_list if idx in ex_by_order]
-        matched_solved = [e for e in matched_exs if e.id in solved_ids]
-        # In the mockup, Complexity Analysis shows 0/4 as theory foundational
-        if topic_name == "Complexity Analysis" and len(matched_solved) > 0 and len(matched_exs) == 4:
-            # Check if Time Complexity MCQ was in here
-            pass
-        topics_summary.append({
-            "name": topic_name,
-            "solved": len(matched_solved),
-            "total": len(matched_exs),
-            "pct": round((len(matched_solved) / len(matched_exs)) * 100) if matched_exs else 0
-        })
+    # Compute topic progress from the same exercise tags used to build the catalog.
+    for exercise in exercises:
+        if exercise.id in solved_ids:
+            for topic in exercise.tags or []:
+                name = str(topic).strip()
+                if name in topic_counts:
+                    topic_counts[name]['solved'] += 1
+    topics_summary = [
+        {
+            'name': name,
+            'solved': counts['solved'],
+            'total': counts['total'],
+            'pct': round(counts['solved'] / counts['total'] * 100) if counts['total'] else 0,
+        }
+        for name, counts in topic_counts.items()
+    ]
 
     total_exercises = len(exercises)
-    total_xp = sum(e.xp_reward or 10 for e in exercises)
+    total_xp = sum(e.xp_reward or 0 for e in exercises)
     solved_count = len(solved_ids)
     attempted_count = len(attempted_ids)
     unsolved_count = max(0, total_exercises - solved_count - attempted_count)
-    earned_xp = sum(e.xp_reward or 10 for e in exercises if e.id in solved_ids)
+    earned_xp = sum(e.xp_reward or 0 for e in exercises if e.id in solved_ids)
     pct_solved = round((solved_count / total_exercises) * 100) if total_exercises else 0
     pct_xp = round((earned_xp / total_xp) * 100) if total_xp else 0
 
-    rank_in_course = 1
+    rank_in_course = None
     global_rank = None
-    top_percentile = 100
+    top_percentile = None
     try:
         from app.models.practice import StudentXP
         from sqlalchemy import func
-        if user_id:
-            better_count = db.session.query(func.count(FreeProgress.user_id.distinct())).filter(
-                FreeProgress.course_id == course.id,
-                FreeProgress.status == 'solved',
-                FreeProgress.xp_earned > earned_xp
+        if user_id and solved_count > 0:
+            per_user_xp = db.session.query(
+                FreeProgress.user_id.label('user_id'),
+                func.sum(FreeProgress.xp_earned).label('course_xp'),
+            ).filter_by(course_id=course.id, status='solved').group_by(FreeProgress.user_id).subquery()
+            better_count = db.session.query(func.count()).select_from(per_user_xp).filter(
+                per_user_xp.c.course_xp > earned_xp
             ).scalar() or 0
             rank_in_course = better_count + 1
 
-            my_xp = db.session.query(StudentXP.total_xp).filter_by(student_id=user_id).scalar() or earned_xp
+        my_xp = db.session.query(StudentXP.total_xp).filter_by(student_id=user_id).scalar() if user_id else None
+        has_global_activity = bool(my_xp and my_xp > 0)
+        if user_id and has_global_activity:
             higher_xp_count = db.session.query(func.count(StudentXP.student_id)).filter(
                 StudentXP.total_xp > my_xp
             ).scalar() or 0
-            global_rank = max(1, higher_xp_count + 1)
-            total_students = db.session.query(func.count(StudentXP.student_id)).scalar() or 1
-            top_percentile = max(1, min(100, round((global_rank / max(1, total_students)) * 100)))
+            global_rank = higher_xp_count + 1
+            total_students = db.session.query(func.count(StudentXP.student_id)).filter(
+                StudentXP.total_xp > 0
+            ).scalar() or 0
+            if total_students:
+                top_percentile = max(1, min(100, round((global_rank / total_students) * 100)))
     except Exception:
         pass
 
@@ -163,8 +166,7 @@ def get_course(course_id):
         formatted_exercises.append(d)
 
     course_dict = course.to_dict()
-    course_dict['estimated_hours'] = "4–6 hours"
-    course_dict['topic_count'] = len(TOPIC_DEFS)
+    course_dict['topic_count'] = len(topics_summary)
 
     return jsonify({
         'course': course_dict,
@@ -233,27 +235,9 @@ def run_exercise(exercise_id):
     visible_cases = [tc for tc in (ex.test_cases or []) if not tc.get('hidden', False)]
 
     if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
-        results = [
-            {
-                'input':          tc.get('input', ''),
-                'expected':       tc.get('expected', ''),
-                'output':         tc.get('expected', ''),
-                'passed':         True,
-                'time_ms':        42,
-                'memory_kb':      14200,
-                'status':         'Accepted',
-                'stderr':         None,
-                'compile_output': None,
-            }
-            for tc in visible_cases
-        ]
         return jsonify({
-            'results':      results,
-            'passed':       len(visible_cases),
-            'total':        len(visible_cases),
-            'score':        100.0 if visible_cases else 0.0,
-            'all_passed':   True,
-        }), 200
+            'error': 'Code execution is currently unavailable. Your code was not run.'
+        }), 503
 
     results = []
 
@@ -319,21 +303,9 @@ def submit_exercise(exercise_id):
     passed_count = 0
 
     if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
-        for tc in all_cases:
-            is_hidden = bool(tc.get('hidden', False))
-            passed_count += 1
-            results.append({
-                'input':          '<hidden>' if is_hidden else tc.get('input', ''),
-                'expected':       '<hidden>' if is_hidden else tc.get('expected', ''),
-                'output':         '<hidden>' if is_hidden else tc.get('expected', ''),
-                'passed':         True,
-                'hidden':         is_hidden,
-                'time_ms':        42,
-                'memory_kb':      14200,
-                'status':         'Accepted',
-                'stderr':         None,
-                'compile_output': None,
-            })
+        return jsonify({
+            'error': 'Code execution is currently unavailable. Your code was not run or saved.'
+        }), 503
     else:
         for tc in all_cases:
             result, err = _run_case(spec['id'], code, tc.get('input', ''))

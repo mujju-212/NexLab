@@ -37,7 +37,7 @@ interface QuestStats {
   hard_solved: number;
   level: number;
   level_name: string;
-  global_rank: number;
+  global_rank: number | null;
 }
 
 interface HeroQuest {
@@ -319,7 +319,7 @@ export default function QuestPage({ baseRoute }: { baseRoute: string }) {
               <BarChart3 size={18} />
             </div>
             <div className={styles.statPillInfo}>
-              <span className={styles.statPillVal}>#{stats?.global_rank ?? 1}</span>
+              <span className={styles.statPillVal}>{stats?.global_rank != null ? `#${stats.global_rank}` : '—'}</span>
               <span className={styles.statPillLabel}>Global Rank</span>
             </div>
           </div>
@@ -335,43 +335,43 @@ export default function QuestPage({ baseRoute }: { baseRoute: string }) {
               <Sparkles size={14} fill="#ea580c" />
               TODAY&apos;S QUEST
             </div>
-            <h2 className={styles.heroTitle}>{heroQuest?.title || 'Solve 3 Array Problems'}</h2>
+            <h2 className={styles.heroTitle}>{heroQuest?.title ?? 'No quest available today'}</h2>
             <p className={styles.heroSubtitle}>
-              {heroQuest?.description || 'Build your problem-solving habit and earn bonus XP!'}
+              {heroQuest?.description ?? 'There is no active quest to display right now.'}
             </p>
 
             <div className={styles.tagRow}>
               <span className={`${styles.tagPill} ${styles.tagXp}`}>
-                <Zap size={12} fill="#ea580c" /> +{heroQuest?.xp_reward || 30} XP
+                <Zap size={12} fill="#ea580c" /> {heroQuest?.xp_reward != null ? `+${heroQuest.xp_reward} XP` : 'XP unavailable'}
               </span>
               <span className={`${styles.tagPill} ${styles.tagDiff}`}>
-                {heroQuest?.difficulty || 'Easy – Medium'}
+                {heroQuest?.difficulty ?? '—'}
               </span>
               <span className={`${styles.tagPill} ${styles.tagTopic}`}>
-                {heroQuest?.topic || 'Arrays'}
+                {heroQuest?.topic ?? '—'}
               </span>
               <span className={`${styles.tagPill} ${styles.tagTime}`}>
-                <Clock size={12} /> Ends in {heroQuest?.ends_in || '12h 34m'}
+                <Clock size={12} /> Ends in {heroQuest?.ends_in ?? '—'}
               </span>
             </div>
 
             <div className={styles.heroActionsRow}>
               <div className={styles.heroProgressWrap}>
                 <div className={styles.heroProgressText}>
-                  {heroQuest?.progress || 0} / {heroQuest?.total || 3} completed
+                  {heroQuest?.progress ?? 0} / {heroQuest?.total ?? 0} completed
                 </div>
                 <div className={styles.progressBarTrack}>
                   <div
                     className={styles.progressBarFill}
                     style={{
-                      width: `${Math.min(100, Math.round(((heroQuest?.progress || 0) / (heroQuest?.total || 3)) * 100))}%`,
+                      width: `${heroQuest?.total ? Math.min(100, Math.round(((heroQuest.progress ?? 0) / heroQuest.total) * 100)) : 0}%`,
                     }}
                   />
                 </div>
               </div>
 
-              <button className={styles.heroCtaBtn} onClick={handleHeroAction}>
-                {heroQuest?.action_label || 'Continue Quest'} <ArrowRight size={15} />
+              <button className={styles.heroCtaBtn} onClick={handleHeroAction} disabled={!heroQuest}>
+                {heroQuest?.action_label ?? 'No active quest'} <ArrowRight size={15} />
               </button>
             </div>
           </div>
@@ -398,7 +398,7 @@ export default function QuestPage({ baseRoute }: { baseRoute: string }) {
                 </div>
                 <div>
                   <h3 className={styles.weeklyTitle}>Weekly Progress</h3>
-                  <p className={styles.weeklyDates}>{weeklyProgress?.range_label || 'Oct 13 – Oct 19, 2026'}</p>
+                  <p className={styles.weeklyDates}>{weeklyProgress?.range_label ?? '—'}</p>
                 </div>
               </div>
               <button className={styles.viewAllLink} onClick={openLeaderboard}>
@@ -438,15 +438,15 @@ export default function QuestPage({ baseRoute }: { baseRoute: string }) {
           <div className={styles.weeklyBottom}>
             <div className={styles.weeklyProgressMeta}>
               <span className={styles.weeklyDaysCount}>
-                {weeklyProgress?.active_days_count || 0} / {weeklyProgress?.total_days || 7} days
+                {weeklyProgress?.active_days_count ?? 0} / {weeklyProgress?.total_days ?? 0} days
               </span>
-              <span className={styles.weeklyRewardTag}>+{weeklyProgress?.reward_xp || 100} XP</span>
+              <span className={styles.weeklyRewardTag}>{weeklyProgress?.reward_xp != null ? `+${weeklyProgress.reward_xp} XP` : '—'}</span>
             </div>
             <div className={styles.progressBarTrack}>
               <div
                 className={styles.progressBarFill}
                 style={{
-                  width: `${Math.min(100, Math.round(((weeklyProgress?.active_days_count || 0) / (weeklyProgress?.total_days || 7)) * 100))}%`,
+                  width: `${weeklyProgress?.total_days ? Math.min(100, Math.round(((weeklyProgress.active_days_count ?? 0) / weeklyProgress.total_days) * 100)) : 0}%`,
                   background: '#7c3aed',
                 }}
               />
@@ -497,17 +497,17 @@ export default function QuestPage({ baseRoute }: { baseRoute: string }) {
 
             <div className={styles.sectionHeaderRight}>
               <span className={styles.completedBadge}>
-                {dailyQuests?.completed_count || 0}/{dailyQuests?.total_count || 5} completed
+                {dailyQuests?.completed_count ?? 0}/{dailyQuests?.total_count ?? 0} completed
               </span>
               <span className={styles.resetsBadge}>
-                <Clock size={13} /> Resets in {dailyQuests?.resets_in || '12h 34m'}
+                <Clock size={13} /> Resets in {dailyQuests?.resets_in ?? '—'}
               </span>
             </div>
           </div>
 
           {/* 5 Daily Quest Cards */}
           <div className={styles.fiveCardsGrid}>
-            {dailyQuests?.items.map((item, idx) => {
+            {(dailyQuests?.items ?? []).length ? dailyQuests!.items.map((item, idx) => {
               const isHighlight = idx === 1; // Card 2 has subtle purple glow like in screenshot
               const isFull = item.progress >= item.total;
               const fillPct = Math.min(100, Math.round((item.progress / item.total) * 100));
@@ -588,7 +588,7 @@ export default function QuestPage({ baseRoute }: { baseRoute: string }) {
                   </div>
                 </div>
               );
-            })}
+            }) : <p className={styles.sectionSubtitle}>No daily quests available.</p>}
           </div>
         </div>
       )}
@@ -609,17 +609,17 @@ export default function QuestPage({ baseRoute }: { baseRoute: string }) {
 
             <div className={styles.sectionHeaderRight}>
               <span className={styles.completedBadge}>
-                {weeklyQuests?.completed_count || 0}/{weeklyQuests?.total_count || 5} completed
+                {weeklyQuests?.completed_count ?? 0}/{weeklyQuests?.total_count ?? 0} completed
               </span>
               <span className={styles.resetsBadge}>
-                <Clock size={13} /> Resets in {weeklyQuests?.resets_in || '5 days'}
+                <Clock size={13} /> Resets in {weeklyQuests?.resets_in ?? '—'}
               </span>
             </div>
           </div>
 
           {/* 5 Weekly Quest Cards */}
           <div className={styles.fiveCardsGrid}>
-            {weeklyQuests?.items.map((item) => {
+            {(weeklyQuests?.items ?? []).length ? weeklyQuests!.items.map((item) => {
               const fillPct = Math.min(100, Math.round((item.progress / item.total) * 100));
 
               let IconComponent = Code;
@@ -687,7 +687,7 @@ export default function QuestPage({ baseRoute }: { baseRoute: string }) {
                   </div>
                 </div>
               );
-            })}
+            }) : <p className={styles.sectionSubtitle}>No weekly quests available.</p>}
           </div>
         </div>
       )}

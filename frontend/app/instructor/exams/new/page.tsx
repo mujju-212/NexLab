@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import { ArrowLeft, Save, Loader2, HelpCircle, Code2, Layers } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
+import InstructorWorkspaceTabs from '@/components/layout/InstructorWorkspaceTabs';
 import styles from '../../shared.module.css';
 import { examService, type ExamType, type SubjectOption } from '@/services/exam.service';
 
@@ -79,10 +80,11 @@ export default function NewExamPage() {
 
   return (
     <InstructorShell
-      activePage="Exams"
+      activePage="Experiments"
       title="Create Exam"
       subtitle="Set the basics — you'll add questions on the next screen"
     >
+      <InstructorWorkspaceTabs active="timed-exams" />
       <div className={styles.actionRow}>
         <button type="button" className={styles.secondaryBtn} onClick={() => router.push('/instructor/exams')}>
           <ArrowLeft size={16} /> Back to Exams

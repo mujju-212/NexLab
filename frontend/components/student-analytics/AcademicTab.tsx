@@ -25,6 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import { studentAnalyticsService, type AcademicDashboardResponse } from '@/services/student-analytics.service';
+import { useAuthStore } from '@/store/auth-store';
 import DeltaPill from '@/components/analytics/DeltaPill';
 import styles from './AcademicDashboard.module.css';
 
@@ -58,11 +59,11 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
   dateRange,
 }) => {
   const router = useRouter();
+  const { user } = useAuthStore();
 
   // ── State for Interactive Controls & Dropdowns ─────────────────────────────
   const effectiveSubjectId = selectedSubjectId || initialSubjectId || 'all';
   const [selectedSubject, setSelectedSubject] = useState<string>(effectiveSubjectId);
-  const [selectedSemester, setSelectedSemester] = useState<string>('all');
   const [selectedExperiment, setSelectedExperiment] = useState<string>('all');
   const [selectedPeriod, setSelectedPeriod] = useState<string>('30d');
   const [trendWindow, setTrendWindow] = useState<string>('12w');
@@ -70,7 +71,7 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
   // Synchronize with top global date filter
   useEffect(() => {
     if (dateRange) {
-      const mapped = dateRange === 'semester' ? 'semester' : dateRange === 'all' ? 'all' : `${dateRange}d`;
+      const mapped = dateRange === 'all' ? 'all' : `${dateRange}d`;
       setSelectedPeriod(mapped);
     }
   }, [dateRange]);
@@ -83,7 +84,7 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
   const [activeLegendFilter, setActiveLegendFilter] = useState<string | null>(null);
 
   // Attendance Donut interactive hover state
-  const [hoveredAttendance, setHoveredAttendance] = useState<'present' | 'absent' | 'excused' | null>(null);
+  const [hoveredAttendance, setHoveredAttendance] = useState<'present' | 'absent' | 'late' | 'partial' | null>(null);
 
   // Recent Grades Modal state
   const [isGradesModalOpen, setIsGradesModalOpen] = useState(false);
@@ -93,42 +94,28 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
   const [conceptLimit, setConceptLimit] = useState<number | 'all'>(8);
   const [isConceptModalOpen, setIsConceptModalOpen] = useState(false);
   const [conceptModalSubject, setConceptModalSubject] = useState<string>('all');
-  const [attendanceMonth, setAttendanceMonth] = useState<string>('this_month');
   const [completionFilterSubject, setCompletionFilterSubject] = useState<string>('all');
 
   // ── TanStack Query to Fetch Real Backend Academic Analytics ────────────────
-  const { data: dashboardData, isLoading } = useQuery<AcademicDashboardResponse>({
-    queryKey: ['student-academic-dashboard', selectedSubject, selectedSemester, selectedExperiment, selectedPeriod],
+  const { data: dashboardData, isLoading, isError, error, refetch } = useQuery<AcademicDashboardResponse>({
+    queryKey: ['student-academic-dashboard', user?.id ?? 'anonymous', selectedSubject, selectedExperiment, selectedPeriod],
     queryFn: () =>
       studentAnalyticsService.getAcademicDashboard({
         subject_id: selectedSubject !== 'all' ? selectedSubject : undefined,
-        semester: selectedSemester !== 'all' ? selectedSemester : undefined,
         experiment_id: selectedExperiment !== 'all' ? selectedExperiment : undefined,
         period: selectedPeriod,
       }),
     staleTime: 60 * 1000,
   });
 
-  // Honest empty state: every number is 0 until the API returns real values.
+  // Missing API observations stay unavailable; counts are populated only by the response.
   const kpis = dashboardData?.kpi_metrics || {
-    overall_score: 0,
-    overall_delta: 0,
-    sparkline_overall: [],
-    subjects_enrolled: 0,
-    subjects_on_track: 0,
-    subjects_ring_pct: 0,
-    experiments_completed: 0,
-    experiments_total: 0,
-    experiments_completion_pct: 0,
-    attendance_rate: 0,
-    attendance_period: 'This month',
-    attendance_mini_bars: [],
-    academic_rank: '—',
-    rank_position: 0,
-    rank_cohort: 0,
-    rank_delta: '0',
-    rank_percentile_text: '—',
-    sparkline_rank: [],
+    overall_score: null, overall_delta: null, sparkline_overall: [],
+    subjects_enrolled: null, subjects_on_track: null, subjects_ring_pct: null,
+    experiments_completed: null, experiments_total: null, experiments_completion_pct: null,
+    attendance_rate: null, attendance_period: null, attendance_mini_bars: [],
+    academic_rank: null, rank_position: null, rank_cohort: null, rank_delta: null,
+    rank_percentile_text: null, sparkline_rank: [],
   };
 
   const performanceTrend = dashboardData?.performance_trend || {
@@ -142,12 +129,7 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
   const conceptMastery = dashboardData?.concept_mastery || [];
 
   const attendanceDonut = dashboardData?.attendance_breakdown || {
-    rate: 0,
-    present: 0,
-    absent: 0,
-    excused: 0,
-    total: 0,
-    period_label: 'This Month',
+    rate: null, present: 0, late: 0, partial: 0, absent: 0, total: 0, period_label: null,
   };
 
   const riskGuidance = dashboardData?.risk_and_guidance || {
@@ -179,13 +161,14 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
   // Handle dropdown selection
   const handleSelectSubject = (id: string) => {
     setSelectedSubject(id);
+    setSelectedExperiment('all');
     setOpenDropdown(null);
     if (onSubjectChange) onSubjectChange(id === 'all' ? null : id);
   };
 
   const getSubjectLabel = (id: string) => {
     if (id === 'all') return 'All Subjects';
-    const found = subjectPerformance.find((s) => s.code.toLowerCase() === id.toLowerCase());
+    const found = subjectPerformance.find((s) => s.code.toLowerCase() === id.toLowerCase() || (s as any).id === id);
     return found ? found.name : id.toUpperCase();
   };
 
@@ -237,15 +220,18 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
 
     const presentPct = attendanceDonut.present / Math.max(1, attendanceDonut.total);
     const absentPct = attendanceDonut.absent / Math.max(1, attendanceDonut.total);
-    const excusedPct = attendanceDonut.excused / Math.max(1, attendanceDonut.total);
+    const latePct = attendanceDonut.late / Math.max(1, attendanceDonut.total);
+    const partialPct = attendanceDonut.partial / Math.max(1, attendanceDonut.total);
 
     const presentStroke = presentPct * circumference;
     const absentStroke = absentPct * circumference;
-    const excusedStroke = excusedPct * circumference;
+    const lateStroke = latePct * circumference;
+    const partialStroke = partialPct * circumference;
 
     const presentOffset = circumference * 0.25;
     const absentOffset = presentOffset - presentStroke;
-    const excusedOffset = absentOffset - absentStroke;
+    const lateOffset = absentOffset - absentStroke;
+    const partialOffset = lateOffset - lateStroke;
 
     return (
       <div className={styles.donutContainer}>
@@ -298,24 +284,31 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
             onMouseEnter={() => setHoveredAttendance('absent')}
             onMouseLeave={() => setHoveredAttendance(null)}
           />
-          {/* Excused segment (amber) */}
+          {/* Late segment (amber) */}
           <circle
             cx={size / 2}
             cy={size / 2}
             r={radius}
             fill="none"
             stroke="#f59e0b"
-            strokeWidth={hoveredAttendance === 'excused' ? 16 : strokeWidth}
-            strokeDasharray={`${excusedStroke} ${circumference}`}
-            strokeDashoffset={excusedOffset}
+            strokeWidth={hoveredAttendance === 'late' ? 16 : strokeWidth}
+            strokeDasharray={`${lateStroke} ${circumference}`}
+            strokeDashoffset={lateOffset}
             style={{
               cursor: 'pointer',
               transition: 'all 0.2s cubic-bezier(0.16, 1, 0.3, 1)',
-              opacity: hoveredAttendance && hoveredAttendance !== 'excused' ? 0.45 : 1,
-              filter: hoveredAttendance === 'excused' ? 'drop-shadow(0 0 6px rgba(245, 158, 11, 0.4))' : 'none',
+              opacity: hoveredAttendance && hoveredAttendance !== 'late' ? 0.45 : 1,
+              filter: hoveredAttendance === 'late' ? 'drop-shadow(0 0 6px rgba(245, 158, 11, 0.4))' : 'none',
             }}
-            onMouseEnter={() => setHoveredAttendance('excused')}
+            onMouseEnter={() => setHoveredAttendance('late')}
             onMouseLeave={() => setHoveredAttendance(null)}
+          />
+          <circle
+            cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="#8b5cf6"
+            strokeWidth={hoveredAttendance === 'partial' ? 16 : strokeWidth}
+            strokeDasharray={`${partialStroke} ${circumference}`} strokeDashoffset={partialOffset}
+            style={{ cursor: 'pointer', opacity: hoveredAttendance && hoveredAttendance !== 'partial' ? 0.45 : 1, transition: 'all 0.2s ease' }}
+            onMouseEnter={() => setHoveredAttendance('partial')} onMouseLeave={() => setHoveredAttendance(null)}
           />
         </svg>
 
@@ -323,21 +316,26 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
           {hoveredAttendance === 'present' ? (
             <>
               <div className={styles.donutRateBig} style={{ color: '#10b981' }}>{attendanceDonut.present}</div>
-              <div className={styles.donutRateLabel}>Present ({attendanceDonut.rate}%)</div>
+              <div className={styles.donutRateLabel}>Present ({attendanceDonut.rate != null ? `${attendanceDonut.rate}%` : '—'})</div>
             </>
           ) : hoveredAttendance === 'absent' ? (
             <>
               <div className={styles.donutRateBig} style={{ color: '#ef4444' }}>{attendanceDonut.absent}</div>
               <div className={styles.donutRateLabel}>Absent ({Math.round(absentPct * 100)}%)</div>
             </>
-          ) : hoveredAttendance === 'excused' ? (
+          ) : hoveredAttendance === 'late' ? (
             <>
-              <div className={styles.donutRateBig} style={{ color: '#f59e0b' }}>{attendanceDonut.excused}</div>
-              <div className={styles.donutRateLabel}>Excused ({Math.round(excusedPct * 100)}%)</div>
+              <div className={styles.donutRateBig} style={{ color: '#f59e0b' }}>{attendanceDonut.late}</div>
+              <div className={styles.donutRateLabel}>Late ({Math.round(latePct * 100)}%)</div>
+            </>
+          ) : hoveredAttendance === 'partial' ? (
+            <>
+              <div className={styles.donutRateBig} style={{ color: '#7c3aed' }}>{attendanceDonut.partial}</div>
+              <div className={styles.donutRateLabel}>Partial ({Math.round(partialPct * 100)}%)</div>
             </>
           ) : (
             <>
-              <div className={styles.donutRateBig}>{attendanceDonut.rate}%</div>
+              <div className={styles.donutRateBig}>{attendanceDonut.rate != null ? `${attendanceDonut.rate != null ? `${attendanceDonut.rate}%` : '—'}` : '—'}</div>
               <div className={styles.donutRateLabel}>Present</div>
             </>
           )}
@@ -558,6 +556,9 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
     );
   };
 
+  if (isLoading) return <div className={styles.dashboard} style={{ padding: '2rem', color: '#64748b' }}>Loading academic records…</div>;
+  if (isError) return <div role="alert" className={styles.dashboard} style={{ padding: '2rem', color: '#991b1b' }}>Could not load academic records. No sample values are shown. <button onClick={() => refetch()}>Retry</button></div>;
+
   return (
     <div className={styles.dashboard}>
       {/* ── 1. Academic Filter Controls Strip ───────────────────────────────── */}
@@ -583,47 +584,13 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
               {subjectPerformance.map((s, sIdx) => (
                 <li
                   key={`dropdown-${(s as any).id || s.code}-${sIdx}`}
-                  className={`${styles.dropdownItem} ${selectedSubject.toLowerCase() === s.code.toLowerCase() ? styles.dropdownItemActive : ''}`}
-                  onClick={() => handleSelectSubject(s.code.toLowerCase())}
+                  className={`${styles.dropdownItem} ${selectedSubject.toLowerCase() === s.code.toLowerCase() || selectedSubject === (s as any).id ? styles.dropdownItemActive : ''}`}
+                  onClick={() => handleSelectSubject((s as any).id || s.code.toLowerCase())}
                 >
                   <span>{s.name}</span>
                   <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>{s.avg_grade}%</span>
                 </li>
               ))}
-            </ul>
-          )}
-        </div>
-
-        {/* Semester Filter Dropdown */}
-        <div className={styles.filterGroup}>
-          <span className={styles.filterLabel}>Semester:</span>
-          <button
-            className={`${styles.filterBtn} ${selectedSemester !== 'all' ? styles.filterBtnActive : ''}`}
-            onClick={() => setOpenDropdown(openDropdown === 'semester' ? null : 'semester')}
-          >
-            <span>{selectedSemester === 'all' ? 'All Semesters' : `Semester ${selectedSemester}`}</span>
-            <ChevronDown size={14} />
-          </button>
-          {openDropdown === 'semester' && (
-            <ul className={styles.dropdownMenu}>
-              <li
-                className={`${styles.dropdownItem} ${selectedSemester === 'all' ? styles.dropdownItemActive : ''}`}
-                onClick={() => { setSelectedSemester('all'); setOpenDropdown(null); }}
-              >
-                All Semesters
-              </li>
-              <li
-                className={`${styles.dropdownItem} ${selectedSemester === '3' ? styles.dropdownItemActive : ''}`}
-                onClick={() => { setSelectedSemester('3'); setOpenDropdown(null); }}
-              >
-                Semester 3 (Current)
-              </li>
-              <li
-                className={`${styles.dropdownItem} ${selectedSemester === '4' ? styles.dropdownItemActive : ''}`}
-                onClick={() => { setSelectedSemester('4'); setOpenDropdown(null); }}
-              >
-                Semester 4
-              </li>
             </ul>
           )}
         </div>
@@ -635,7 +602,7 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
             className={`${styles.filterBtn} ${selectedExperiment !== 'all' ? styles.filterBtnActive : ''}`}
             onClick={() => setOpenDropdown(openDropdown === 'experiment' ? null : 'experiment')}
           >
-            <span>{selectedExperiment === 'all' ? 'All Experiments' : selectedExperiment}</span>
+            <span>{selectedExperiment === 'all' ? 'All Experiments' : (dashboardData?.filter_options?.experiments ?? []).find((item) => item.id === selectedExperiment)?.label ?? 'Selected Experiment'}</span>
             <ChevronDown size={14} />
           </button>
           {openDropdown === 'experiment' && (
@@ -646,13 +613,9 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
               >
                 All Experiments
               </li>
-              {recentGrades.map((g) => (
-                <li
-                  key={g.id}
-                  className={`${styles.dropdownItem} ${selectedExperiment === g.exp_title ? styles.dropdownItemActive : ''}`}
-                  onClick={() => { setSelectedExperiment(g.exp_title); setOpenDropdown(null); }}
-                >
-                  {g.exp_title}
+              {(dashboardData?.filter_options?.experiments ?? []).filter((item) => item.id !== 'all').map((item) => (
+                <li key={item.id} className={`${styles.dropdownItem} ${selectedExperiment === item.id ? styles.dropdownItemActive : ''}`} onClick={() => { setSelectedExperiment(item.id); setOpenDropdown(null); }}>
+                  {item.label}
                 </li>
               ))}
             </ul>
@@ -673,8 +636,6 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
                 ? 'Last 60 Days'
                 : selectedPeriod === '90d' || selectedPeriod === '90' || selectedPeriod === '12w'
                 ? 'Last 90 Days'
-                : selectedPeriod === 'semester'
-                ? 'This Semester'
                 : selectedPeriod === 'all'
                 ? 'All Time'
                 : 'Last 30 Days'}
@@ -700,12 +661,6 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
                 onClick={() => { setSelectedPeriod('90d'); setOpenDropdown(null); }}
               >
                 Last 90 Days
-              </li>
-              <li
-                className={`${styles.dropdownItem} ${selectedPeriod === 'semester' ? styles.dropdownItemActive : ''}`}
-                onClick={() => { setSelectedPeriod('semester'); setOpenDropdown(null); }}
-              >
-                This Semester
               </li>
               <li
                 className={`${styles.dropdownItem} ${selectedPeriod === 'all' ? styles.dropdownItemActive : ''}`}
@@ -758,12 +713,12 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
             <div>
               <p className={styles.kpiTitle}>Subjects Enrolled</p>
               <div className={styles.kpiValueRow}>
-                <span className={styles.kpiValue}>{kpis.subjects_enrolled}</span>
+                <span className={styles.kpiValue}>{kpis.subjects_enrolled ?? '—'}</span>
               </div>
             </div>
           </div>
           <div className={styles.kpiBottomRow}>
-            <span className={styles.kpiSubtext}>{kpis.subjects_on_track} on track</span>
+            <span className={styles.kpiSubtext}>{kpis.subjects_on_track != null ? `${kpis.subjects_on_track} on track` : 'On-track count unavailable'}</span>
             <div className={styles.sparklineWrap}>
               {/* Circular Mini Progress Ring */}
               <svg width="28" height="28" viewBox="0 0 28 28">
@@ -775,7 +730,7 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
                   fill="none"
                   stroke="#10b981"
                   strokeWidth="3"
-                  strokeDasharray={`${(kpis.subjects_ring_pct / 100) * 69} 69`}
+                  strokeDasharray={`${((kpis.subjects_ring_pct ?? 0) / 100) * 69} 69`}
                   strokeDashoffset="17"
                   strokeLinecap="round"
                 />
@@ -794,19 +749,19 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
               <p className={styles.kpiTitle}>Experiments Completed</p>
               <div className={styles.kpiValueRow}>
                 <span className={styles.kpiValue}>
-                  {kpis.experiments_completed} / {kpis.experiments_total}
+                  {kpis.experiments_completed ?? '—'} / {kpis.experiments_total ?? '—'}
                 </span>
               </div>
             </div>
           </div>
           <div className={styles.kpiBottomRow} style={{ flexDirection: 'column', alignItems: 'stretch' }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', marginBottom: '0.35rem' }}>
-              <span className={styles.kpiSubtext}>{kpis.experiments_completion_pct}% completion</span>
+              <span className={styles.kpiSubtext}>{kpis.experiments_completion_pct != null ? `${kpis.experiments_completion_pct}% completion` : 'Completion unavailable'}</span>
             </div>
             <div style={{ width: '100%', height: '5px', background: '#e2e8f0', borderRadius: '9999px', overflow: 'hidden' }}>
               <div
                 style={{
-                  width: `${kpis.experiments_completion_pct}%`,
+                  width: `${kpis.experiments_completion_pct ?? 0}%`,
                   height: '100%',
                   background: '#2563eb',
                   borderRadius: '9999px',
@@ -826,12 +781,12 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
             <div>
               <p className={styles.kpiTitle}>Attendance</p>
               <div className={styles.kpiValueRow}>
-                <span className={styles.kpiValue}>{kpis.attendance_rate}%</span>
+                <span className={styles.kpiValue}>{kpis.attendance_rate != null ? `${kpis.attendance_rate}%` : '—'}</span>
               </div>
             </div>
           </div>
           <div className={styles.kpiBottomRow}>
-            <span className={styles.kpiSubtext}>{kpis.attendance_period}</span>
+            <span className={styles.kpiSubtext}>{kpis.attendance_period ?? 'No attendance period'}</span>
             <div className={styles.sparklineWrap}>
               {/* Mini vertical bar chart */}
               <div style={{ display: 'flex', alignItems: 'flex-end', gap: '3px', height: '22px' }}>
@@ -872,7 +827,7 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
             </div>
           </div>
           <div className={styles.kpiBottomRow}>
-            <span className={styles.kpiSubtext}>{kpis.rank_percentile_text}</span>
+            <span className={styles.kpiSubtext}>{kpis.rank_percentile_text ?? 'Percentile unavailable'}</span>
             <div className={styles.sparklineWrap}>
               {renderSparkline(kpis.sparkline_rank, '#8b5cf6', 76, 22, true)}
             </div>
@@ -921,7 +876,7 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
           </div>
 
           {/* Interactive Multi-Line SVG Chart */}
-          {renderMultiLineChart()}
+          {performanceTrend.overall.some((value) => value != null) || performanceTrend.subjects.some((series) => series.data.some((value) => value != null)) ? renderMultiLineChart() : <div className={styles.chartContainer} style={{ display: 'grid', placeItems: 'center', color: '#64748b' }}>No graded observations are available for this trend period.</div>}
 
           {/* Color Legend (Clickable to isolate subject) */}
           <div className={styles.chartLegend}>
@@ -982,7 +937,7 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
                   {subjectPerformance.map((s, sIdx) => (
                     <li
                       key={`card-dropdown-${(s as any).id || s.code}-${sIdx}`}
-                      className={`${styles.dropdownItem} ${selectedSubject.toLowerCase() === s.code.toLowerCase() ? styles.dropdownItemActive : ''}`}
+                      className={`${styles.dropdownItem} ${selectedSubject.toLowerCase() === s.code.toLowerCase() || selectedSubject === (s as any).id ? styles.dropdownItemActive : ''}`}
                       onClick={() => {
                         handleSelectSubject(s.code.toLowerCase());
                         setOpenDropdown(null);
@@ -1168,53 +1123,13 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
               <h3 className={styles.cardTitle}>Attendance</h3>
             </div>
 
-            <div className={styles.filterGroup}>
-              <button
-                type="button"
-                className={styles.filterBtn}
-                style={{ padding: '0.3rem 0.6rem', fontSize: '0.75rem' }}
-                onClick={() => setOpenDropdown(openDropdown === 'attendance_month' ? null : 'attendance_month')}
-              >
-                <span>
-                  {attendanceMonth === 'this_month'
-                    ? 'This Month'
-                    : attendanceMonth === 'last_month'
-                    ? 'Last Month'
-                    : attendanceMonth === 'semester'
-                    ? 'This Semester'
-                    : 'All Time'}
-                </span>
-                <ChevronDown size={12} />
-              </button>
-              {openDropdown === 'attendance_month' && (
-                <ul className={styles.dropdownMenu} style={{ right: 0, left: 'auto', minWidth: '140px' }}>
-                  {[
-                    { id: 'this_month', label: 'This Month' },
-                    { id: 'last_month', label: 'Last Month' },
-                    { id: 'semester', label: 'This Semester' },
-                    { id: 'all', label: 'All Time' },
-                  ].map((opt) => (
-                    <li
-                      key={opt.id}
-                      className={`${styles.dropdownItem} ${attendanceMonth === opt.id ? styles.dropdownItemActive : ''}`}
-                      onClick={() => {
-                        setAttendanceMonth(opt.id);
-                        setOpenDropdown(null);
-                      }}
-                    >
-                      {opt.label}
-                    </li>
-                  ))}
-                </ul>
-              )}
-            </div>
           </div>
 
           {/* Circular Donut Diagram */}
-          {renderDonut()}
+          {attendanceDonut.total > 0 ? renderDonut() : <div className={styles.donutContainer} style={{ color: '#64748b', textAlign: 'center', display: 'grid', placeItems: 'center' }}>No attendance records for this period.</div>}
 
           {/* Attendance Breakdown Legend */}
-          <div className={styles.donutLegend}>
+          {attendanceDonut.total > 0 && <div className={styles.donutLegend}>
             <div
               className={styles.donutLegendItem}
               style={{
@@ -1253,21 +1168,25 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
                 cursor: 'pointer',
                 padding: '3px 8px',
                 borderRadius: '6px',
-                background: hoveredAttendance === 'excused' ? '#fffbeb' : 'transparent',
+                background: hoveredAttendance === 'late' ? '#fffbeb' : 'transparent',
                 transition: 'background 0.15s ease',
               }}
-              onMouseEnter={() => setHoveredAttendance('excused')}
+              onMouseEnter={() => setHoveredAttendance('late')}
               onMouseLeave={() => setHoveredAttendance(null)}
             >
               <span className={styles.donutDot} style={{ background: '#f59e0b' }} />
-              <span>Excused</span>
-              <span className={styles.donutCount}>{attendanceDonut.excused}</span>
+              <span>Late</span>
+              <span className={styles.donutCount}>{attendanceDonut.late}</span>
             </div>
-          </div>
+            <div className={styles.donutLegendItem} onMouseEnter={() => setHoveredAttendance('partial')} onMouseLeave={() => setHoveredAttendance(null)}>
+              <span className={styles.donutDot} style={{ background: '#8b5cf6' }} />
+              <span>Partial</span><span className={styles.donutCount}>{attendanceDonut.partial}</span>
+            </div>
+          </div>}
 
-          <div className={styles.donutFooter}>
+          {attendanceDonut.total > 0 && <div className={styles.donutFooter}>
             {attendanceDonut.total} Total Sessions
-          </div>
+          </div>}
         </div>
 
         {/* Column 3: Risk & Guidance */}
@@ -1287,14 +1206,14 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
                 gap: '0.25rem',
                 fontSize: '0.75rem',
                 fontWeight: 700,
-                color: '#15803d',
-                background: '#dcfce7',
-                border: '1px solid #bbf7d0',
+                color: riskGuidance.status_color === 'green' ? '#15803d' : riskGuidance.status_color === 'orange' ? '#b45309' : '#64748b',
+                background: riskGuidance.status_color === 'green' ? '#dcfce7' : riskGuidance.status_color === 'orange' ? '#fff7ed' : '#f1f5f9',
+                border: `1px solid ${riskGuidance.status_color === 'green' ? '#bbf7d0' : riskGuidance.status_color === 'orange' ? '#fed7aa' : '#cbd5e1'}`,
                 padding: '0.25rem 0.65rem',
                 borderRadius: '9999px',
               }}
             >
-              <CheckCircle2 size={12} />
+              {riskGuidance.status_color === 'green' ? <CheckCircle2 size={12} /> : riskGuidance.status_color === 'orange' ? <AlertTriangle size={12} /> : <Clock size={12} />}
               <span>{riskGuidance.status}</span>
             </span>
           </div>
@@ -1465,12 +1384,12 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
                   <div
                     className={styles.completionBarFill}
                     style={{
-                      width: `${cp.completion_pct}%`,
+                      width: `${cp.completion_pct ?? 0}%`,
                       background: cp.color,
                     }}
                   />
                 </div>
-                <span className={styles.completionPct}>{cp.completion_pct}%</span>
+                <span className={styles.completionPct}>{cp.completion_pct != null ? `${cp.completion_pct}%` : '—'}</span>
               </div>
             ))}
           </div>

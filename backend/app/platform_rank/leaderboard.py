@@ -147,6 +147,7 @@ def get_platform_leaderboard(
     # 2. Global or Institution-scoped Leaderboard
     q = db.session.query(PlatformRating, User, StudentXP).join(User, PlatformRating.student_id == User.id)
     q = q.outerjoin(StudentXP, PlatformRating.student_id == StudentXP.student_id)
+    q = q.filter(PlatformRating.problems_solved > 0, PlatformRating.rating > 0)
 
     if scope == 'institution' and scope_id:
         q = q.filter(User.institution_id == scope_id)
@@ -197,13 +198,13 @@ def get_platform_leaderboard(
     # If current student is not in top limit, still include my_standing
     if not my_standing and current_student_id:
         st_rating = PlatformRating.query.get(current_student_id)
-        if st_rating:
+        if st_rating and (st_rating.problems_solved or 0) > 0 and (st_rating.rating or 0.0) > 0:
             st_user = User.query.get(current_student_id)
             st_xp = StudentXP.query.filter_by(student_id=current_student_id).first()
             lvl, lvl_name = xp_to_level(st_xp.total_xp if st_xp else 0)
             st_name = st_user.name if st_user else 'You'
             my_standing = {
-                'position': st_rating.global_rank or cohort_size,
+                'position': st_rating.global_rank,
                 'student_id': current_student_id,
                 'student_name': st_name,
                 'full_name': st_name,
@@ -215,7 +216,7 @@ def get_platform_leaderboard(
                 'level_name': lvl_name,
                 'problems_solved': st_rating.problems_solved,
                 'streak_days': st_rating.streak_days,
-                'percentile': round(float(st_rating.global_percentile or 50.0), 1),
+                'percentile': round(float(st_rating.global_percentile), 1) if st_rating.global_percentile is not None else None,
             }
 
     return {

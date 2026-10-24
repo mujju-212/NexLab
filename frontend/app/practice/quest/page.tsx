@@ -1,12 +1,6 @@
-// /practice/quest
-'use client';
-import IndividualShell from '@/components/layout/IndividualShell';
-import QuestPage from '@/components/practice/QuestPage';
+import { redirect } from 'next/navigation';
 
-export default function IndividualQuestPage() {
-  return (
-    <IndividualShell activePage="quest">
-      <QuestPage baseRoute="/practice/library" />
-    </IndividualShell>
-  );
+/** Legacy route retained for bookmarks; the canonical page lives under the library. */
+export default function IndividualQuestRedirect() {
+  redirect('/practice/library/quest');
 }

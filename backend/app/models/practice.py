@@ -29,7 +29,7 @@ class Problem(db.Model):
     constraints     = db.Column(db.JSON, default=list)               # ["2 <= n <= 10^4", ...]
     hints           = db.Column(db.JSON, default=list)               # reveal one at a time
     starter_code    = db.Column(db.JSON, default=dict)               # {python: "...", java: "..."}
-    acceptance      = db.Column(db.Float, default=0.0)              # 0.49 = 49%
+    acceptance      = db.Column(db.Float)                           # source acceptance, absent when unknown
     source          = db.Column(db.String(30), default='leetcode')   # leetcode | custom | instructor
 
     is_active       = db.Column(db.Boolean, default=True)
@@ -53,7 +53,7 @@ class Problem(db.Model):
             'topics':        self.topics or [],
             'constraints':   self.constraints or [],
             'hints':         self.hints or [],
-            'acceptance':    round(float(self.acceptance or 0), 4),
+            'acceptance':    round(float(self.acceptance), 4) if self.acceptance is not None and float(self.acceptance) > 0 else None,
             'source':        self.source,
             'is_daily':      self.is_daily,
             'daily_date':    self.daily_date.isoformat() if self.daily_date else None,
@@ -65,39 +65,7 @@ class Problem(db.Model):
         return d
 
     def to_list_dict(self):
-        """Lightweight dict for problem list table (no description)."""
-        import hashlib
-        acc = float(self.acceptance or 0)
-        solvers_k = 120.0
-
-        CURATED_STATS = {
-            'two-sum': (0.498, '325.4K'),
-            'valid-parentheses': (0.421, '298.7K'),
-            'merge-two-sorted-lists': (0.563, '267.9K'),
-            'binary-tree-inorder-traversal': (0.625, '241.2K'),
-            'maximum-subarray': (0.467, '223.6K'),
-        }
-
-        if self.slug in CURATED_STATS:
-            acc, solvers_display = CURATED_STATS[self.slug]
-        else:
-            h = int(hashlib.md5(self.slug.encode()).hexdigest()[:6], 16)
-            if acc <= 0.0:
-                if self.difficulty == 'Easy':
-                    acc = round(0.48 + (h % 280) / 1000.0, 3)
-                elif self.difficulty == 'Hard':
-                    acc = round(0.24 + (h % 220) / 1000.0, 3)
-                else:
-                    acc = round(0.38 + (h % 260) / 1000.0, 3)
-            h2 = int(hashlib.md5((self.slug + 'solvers').encode()).hexdigest()[:6], 16)
-            if self.difficulty == 'Easy':
-                solvers_k = round(160.0 + (h2 % 1600) / 10.0, 1)
-            elif self.difficulty == 'Hard':
-                solvers_k = round(35.0 + (h2 % 650) / 10.0, 1)
-            else:
-                solvers_k = round(85.0 + (h2 % 1350) / 10.0, 1)
-            solvers_display = f"{solvers_k}K"
-
+        """Lightweight problem payload; unavailable source stats stay unavailable."""
         parsed_topics = []
         if isinstance(self.topics, list):
             parsed_topics = self.topics
@@ -105,15 +73,15 @@ class Problem(db.Model):
             try:
                 import json
                 pt = json.loads(self.topics)
-                if isinstance(pt, list):
-                    parsed_topics = [str(x) for x in pt]
-                else:
-                    parsed_topics = [str(pt)]
+                parsed_topics = [str(x) for x in pt] if isinstance(pt, list) else [str(pt)]
             except Exception:
                 parsed_topics = [t.strip() for t in self.topics.split(',') if t.strip()]
-        if not parsed_topics:
-            parsed_topics = [self.nexlab_topic] if self.nexlab_topic else ['Algorithms']
 
+        acceptance = (
+            round(float(self.acceptance), 4)
+            if self.acceptance is not None and float(self.acceptance) > 0
+            else None
+        )
         return {
             'id':              self.id,
             'slug':            self.slug,
@@ -122,11 +90,12 @@ class Problem(db.Model):
             'difficulty':      self.difficulty,
             'nexlab_topic':    self.nexlab_topic,
             'topics':          parsed_topics,
-            'acceptance':      round(acc, 4),
-            'acceptance_pct':  f"{round(acc * 100, 1)}%",
-            'solvers_display': solvers_display,
+            'acceptance':      acceptance,
+            'acceptance_pct':  f"{round(acceptance * 100, 1)}%" if acceptance is not None else None,
+            'solvers_display': None,
             'is_daily':        self.is_daily,
         }
+
 
 
 class PracticeTestCase(db.Model):

@@ -41,33 +41,12 @@ const CONCEPT_ICONS: Record<string, React.FC<{ size?: number }>> = {
   'Trees & Graphs': GitBranch,
 };
 
-const DEFAULT_STRONGEST = [
-  { name: 'Arrays & Lists', score: 92 },
-  { name: 'Object-Oriented Programming', score: 88 },
-  { name: 'SQL & Databases', score: 84 },
-  { name: 'Operating Systems', score: 82 },
-  { name: 'Computer Networks', score: 78 },
-];
-
-const DEFAULT_FOCUS = [
-  { name: 'Recursion', score: 34 },
-  { name: 'Dynamic Programming', score: 42 },
-  { name: 'Pointers & Memory', score: 46 },
-  { name: 'Concurrency', score: 52 },
-  { name: 'System Design Basics', score: 58 },
-];
-
 export const StrongestWeakestCard: React.FC<StrongestWeakestCardProps> = ({
   overview,
   onNavigateTab,
 }) => {
-  const strongest = overview?.strongest_concepts && overview.strongest_concepts.length >= 5
-    ? overview.strongest_concepts
-    : DEFAULT_STRONGEST;
-
-  const focusNext = overview?.focus_next_concepts && overview.focus_next_concepts.length >= 5
-    ? overview.focus_next_concepts
-    : DEFAULT_FOCUS;
+  const strongest = overview?.strongest_concepts ?? [];
+  const focusNext = overview?.focus_next_concepts ?? [];
 
   const renderIcon = (name: string, fallbackColor: string) => {
     const IconComp = CONCEPT_ICONS[name] || Layers;
@@ -105,7 +84,9 @@ export const StrongestWeakestCard: React.FC<StrongestWeakestCardProps> = ({
             <span>Strongest Concepts</span>
           </div>
 
-          {strongest.slice(0, 5).map((c, i) => (
+          {strongest.length === 0 ? (
+            <p style={{ color: '#64748b', padding: '0.75rem' }}>No measured strengths yet.</p>
+          ) : strongest.slice(0, 5).map((c, i) => (
             <div key={i} className={styles.conceptRowItem}>
               <div className={styles.conceptRowTop}>
                 <div className={styles.conceptLabelWithIcon}>
@@ -131,7 +112,9 @@ export const StrongestWeakestCard: React.FC<StrongestWeakestCardProps> = ({
             <span>Focus Next</span>
           </div>
 
-          {focusNext.slice(0, 5).map((c, i) => (
+          {focusNext.length === 0 ? (
+            <p style={{ color: '#64748b', padding: '0.75rem' }}>No measured focus areas yet.</p>
+          ) : focusNext.slice(0, 5).map((c, i) => (
             <div key={i} className={styles.conceptRowItem}>
               <div className={styles.conceptRowTop}>
                 <div className={styles.conceptLabelWithIcon}>

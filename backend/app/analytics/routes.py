@@ -208,10 +208,53 @@ def cohort_leaderboard():
     Returns the ranked leaderboard cohort for any scope level:
     'section', 'department', 'year', 'institution', or 'platform'.
     """
-    scope_level = request.args.get('scope_level', 'institution')
+    scope_level = (request.args.get('scope_level', 'institution') or 'institution').lower()
     scope_id = request.args.get('scope_id')
     limit = int(request.args.get('limit', 50))
     limit = max(1, min(200, limit))
+
+    # Student leaderboards are limited to the student's own institution and
+    # academic cohorts. A caller-supplied UUID must never widen that scope.
+    if g.role == 'student':
+        from app.models.academic import SectionStudent, SectionSubject, Section, Batch
+        student = User.query.get(g.user_id)
+        if not student or not g.institution_id:
+            return jsonify({'error': 'Academic rankings are unavailable for this account'}), 403
+        section_ids = [row.section_id for row in SectionStudent.query.filter_by(student_id=g.user_id).all()]
+        if scope_level in ('section', 'section_subject'):
+            if scope_id and scope_id not in section_ids:
+                own_subject_ids = [row.id for row in SectionSubject.query.filter(SectionSubject.section_id.in_(section_ids)).all()] if section_ids else []
+                if scope_id not in own_subject_ids:
+                    return jsonify({'error': 'Access denied: rankings are limited to your own section'}), 403
+            scope_id = scope_id or (section_ids[0] if section_ids else None)
+        elif scope_level == 'subject':
+            own_subject_ids = [row.id for row in SectionSubject.query.filter(SectionSubject.section_id.in_(section_ids)).all()] if section_ids else []
+            if scope_id and scope_id not in own_subject_ids:
+                return jsonify({'error': 'Access denied: rankings are limited to your enrolled subjects'}), 403
+            scope_id = scope_id or (own_subject_ids[0] if own_subject_ids else None)
+        elif scope_level == 'department':
+            if scope_id and scope_id != student.department_id:
+                return jsonify({'error': 'Access denied: rankings are limited to your department'}), 403
+            scope_id = student.department_id
+        elif scope_level == 'year':
+            sections = Section.query.filter(Section.id.in_(section_ids), Section.institution_id == g.institution_id).all() if section_ids else []
+            allowed_year_ids = set()
+            for section in sections:
+                if section.batch_id:
+                    batch = Batch.query.get(section.batch_id)
+                    if batch:
+                        allowed_year_ids.update([batch.id, batch.year_id])
+            if scope_id and scope_id not in allowed_year_ids:
+                return jsonify({'error': 'Access denied: rankings are limited to your cohort'}), 403
+            scope_id = scope_id or next(iter(allowed_year_ids), None)
+        elif scope_level == 'institution':
+            if scope_id and scope_id != g.institution_id:
+                return jsonify({'error': 'Access denied: rankings are limited to your institution'}), 403
+            scope_id = g.institution_id
+        else:
+            return jsonify({'error': 'Students may only view academic rankings within their institution'}), 403
+    elif scope_level == 'institution' and not scope_id:
+        scope_id = g.institution_id
 
     results = compute_rank_for_scope(
         scope_level=scope_level,
@@ -219,7 +262,6 @@ def cohort_leaderboard():
         institution_id=g.institution_id,
     )
 
-    from app.models.user import User
     student_ids = [r['student_id'] for r in results if r.get('student_id')]
     users_map = {u.id: u for u in User.query.filter(User.id.in_(student_ids)).all()} if student_ids else {}
 

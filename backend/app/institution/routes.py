@@ -2790,7 +2790,8 @@ def analytics_overview():
 
         # Completion rate in interval
         int_done = sum(1 for s in int_sess if s.status == 'ended')
-        spark_completion.append(round((int_done / len(int_sess) * 100.0) if int_sess else completion_rate_pct, 1))
+        interval_completion = (int_done / len(int_sess) * 100.0) if int_sess else completion_rate_pct
+        spark_completion.append(round(interval_completion, 1) if interval_completion is not None else None)
 
     # 7. Peak usage hours & 7-day x 6-hour-bucket activity matrix
     hour_rows = session_q.filter(

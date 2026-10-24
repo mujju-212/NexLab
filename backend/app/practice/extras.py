@@ -100,7 +100,7 @@ def recommended_problems():
                 if p.slug == ps and p.id not in solved_ids:
                     candidates.append(p)
                     break
-        for p in sorted(problems.values(), key=lambda x: -(x.acceptance or 0)):
+        for p in sorted(problems.values(), key=lambda x: (x.acceptance is None or x.acceptance <= 0, -(x.acceptance or 0))):
             if p.id not in solved_ids and p not in candidates and p.difficulty == 'Easy':
                 candidates.append(p)
         picks = candidates[:5]
@@ -118,6 +118,7 @@ def recommended_problems():
         # order by weak-topic priority then acceptance
         candidates.sort(key=lambda p: (
             -topic_score.get(p.nexlab_topic, 0),
+            p.acceptance is None or p.acceptance <= 0,
             -(p.acceptance or 0),
         ))
         picks = candidates[:5]
@@ -134,13 +135,7 @@ def recommended_problems():
             return line[:90] + ('...' if len(line) > 90 else '')
         return ""
 
-    def _solves_str(acc, pid):
-        # Deterministic human-readable solves estimate matching competitive platforms
-        h = abs(hash(str(pid))) % 500
-        total_k = int(round((acc or 0.6) * 1100)) + h + 200
-        if total_k >= 1000:
-            return f"{round(total_k / 1000, 1)}M solves"
-        return f"{total_k}K solves"
+
 
     return jsonify({'recommendations': [{
         'id':             p.id,
@@ -148,11 +143,11 @@ def recommended_problems():
         'title':          p.title,
         'difficulty':     p.difficulty,
         'nexlab_topic':   p.nexlab_topic,
-        'topics':         (p.topics or [p.nexlab_topic])[:3],
+        'topics':         (p.topics or [])[:3],
         'description':    _clean_desc(p.description),
-        'acceptance':     p.acceptance,
-        'acceptance_pct': int(round(float(p.acceptance or 0.88) * 100 if (p.acceptance and p.acceptance <= 1.0) else float(p.acceptance or 88))),
-        'solves_display': _solves_str(p.acceptance, p.id),
+        'acceptance':     p.acceptance if p.acceptance is not None and p.acceptance > 0 else None,
+        'acceptance_pct': int(round(float(p.acceptance) * 100)) if p.acceptance is not None and 0 < p.acceptance <= 1.0 else (int(round(float(p.acceptance))) if p.acceptance is not None and p.acceptance > 1.0 else None),
+        'solves_display': None,
         'reason':         'weak topic practice' if topic_score.get(p.nexlab_topic, 0) > 0
                           else ('warm-up' if p.difficulty == 'Easy' else 'level up'),
     } for p in picks]}), 200

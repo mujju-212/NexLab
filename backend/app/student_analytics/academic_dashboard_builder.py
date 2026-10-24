@@ -13,6 +13,7 @@ from app.models.experiment import Experiment
 from app.models.grading import Grade
 from app.models.academic import Section, SectionStudent, SectionSubject, Department
 from app.models.session import LabSession, SessionAttendance
+from app.models.submission import CodeAttempt
 from app.models.knowledge import ConceptMastery, ExperimentConcept
 from app.analytics.completion import (
     compute_student_completion_rollup,
@@ -65,66 +66,113 @@ def build_academic_dashboard_payload(
     student = db.session.get(User, student_id)
     iid = institution_id or (student.institution_id if student else None)
 
-    # 1. Fetch Enrolled Subjects & Active Courses
+    # 1. Fetch only subjects assigned to sections in which this student is enrolled.
     enrollments = SectionStudent.query.filter_by(student_id=student_id).all()
-    sec_ids = [e.section_id for e in enrollments]
-    sec_subjects = (
-        SectionSubject.query.filter(SectionSubject.section_id.in_(sec_ids)).all()
-        if sec_ids else []
-    )
-    enrolled_subject_ids = [ss.subject_id for ss in sec_subjects]
+    sec_ids = {e.section_id for e in enrollments}
+    if sec_ids and iid:
+        sec_ids = {row.id for row in Section.query.filter(
+            Section.id.in_(sec_ids), Section.institution_id == iid
+        ).all()}
+    sec_subject_q = SectionSubject.query.filter(SectionSubject.section_id.in_(sec_ids)) if sec_ids else SectionSubject.query.filter(db.literal(False))
+    if iid:
+        sec_subject_q = sec_subject_q.filter(SectionSubject.institution_id == iid)
+    sec_subjects = sec_subject_q.all()
+    enrolled_subject_ids = sorted({ss.subject_id for ss in sec_subjects})
+    enrolled_subjects = Subject.query.filter(Subject.id.in_(enrolled_subject_ids)).all() if enrolled_subject_ids else []
 
-    if not enrolled_subject_ids:
-        inst_subs = Subject.query.filter_by(institution_id=iid).limit(5).all() if iid else Subject.query.limit(5).all()
-        enrolled_subjects = inst_subs
-    else:
-        enrolled_subjects = Subject.query.filter(Subject.id.in_(enrolled_subject_ids)).all()
-
-    # Normalize active subject filter if provided
+    # Subject filters accept an enrolled subject id or its actual code/name only.
     is_subject_filtered = bool(subject_id and subject_id.lower() != 'all')
-    target_subject_code = _normalize_subject_code(subject_id) if is_subject_filtered else None
-
-    # Filter enrolled subjects if single subject requested
     if is_subject_filtered:
-        filtered_subjs = [s for s in enrolled_subjects if _normalize_subject_code(s.code or s.name) == target_subject_code or s.id == subject_id]
-        if filtered_subjs:
-            enrolled_subjects = filtered_subjs
+        requested = subject_id.strip().lower()
+        matches = [s for s in enrolled_subjects if (
+            s.id == subject_id or (s.code or '').strip().lower() == requested
+            or (s.name or '').strip().lower() == requested
+        )]
+        enrolled_subjects = matches
+        enrolled_subject_ids = [s.id for s in matches]
 
-    # 2. Fetch Grades for Student
-    # Grade-scope rule: unattributed grades (no experiment) never enter an
-    # average; they are surfaced separately as `unattributed_grades`.
-    from app.analytics.scope import count_unattributed_grades
-    grades_query = (
-        Grade.query
-        .filter(Grade.student_id == student_id,
-                Grade.final_grade.isnot(None),
-                Grade.experiment_id.isnot(None))
-    )
+    assigned_exp_q = Experiment.query.filter(Experiment.subject_id.in_(enrolled_subject_ids), Experiment.is_published.is_(True)) if enrolled_subject_ids else Experiment.query.filter(db.literal(False))
+    if iid:
+        assigned_exp_q = assigned_exp_q.filter(Experiment.institution_id == iid)
+    assigned_experiments = assigned_exp_q.all()
+    assigned_exp_ids = {e.id for e in assigned_experiments}
 
+    # An experiment filter must identify an experiment actually assigned through
+    # the student's enrolled subject(s); unknown IDs resolve to an empty set.
+    if experiment_id and experiment_id.lower() != 'all':
+        assigned_exp_ids = assigned_exp_ids.intersection({experiment_id})
+        assigned_experiments = [e for e in assigned_experiments if e.id == experiment_id]
+        if assigned_experiments:
+            enrolled_subjects = [s for s in enrolled_subjects if s.id == assigned_experiments[0].subject_id]
+            enrolled_subject_ids = [s.id for s in enrolled_subjects]
+        else:
+            enrolled_subjects = []
+            enrolled_subject_ids = []
+
+    # The schema has no semester field. Ignore the legacy parameter instead of
+    # pretending fixed semester labels are real filter options.
     now = datetime.utcnow()
-    if period in ('30d', '30'):
-        grades_query = grades_query.filter(Grade.created_at >= now - timedelta(days=30))
-    elif period in ('60d', '60'):
-        grades_query = grades_query.filter(Grade.created_at >= now - timedelta(days=60))
-    elif period in ('90d', '90', '12w'):
-        grades_query = grades_query.filter(Grade.created_at >= now - timedelta(days=90))
-    elif period in ('semester', 'this_semester'):
-        grades_query = grades_query.filter(Grade.created_at >= now - timedelta(days=120))
+    period_days = {'30d': 30, '30': 30, '60d': 60, '60': 60, '90d': 90, '90': 90, '12w': 84}
+    period_start = now - timedelta(days=period_days[period]) if period in period_days else None
 
+    # 2. Fetch only this student's graded work for currently assigned experiments.
+    # A missing grade is not zero; zero-weight and invalid-scale experiments are
+    # excluded from the weighted score denominator.
+    from app.analytics.scope import count_unattributed_grades
+    grades_query = Grade.query.filter(
+        Grade.student_id == student_id,
+        Grade.final_grade.isnot(None),
+        Grade.experiment_id.isnot(None),
+    )
+    if assigned_exp_ids:
+        grades_query = grades_query.filter(Grade.experiment_id.in_(assigned_exp_ids))
+    else:
+        grades_query = grades_query.filter(db.literal(False))
+    if period_start is not None:
+        grades_query = grades_query.filter(Grade.created_at >= period_start)
     all_grades = grades_query.order_by(Grade.created_at.desc()).all()
 
-    # Map grades by subject
+    exp_cache = {e.id: e for e in assigned_experiments}
     grades_by_subject: Dict[str, List[Grade]] = defaultdict(list)
-    exp_cache = {}
-    for g in all_grades:
-        exp = db.session.get(Experiment, g.experiment_id) if g.experiment_id else None
+    for grade in all_grades:
+        exp = exp_cache.get(grade.experiment_id)
         if exp:
-            exp_cache[g.experiment_id] = exp
-            grades_by_subject[exp.subject_id].append(g)
+            grades_by_subject[exp.subject_id].append(grade)
+
+    def _grade_percent(grade: Grade) -> Optional[float]:
+        exp = exp_cache.get(grade.experiment_id)
+        if not exp or grade.final_grade is None:
+            return None
+        scale = float(exp.grade_scale or 0)
+        weight = float(exp.weightage or 0)
+        if scale <= 0 or weight <= 0:
+            return None
+        return max(0.0, min(100.0, float(grade.final_grade) / scale * 100.0))
+
+    def _weighted_average(grades: List[Grade]) -> Optional[float]:
+        latest_by_experiment = {}
+        for grade in grades:
+            if grade.experiment_id not in latest_by_experiment:
+                latest_by_experiment[grade.experiment_id] = grade
+        weighted_total = 0.0
+        total_weight = 0.0
+        for grade in latest_by_experiment.values():
+            exp = exp_cache.get(grade.experiment_id)
+            pct = _grade_percent(grade)
+            weight = float(exp.weightage or 0) if exp else 0.0
+            if pct is None or weight <= 0:
+                continue
+            weighted_total += pct * weight
+            total_weight += weight
+        return round(weighted_total / total_weight, 1) if total_weight > 0 else None
 
     # 3. Real Academic Completion Rollup (SectionStudent -> SectionSubject -> Experiment -> Grade)
-    scope_lvl = 'subject' if is_subject_filtered else 'institution'
-    scope_target_id = subject_id if is_subject_filtered else None
+    if experiment_id and experiment_id.lower() != 'all':
+        scope_lvl, scope_target_id = 'experiment', experiment_id
+    elif is_subject_filtered:
+        scope_lvl, scope_target_id = 'subject', (enrolled_subject_ids[0] if enrolled_subject_ids else subject_id)
+    else:
+        scope_lvl, scope_target_id = 'student', student_id
     completion_data = compute_student_completion_rollup(
         student_id=student_id,
         scope_level=scope_lvl,
@@ -133,7 +181,8 @@ def build_academic_dashboard_payload(
     )
     total_assigned_exps = int(completion_data.get('assigned', 0) or 0)
     completed_exps = int(completion_data.get('completed', 0) or 0)
-    completion_pct = float(completion_data.get('completion_pct', 0.0) or 0.0)
+    _completion_pct = completion_data.get('completion_pct')
+    completion_pct = float(_completion_pct) if _completion_pct is not None else None
 
     # 4. Real Attendance Rollup (SessionAttendance where status in ('present', 'late'))
     attendance_data = compute_student_attendance_rollup(
@@ -141,6 +190,7 @@ def build_academic_dashboard_payload(
         scope_level=scope_lvl,
         scope_id=scope_target_id,
         institution_id=iid,
+        window_start=period_start,
     )
     scheduled_sessions = int(attendance_data.get('scheduled', 0) or 0)
     present_sessions = int(attendance_data.get('present', 0) or 0)
@@ -157,17 +207,15 @@ def build_academic_dashboard_payload(
     ]
 
     # 5. Overall Academic Score & Sparkline
-    if all_grades:
-        computed_avg = round(sum(float(g.final_grade or 0) for g in all_grades) / len(all_grades), 1)
-        overall_score = round(computed_avg)
-    else:
-        overall_score = None      # no graded work => unmeasured, not 0%
+    overall_score = _weighted_average(all_grades)
+    if overall_score is not None:
+        overall_score = round(overall_score)
     # Real delta: latest grade vs the mean of everything before it. With a
     # single grade there is no prior period, so it stays None (UI prints "—").
     if len(all_grades) >= 2:
         _chrono = sorted(all_grades, key=lambda g: (g.graded_at or g.created_at))
-        _prior = [float(g.final_grade) for g in _chrono[:-1] if g.final_grade is not None]
-        _last = float(_chrono[-1].final_grade) if _chrono[-1].final_grade is not None else None
+        _prior = [v for g in _chrono[:-1] if (v := _grade_percent(g)) is not None]
+        _last = _grade_percent(_chrono[-1])
         if _prior and _last is not None:
             _base = sum(_prior) / len(_prior)
             overall_delta = round(_last - _base, 1) if _base else None
@@ -179,11 +227,11 @@ def build_academic_dashboard_payload(
     # Sparkline from chronological grades
     chronological_grades = list(reversed(all_grades))
     if len(chronological_grades) >= 7:
-        sparkline_overall = [round(float(g.final_grade or 0)) for g in chronological_grades[-7:]]
+        sparkline_overall = [round(v) for g in chronological_grades[-7:] if (v := _grade_percent(g)) is not None]
     elif chronological_grades:
         # Real points only — the series used to be left-padded by repeating the
         # first grade, which drew a flat run that never happened.
-        sparkline_overall = [round(float(g.final_grade or 0)) for g in chronological_grades]
+        sparkline_overall = [round(v) for g in chronological_grades if (v := _grade_percent(g)) is not None]
     else:
         sparkline_overall = []
 
@@ -206,21 +254,21 @@ def build_academic_dashboard_payload(
         st = SUBJECT_STYLE_MAP.get(base_code, SUBJECT_STYLE_MAP.get(s_code, SUBJECT_STYLE_MAP['DSA']))
 
         # Query all experiments for this subject
-        subj_exps = Experiment.query.filter_by(subject_id=subj.id).all()
+        subj_exps = [e for e in assigned_experiments if e.subject_id == subj.id]
         subj_exp_ids = [e.id for e in subj_exps]
         subj_assigned = len(subj_exps)
 
         # Query grades for this student in this subject
         s_grades = [g for g in all_grades if g.experiment_id in subj_exp_ids]
-        if s_grades:
-            avg_g = round(sum(float(g.final_grade or 0) for g in s_grades) / len(s_grades))
-            completed_s = len({g.experiment_id for g in s_grades if g.final_grade is not None})
-        else:
-            # No graded work in this subject: unmeasured, not zero.
-            avg_g = None
-            completed_s = 0
+        avg_g = _weighted_average(s_grades)
+        submitted_rows = db.session.query(CodeAttempt.experiment_id).filter(
+            CodeAttempt.student_id == student_id,
+            CodeAttempt.experiment_id.in_(subj_exp_ids) if subj_exp_ids else db.literal(False),
+            CodeAttempt.is_final_submission.is_(True),
+        ).distinct().all()
+        completed_s = len({row[0] for row in submitted_rows})
 
-        c_pct = round((completed_s / max(1, subj_assigned)) * 100) if subj_assigned > 0 else 0
+        c_pct = round((completed_s / subj_assigned) * 100) if subj_assigned > 0 else None
         if avg_g is not None and avg_g >= 65:
             on_track_count += 1
 
@@ -228,7 +276,7 @@ def build_academic_dashboard_payload(
         # repeated the first grade until it had six points, drawing a flat line
         # that implied a stable history the student never had.
         ordered = sorted(s_grades, key=lambda g: (g.graded_at or g.created_at))
-        s_spark = [round(float(g.final_grade)) for g in ordered if g.final_grade is not None]
+        s_spark = [round(v) for g in ordered if (v := _grade_percent(g)) is not None]
 
         # Real trend: latest grade vs the mean of the earlier ones in this subject.
         if len(s_spark) >= 2:
@@ -256,7 +304,7 @@ def build_academic_dashboard_payload(
 
     # 6. Academic Rank from Multi-Scope Ranking Engine
     rank_pos = None            # unranked students must not display "#1"
-    cohort_size = max(1, enrolled_count)
+    cohort_size = None
     rank_percentile = None
     try:
         ranks_data = get_student_all_ranks(student_id=student_id, institution_id=iid)
@@ -270,12 +318,14 @@ def build_academic_dashboard_payload(
     except Exception:
         pass
 
-    if cohort_size < 2:
+    if cohort_size is not None and cohort_size < 2:
         rank_text = 'Only student in cohort'
-    elif cohort_size < 5 or rank_percentile is None:
+    elif cohort_size is not None and (cohort_size < 5 or rank_percentile is None):
         rank_text = 'Cohort too small for a percentile'
-    else:
+    elif rank_percentile is not None:
         rank_text = f"Top {max(1, 100 - round(rank_percentile))}% in Cohort"
+    else:
+        rank_text = None
     # Rank history must come from real snapshots; a repeated current rank is not
     # a trend. Empty list => the UI renders no sparkline.
     sparkline_rank = []
@@ -290,7 +340,9 @@ def build_academic_dashboard_payload(
     for g in all_grades:
         if g.created_at and g.created_at >= twelve_weeks_ago:
             w_idx = 11 - min(11, max(0, (now - g.created_at).days // 7))
-            val = float(g.final_grade or 0)
+            val = _grade_percent(g)
+            if val is None:
+                continue
             weekly_overall_buckets[w_idx].append(val)
             exp = exp_cache.get(g.experiment_id)
             if exp:
@@ -330,12 +382,10 @@ def build_academic_dashboard_payload(
     }
 
     # 8. Real Concept Mastery from DB
-    db_concepts = (
-        ConceptMastery.query
-        .filter_by(student_id=student_id)
-        .order_by(ConceptMastery.mastery_score.desc())
-        .all()
-    )
+    concepts_q = ConceptMastery.query.filter_by(student_id=student_id)
+    if iid:
+        concepts_q = concepts_q.filter_by(institution_id=iid)
+    db_concepts = concepts_q.filter(ConceptMastery.experiment_count > 0).order_by(ConceptMastery.mastery_score.desc()).all()
     concept_mastery_list = []
     for c in db_concepts:
         score = round(float(c.mastery_score or 0))
@@ -362,20 +412,39 @@ def build_academic_dashboard_payload(
     attendance_donut = {
         'rate': None if attendance_rate is None else round(attendance_rate),
         'present': present_sessions,
+        'late': late_sessions,
+        'partial': int(attendance_data.get('partial', 0) or 0),
         'absent': absent_sessions,
-        'excused': late_sessions,
         'total': scheduled_sessions,
-        'period_label': 'This Month' if period == '30d' else 'This Semester',
+        'period_label': {'30d': 'Last 30 Days', '30': 'Last 30 Days', '60d': 'Last 60 Days', '60': 'Last 60 Days', '90d': 'Last 90 Days', '90': 'Last 90 Days', '12w': 'Last 12 Weeks', 'all': 'All Time'}.get(period, 'Selected Period'),
     }
 
     # 10. Real Risk & Guidance from Risk Engine
+    measured_on_track = overall_score is not None and attendance_rate is not None and overall_score >= 65 and attendance_rate >= 75
+    measured_risk = (
+        (overall_score is not None and overall_score < 65)
+        or (attendance_rate is not None and attendance_rate < 75)
+    )
+    has_any_risk_measure = overall_score is not None or attendance_rate is not None
+    if measured_on_track:
+        guidance_status, guidance_color = 'On Track', 'green'
+        guidance_subtitle = 'Measured academic and attendance metrics are within the selected thresholds.'
+    elif measured_risk:
+        guidance_status, guidance_color = 'Needs Attention', 'orange'
+        guidance_subtitle = 'At least one measured academic or attendance metric is below its threshold.'
+    elif has_any_risk_measure:
+        guidance_status, guidance_color = 'Partial data', 'grey'
+        guidance_subtitle = 'Risk assessment is incomplete because one of the required metrics is unavailable.'
+    else:
+        guidance_status, guidance_color = 'Not enough data', 'grey'
+        guidance_subtitle = 'Graded work and attendance records are not available for assessment.'
     risk_guidance = {
-        'status': 'On Track' if (overall_score or 0) >= 65 and (attendance_rate or 0) >= 75 else 'Needs Attention',
-        'status_color': 'green' if (overall_score or 0) >= 65 and (attendance_rate or 0) >= 75 else 'orange',
-        'subtitle': 'Academic metrics are healthy.' if overall_score >= 65 else 'Review upcoming lab sessions and complete pending experiments.',
+        'status': guidance_status,
+        'status_color': guidance_color,
+        'subtitle': guidance_subtitle,
         'items': [],
     }
-    if overall_score >= 75:
+    if overall_score is not None and overall_score >= 75:
         risk_guidance['items'].append({
             'id': 'g1',
             'title': 'Strong Academic Standing',
@@ -409,7 +478,10 @@ def build_academic_dashboard_payload(
         s_code = _normalize_subject_code(subj.code if subj else 'DSA')
         exp_num = getattr(exp, 'exp_number', None) or 1
         e_title = f"Exp {exp_num}: {exp.title}" if exp else f"Exp {exp_num}"
-        fin = round(float(g.final_grade or 0))
+        pct_grade = _grade_percent(g)
+        if pct_grade is None:
+            continue
+        fin = round(pct_grade)
         auto_g = round(float(g.auto_grade or 0))
         man_g = round(float(g.manual_grade or 0))
         viva_g = round(float(g.viva_grade or 0))
@@ -419,9 +491,9 @@ def build_academic_dashboard_payload(
             'id': g.id,
             'exp_title': e_title,
             'subject': s_code,
-            'auto': f"{auto_g}/25",
-            'manual': f"{man_g}/20",
-            'viva': f"{viva_g}/10",
+            'auto': f"{auto_g}",
+            'manual': f"{man_g}",
+            'viva': f"{viva_g}",
             'final': f"{fin}%",
             'final_num': fin,
             'status': stat,
@@ -437,12 +509,9 @@ def build_academic_dashboard_payload(
 
     filter_options = {
         'subjects': subject_options,
-        'semesters': [
-            {'id': 'all', 'label': 'All Semesters'},
-            {'id': 'sem3', 'label': 'Semester 3'},
-            {'id': 'sem4', 'label': 'Semester 4'},
+        'experiments': [{'id': 'all', 'label': 'All Experiments'}] + [
+            {'id': e.id, 'label': e.title} for e in assigned_experiments
         ],
-        'experiments': [{'id': 'all', 'label': 'All Experiments'}],
         'date_ranges': [
             {'id': '30d', 'label': 'Last 30 Days'},
             {'id': '12w', 'label': 'Last 12 Weeks'},
@@ -450,20 +519,20 @@ def build_academic_dashboard_payload(
         ],
     }
 
-    full_name = getattr(student, 'full_name', None) or getattr(student, 'name', None) or 'Student'
-    sec_name = 'Section'
+    full_name = getattr(student, 'full_name', None) or getattr(student, 'name', None)
+    sec_name = None
     if enrollments:
         sec = db.session.get(Section, enrollments[0].section_id)
         if sec and sec.name:
             sec_name = sec.name
-    dept_info = f"CSE-{sec_name}"
+    dept_info = f"{sec_name}" if sec_name else None
 
     return {
         'student': {
             'id': student_id,
             'name': full_name,
             'department_year': dept_info,
-            'avatar_url': getattr(student, 'avatar_url', None) or '/images/student_avatar.jpg',
+            'avatar_url': getattr(student, 'avatar_url', None),
         },
         'kpi_metrics': {
             'overall_score': overall_score,
@@ -471,12 +540,12 @@ def build_academic_dashboard_payload(
             'sparkline_overall': sparkline_overall,
             'subjects_enrolled': enrolled_count,
             'subjects_on_track': on_track_count,
-            'subjects_ring_pct': round((on_track_count / max(1, enrolled_count)) * 100) if enrolled_count > 0 else 0,
+            'subjects_ring_pct': round((on_track_count / enrolled_count) * 100) if enrolled_count > 0 else None,
             'experiments_completed': completed_exps,
             'experiments_total': total_assigned_exps,
-            'experiments_completion_pct': round(completion_pct),
+            'experiments_completion_pct': round(completion_pct) if completion_pct is not None else None,
             'attendance_rate': None if attendance_rate is None else round(attendance_rate),
-            'attendance_period': 'This month' if period == '30d' else 'This semester',
+            'attendance_period': attendance_donut['period_label'],
             # One bar per real session, oldest -> newest (was the same rate
             # duplicated nine times).
             'attendance_mini_bars': attendance_bars,

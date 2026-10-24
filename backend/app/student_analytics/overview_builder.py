@@ -44,121 +44,98 @@ def _format_time_ago(dt: Optional[datetime]) -> str:
     return f'{weeks} weeks ago'
 
 
-def build_growth_student_profile(student_id: str, institution_id: Optional[str]) -> Dict[str, Any]:
-    """Builds profile identity card matching the exact student credentials."""
-    student = db.session.get(User, student_id)
-    full_name = getattr(student, 'full_name', None) or getattr(student, 'name', None) or 'Student'
-    roll_no = getattr(student, 'roll_number', None) or '—'
-    avatar_url = getattr(student, 'avatar_url', None) or '/images/student_avatar.jpg'
+def _assigned_experiment_ids(student_id: str) -> List[str]:
+    """Resolve experiment IDs only from this student's section-subject enrolments."""
+    section_ids = [row.section_id for row in SectionStudent.query.filter_by(student_id=student_id).all()]
+    if not section_ids:
+        return []
+    subject_ids = {row.subject_id for row in SectionSubject.query.filter(SectionSubject.section_id.in_(section_ids)).all()}
+    if not subject_ids:
+        return []
+    return [row.id for row in Experiment.query.filter(Experiment.subject_id.in_(subject_ids), Experiment.is_published.is_(True)).all()]
 
-    # Section & Department
-    sec_name = 'Section'
+
+def build_growth_student_profile(student_id: str, institution_id: Optional[str]) -> Dict[str, Any]:
+    """Identity fields are sourced from the authenticated student's records."""
+    student = db.session.get(User, student_id)
+    full_name = getattr(student, 'full_name', None) or getattr(student, 'name', None)
+    roll_no = getattr(student, 'roll_number', None)
+    avatar_url = getattr(student, 'avatar_url', None)
+
+    sec_name = None
     sec_link = SectionStudent.query.filter_by(student_id=student_id).first()
     if sec_link:
-        sec = db.session.get(Section, sec_link.section_id)
-        if sec and sec.name:
-            sec_name = sec.name
+        section = db.session.get(Section, sec_link.section_id)
+        sec_name = section.name if section else None
 
-    dept_code = 'CSE'
+    dept_code = None
     if student and student.department_id:
-        dept = db.session.get(Department, student.department_id)
-        if dept and dept.code:
-            dept_code = dept.code
+        department = db.session.get(Department, student.department_id)
+        dept_code = department.code if department else None
+    dept_year = ' • '.join(part for part in (dept_code, sec_name) if part) or None
 
-    dept_year = f"{dept_code}-{sec_name} • Student"
-
-    # Institution
-    inst_name = 'NexLab'
     iid = institution_id or (student.institution_id if student else None)
+    institution_name = None
     if iid:
-        inst = db.session.get(Institution, iid)
-        if inst and inst.name:
-            inst_name = inst.name
+        institution = db.session.get(Institution, iid)
+        institution_name = institution.name if institution else None
 
     return {
-        'name': full_name,
-        'roll_number': roll_no,
-        'department_year': dept_year,
-        'institution_name': inst_name,
+        'name': full_name, 'roll_number': roll_no,
+        'department_year': dept_year, 'institution_name': institution_name,
         'avatar_url': avatar_url,
-        'quote': 'Consistent practice today builds expertise tomorrow.',
     }
-
 
 def build_learning_trend_12_weeks(
     student_id: str,
-    target_grade: float = 0.0,
-    target_rating: float = 1000.0,
     period: str = '30d',
 ) -> List[Dict[str, Any]]:
-    """
-    Computes a 12-week dual-metric trajectory using real historical grades
-    and practice rating snapshots.
-    """
+    """Return only actual weekly grade and rating-snapshot observations."""
     now = datetime.utcnow()
     twelve_weeks_ago = now - timedelta(weeks=12)
-
-    # 1. Real historical grades grouped by week
-    grades = (
-        Grade.query
-        .filter(
-            Grade.student_id == student_id,
-            Grade.final_grade.isnot(None),
-            Grade.created_at >= twelve_weeks_ago,
+    assigned_ids = _assigned_experiment_ids(student_id)
+    if assigned_ids:
+        grade_q = Grade.query.filter(
+            Grade.student_id == student_id, Grade.experiment_id.in_(assigned_ids),
+            Grade.final_grade.isnot(None), Grade.created_at >= twelve_weeks_ago,
         )
-        .order_by(Grade.created_at.asc())
-        .all()
-    )
+    else:
+        grade_q = Grade.query.filter(db.literal(False))
+    grades = grade_q.order_by(Grade.created_at.asc()).all()
+
     weekly_grades = defaultdict(list)
-    for g in grades:
-        w_idx = 11 - min(11, max(0, (now - g.created_at).days // 7))
-        weekly_grades[w_idx].append(float(g.final_grade))
+    for grade in grades:
+        exp = db.session.get(Experiment, grade.experiment_id) if grade.experiment_id else None
+        if not exp or not exp.grade_scale or not exp.weightage or exp.grade_scale <= 0 or exp.weightage <= 0:
+            continue
+        pct = max(0.0, min(100.0, float(grade.final_grade) / float(exp.grade_scale) * 100.0))
+        idx = 11 - min(11, max(0, (now - grade.created_at).days // 7))
+        weekly_grades[idx].append((pct, float(exp.weightage)))
 
-    # 2. Real practice rating progression
-    subs = (
-        PracticeSubmission.query
-        .filter(
-            PracticeSubmission.student_id == student_id,
-            PracticeSubmission.status == 'Accepted',
-            PracticeSubmission.submitted_at >= twelve_weeks_ago,
-        )
-        .order_by(PracticeSubmission.submitted_at.asc())
-        .all()
-    )
-    weekly_xp_subs = defaultdict(float)
-    for s in subs:
-        w_idx = 11 - min(11, max(0, (now - s.submitted_at).days // 7))
-        weekly_xp_subs[w_idx] += (s.xp_earned or 10.0)
+    snapshots = (PlatformRatingPeriod.query.filter(
+        PlatformRatingPeriod.student_id == student_id,
+        PlatformRatingPeriod.period_type == 'weekly',
+        PlatformRatingPeriod.created_at >= twelve_weeks_ago,
+        PlatformRatingPeriod.rating.isnot(None),
+    ).order_by(PlatformRatingPeriod.created_at.asc()).all())
+    weekly_ratings = {}
+    for snapshot in snapshots:
+        idx = 11 - min(11, max(0, (now - snapshot.created_at).days // 7))
+        weekly_ratings[idx] = float(snapshot.rating)
 
-    # Accumulate rating steps from baseline
-    cur_rating = 1000.0
-    last_grade = float(target_grade or 0.0)
-
-    trend_points = []
-    for i in range(12):
-        week_num = i + 1
-        w_label = f"W{week_num}"
-        full_label = f"Week {week_num}"
-
-        if weekly_grades[i]:
-            last_grade = round(sum(weekly_grades[i]) / len(weekly_grades[i]), 1)
-
-        cur_rating += weekly_xp_subs[i]
-        calc_rating = int(round(cur_rating))
-        # Scaled rating for dual-axis display (2000 rating = 100%)
-        scaled_rating = min(100.0, max(0.0, round((calc_rating / 2000.0) * 100.0, 1)))
-
-        trend_points.append({
-            'week': w_label,
-            'label': full_label,
-            'academic_grade': last_grade,
-            'practice_rating_scaled': scaled_rating,
-            'practice_rating_raw': calc_rating,
+    points = []
+    for idx in range(12):
+        values = weekly_grades.get(idx, [])
+        grade_avg = (round(sum(score * weight for score, weight in values) / sum(weight for _, weight in values), 1)
+                     if values else None)
+        raw_rating = weekly_ratings.get(idx)
+        points.append({
+            'week': f'W{idx + 1}', 'label': f'Week {idx + 1}',
+            'academic_grade': grade_avg,
+            'practice_rating_scaled': min(100.0, max(0.0, round(raw_rating / 20.0, 1))) if raw_rating is not None else None,
+            'practice_rating_raw': raw_rating,
         })
-
-    # Return full trend points for chart navigation
-    return trend_points
-
+    return points
 
 def build_recent_activity(student_id: str, period: str = '30d') -> List[Dict[str, Any]]:
     """
@@ -178,15 +155,18 @@ def build_recent_activity(student_id: str, period: str = '30d') -> List[Dict[str
         cutoff = now - timedelta(days=120)
 
     # 1. Fetch real recent Grades
-    grades_q = Grade.query.filter(Grade.student_id == student_id, Grade.final_grade.isnot(None))
+    assigned_ids = _assigned_experiment_ids(student_id)
+    grades_q = Grade.query.filter(Grade.student_id == student_id, Grade.final_grade.isnot(None), Grade.experiment_id.in_(assigned_ids) if assigned_ids else db.literal(False))
     if cutoff:
         grades_q = grades_q.filter(Grade.created_at >= cutoff)
     grades = grades_q.order_by(Grade.created_at.desc()).limit(10).all()
     for g in grades:
         exp = db.session.get(Experiment, g.experiment_id) if g.experiment_id else None
         subj = db.session.get(Subject, exp.subject_id) if (exp and exp.subject_id) else None
-        subj_name = subj.name if subj else 'Lab Coursework'
-        exp_title = exp.title if exp else 'Experiment Submission'
+        if not exp or not exp.grade_scale or exp.grade_scale <= 0 or not exp.weightage or exp.weightage <= 0:
+            continue
+        subj_name = subj.name if subj else None
+        exp_title = exp.title
         items.append({
             'id': f"grade-{g.id}",
             'title': exp_title,
@@ -194,21 +174,21 @@ def build_recent_activity(student_id: str, period: str = '30d') -> List[Dict[str
             'type': 'experiment',
             'status': 'Graded',
             'status_color': 'green',
-            'score_display': f"{int(round(float(g.final_grade)))}%",
+            'score_display': f"{int(round(float(g.final_grade) / float(exp.grade_scale) * 100))}%",
             'time_ago': _format_time_ago(g.created_at),
             'timestamp': g.created_at.timestamp() if g.created_at else 0,
         })
 
     # 2. Fetch real recent Practice Submissions
-    practice_subs_q = PracticeSubmission.query.filter(PracticeSubmission.student_id == student_id)
+    practice_subs_q = PracticeSubmission.query.filter(PracticeSubmission.student_id == student_id, PracticeSubmission.is_run.is_(False))
     if cutoff:
         practice_subs_q = practice_subs_q.filter(PracticeSubmission.submitted_at >= cutoff)
     practice_subs = practice_subs_q.order_by(PracticeSubmission.submitted_at.desc()).limit(10).all()
     for p in practice_subs:
         prob = db.session.get(Problem, p.problem_id) if p.problem_id else None
-        prob_title = prob.title if prob else 'Practice Problem'
+        prob_title = prob.title if prob else None
         is_acc = p.status == 'Accepted'
-        xp_gain = p.xp_earned or (25 if is_acc else 0)
+        xp_gain = p.xp_earned
         items.append({
             'id': f"practice-{p.id}",
             'title': prob_title,
@@ -216,28 +196,33 @@ def build_recent_activity(student_id: str, period: str = '30d') -> List[Dict[str
             'type': 'practice',
             'status': p.status or 'Attempted',
             'status_color': 'blue' if is_acc else 'orange',
-            'score_display': f"+{xp_gain} XP" if is_acc else "0 XP",
+            'score_display': (f"+{xp_gain} XP" if is_acc else f"{xp_gain} XP") if xp_gain is not None else None,
             'time_ago': _format_time_ago(p.submitted_at),
             'timestamp': p.submitted_at.timestamp() if p.submitted_at else 0,
         })
 
     # 3. Fetch real pending CodeAttempt submissions
+    graded_experiment_ids = {g.experiment_id for g in grades if g.experiment_id}
+    pending_q = CodeAttempt.query.filter(CodeAttempt.student_id == student_id, CodeAttempt.is_final_submission.is_(True))
+    if cutoff is not None:
+        pending_q = pending_q.filter(CodeAttempt.submitted_at >= cutoff)
     pending_attempts = (
-        CodeAttempt.query
-        .filter(CodeAttempt.student_id == student_id, CodeAttempt.is_final_submission == True)
+        pending_q
         .order_by(CodeAttempt.submitted_at.desc())
         .limit(3)
         .all()
     )
     for a in pending_attempts:
-        has_grade = any(it.get('id') == f"grade-{a.experiment_id}" for it in items)
+        has_grade = a.experiment_id in graded_experiment_ids
         if not has_grade:
             exp = db.session.get(Experiment, a.experiment_id) if a.experiment_id else None
             subj = db.session.get(Subject, exp.subject_id) if (exp and exp.subject_id) else None
+            if not exp:
+                continue
             items.append({
                 'id': f"attempt-{a.id}",
-                'title': exp.title if exp else 'Experiment Submission',
-                'category': subj.name if subj else 'Lab Coursework',
+                'title': exp.title,
+                'category': subj.name if subj else None,
                 'type': 'experiment',
                 'status': 'Needs Review',
                 'status_color': 'orange',
@@ -255,112 +240,57 @@ def build_upcoming_goals(
     completion: Dict[str, Any],
     unlocks: Dict[str, Any],
     focus_topics: List[str],
+    knowledge_map: Optional[List[Dict[str, Any]]] = None,
 ) -> List[Dict[str, Any]]:
-    """Builds personalized next-action goals with visual progress bars from real database stats."""
+    """Build goals only where a real assignment, unlock, or mastery observation exists."""
     assigned = int(completion.get('assigned', 0) or 0)
     completed = int(completion.get('completed', 0) or 0)
-    remaining_exps = max(0, assigned - completed)
-
     goals = []
-
-    # Goal 1: Lab completion
-    if remaining_exps > 0:
+    if assigned > 0:
+        remaining = max(0, assigned - completed)
         goals.append({
             'id': 'goal-lab',
-            'title': f'Complete {remaining_exps} more experiment{"s" if remaining_exps > 1 else ""} to complete lab coursework',
-            'type': 'lab',
-            'current_display': f'{completed} / {assigned}',
-            'progress_pct': min(100, round((completed / max(1, assigned)) * 100)),
-            'color': 'purple',
-        })
-    else:
-        goals.append({
-            'id': 'goal-lab',
-            'title': 'All assigned lab experiments completed!',
-            'type': 'lab',
-            'current_display': f'{completed} / {max(1, assigned)}',
-            'progress_pct': 100,
-            'color': 'green',
+            'title': (f'Complete {remaining} more assigned experiment' + ('s' if remaining != 1 else '')
+                     if remaining else 'All assigned lab experiments completed'),
+            'type': 'lab', 'current_display': f'{completed} / {assigned}',
+            'progress_pct': min(100, round(100 * completed / assigned)),
+            'color': 'purple' if remaining else 'green',
         })
 
-    # Goal 2: Tier unlock
-    next_u = unlocks.get('next_unlock', {})
-    if next_u and next_u.get('target') != 'All Tiers Mastered':
+    next_unlock = unlocks.get('next_unlock') if isinstance(unlocks, dict) else None
+    if next_unlock and next_unlock.get('target') != 'All Tiers Mastered':
         goals.append({
-            'id': 'goal-unlock',
-            'title': f"{next_u.get('requirement', 'Solve practice problems to unlock next tier')}",
-            'type': 'practice',
-            'current_display': str(next_u.get('current', 'In Progress')),
-            'progress_pct': int(round(next_u.get('progress_pct', 0.0))),
-            'color': 'blue',
-        })
-    else:
-        goals.append({
-            'id': 'goal-unlock',
-            'title': 'Challenge yourself with advanced problem sets in Practice',
-            'type': 'practice',
-            'current_display': 'All Tiers Unlocked',
-            'progress_pct': 100,
-            'color': 'blue',
+            'id': 'goal-unlock', 'title': next_unlock.get('requirement'),
+            'type': 'practice', 'current_display': next_unlock.get('current'),
+            'progress_pct': next_unlock.get('progress_pct'), 'color': 'blue',
         })
 
-    # Goal 3: Concept mastery
-    focus_topic = focus_topics[0] if focus_topics else 'Data Structures'
-    goals.append({
-        'id': 'goal-mastery',
-        'title': f'Strengthen comprehension in {focus_topic} through recommended practice drills',
-        'type': 'concept',
-        'current_display': 'Target: 80%+',
-        'progress_pct': 60,
-        'color': 'orange',
-    })
-
+    if focus_topics:
+        focus = focus_topics[0]
+        measured = next((row for row in (knowledge_map or []) if row.get('topic') == focus), None)
+        score = measured.get('blended_score') if measured else None
+        goals.append({
+            'id': 'goal-mastery',
+            'title': f'Review {focus} based on your recorded mastery',
+            'type': 'concept',
+            'current_display': f'{round(score)}% measured' if score is not None else 'See Knowledge Map',
+            'progress_pct': score,
+            'color': 'orange',
+        })
     return goals
 
-
 def build_achievements(student_id: str, platform: Dict[str, Any]) -> List[Dict[str, Any]]:
-    """Builds milestone achievement cards based on real badges and stats."""
-    badges = StudentBadge.query.filter_by(student_id=student_id).all()
-    solves = int(platform.get('problems_solved', 0) or 0)
-    streak = int(platform.get('streak_days', 0) or 0)
-
+    """Return badges actually earned and persisted for this student."""
     cards = []
-
-    # Milestone 1: Solves
-    cards.append({
-        'id': 'ach-solves',
-        'title': '100 Problems' if solves >= 100 else 'First Solve' if solves >= 1 else 'Problem Solver',
-        'subtitle': 'Practice Milestone',
-        'category': 'Milestone',
-        'icon': 'trophy',
-        'badge_color': 'gold' if solves >= 100 else 'blue',
-        'value_display': str(solves),
-    })
-
-    # Milestone 2: Consistency
-    cards.append({
-        'id': 'ach-streak',
-        'title': f'{streak}-Day Streak' if streak > 0 else 'Daily Habit',
-        'subtitle': 'Consistency Streak',
-        'category': 'Habit',
-        'icon': 'flame',
-        'badge_color': 'fire' if streak >= 7 else 'orange',
-        'value_display': str(streak),
-    })
-
-    # Milestone 3: Badges count
-    cards.append({
-        'id': 'ach-badges',
-        'title': f'{len(badges)} Badges' if badges else 'Badges Pioneer',
-        'subtitle': 'Milestones Earned',
-        'category': 'Badges',
-        'icon': 'layers',
-        'badge_color': 'purple',
-        'value_display': str(len(badges)),
-    })
-
+    for badge in StudentBadge.query.filter_by(student_id=student_id).order_by(StudentBadge.earned_at.desc()).all():
+        record = badge.to_dict()
+        cards.append({
+            'id': badge.id, 'title': record.get('title'),
+            'subtitle': record.get('desc'), 'category': 'Earned badge',
+            'icon': record.get('icon'), 'badge_color': 'purple',
+            'value_display': None, 'earned_at': record.get('earned_at'),
+        })
     return cards
-
 
 def build_concept_breakdowns(knowledge_map: List[Dict[str, Any]]) -> Dict[str, List[Dict[str, Any]]]:
     """Sorts and separates Strongest Concepts and Focus Next gaps from real blended knowledge map."""
@@ -371,20 +301,24 @@ def build_concept_breakdowns(knowledge_map: List[Dict[str, Any]]) -> Dict[str, L
 
     strongest = []
     for item in sorted_by_blended:
-        score = int(round(float(item.get('blended_score', 0))))
+        if item.get('blended_score') is None or not item.get('topic'):
+            continue
+        score = int(round(float(item['blended_score'])))
         if score >= 60 and len(strongest) < 5:
             strongest.append({
-                'name': item.get('topic', 'General'),
+                'name': item.get('topic'),
                 'score': score,
                 'icon': 'Layers',
             })
 
     focus_next = []
     for item in reversed(sorted_by_blended):
-        score = int(round(float(item.get('blended_score', 0))))
+        if item.get('blended_score') is None or not item.get('topic'):
+            continue
+        score = int(round(float(item['blended_score'])))
         if score < 75 and len(focus_next) < 5:
             focus_next.append({
-                'name': item.get('topic', 'General'),
+                'name': item.get('topic'),
                 'score': score,
                 'icon': 'Repeat',
             })
@@ -400,7 +334,7 @@ def build_summary_kpis(
     progress_points: Optional[List[Dict[str, Any]]] = None,
 ) -> Dict[str, Any]:
     """Builds the 4 primary KPI summary cards shown in Row 2."""
-    mastered_count = sum(1 for k in knowledge_map if (k.get('blended_score') or 0) >= 75)
+    mastered_count = sum(1 for k in knowledge_map if k.get('blended_score') is not None and k['blended_score'] >= 80)
     # Real observations of "overall progress" over time, in chronological order.
     progress_series = sorted(
         [float(p['pct']) for p in (progress_points or []) if p.get('pct') is not None]
@@ -409,14 +343,14 @@ def build_summary_kpis(
 
     assigned = int(completion.get('assigned', 0) or 0)
     completed = int(completion.get('completed', 0) or 0)
-    exp_pct = int(round((completed / max(1, assigned)) * 100)) if assigned > 0 else 0
+    exp_pct = int(round((completed / assigned) * 100)) if assigned > 0 else None
 
     prob_solved = int(platform.get('problems_solved', 0) or 0)
     easy = int(platform.get('easy_solved', 0) or 0)
     med = int(platform.get('medium_solved', 0) or 0)
     hard = int(platform.get('hard_solved', 0) or 0)
 
-    overall_val = int(round(average_blended)) if (average_blended or 0) > 0 else None
+    overall_val = int(round(average_blended)) if average_blended is not None else None
 
     return {
         # Sparkline: only real progress observations, otherwise None.
@@ -431,8 +365,8 @@ def build_summary_kpis(
         'concepts_mastered': {
             'mastered': mastered_count,
             'total': total_concepts,
-            'delta': f'{mastered_count} mastered',
-            'bars': [mastered_count],
+            'delta': None,
+            'bars': [int(round(k['blended_score'])) for k in knowledge_map if k.get('blended_score') is not None],
         },
         'experiments_completed': {
             'completed': completed,
@@ -441,10 +375,10 @@ def build_summary_kpis(
         },
         'practice_problems_solved': {
             'total': prob_solved,
-            'delta': f'+{prob_solved}' if prob_solved > 0 else '0',
+            'delta': None,
             'easy': easy,
             'medium': med,
             'hard': hard,
-            'bars': [easy, med, hard, prob_solved],
+            'bars': [],
         },
     }

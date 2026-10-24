@@ -56,9 +56,9 @@ interface Problem {
   difficulty: 'Easy' | 'Medium' | 'Hard';
   nexlab_topic: string;
   topics: string[];
-  acceptance: number;
-  acceptance_pct?: string;
-  solvers_display?: string;
+  acceptance: number | null;
+  acceptance_pct?: string | null;
+  solvers_display?: string | null;
   status: 'solved' | 'attempted' | 'todo';
   is_daily: boolean;
 }
@@ -94,9 +94,9 @@ interface DailyChallenge {
   title: string;
   difficulty: string;
   nexlab_topic: string;
-  acceptance: number;
-  solvers_today?: string;
-  success_rate?: string;
+  acceptance: number | null;
+  solvers_today?: string | null;
+  success_rate?: string | null;
   prize_xp?: number;
   ends_in?: string;
 }
@@ -482,10 +482,19 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
         setLoading(false);
       }
     };
-    fetchAll();
+    // Check-in and fetch bookmarks. Refresh the XP snapshot after the check-in
+    // so the header cannot show a stale total.
+    const loadWithCheckin = async () => {
+      try {
+        const checkin = await apiClient.post('/practice/quest/daily-checkin');
+        if (checkin.data?.xp) setXP(checkin.data.xp);
+      } catch {
+        // The library remains browseable when the optional check-in is unavailable.
+      }
+      await fetchAll();
+    };
+    loadWithCheckin();
 
-    // Check-in and fetch bookmarks
-    apiClient.post('/practice/quest/daily-checkin').catch(() => {});
     apiClient
       .get('/practice/bookmarks/ids')
       .then((res) => setBookmarkIds(new Set(res.data.starred ?? [])))
@@ -553,11 +562,11 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
 
     // Acceptance
     if (acceptanceFilter === 'high') {
-      p = p.filter((x) => (x.acceptance || 0) >= 0.6);
+      p = p.filter((x) => x.acceptance != null && x.acceptance >= 0.6);
     } else if (acceptanceFilter === 'med') {
-      p = p.filter((x) => (x.acceptance || 0) >= 0.4 && (x.acceptance || 0) < 0.6);
+      p = p.filter((x) => x.acceptance != null && x.acceptance >= 0.4 && x.acceptance < 0.6);
     } else if (acceptanceFilter === 'low') {
-      p = p.filter((x) => (x.acceptance || 0) < 0.4);
+      p = p.filter((x) => x.acceptance != null && x.acceptance < 0.4);
     }
 
     // Tab filter
@@ -570,9 +579,9 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
 
     // Sort
     if (sortBy === 'acc_desc') {
-      p.sort((a, b) => (b.acceptance || 0) - (a.acceptance || 0));
+      p.sort((a, b) => a.acceptance == null ? (b.acceptance == null ? 0 : 1) : b.acceptance == null ? -1 : b.acceptance - a.acceptance);
     } else if (sortBy === 'acc_asc') {
-      p.sort((a, b) => (a.acceptance || 0) - (b.acceptance || 0));
+      p.sort((a, b) => a.acceptance == null ? (b.acceptance == null ? 0 : 1) : b.acceptance == null ? -1 : a.acceptance - b.acceptance);
     } else if (sortBy === 'title') {
       p.sort((a, b) => a.title.localeCompare(b.title));
     } else if (sortBy === 'difficulty') {
@@ -633,9 +642,9 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
           <div>
             <h1 className={styles.headerTitle}>Practice Library</h1>
             <p className={styles.headerSubtitle}>
-              <span>589+ Curated Coding Challenges</span>
+              <span>{problems.length.toLocaleString()} Curated Coding Challenges</span>
               <span className={styles.headerSubtitleDot}>•</span>
-              <span>30 Core Topics</span>
+              <span>{topics.length} Core Topics</span>
               <span className={styles.headerSubtitleDot}>•</span>
               <span>Algorithmic &amp; Data Structures</span>
             </p>
@@ -647,7 +656,7 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
           <div className={styles.xpStrip}>
             <div className={styles.levelBadge}>
               <BarChart2 size={13} />
-              <span>{xp.level_name || 'Newcomer'}</span>
+              <span>{xp.level_name ?? '—'}</span>
             </div>
             <div className={styles.xpChip}>
               <Zap size={14} color="#7c3aed" />
@@ -659,7 +668,7 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
             </div>
             <div className={`${styles.xpChip} ${styles.solvedChip}`}>
               <Trophy size={14} color="#7c3aed" />
-              <span>{xp.problems_solved || 86} solved</span>
+              <span>{xp.problems_solved ?? 0} solved</span>
             </div>
           </div>
         )}
@@ -697,7 +706,7 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
                 </span>
                 <span className={styles.dailyChip} style={{ background: '#ffffff', color: '#64748b', border: '1px solid #e2e8f0' }}>
                   <Clock size={12} />
-                  <span>Ends in {daily.ends_in || '12h 34m'}</span>
+                  <span>{daily.ends_in ?? '—'}</span>
                 </span>
               </div>
             </div>
@@ -711,7 +720,7 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
                   <span>Today&apos;s Prize</span>
                 </div>
                 <div className={styles.dailyStatValue} style={{ color: '#ea580c' }}>
-                  +{daily.prize_xp || 15} XP
+                  +{daily.prize_xp ?? 15} XP
                 </div>
               </div>
               <div className={styles.dailyStatItem}>
@@ -719,14 +728,14 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
                   <Users size={12} color="#3b82f6" />
                   <span>Solvers Today</span>
                 </div>
-                <div className={styles.dailyStatValue}>{daily.solvers_today || '1.2K'}</div>
+                <div className={styles.dailyStatValue}>{daily.solvers_today ?? '—'}</div>
               </div>
               <div className={styles.dailyStatItem}>
                 <div className={styles.dailyStatHeader}>
                   <Trophy size={12} color="#f59e0b" />
                   <span>Success Rate</span>
                 </div>
-                <div className={styles.dailyStatValue}>{daily.success_rate || '68%'}</div>
+                <div className={styles.dailyStatValue}>{daily.success_rate ?? '—'}</div>
               </div>
             </div>
 
@@ -1223,10 +1232,10 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
                         ))}
                       </div>
                     </td>
-                    <td className={styles.colAccept}>{p.acceptance_pct || `${Math.round((p.acceptance || 0.45) * 100)}%`}</td>
+                    <td className={styles.colAccept}>{p.acceptance_pct ?? (p.acceptance != null ? `${Math.round(p.acceptance * 100)}%` : '—')}</td>
                     <td className={styles.colSolved}>
                       <Users size={12} color="#94a3b8" />
-                      <span>{p.solvers_display || '142.5K'}</span>
+                      <span>{p.solvers_display ?? '—'}</span>
                     </td>
                     <td className={styles.colActions}>
                       <div className={styles.actionsFlex}>
@@ -1315,13 +1324,13 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
                       </span>
                       <div className={styles.topicDiffBadges}>
                         <span className={`${styles.diffCountPill} ${styles.diffCountEasy}`}>
-                          E {t.easy_solved || t.easy_total || 0}
+                          E {t.easy_solved ?? 0}/{t.easy_total ?? 0}
                         </span>
                         <span className={`${styles.diffCountPill} ${styles.diffCountMedium}`}>
-                          M {t.medium_solved || t.medium_total || 0}
+                          M {t.medium_solved ?? 0}/{t.medium_total ?? 0}
                         </span>
                         <span className={`${styles.diffCountPill} ${styles.diffCountHard}`}>
-                          H {t.hard_solved || t.hard_total || 0}
+                          H {t.hard_solved ?? 0}/{t.hard_total ?? 0}
                         </span>
                       </div>
                     </div>
@@ -1442,11 +1451,11 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
                         </div>
                       </td>
                       <td className={styles.colAccept}>
-                        {p.acceptance_pct || `${Math.round((p.acceptance || 0.45) * 100)}%`}
+                        {p.acceptance_pct ?? (p.acceptance != null ? `${Math.round(p.acceptance * 100)}%` : '—')}
                       </td>
                       <td className={styles.colSolved}>
                         <Users size={12} color="#94a3b8" />
-                        <span>{p.solvers_display || '124.5K'}</span>
+                        <span>{p.solvers_display ?? '—'}</span>
                       </td>
                       <td className={styles.colActions}>
                         <div className={styles.actionsFlex}>

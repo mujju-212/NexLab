@@ -1,12 +1,6 @@
-// /practice/daily
-'use client';
-import IndividualShell from '@/components/layout/IndividualShell';
-import DailyChallengePage from '@/components/practice/DailyChallengePage';
+import { redirect } from 'next/navigation';
 
-export default function IndividualDailyPage() {
-  return (
-    <IndividualShell activePage="daily">
-      <DailyChallengePage baseRoute="/practice/library" />
-    </IndividualShell>
-  );
+/** Legacy route retained for bookmarks; the canonical page lives under the library. */
+export default function IndividualDailyRedirect() {
+  redirect('/practice/library/daily');
 }

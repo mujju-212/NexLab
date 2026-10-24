@@ -20,105 +20,21 @@ import {
 } from 'lucide-react';
 import type { UnifiedStudentOverview } from '@/services/student-analytics.service';
 import { apiClient } from '@/services/api-client';
+import { useAuthStore } from '@/store/auth-store';
 import styles from './growth-overview.module.css';
 
 interface UpcomingGoalsCardProps {
   overview: UnifiedStudentOverview | null;
 }
 
-const DEFAULT_GOALS = [
-  {
-    id: 'goal-1',
-    title: 'Complete 6 more experiments to finish Data Structures lab',
-    type: 'lab',
-    current_display: '18 / 24',
-    progress_pct: 75,
-    color: 'purple',
-  },
-  {
-    id: 'goal-2',
-    title: 'Solve 3 more Medium problems to unlock Hard difficulty',
-    type: 'practice',
-    current_display: '2 / 3',
-    progress_pct: 66,
-    color: 'blue',
-  },
-  {
-    id: 'goal-3',
-    title: 'Improve Recursion mastery Practice 5 recommended problems',
-    type: 'concept',
-    current_display: '34% → 60%',
-    progress_pct: 57,
-    color: 'orange',
-  },
-  {
-    id: 'goal-4',
-    title: 'Maintain 7-day practice streak for Bronze Flame',
-    type: 'practice',
-    current_display: '5 / 7 days',
-    progress_pct: 71,
-    color: 'orange',
-  },
-  {
-    id: 'goal-5',
-    title: 'Complete DBMS Lab Exp 4 on Normalization',
-    type: 'lab',
-    current_display: '0 / 1',
-    progress_pct: 0,
-    color: 'purple',
-  },
-];
-
-const DEFAULT_STUDY_PLANS = [
-  {
-    id: 'plan-1',
-    slug: 'nexlab-75',
-    title: 'NexLab 75',
-    description: '75 must-solve curated coding interview questions covering 14 essential algorithmic patterns.',
-    total_problems: 75,
-    difficulty_mix: 'Mixed Difficulty',
-    tag: 'Most Popular',
-    solved_count: 0,
-  },
-  {
-    id: 'plan-2',
-    slug: 'top-interview-150',
-    title: 'Top Interview 150',
-    description: 'The classic 150 problems essential for technical interviews across top software engineering companies.',
-    total_problems: 150,
-    difficulty_mix: 'Medium & Hard',
-    tag: 'Interview Prep',
-    solved_count: 0,
-  },
-  {
-    id: 'plan-3',
-    slug: 'sql-50',
-    title: 'SQL 50 Study Plan',
-    description: 'Master relational queries, multi-table joins, subqueries, grouping, and advanced window functions.',
-    total_problems: 50,
-    difficulty_mix: 'Easy & Medium',
-    tag: 'Database Mastery',
-    solved_count: 0,
-  },
-  {
-    id: 'plan-4',
-    slug: 'dynamic-programming',
-    title: 'Dynamic Programming 30',
-    description: 'Master 1D, 2D, and multidimensional dynamic programming patterns from memoization to tabulation.',
-    total_problems: 30,
-    difficulty_mix: 'Intermediate',
-    tag: 'Advanced Algorithms',
-    solved_count: 0,
-  },
-];
-
 export const UpcomingGoalsCard: React.FC<UpcomingGoalsCardProps> = ({ overview }) => {
+  const { user } = useAuthStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalTab, setModalTab] = useState<'plans' | 'goals'>('plans');
 
   // Fetch real Study Plans from backend
   const { data: dbPlans = [] } = useQuery({
-    queryKey: ['student-study-plans-overview'],
+    queryKey: ['student-study-plans-overview', user?.id ?? 'anonymous'],
     queryFn: async () => {
       try {
         const res = await apiClient.get<{ plans: any[] }>('/practice/plans');
@@ -130,11 +46,8 @@ export const UpcomingGoalsCard: React.FC<UpcomingGoalsCardProps> = ({ overview }
     staleTime: 60 * 1000,
   });
 
-  const studyPlans = dbPlans.length > 0 ? dbPlans : DEFAULT_STUDY_PLANS;
-
-  const goals = overview?.upcoming_goals && overview.upcoming_goals.length > 0
-    ? overview.upcoming_goals
-    : DEFAULT_GOALS;
+  const studyPlans = dbPlans;
+  const goals = overview?.upcoming_goals ?? [];
 
   const getGoalIcon = (type: string, color: string) => {
     switch (type) {
@@ -196,7 +109,9 @@ export const UpcomingGoalsCard: React.FC<UpcomingGoalsCardProps> = ({ overview }
         </div>
 
         <div className={styles.goalsList}>
-          {goals.slice(0, 3).map((goal) => (
+          {goals.length === 0 ? (
+            <p style={{ color: '#64748b', padding: '0.75rem' }}>No personalized goals are available from your current records.</p>
+          ) : goals.slice(0, 3).map((goal) => (
             <div key={goal.id} className={styles.goalItem}>
               <div className={styles.goalTitleRow}>
                 {getGoalIcon(goal.type, goal.color)}
@@ -207,10 +122,10 @@ export const UpcomingGoalsCard: React.FC<UpcomingGoalsCardProps> = ({ overview }
                 <div className={styles.goalBarTrack}>
                   <div
                     className={getProgressBarClass(goal.color)}
-                    style={{ width: `${goal.progress_pct}%` }}
+                    style={{ width: `${goal.progress_pct != null ? Math.max(0, Math.min(100, goal.progress_pct)) : 0}%` }}
                   />
                 </div>
-                <span className={styles.goalCurrentText}>{goal.current_display}</span>
+                <span className={styles.goalCurrentText}>{goal.current_display || 'Progress unavailable'}</span>
               </div>
             </div>
           ))}
@@ -394,10 +309,14 @@ export const UpcomingGoalsCard: React.FC<UpcomingGoalsCardProps> = ({ overview }
                   </div>
 
                   <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(300px, 1fr))', gap: '0.75rem' }}>
-                    {studyPlans.map((plan: any) => {
-                      const solvedCount = plan.solved_count || 0;
-                      const totalProbs = plan.total_problems || 75;
-                      const pct = Math.min(100, Math.round((solvedCount / Math.max(1, totalProbs)) * 100));
+                    {studyPlans.length === 0 ? (
+                      <p style={{ color: '#64748b', textAlign: 'center', gridColumn: '1 / -1', padding: '2rem' }}>No study plans are available in the database.</p>
+                    ) : studyPlans.map((plan: any) => {
+                      const solvedCount = plan.solved_count ?? null;
+                      const totalProbs = plan.total_problems ?? null;
+                      const pct = solvedCount != null && totalProbs != null && totalProbs > 0
+                        ? Math.min(100, Math.round((solvedCount / totalProbs) * 100))
+                        : null;
 
                       return (
                         <div
@@ -439,14 +358,14 @@ export const UpcomingGoalsCard: React.FC<UpcomingGoalsCardProps> = ({ overview }
 
                           <div>
                             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', fontSize: '0.72rem', color: '#475569', marginBottom: '0.35rem', fontWeight: 600 }}>
-                              <span>{totalProbs} problems • {plan.difficulty_mix || 'Mixed'}</span>
-                              <span style={{ fontWeight: 700, color: '#7c3aed' }}>{solvedCount} / {totalProbs} ({pct}%)</span>
+                              <span>{totalProbs != null ? `${totalProbs} problems` : 'Problem count unavailable'}{plan.difficulty_mix ? ` • ${plan.difficulty_mix}` : ''}</span>
+                              <span style={{ fontWeight: 700, color: '#7c3aed' }}>{solvedCount != null && totalProbs != null ? `${solvedCount} / ${totalProbs}${pct != null ? ` (${pct}%)` : ''}` : 'Progress unavailable'}</span>
                             </div>
 
                             <div style={{ width: '100%', height: '6px', background: '#f1f5f9', borderRadius: '9999px', overflow: 'hidden', marginBottom: '0.75rem' }}>
                               <div
                                 style={{
-                                  width: `${pct}%`,
+                                  width: `${pct ?? 0}%`,
                                   height: '100%',
                                   background: 'linear-gradient(90deg, #7c3aed, #2563eb)',
                                   borderRadius: '9999px',
@@ -473,7 +392,7 @@ export const UpcomingGoalsCard: React.FC<UpcomingGoalsCardProps> = ({ overview }
                                 transition: 'all 0.15s ease',
                               }}
                             >
-                              <span>{solvedCount > 0 ? 'Continue Study Plan' : 'Start Study Plan Roadmap'}</span>
+                              <span>{solvedCount != null && solvedCount > 0 ? 'Continue Study Plan' : 'Open Study Plan'}</span>
                               <ChevronRight size={13} />
                             </Link>
                           </div>
@@ -484,7 +403,9 @@ export const UpcomingGoalsCard: React.FC<UpcomingGoalsCardProps> = ({ overview }
                 </>
               ) : (
                 <div style={{ display: 'flex', flexDirection: 'column', gap: '0.75rem' }}>
-                  {goals.map((goal) => (
+                  {goals.length === 0 ? (
+                    <p style={{ color: '#64748b', textAlign: 'center', padding: '2rem' }}>No milestones are available from your current records.</p>
+                  ) : goals.map((goal) => (
                     <div key={goal.id} className={styles.goalItem} style={{ border: '1px solid #f1f5f9', borderRadius: '0.75rem', padding: '0.85rem 1rem' }}>
                       <div className={styles.goalTitleRow} style={{ marginBottom: '0.5rem' }}>
                         {getGoalIcon(goal.type, goal.color)}
@@ -495,7 +416,7 @@ export const UpcomingGoalsCard: React.FC<UpcomingGoalsCardProps> = ({ overview }
                         <div className={styles.goalBarTrack} style={{ height: '8px' }}>
                           <div
                             className={getProgressBarClass(goal.color)}
-                            style={{ width: `${goal.progress_pct}%` }}
+                            style={{ width: `${goal.progress_pct != null ? Math.max(0, Math.min(100, goal.progress_pct)) : 0}%` }}
                           />
                         </div>
                         <span className={styles.goalCurrentText} style={{ fontWeight: 700 }}>{goal.current_display}</span>

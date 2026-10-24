@@ -38,7 +38,7 @@ export const SubjectProgressCard: React.FC<SubjectProgressCardProps> = ({ subjec
         <div className={styles.subjectsGrid}>
           {subjects.map((s) => {
             const avgColor =
-              s.subject_average >= 85
+              s.subject_average == null ? '#94a3b8' : s.subject_average >= 85
                 ? '#10b981'
                 : s.subject_average >= 70
                 ? '#7c3aed'
@@ -55,7 +55,7 @@ export const SubjectProgressCard: React.FC<SubjectProgressCardProps> = ({ subjec
                   </div>
                   <div style={{ textAlign: 'right' }}>
                     <div style={{ fontSize: '1.25rem', fontWeight: 800, color: avgColor }}>
-                      {s.subject_average > 0 ? `${s.subject_average}%` : '—'}
+                      {s.subject_average != null ? `${s.subject_average}%` : '—'}
                     </div>
                     <small style={{ color: '#64748b' }}>Average Grade</small>
                   </div>
@@ -75,15 +75,15 @@ export const SubjectProgressCard: React.FC<SubjectProgressCardProps> = ({ subjec
                     <span>
                       Completed {s.completed_experiments} of {s.total_experiments} labs
                     </span>
-                    <strong>{s.completion_pct}%</strong>
+                    <strong>{s.completion_pct != null ? `${s.completion_pct}%` : '—'}</strong>
                   </div>
                   <div className={styles.barTrack} style={{ height: '6px' }}>
                     <div
                       className={styles.barFill}
                       style={{
-                        width: `${s.completion_pct}%`,
+                        width: `${s.completion_pct ?? 0}%`,
                         background:
-                          s.completion_pct >= 80
+                          (s.completion_pct ?? 0) >= 80
                             ? 'linear-gradient(90deg, #10b981, #059669)'
                             : 'linear-gradient(90deg, #7c3aed, #6d28d9)',
                       }}

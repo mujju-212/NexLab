@@ -103,8 +103,8 @@ def student_analytics_overview():
         suggestions.append(f'Strengthen fundamental comprehension in {", ".join(focus_topics[:2])}.')
     if standing_band in ('critical', 'high'):
         suggestions.append('Attend upcoming lab session and review pre-lab materials with your instructor.')
-    else:
-        suggestions.append('On track! Challenge yourself with Medium & Hard practice problem sets.')
+    elif standing_band in ('ok', 'watch') and (academic_360.get('grades', {}).get('avg_grade') is not None or academic_360.get('attendance', {}).get('attendance_rate') is not None):
+        suggestions.append('Continue building on your recorded academic and practice progress.')
 
     highlights = {
         'strong_topics': strong_topics,
@@ -116,20 +116,15 @@ def student_analytics_overview():
     # 6. Enriched Visual & Telemetry Modules for Growth Dashboard
     student_profile = build_growth_student_profile(student_id, g.institution_id)
 
-    # No invented defaults: a student with no graded work has a 0 average and no
-    # rating yet. (Was 78.0 / 1540.0, which reported a passing grade to students
-    # who had never submitted anything.)
-    avg_grade = academic_360.get('grades', {}).get('avg_grade')  # None == not graded yet
-    rating_val = platform_standing.get('rating')
-    if rating_val is None:
-        rating_val = 0
-    learning_trend = build_learning_trend_12_weeks(student_id, target_grade=avg_grade, target_rating=rating_val, period=period)
+    # Historical charts contain only recorded weekly grades and rating snapshots.
+    learning_trend = build_learning_trend_12_weeks(student_id, period=period)
 
     recent_activity = build_recent_activity(student_id, period=period)
     upcoming_goals = build_upcoming_goals(
         completion=academic_360.get('completion', {}),
         unlocks=unlocks,
         focus_topics=focus_topics,
+        knowledge_map=blended_map.get('knowledge_map', []),
     )
     achievements = build_achievements(student_id, platform_standing)
     concept_breakdown = build_concept_breakdowns(blended_map.get('knowledge_map', []))
@@ -209,13 +204,15 @@ def student_subjects_analytics():
         exp_ids = [e.id for e in exps]
 
         # Fetch student grades and submissions for these experiments
-        grades_map = {
-            g_row.experiment_id: g_row
+        grades_map = {}
+        if exp_ids:
+            # Most recently-created grade record wins if historical duplicate
+            # rows exist for the same student/experiment.
             for g_row in Grade.query.filter(
                 Grade.student_id == student_id,
                 Grade.experiment_id.in_(exp_ids),
-            ).all()
-        } if exp_ids else {}
+            ).order_by(Grade.created_at.desc(), Grade.graded_at.desc()).all():
+                grades_map.setdefault(g_row.experiment_id, g_row)
 
         submitted_ids = {
             r[0] for r in db.session.query(CodeAttempt.experiment_id).filter(
@@ -232,29 +229,35 @@ def student_subjects_analytics():
         exp_items = []
         for e in exps:
             g_item = grades_map.get(e.id)
-            final_gr = float(g_item.final_grade) if (g_item and g_item.final_grade is not None) else None
-            is_comp = (final_gr is not None) or (e.id in submitted_ids)
+            raw_final_grade = float(g_item.final_grade) if (g_item and g_item.final_grade is not None) else None
+            # Completion means a final submission exists. A grade imported or
+            # entered without a student submission is not evidence of completion.
+            is_comp = e.id in submitted_ids
             if is_comp:
                 completed_count += 1
 
-            w = float(e.weightage or 1.0)
-            total_weightage += w
-            if final_gr is not None:
-                scale = float(e.grade_scale or 100.0)
-                total_grade_weighted += (final_gr / max(1.0, scale)) * 100.0 * w
+            w = float(e.weightage or 0.0)
+            scale = float(e.grade_scale or 0.0)
+            normalized_grade = (
+                max(0.0, min(100.0, (raw_final_grade / scale) * 100.0))
+                if raw_final_grade is not None and scale > 0 else None
+            )
+            if normalized_grade is not None and w > 0:
+                total_grade_weighted += normalized_grade * w
+                total_weightage += w
 
             exp_items.append({
                 'experiment_id': e.id,
                 'exp_number': e.exp_number,
                 'title': e.title,
-                'final_grade': final_gr,
+                'final_grade': normalized_grade,
                 'is_completed': is_comp,
                 'weightage': w,
             })
 
         total_exps = len(exps)
-        completion_pct = round(100.0 * (completed_count / max(1, total_exps)), 1) if total_exps > 0 else 0.0
-        subject_avg = round(total_grade_weighted / max(1.0, total_weightage), 1) if total_weightage > 0 else 0.0
+        completion_pct = round(100.0 * (completed_count / total_exps), 1) if total_exps > 0 else None
+        subject_avg = round(total_grade_weighted / total_weightage, 1) if total_weightage > 0 else None
 
         subjects_summary.append({
             'subject_id': subject.id,
@@ -402,7 +405,7 @@ def student_attendance_analytics():
     subject_id = request.args.get('subject_id')
     rollup = compute_student_attendance_rollup(
         student_id=student_id,
-        scope_level='subject' if subject_id else 'institution',
+        scope_level='subject' if subject_id else 'student',
         scope_id=subject_id,
         institution_id=g.institution_id,
     )
@@ -698,8 +701,15 @@ def platform_leaderboard():
     period = request.args.get('period', 'all_time')
     limit = int(request.args.get('limit', 50))
 
-    if scope == 'institution' and not scope_id:
-        scope_id = g.institution_id
+    if scope == 'institution':
+        if g.role == 'student':
+            if not g.institution_id:
+                return jsonify({'error': 'Institution leaderboard is unavailable for this account'}), 403
+            if scope_id and scope_id != g.institution_id:
+                return jsonify({'error': 'Access denied: rankings are limited to your institution'}), 403
+            scope_id = g.institution_id
+        elif not scope_id:
+            scope_id = g.institution_id
 
     data = get_platform_leaderboard(
         scope=scope,
@@ -708,4 +718,8 @@ def platform_leaderboard():
         current_student_id=g.user_id,
         limit=limit,
     )
+    for entry in data.get('leaderboard', []):
+        entry['is_current_user'] = entry.get('student_id') == g.user_id
+    if data.get('my_standing'):
+        data['my_standing']['is_current_user'] = data['my_standing'].get('student_id') == g.user_id
     return jsonify(data), 200

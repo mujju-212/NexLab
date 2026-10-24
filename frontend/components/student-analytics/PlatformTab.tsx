@@ -56,9 +56,6 @@ interface PlatformTabProps {
 }
 
 export const PlatformTab: React.FC<PlatformTabProps> = ({
-  standing: propStanding,
-  unlocks: propUnlocks,
-  leaderboardData: propLeaderboard,
   onNavigateTab,
   dateRange,
 }) => {
@@ -73,7 +70,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
   // Synchronize with top global date filter
   useEffect(() => {
     if (dateRange) {
-      const mapped = dateRange === 'all' ? 'all_time' : dateRange === 'semester' ? 'semester' : `${dateRange}d`;
+      const mapped = dateRange === 'all' ? 'all_time' : `${dateRange}d`;
       setSelectedPeriod(mapped);
     }
   }, [dateRange]);
@@ -102,8 +99,8 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
   const [modalTopicTab, setModalTopicTab] = useState<'all' | 'strongest' | 'needs_focus'>('all');
 
   // ── TanStack Query to Fetch Real Backend Platform Analytics ─────────────────
-  const { data: dashboardData, isLoading } = useQuery<PlatformDashboardResponse>({
-    queryKey: ['student-platform-dashboard', selectedProblemType, selectedDifficulty, selectedTopic, selectedPeriod],
+  const { data: dashboardData, isLoading, isError, error, refetch } = useQuery<PlatformDashboardResponse>({
+    queryKey: ['student-platform-dashboard', user?.id ?? 'anonymous', selectedProblemType, selectedDifficulty, selectedTopic, selectedPeriod],
     queryFn: () =>
       studentAnalyticsService.getPlatformDashboard({
         problem_type: selectedProblemType !== 'all' ? selectedProblemType : undefined,
@@ -115,24 +112,15 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
   });
 
   // Profile comes from the API; blank until it answers (no invented identity).
-  const profile = dashboardData?.student_profile || {
-    id: '',
-    name: '',
-    department_year: '',
-    avatar_url: '',
-    quote: '',
-  };
+  const profile = dashboardData?.student_profile || { id: '', name: null, department_year: null, avatar_url: null };
 
   useEffect(() => {
     const saved = typeof window !== 'undefined' ? localStorage.getItem('nexlab_student_quote') : null;
     if (saved) {
       setCustomQuote(saved);
       setQuoteInput(saved);
-    } else {
-      setCustomQuote(profile.quote);
-      setQuoteInput(profile.quote);
     }
-  }, [profile.quote]);
+  }, []);
 
   const handleSaveQuote = () => {
     if (quoteInput.trim()) {
@@ -144,8 +132,8 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
     setActiveModal(null);
   };
 
-  const displayName = user?.full_name || profile.name;
-  const displayDept = (user as any)?.department ? `${(user as any).department} • Student` : profile.department_year;
+  const displayName = user?.full_name || profile.name || '';
+  const displayDept = (user as any)?.department ? `${(user as any).department} • Student` : profile.department_year || '';
   const studentInitials = useMemo(() => {
     const parts = displayName.trim().split(/\s+/);
     if (parts.length >= 2) return `${parts[0][0]}${parts[1][0]}`.toUpperCase();
@@ -153,41 +141,19 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
   }, [displayName]);
 
   const standing = dashboardData?.standing || {
-    rating: 0,
-    rating_delta: 0,
-    sparkline_rating: [],
-    global_rank: 0,
-    global_percentile: 0,
-    top_percent: 0,
-    level: 0,
-    level_name: '—',
-    current_xp: 0,
-    next_level_xp: 0,
-    streak_days: 0,
-    week_dots: [
-      { day: 'S', active: false },
-      { day: 'M', active: false },
-      { day: 'T', active: false },
-      { day: 'W', active: false },
-      { day: 'T', active: false },
-      { day: 'F', active: false },
-      { day: 'S', active: false },
-    ],
+    rating: null, rating_delta: null, sparkline_rating: [], global_rank: null,
+    global_percentile: null, top_percent: null, level: null, level_name: null,
+    current_xp: null, next_level_xp: null, streak_days: null, week_dots: [],
   };
 
   // Badge catalogue comes from the backend (locked/unlocked), never invented.
   const badges = dashboardData?.badges || [];
 
   const kpis = dashboardData?.kpi_metrics || {
-    problems_solved: {
-      value: 0,
-      delta: '0',
-      breakdown: { easy: 0, medium: 0, hard: 0 },
-      bars: [],
-    },
-    acceptance_rate: { value: 0, delta: '0%', sparkline: [] },
-    avg_time: { value: '—', delta: '—', sparkline: [] },
-    hints_used: { value: 0, delta: '0', bars: [] },
+    problems_solved: { value: 0, delta: null, breakdown: { easy: 0, medium: 0, hard: 0 }, bars: [] },
+    acceptance_rate: { value: null, delta: null, sparkline: [] },
+    avg_time: { value: null, delta: null, sparkline: [] },
+    hints_used: { value: 0, delta: null, bars: [] },
   };
 
   const activityTrend = dashboardData?.activity_trend || {
@@ -199,10 +165,8 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
   };
 
   const difficultyDist = dashboardData?.difficulty_distribution || {
-    total: 0,
-    easy: { count: 0, pct: 0, color: '#10b981' },
-    medium: { count: 0, pct: 0, color: '#f59e0b' },
-    hard: { count: 0, pct: 0, color: '#ef4444' },
+    total: 0, easy: { count: 0, pct: 0, color: '#10b981' },
+    medium: { count: 0, pct: 0, color: '#f59e0b' }, hard: { count: 0, pct: 0, color: '#ef4444' },
   };
 
   const topicPerf = dashboardData?.topic_performance || {
@@ -238,36 +202,11 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
     return [];
   }, [dashboardData]);
 
-  // Filter options
-  const problemTypeOptions = [
-    { id: 'all', label: 'All Problems' },
-    { id: 'algo', label: 'Algorithms' },
-    { id: 'ds', label: 'Data Structures' },
-    { id: 'system', label: 'System Design' },
-  ];
-
-  const difficultyOptions = [
-    { id: 'all', label: 'All' },
-    { id: 'easy', label: 'Easy' },
-    { id: 'medium', label: 'Medium' },
-    { id: 'hard', label: 'Hard' },
-  ];
-
-  const topicOptions = [
-    { id: 'all', label: 'All Topics' },
-    { id: 'arrays', label: 'Arrays & Strings' },
-    { id: 'dp', label: 'Dynamic Programming' },
-    { id: 'graphs', label: 'Graphs & Trees' },
-    { id: 'binary_search', label: 'Binary Search' },
-  ];
-
-  const periodOptions = [
-    { id: '30d', label: 'Last 30 Days' },
-    { id: '60d', label: 'Last 60 Days' },
-    { id: '90d', label: 'Last 90 Days' },
-    { id: 'semester', label: 'This Semester' },
-    { id: 'all_time', label: 'All Time' },
-  ];
+  // Filter options come from catalog rows (Problem.source, is_daily, difficulty, topics).
+  const problemTypeOptions = dashboardData?.filter_options.problem_types ?? [];
+  const difficultyOptions = dashboardData?.filter_options.difficulties ?? [];
+  const topicOptions = dashboardData?.filter_options.topics ?? [];
+  const periodOptions = (dashboardData?.filter_options.date_ranges ?? []).map((option) => option.id === 'all' ? { ...option, id: 'all_time' } : option);
 
   // Helper function to render SVG sparklines
   const renderSparkline = (data: number[], strokeColor: string, fillColor?: string) => {
@@ -319,13 +258,13 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
   };
 
   // Level Ring calculations
-  const levelPct = Math.min(100, Math.round((standing.current_xp / standing.next_level_xp) * 100));
+  const levelPct = standing.current_xp != null && standing.next_level_xp != null && standing.next_level_xp > 0 ? Math.min(100, Math.round((standing.current_xp / standing.next_level_xp) * 100)) : null;
   const ringRadius = 26;
   const ringCircumference = 2 * Math.PI * ringRadius;
-  const ringOffset = ringCircumference - (levelPct / 100) * ringCircumference;
+  const ringOffset = ringCircumference - ((levelPct ?? 0) / 100) * ringCircumference;
 
   // Donut chart calculations for Difficulty Distribution
-  const totalSolved = difficultyDist.total || 0;
+  const totalSolved = difficultyDist.total;
   const easyPct = difficultyDist.easy.pct;
   const medPct = difficultyDist.medium.pct;
   const hardPct = difficultyDist.hard.pct;
@@ -335,6 +274,9 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
   const easyStroke = (easyPct / 100) * donutC;
   const medStroke = (medPct / 100) * donutC;
   const hardStroke = (hardPct / 100) * donutC;
+
+  if (isLoading) return <div className={styles.dashboard} style={{ padding: '2rem', color: '#64748b' }}>Loading practice records…</div>;
+  if (isError) return <div role="alert" className={styles.dashboard} style={{ padding: '2rem', color: '#991b1b' }}>Could not load practice analytics. No sample values are shown. <button onClick={() => refetch()}>Retry</button></div>;
 
   return (
     <div className={styles.dashboard}>
@@ -523,12 +465,11 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
               <Info size={12} style={{ color: '#94a3b8', cursor: 'pointer' }} />
             </div>
             <div className={styles.ratingValueRow}>
-              <span className={styles.ratingNum}>{standing.rating.toLocaleString()}</span>
-              <span className={styles.ratingBadge}>+{standing.rating_delta}</span>
+              <span className={styles.ratingNum}>{standing.rating != null ? standing.rating.toLocaleString() : '—'}</span>
+              {standing.rating_delta != null && <span className={styles.ratingBadge}>{standing.rating_delta >= 0 ? '+' : ''}{standing.rating_delta}</span>}
             </div>
             <div className={styles.ratingSub}>
-              Global Rank <span style={{ fontWeight: 700, color: '#334155' }}>#{standing.global_rank.toLocaleString()}</span>{' '}
-              <span style={{ color: '#7c3aed', fontWeight: 600 }}>(Top {standing.top_percent}%)</span>
+              Global Rank <span style={{ fontWeight: 700, color: '#334155' }}>{standing.global_rank != null ? `#${standing.global_rank.toLocaleString()}` : 'Not ranked'}</span>{standing.top_percent != null ? <span style={{ color: '#7c3aed', fontWeight: 600 }}> (Top {standing.top_percent}%)</span> : null}
             </div>
             <div className={styles.ratingSparklineWrap}>
               {renderSparkline(standing.sparkline_rating, '#8b5cf6', '#c4b5fd')}
@@ -563,16 +504,16 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
               </svg>
               <div className={styles.ringCenter}>
                 <Sparkles size={11} style={{ color: '#7c3aed', marginBottom: '1px' }} />
-                <span className={styles.ringLevel}>Level {standing.level}</span>
+                <span className={styles.ringLevel}>{standing.level != null ? `Level ${standing.level}` : '—'}</span>
               </div>
             </div>
             <div className={styles.levelInfo}>
-              <div className={styles.levelBadge}>{standing.level_name}</div>
+              <div className={styles.levelBadge}>{standing.level_name || 'Level unavailable'}</div>
               <div className={styles.xpProgressText}>
-                {standing.current_xp.toLocaleString()} / {standing.next_level_xp.toLocaleString()} XP
+                {standing.current_xp == null ? 'XP progress unavailable' : standing.next_level_xp != null ? `${standing.current_xp.toLocaleString()} / ${standing.next_level_xp.toLocaleString()} XP` : `${standing.current_xp.toLocaleString()} XP`}
               </div>
               <div style={{ fontSize: '0.675rem', color: '#94a3b8', fontWeight: 500 }}>
-                to Level {standing.level + 1}
+                {standing.level != null ? `to Level ${standing.level + 1}` : ''}
               </div>
             </div>
           </div>
@@ -595,7 +536,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
                 <Flame size={15} />
               </div>
               <div>
-                <div className={styles.streakBig}>{standing.streak_days}-day</div>
+                <div className={styles.streakBig}>{standing.streak_days != null ? `${standing.streak_days}-day` : '—'}</div>
                 <div className={styles.streakLabel}>Practice Streak</div>
               </div>
             </div>
@@ -657,10 +598,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
               <h4 className={styles.kpiTitle}>Problems Solved</h4>
             </div>
             <div className={styles.kpiValueRow}>
-              <span className={styles.kpiValue}>{kpis.problems_solved.value}</span>
-              <span className={styles.kpiBadge}>
-                <ArrowUp size={11} /> {kpis.problems_solved.delta}
-              </span>
+              <span className={styles.kpiValue}>{kpis.problems_solved.value ?? '—'}</span>
             </div>
           </div>
           <div className={styles.kpiBottomRow}>
@@ -685,10 +623,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
               <h4 className={styles.kpiTitle}>Acceptance Rate</h4>
             </div>
             <div className={styles.kpiValueRow}>
-              <span className={styles.kpiValue}>{kpis.acceptance_rate.value}%</span>
-              <span className={styles.kpiBadge}>
-                <ArrowUp size={11} /> {kpis.acceptance_rate.delta}
-              </span>
+              <span className={styles.kpiValue}>{kpis.acceptance_rate.value != null ? `${kpis.acceptance_rate.value}%` : '—'}</span>
             </div>
           </div>
           <div className={styles.kpiBottomRow}>
@@ -707,10 +642,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
               <h4 className={styles.kpiTitle}>Avg. Time per Problem</h4>
             </div>
             <div className={styles.kpiValueRow}>
-              <span className={styles.kpiValue}>{kpis.avg_time.value}</span>
-              <span className={`${styles.kpiBadge} ${styles.kpiBadgeBlue}`}>
-                <ArrowDown size={11} /> {kpis.avg_time.delta}
-              </span>
+              <span className={styles.kpiValue}>{kpis.avg_time.value ?? '—'}</span>
             </div>
           </div>
           <div className={styles.kpiBottomRow}>
@@ -729,10 +661,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
               <h4 className={styles.kpiTitle}>Hints Used</h4>
             </div>
             <div className={styles.kpiValueRow}>
-              <span className={styles.kpiValue}>{kpis.hints_used.value}</span>
-              <span className={styles.kpiBadge}>
-                <ArrowDown size={11} /> {kpis.hints_used.delta}
-              </span>
+              <span className={styles.kpiValue}>{kpis.hints_used.value ?? '—'}</span>
             </div>
           </div>
           <div className={styles.kpiBottomRow}>
@@ -1251,14 +1180,14 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
                   <div className={styles.unlockTitleRow}>
                     <h5 className={styles.unlockTitle}>{u.title}</h5>
                     <span className={styles.unlockCount}>
-                      {u.current.toLocaleString()} / {u.target.toLocaleString()}
+                      {u.current != null ? `${u.current.toLocaleString()} / ${u.target.toLocaleString()}` : `— / ${u.target.toLocaleString()}`}
                     </span>
                   </div>
                   <div className={styles.unlockTrack}>
                     <div
                       className={styles.unlockFill}
                       style={{
-                        width: `${Math.min(100, (u.current / u.target) * 100)}%`,
+                        width: `${u.current != null ? Math.min(100, (u.current / u.target) * 100) : 0}%`,
                         background: u.color,
                       }}
                     />
@@ -1330,7 +1259,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
                         <span className={styles.leaderName}>{entry.name}</span>
                       </div>
                     </td>
-                    <td className={styles.ratingCell}>{entry.rating.toLocaleString()}</td>
+                    <td className={styles.ratingCell}>{entry.rating != null ? entry.rating.toLocaleString() : '—'}</td>
                   </tr>
                 ))}
               </tbody>
@@ -1403,7 +1332,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
             </div>
             <div className={styles.modalBody}>
               <div className={styles.modalBadgeGrid}>
-                {badges.map((b) => (
+                {badges.length === 0 ? <p style={{ color: '#64748b', textAlign: 'center', gridColumn: '1 / -1' }}>No badges have been earned yet.</p> : badges.map((b) => (
                   <div key={b.id} className={styles.modalBadgeCard}>
                     <div
                       className={styles.badgeIconBox}
@@ -1418,37 +1347,6 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
                     </span>
                   </div>
                 ))}
-                {/* Upcoming Badges */}
-                <div className={styles.modalBadgeCard} style={{ opacity: 0.7, background: '#fafafa' }}>
-                  <div className={styles.badgeIconBox} style={{ background: '#f1f5f9', color: '#94a3b8', width: '52px', height: '52px' }}>
-                    <Lock size={20} />
-                  </div>
-                  <span style={{ fontWeight: 700, fontSize: '0.8rem', color: '#64748b' }}>250 Solves</span>
-                  <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Silver Milestone</span>
-                  <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '9999px', marginTop: '4px' }}>
-                    {kpis.problems_solved.value}/250 ({Math.min(100, Math.round((kpis.problems_solved.value / 250) * 100))}%)
-                  </span>
-                </div>
-                <div className={styles.modalBadgeCard} style={{ opacity: 0.7, background: '#fafafa' }}>
-                  <div className={styles.badgeIconBox} style={{ background: '#f1f5f9', color: '#94a3b8', width: '52px', height: '52px' }}>
-                    <Lock size={20} />
-                  </div>
-                  <span style={{ fontWeight: 700, fontSize: '0.8rem', color: '#64748b' }}>30-Day Streak</span>
-                  <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Master of Habits</span>
-                  <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '9999px', marginTop: '4px' }}>
-                    {standing.streak_days}/30 ({Math.min(100, Math.round((standing.streak_days / 30) * 100))}%)
-                  </span>
-                </div>
-                <div className={styles.modalBadgeCard} style={{ opacity: 0.7, background: '#fafafa' }}>
-                  <div className={styles.badgeIconBox} style={{ background: '#f1f5f9', color: '#94a3b8', width: '52px', height: '52px' }}>
-                    <Lock size={20} />
-                  </div>
-                  <span style={{ fontWeight: 700, fontSize: '0.8rem', color: '#64748b' }}>Contest Master</span>
-                  <span style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Rating 1,800+</span>
-                  <span style={{ fontSize: '0.65rem', fontWeight: 600, color: '#64748b', background: '#f1f5f9', padding: '2px 8px', borderRadius: '9999px', marginTop: '4px' }}>
-                    {Math.round(standing.rating).toLocaleString()}/1,800
-                  </span>
-                </div>
               </div>
             </div>
           </div>
@@ -1680,7 +1578,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
                             </span>
                           </div>
                         </td>
-                        <td className={styles.ratingCell}>{entry.rating.toLocaleString()}</td>
+                        <td className={styles.ratingCell}>{entry.rating != null ? entry.rating.toLocaleString() : '—'}</td>
                       </tr>
                     ))}
                   </tbody>

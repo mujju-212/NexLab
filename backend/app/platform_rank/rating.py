@@ -56,33 +56,24 @@ def compute_student_platform_rating(student_id: str, commit: bool = True) -> Dic
         .all()
     )
 
-    BASE_RATING = 1000.0
-
     if not first_solves and not course_solves:
-        # Initial baseline rating for new student
+        # No solve means no rating observation; clear stale baseline values but
+        # do not create a synthetic rating row for a new student.
         rating_rec = PlatformRating.query.get(student_id)
-        if not rating_rec:
-            rating_rec = PlatformRating(student_id=student_id, rating=BASE_RATING)
-            db.session.add(rating_rec)
-        else:
-            rating_rec.rating = BASE_RATING
+        if rating_rec:
+            rating_rec.rating = 0.0
             rating_rec.problems_solved = 0
             rating_rec.easy_solved = 0
             rating_rec.medium_solved = 0
             rating_rec.hard_solved = 0
-
-        if commit:
-            db.session.commit()
-
+            rating_rec.global_rank = None
+            rating_rec.global_percentile = 0.0
+            if commit:
+                db.session.commit()
         return {
-            'student_id': student_id,
-            'rating': BASE_RATING,
-            'problems_solved': 0,
-            'easy_solved': 0,
-            'medium_solved': 0,
-            'hard_solved': 0,
-            'global_rank': None,
-            'global_percentile': 0.0,
+            'student_id': student_id, 'rating': None, 'problems_solved': 0,
+            'easy_solved': 0, 'medium_solved': 0, 'hard_solved': 0,
+            'global_rank': None, 'global_percentile': None,
         }
 
     # 4. Load library problems in bulk
@@ -113,8 +104,8 @@ def compute_student_platform_rating(student_id: str, commit: bool = True) -> Dic
         # Quality factor: test cases passed ratio + acceptance difficulty scaling
         passed_ratio = float(sub.passed or 1) / max(1, float(sub.total or 1))
         # Harder problem (lower acceptance) gives slight bonus up to +20%
-        acceptance = float(problem.acceptance or 0.5)
-        acceptance_bonus = max(0.0, min(0.2, (0.7 - acceptance) * 0.4))
+        acceptance = float(problem.acceptance) if problem.acceptance is not None and problem.acceptance > 0 else None
+        acceptance_bonus = max(0.0, min(0.2, (0.7 - acceptance) * 0.4)) if acceptance is not None else 0.0
         quality = max(0.5, min(1.2, passed_ratio + acceptance_bonus))
 
         # Recency factor: 1.0 for last 90 days, decays smoothly to 0.7 for older solves
@@ -165,8 +156,8 @@ def compute_student_platform_rating(student_id: str, commit: bool = True) -> Dic
     if total_solved == 0:
         total_rating = 0.0
     else:
-        # Formula: Rating = 1000.0 + sum(BaseXP * RecencyWeight) - AntiFarmingPenalty
-        total_rating = round(max(500.0, BASE_RATING + total_xp_earned - anti_farming_penalty), 1)
+        # Rating is the measured earned score; no baseline is granted before a solve.
+        total_rating = round(max(0.0, total_xp_earned - anti_farming_penalty), 1)
 
     # 5. Save/update PlatformRating
     rating_rec = PlatformRating.query.get(student_id)
@@ -257,7 +248,7 @@ def get_student_platform_standing(student_id: str) -> Dict[str, Any]:
     """
     # Ensure rating is initialized
     rating_rec = PlatformRating.query.get(student_id)
-    if not rating_rec:
+    if not rating_rec or ((rating_rec.problems_solved or 0) == 0 and float(rating_rec.rating or 0.0) != 0.0):
         compute_student_platform_rating(student_id, commit=True)
         rating_rec = PlatformRating.query.get(student_id)
 
@@ -276,14 +267,14 @@ def get_student_platform_standing(student_id: str) -> Dict[str, Any]:
 
     xp = StudentXP.query.filter_by(student_id=student_id).first()
     from app.models.practice import xp_to_level, LEVELS, StudentBadge
-    total_xp = xp.total_xp if xp else 0
-    level, level_name = xp_to_level(total_xp)
-
-    next_xp = None
-    for lvl_num, lvl_nm, req in LEVELS:
-        if req > total_xp:
-            next_xp = req
-            break
+    total_xp = int(xp.total_xp or 0) if xp else None
+    if xp is not None:
+        level, level_name = xp_to_level(total_xp)
+        next_xp = next((req for _, _, req in LEVELS if req > total_xp), None)
+    else:
+        # No XP record is an unavailable level/streak observation, not a new
+        # student with a fabricated level-1 baseline.
+        level = level_name = next_xp = None
 
     # Badges earned
     badges = [b.to_dict() for b in StudentBadge.query.filter_by(student_id=student_id).all()]
@@ -304,18 +295,18 @@ def get_student_platform_standing(student_id: str) -> Dict[str, Any]:
 
     return {
         'student_id': student_id,
-        'rating': 0.0 if is_unranked else round(float(rating_rec.rating or 0.0), 1),
+        'rating': None if is_unranked else round(float(rating_rec.rating or 0.0), 1),
         'level': level,
         'level_name': level_name,
         'total_xp': total_xp,
         'next_level_xp': next_xp,
         'global_rank': None if is_unranked else rating_rec.global_rank,
-        'global_percentile': 0.0 if is_unranked else round(float(rating_rec.global_percentile or 0.0), 1),
-        'rank_movement': 0 if is_unranked else rank_movement,
+        'global_percentile': None if is_unranked else round(float(rating_rec.global_percentile or 0.0), 1),
+        'rank_movement': None if (is_unranked or not last_period or not last_period.rank_pos) else rank_movement,
         'problems_solved': 0 if is_unranked else (rating_rec.problems_solved if rating_rec else 0),
         'easy_solved': 0 if is_unranked else (rating_rec.easy_solved if rating_rec else 0),
         'medium_solved': 0 if is_unranked else (rating_rec.medium_solved if rating_rec else 0),
         'hard_solved': 0 if is_unranked else (rating_rec.hard_solved if rating_rec else 0),
-        'streak_days': xp.streak_days if xp else 0,
+        'streak_days': xp.streak_days if xp else None,
         'badges': badges,
     }

@@ -18,6 +18,10 @@ interface OverviewTabProps {
   rollNumber?: string | null;
   department?: string | null;
   dateRange?: string;
+  subjectCount?: number | null;
+  loading?: boolean;
+  error?: string | null;
+  onRetry?: () => void;
 }
 
 export const OverviewTab: React.FC<OverviewTabProps> = ({
@@ -27,7 +31,18 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
   rollNumber,
   department,
   dateRange,
+  subjectCount,
+  loading = false,
+  error,
+  onRetry,
 }) => {
+  if (loading) return <div style={{ padding: '2rem', textAlign: 'center', color: '#64748b' }}>Loading analytics from your records…</div>;
+  if (error) return (
+    <div role="alert" style={{ padding: '1.5rem', border: '1px solid #fecaca', borderRadius: 12, color: '#991b1b', background: '#fef2f2' }}>
+      <p>Could not load your analytics. No sample data is shown.</p>
+      <button onClick={onRetry} style={{ padding: '0.4rem 0.75rem', borderRadius: 8, border: '1px solid #cbd5e1', background: 'white', cursor: 'pointer' }}>Retry</button>
+    </div>
+  );
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       {/* ── Row 1: Profile & Standings (3 Cards) ── */}
@@ -36,6 +51,7 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         studentName={studentName}
         rollNumber={rollNumber}
         department={department}
+        subjectCount={subjectCount}
       />
 
       {/* ── Row 2: 4 Metric Summary Cards ── */}

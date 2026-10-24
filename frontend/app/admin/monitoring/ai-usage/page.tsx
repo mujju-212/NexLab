@@ -1,4 +1,4 @@
-﻿'use client';
+'use client';
 
 import { useCallback, useEffect, useState } from 'react';
 import AdminShell from '@/components/layout/AdminShell';
@@ -7,6 +7,7 @@ import {
   RefreshCw, Cpu, Building2, Search, TrendingUp,
 } from 'lucide-react';
 import styles from '../dashboard/page.module.css';
+import AdminMonitoringTabs from '@/components/layout/AdminMonitoringTabs';
 
 interface InstUsage {
   institution_id: string;
@@ -55,7 +56,8 @@ export default function AdminAiUsagePage() {
     !search || r.name.toLowerCase().includes(search.toLowerCase()));
 
   return (
-    <AdminShell activePage="Monitoring">
+    <AdminShell activePage="System Monitoring">
+      <AdminMonitoringTabs active="ai" />
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, flexWrap: 'wrap', marginBottom: 20 }}>
         <div>
           <h1 style={{ margin: 0, fontSize: 22, fontWeight: 800, color: '#201b2e', fontFamily: "'Space Grotesk', sans-serif" }}>

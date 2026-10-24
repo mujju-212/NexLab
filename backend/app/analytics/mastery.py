@@ -67,10 +67,15 @@ def compute_scoped_mastery(
 
     # If no explicit ExperimentConcept mapping was configured, query student's existing ConceptMastery rows
     q = ConceptMastery.query.filter_by(student_id=student_id)
+    q = q.filter(ConceptMastery.experiment_count > 0)
+    if institution_id:
+        q = q.filter(ConceptMastery.institution_id == institution_id)
     if target_concepts:
         q = q.filter(ConceptMastery.concept.in_(target_concepts))
-    elif institution_id:
-        q = q.filter(ConceptMastery.institution_id == institution_id)
+    elif experiment_ids:
+        q = q.filter(db.literal(False))
+    else:
+        q = q.filter(db.literal(False))
 
     mastery_rows = q.all()
 
@@ -96,7 +101,7 @@ def compute_scoped_mastery(
         concepts_data.append({
             'concept': m.concept,
             'mastery_score': round(score, 1),
-            'experiment_count': getattr(m, 'experiment_count', 1) or 1,
+            'experiment_count': int(m.experiment_count or 0),
             'is_weak': is_weak,
             'status': status,
             'last_updated': m.last_updated.isoformat() if getattr(m, 'last_updated', None) else None,
@@ -141,8 +146,9 @@ def get_concept_prerequisite_graph(
 
     # Get student's current mastery
     st_mastery = {
-        m.concept: float(m.mastery_score or 0.0)
-        for m in ConceptMastery.query.filter_by(student_id=student_id).all()
+        m.concept: float(m.mastery_score)
+        for m in ConceptMastery.query.filter_by(student_id=student_id).filter(ConceptMastery.experiment_count > 0).all()
+        if m.mastery_score is not None
     }
 
     nodes = {}
@@ -153,12 +159,12 @@ def get_concept_prerequisite_graph(
     for p in prereqs:
         for c in (p.concept, p.requires_concept):
             if c not in nodes:
-                c_score = st_mastery.get(c, 0.0)
+                c_score = st_mastery.get(c)
                 nodes[c] = {
                     'id': c,
                     'concept': c,
                     'mastery_score': c_score,
-                    'is_deficient': c_score < mastery_threshold,
+                    'is_deficient': c_score is not None and c_score < mastery_threshold,
                     'is_blocked': False,
                     'missing_prereqs': [],
                 }
@@ -171,8 +177,8 @@ def get_concept_prerequisite_graph(
 
     # Identify blocked concepts
     for p in prereqs:
-        req_score = st_mastery.get(p.requires_concept, 0.0)
-        if req_score < mastery_threshold:
+        req_score = st_mastery.get(p.requires_concept)
+        if req_score is not None and req_score < mastery_threshold:
             if p.concept in nodes:
                 nodes[p.concept]['is_blocked'] = True
                 nodes[p.concept]['missing_prereqs'].append({
