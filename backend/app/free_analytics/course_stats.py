@@ -39,7 +39,7 @@ def get_user_course_analytics(user_id: str) -> Dict[str, Any]:
         exercise_count = len(published_exercises)
         total_exercises_catalog += exercise_count
 
-        total_xp_possible = sum(ex.xp_reward or 10 for ex in published_exercises)
+        total_xp_possible = sum(ex.xp_reward or 0 for ex in published_exercises)
 
         user_progs = prog_by_course.get(course.id, [])
         solved_progs = [p for p in user_progs if p.status in ('solved', 'completed')]
@@ -65,7 +65,7 @@ def get_user_course_analytics(user_id: str) -> Dict[str, Any]:
             completed_count += 1
             # Latest solved_at timestamp
             solved_times = [p.solved_at for p in solved_progs if p.solved_at]
-            completed_at = max(solved_times).isoformat() if solved_times else datetime.utcnow().isoformat()
+            completed_at = max(solved_times).isoformat() if solved_times else None
             cert_id = f"NEX-{course.slug.upper()[:12]}-{user_id[:8].upper()}"
             certificates.append({
                 'certificate_id': cert_id,

@@ -29,7 +29,7 @@ class FreeCourse(db.Model):
 
     def to_dict(self, with_stats=False):
         exs = self.exercises.all()
-        calc_xp = sum(e.xp_reward or 10 for e in exs) if exs else 200
+        calc_xp = sum(e.xp_reward or 0 for e in exs)
         d = {
             'id':           self.id,
             'slug':         self.slug,
@@ -42,7 +42,7 @@ class FreeCourse(db.Model):
             'is_published': self.is_published,
             'order_index':  self.order_index,
             'exercise_count': len(exs),
-            'total_xp':     calc_xp if calc_xp > 0 else 200,
+            'total_xp':     calc_xp,
         }
         return d
 
@@ -80,8 +80,8 @@ class FreeExercise(db.Model):
     mcq_explanation  = db.Column(db.Text)
 
     tags             = db.Column(db.JSON)    # e.g. ["Arrays", "Searching"]
-    acceptance_rate  = db.Column(db.Float, default=70.0)
-    solves_count     = db.Column(db.Integer, default=1000)
+    acceptance_rate  = db.Column(db.Float, default=None)
+    solves_count     = db.Column(db.Integer, default=0)
 
     xp_reward        = db.Column(db.Integer, default=10)
     is_published     = db.Column(db.Boolean, default=True)
@@ -98,8 +98,8 @@ class FreeExercise(db.Model):
             'difficulty':   self.difficulty,
             'exercise_type':self.exercise_type,
             'tags':         self.tags or [],
-            'acceptance_rate': round(self.acceptance_rate or 70.0, 1),
-            'solves_count': self.solves_count or 0,
+            'acceptance_rate': round(float(self.acceptance_rate), 1) if self.acceptance_rate is not None else None,
+            'solves_count': self.solves_count if self.solves_count is not None else 0,
             'allowed_languages': self.allowed_languages or ['python'],
             'starter_code': self.starter_code or {},
             'xp_reward':    self.xp_reward,

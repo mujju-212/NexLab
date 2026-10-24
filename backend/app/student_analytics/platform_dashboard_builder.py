@@ -360,7 +360,7 @@ def build_platform_dashboard_payload(
                 'initials': ''.join([part[0] for part in (entry.get('full_name') or entry.get('name') or '').split()[:2]]).upper(),
                 'rating': round(float(entry['rating'])) if entry.get('rating') is not None else None,
                 'avatar_color': '#7c3aed' if entry.get('is_current_user') else '#3b82f6',
-                'is_current_user': bool(entry.get('is_current_user')),
+                'is_current_user': entry.get('student_id') == student_id,
             }
             for idx, entry in enumerate(board.get('leaderboard', []))
         ],

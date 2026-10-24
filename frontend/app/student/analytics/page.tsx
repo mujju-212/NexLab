@@ -60,13 +60,13 @@ function StudentAnalyticsDashboard() {
     error: overviewError,
     refetch,
   } = useQuery({
-    queryKey: ['student-analytics-overview', dateRange],
+    queryKey: ['student-analytics-overview', user?.id ?? 'anonymous', dateRange],
     queryFn: () => studentAnalyticsService.getOverview({ period: dateRange }),
     staleTime: 60 * 1000,
   });
 
   const { data: subjects } = useQuery({
-    queryKey: ['student-analytics-subjects'],
+    queryKey: ['student-analytics-subjects', user?.id ?? 'anonymous'],
     queryFn: () => studentAnalyticsService.getSubjects(),
     staleTime: 60 * 1000,
   });

@@ -104,8 +104,8 @@ def compute_student_platform_rating(student_id: str, commit: bool = True) -> Dic
         # Quality factor: test cases passed ratio + acceptance difficulty scaling
         passed_ratio = float(sub.passed or 1) / max(1, float(sub.total or 1))
         # Harder problem (lower acceptance) gives slight bonus up to +20%
-        acceptance = float(problem.acceptance or 0.5)
-        acceptance_bonus = max(0.0, min(0.2, (0.7 - acceptance) * 0.4))
+        acceptance = float(problem.acceptance) if problem.acceptance is not None and problem.acceptance > 0 else None
+        acceptance_bonus = max(0.0, min(0.2, (0.7 - acceptance) * 0.4)) if acceptance is not None else 0.0
         quality = max(0.5, min(1.2, passed_ratio + acceptance_bonus))
 
         # Recency factor: 1.0 for last 90 days, decays smoothly to 0.7 for older solves

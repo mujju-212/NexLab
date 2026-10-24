@@ -2,7 +2,7 @@
 
 import { useState, useEffect, useCallback } from 'react';
 import { useParams, useRouter } from 'next/navigation';
-import { freeService, type FreeCourse, type FreeExercise, type RunResult } from '@/services/free.service';
+import { freeService, type FreeCourse, type FreeExercise, type RunResult, type McqSubmitResult } from '@/services/free.service';
 import { useAuthStore } from '@/store/auth-store';
 import styles from './exercise.module.css';
 import {
@@ -44,7 +44,7 @@ export default function ExerciseView({ basePath = '/practice', embedded = false 
   const [showHint, setShowHint] = useState(false);
   const [activeTab, setActiveTab] = useState<'problem' | 'results'>('problem');
   const [mcqAnswer, setMcqAnswer] = useState('');
-  const [mcqResult, setMcqResult] = useState<{ correct: boolean; correct_answer: string; explanation: string } | null>(null);
+  const [mcqResult, setMcqResult] = useState<McqSubmitResult | null>(null);
   const [simSolved, setSimSolved]   = useState(false);
   const [completing, setCompleting] = useState(false);
 

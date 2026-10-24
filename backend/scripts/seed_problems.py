@@ -57,7 +57,7 @@ STUDY_PLANS = [
     {
         'slug': 'nexlab-75',
         'title': 'NexLab 75',
-        'description': 'The 75 most essential problems every developer must know. Covers all major patterns.',
+        'description': 'A coding-pattern roadmap covering the core problem-solving topics.',
         'icon': '🎯',
         'estimated_days': 75,
         'difficulty_mix': 'Easy–Hard',
@@ -91,7 +91,7 @@ STUDY_PLANS = [
     {
         'slug': 'beginner-path',
         'title': 'Beginner Path',
-        'description': '30 beginner-friendly problems. Master the basics of arrays, strings, and math.',
+        'description': 'Beginner-friendly practice for mastering arrays, strings, and math.',
         'icon': '🌱',
         'estimated_days': 30,
         'difficulty_mix': 'Easy',
@@ -113,7 +113,7 @@ STUDY_PLANS = [
     {
         'slug': 'dp-mastery',
         'title': 'DP Mastery',
-        'description': '50 problems covering every Dynamic Programming pattern from basics to advanced.',
+        'description': 'Dynamic programming patterns from the basics through advanced techniques.',
         'icon': '🧠',
         'estimated_days': 50,
         'difficulty_mix': 'Medium–Hard',
@@ -141,7 +141,7 @@ STUDY_PLANS = [
     {
         'slug': 'trees-and-graphs',
         'title': 'Trees & Graphs',
-        'description': '40 problems covering tree traversals, graph algorithms, and network problems.',
+        'description': 'Tree traversals, graph algorithms, and network problems.',
         'icon': '🌳',
         'estimated_days': 40,
         'difficulty_mix': 'Easy–Hard',
@@ -168,7 +168,7 @@ STUDY_PLANS = [
     {
         'slug': 'sql-50',
         'title': 'SQL 50',
-        'description': 'Master SQL with 50 problems from basic queries to advanced window functions.',
+        'description': 'SQL practice from basic queries to advanced window functions.',
         'icon': '🗄️',
         'estimated_days': 30,
         'difficulty_mix': 'Easy–Hard',
@@ -393,17 +393,37 @@ def seed_problems():
 
 
 def seed_study_plans():
-    for plan_def in STUDY_PLANS:
+    available_slugs = {
+        row[0] for row in db.session.query(Problem.slug)
+        .filter(Problem.is_active.is_(True)).all()
+    }
+    for source_def in STUDY_PLANS:
+        plan_def = dict(source_def)
         sections = plan_def.pop('sections', [])
+        # Keep plan counts and sections aligned with the problems that were
+        # actually seeded; dangling curated slugs cannot be solved in the app.
+        normalized_sections = []
+        seen_slugs = set()
+        for title, slugs in sections:
+            available = [
+                slug for slug in slugs
+                if slug in available_slugs and slug not in seen_slugs
+            ]
+            seen_slugs.update(available)
+            if available:
+                normalized_sections.append((title, available))
+        sections = normalized_sections
         existing = StudyPlan.query.filter_by(slug=plan_def['slug']).first()
         if existing:
             plan = existing
+            for key, value in plan_def.items():
+                setattr(plan, key, value)
         else:
             plan = StudyPlan(**plan_def)
             db.session.add(plan)
             db.session.flush()
 
-        # Update total_problems count
+        # Update total_problems count using available problem records only.
         total = sum(len(slugs) for _, slugs in sections)
         plan.total_problems = total
 

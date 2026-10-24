@@ -20,6 +20,7 @@ import {
 } from 'lucide-react';
 import type { UnifiedStudentOverview } from '@/services/student-analytics.service';
 import { apiClient } from '@/services/api-client';
+import { useAuthStore } from '@/store/auth-store';
 import styles from './growth-overview.module.css';
 
 interface UpcomingGoalsCardProps {
@@ -27,12 +28,13 @@ interface UpcomingGoalsCardProps {
 }
 
 export const UpcomingGoalsCard: React.FC<UpcomingGoalsCardProps> = ({ overview }) => {
+  const { user } = useAuthStore();
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [modalTab, setModalTab] = useState<'plans' | 'goals'>('plans');
 
   // Fetch real Study Plans from backend
   const { data: dbPlans = [] } = useQuery({
-    queryKey: ['student-study-plans-overview'],
+    queryKey: ['student-study-plans-overview', user?.id ?? 'anonymous'],
     queryFn: async () => {
       try {
         const res = await apiClient.get<{ plans: any[] }>('/practice/plans');

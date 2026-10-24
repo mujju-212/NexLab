@@ -16,6 +16,7 @@ from app.models.grading import Grade, HintLog
 from app.models.submission import CodeAttempt
 from app.models.session import LabSession, SessionAttendance
 from app.models.academic import SectionSubject, SectionStudent
+from app.models.experiment import Experiment
 from app.models.proctor_event import ProctorEvent
 
 

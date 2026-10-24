@@ -115,8 +115,8 @@ export default function DailyChallengePage({ baseRoute }: { baseRoute: string })
   const router = useRouter();
   const [data, setData] = useState<DailyChallengeData | null>(null);
   const [loading, setLoading] = useState(true);
-  const [calYear, setCalYear] = useState<number>(2026);
-  const [calMonth, setCalMonth] = useState<number>(10);
+  const [calYear, setCalYear] = useState<number>(() => new Date().getFullYear());
+  const [calMonth, setCalMonth] = useState<number>(() => new Date().getMonth() + 1);
   const [calLoading, setCalLoading] = useState(false);
   const [secondsRemaining, setSecondsRemaining] = useState<number>(0);
 
@@ -309,7 +309,7 @@ export default function DailyChallengePage({ baseRoute }: { baseRoute: string })
                 <Clock size={15} color="#475569" />
                 {secondsRemaining > 0
                   ? formatCountdown(secondsRemaining)
-                  : daily?.ends_in || 'Ends in 12h 34m'}
+                  : daily?.ends_in ?? '—'}
               </span>
             </div>
 
@@ -347,7 +347,7 @@ export default function DailyChallengePage({ baseRoute }: { baseRoute: string })
                       <Zap size={18} fill="#ca8a04" />
                     </div>
                     <div className={styles.metricInfo}>
-                      <span className={styles.metricValue}>+{daily.reward_xp || 15} XP</span>
+                      <span className={styles.metricValue}>+{daily.reward_xp ?? 15} XP</span>
                       <span className={styles.metricLabel}>Today's Reward</span>
                     </div>
                   </div>
@@ -360,7 +360,7 @@ export default function DailyChallengePage({ baseRoute }: { baseRoute: string })
                       <Users size={18} />
                     </div>
                     <div className={styles.metricInfo}>
-                      <span className={styles.metricValue}>{daily.solvers_today || '1.2K'}</span>
+                      <span className={styles.metricValue}>{daily.solvers_today ?? '—'}</span>
                       <span className={styles.metricLabel}>Solvers Today</span>
                     </div>
                   </div>
@@ -373,7 +373,7 @@ export default function DailyChallengePage({ baseRoute }: { baseRoute: string })
                       <Trophy size={18} />
                     </div>
                     <div className={styles.metricInfo}>
-                      <span className={styles.metricValue}>{daily.success_rate || '68%'}</span>
+                      <span className={styles.metricValue}>{daily.success_rate ?? '—'}</span>
                       <span className={styles.metricLabel}>Success Rate</span>
                     </div>
                   </div>

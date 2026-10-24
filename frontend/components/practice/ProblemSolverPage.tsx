@@ -41,7 +41,7 @@ interface ProblemDetail {
   nexlab_topic: string; topics: string[];
   description: string; examples: Example[];
   constraints: string[]; hints: string[];
-  acceptance: number; xp_reward: number;
+  acceptance: number | null; xp_reward: number | null;
   starter_code: Record<string, string>;
 }
 
@@ -425,7 +425,7 @@ export default function ProblemSolverPage({ slug, baseRoute }: ProblemSolverPage
                       {problem.difficulty}
                     </span>
                     <span className={styles.topicTag}>{problem.nexlab_topic}</span>
-                    <span className={styles.xpReward}>+{problem.xp_reward || 10} XP</span>
+                    <span className={styles.xpReward}>{problem.xp_reward != null ? `+${problem.xp_reward} XP` : 'XP unavailable'}</span>
                     {accepted && (
                       <span style={{ color: '#15803d', fontSize: '.75rem', fontWeight: 800 }}>
                         <CheckCircle2 size={13} style={{ verticalAlign: 'middle' }} /> Solved
@@ -434,7 +434,7 @@ export default function ProblemSolverPage({ slug, baseRoute }: ProblemSolverPage
                   </div>
                   <h1 className={styles.probTitle}>{problem.title}</h1>
                   <div className={styles.acceptance}>
-                    Acceptance: {Math.round((problem.acceptance || 0) * 100)}%
+                    Acceptance: {problem.acceptance != null ? `${Math.round(problem.acceptance * 100)}%` : 'unavailable'}
                   </div>
                 </div>
 
@@ -453,7 +453,7 @@ export default function ProblemSolverPage({ slug, baseRoute }: ProblemSolverPage
                 </div>
 
                 {/* Examples */}
-                {problem.examples?.length > 0 && (
+                {problem.examples?.length > 0 ? (
                   <>
                     <div style={{ marginTop: '1rem', marginBottom: '.25rem', fontWeight: 800, color: '#201b2e', fontSize: '.85rem', fontFamily: 'Space Grotesk, sans-serif' }}>
                       Examples
@@ -490,10 +490,12 @@ export default function ProblemSolverPage({ slug, baseRoute }: ProblemSolverPage
                       );
                     })}
                   </>
+                ) : (
+                  <div style={{ marginTop: '1rem', fontSize: '.82rem', color: '#64748b' }}>No examples supplied.</div>
                 )}
 
                 {/* Constraints */}
-                {problem.constraints?.length > 0 && (
+                {problem.constraints?.length > 0 ? (
                   <>
                     <div style={{ marginTop: '.85rem', marginBottom: '.35rem', fontWeight: 800, color: '#201b2e', fontSize: '.85rem', fontFamily: 'Space Grotesk, sans-serif' }}>
                       Constraints
@@ -502,6 +504,8 @@ export default function ProblemSolverPage({ slug, baseRoute }: ProblemSolverPage
                       {problem.constraints.map((c, i) => <li key={i}>{c}</li>)}
                     </ul>
                   </>
+                ) : (
+                  <div style={{ marginTop: '.85rem', fontSize: '.82rem', color: '#64748b' }}>No constraints supplied.</div>
                 )}
               </>
             )}

@@ -275,12 +275,6 @@ def compute_rank_for_scope(
     entities = resolve_scope_entities(scope_level, scope_id, institution_id)
     student_ids = entities['student_ids']
 
-    if not student_ids:
-        # Fallback: if resolving yielded empty, grab all active students in institution
-        if institution_id:
-            users = User.query.filter_by(institution_id=institution_id, role='student', is_active=True).all()
-            student_ids = [u.id for u in users]
-
     cohort_size = len(student_ids)
     if cohort_size == 0:
         return []

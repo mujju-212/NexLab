@@ -25,7 +25,8 @@ from app.models.practice import (
 from datetime import date, datetime, timedelta, time
 import hashlib
 import calendar
-from sqlalchemy import func
+import re
+from sqlalchemy import func, or_
 
 practice_bp = Blueprint('practice', __name__)
 
@@ -48,23 +49,47 @@ def _award_badge(student_id, badge_id):
         db.session.add(StudentBadge(student_id=student_id, badge_id=badge_id))
 
 
+def _available_plan_slugs(plan):
+    """Return only plan slugs that resolve to a real active problem record."""
+    declared = []
+    for section in plan.sections:  # relationship is lazy/dynamic
+        declared.extend(section.problem_ids or [])
+    if not declared:
+        return []
+    existing = {
+        row[0] for row in db.session.query(Problem.slug)
+        .filter(Problem.slug.in_(set(declared)), Problem.is_active.is_(True)).all()
+    }
+    available = []
+    seen = set()
+    for slug in declared:
+        if slug in existing and slug not in seen:
+            available.append(slug)
+            seen.add(slug)
+    return available
+
+
+def _plan_display_title(plan, available_count):
+    """Clarify numbered roadmap names when fewer problems are currently linked."""
+    match = re.search(r'(?<!\d)(\d+)(?!\d)', plan.title or '')
+    if match and int(match.group(1)) != available_count:
+        return f'{plan.title} ({available_count} available)'
+    return plan.title
+
+
 def _update_plan_progress(student_id, problem_slug):
-    """Mark a solved problem inside every enrolled plan that contains it; award the
-    plan's completion badge + certificate once all of its problems are solved."""
+    """Update enrolled plans using only problems currently available to solve."""
     progs = StudyPlanProgress.query.filter_by(student_id=student_id).all()
     for prog in progs:
         plan = StudyPlan.query.get(prog.plan_id)
         if not plan:
             continue
-        all_slugs = []
-        for sec in plan.sections:            # lazy='dynamic'
-            all_slugs.extend(sec.problem_ids or [])
+        all_slugs = _available_plan_slugs(plan)
         if problem_slug not in all_slugs:
             continue
-        solved = set(prog.solved_slugs or [])
-        if problem_slug not in solved:
-            solved.add(problem_slug)
-            prog.solved_slugs = sorted(solved)   # reassign so JSON change is tracked
+        solved = set(prog.solved_slugs or []) & set(all_slugs)
+        solved.add(problem_slug)
+        prog.solved_slugs = sorted(solved)  # reassign so JSON change is tracked
         if all_slugs and solved.issuperset(all_slugs) and not prog.completed_at:
             prog.completed_at = datetime.utcnow()
             if plan.badge_id and not prog.badge_awarded:
@@ -107,7 +132,7 @@ def _generate_plan_certificate(student_id, plan) -> str:
     <div class="name">{student_name}</div>
     <p class="body">has successfully completed the practice plan<br/>
        <strong>{plan.title}</strong><br/>
-       ({plan.total_problems} problems &middot; {plan.difficulty_mix})</p>
+       ({len(_available_plan_slugs(plan))} problems &middot; {plan.difficulty_mix})</p>
     <div class="meta">
       Certificate ID: {cert_id} &middot; Issued {issued}<br/>
       Verify at your NexLab profile.
@@ -382,18 +407,18 @@ def profile_overview():
         'acceptance_rate': acceptance_rate,
         'easy': {
             'solved': easy_solved,
-            'total': max(total_easy, 16),
-            'percentage': round((easy_solved / max(total_easy, 16)) * 100, 1),
+            'total': total_easy,
+            'percentage': round((easy_solved / total_easy) * 100, 1) if total_easy else None,
         },
         'medium': {
             'solved': medium_solved,
-            'total': max(total_medium, 72),
-            'percentage': round((medium_solved / max(total_medium, 72)) * 100, 1),
+            'total': total_medium,
+            'percentage': round((medium_solved / total_medium) * 100, 1) if total_medium else None,
         },
         'hard': {
             'solved': hard_solved,
-            'total': max(total_hard, 16),
-            'percentage': round((hard_solved / max(total_hard, 16)) * 100, 1),
+            'total': total_hard,
+            'percentage': round((hard_solved / total_hard) * 100, 1) if total_hard else None,
         },
     }), 200
 
@@ -512,20 +537,67 @@ def list_topics():
 
 # ── Daily Challenge ───────────────────────────────────────────────────────────
 
-def _get_daily_problem_for_date(target_date: date):
-    """Retrieve the daily challenge problem for a given date."""
-    p = Problem.query.filter_by(is_daily=True, daily_date=target_date).first()
+def _get_daily_problem_for_date(target_date: date, active_problems=None, daily_problem_map=None):
+    """Retrieve the daily challenge problem for a date, using a stable fallback."""
+    if daily_problem_map is not None:
+        p = daily_problem_map.get(target_date)
+    else:
+        p = Problem.query.filter_by(is_daily=True, daily_date=target_date).first()
     if p:
         return p
-    active = Problem.query.filter_by(is_active=True).order_by(Problem.id).all()
+    active = active_problems
+    if active is None:
+        active = Problem.query.filter_by(is_active=True).order_by(Problem.id).all()
     if not active:
         return None
     day_hash = int(hashlib.md5(f"nexlab-daily-{target_date.isoformat()}".encode()).hexdigest(), 16)
     return active[day_hash % len(active)]
 
 
-def _build_calendar_days(target_year: int, target_month: int, today: date, solved_dates: set, solved_today: bool, current_streak: int):
-    """Build full month grid with Sunday as first weekday (matches mockup layout)."""
+def _daily_completion_history(student_id: str):
+    """Return dates on which this student solved that date's assigned challenge."""
+    active = Problem.query.filter_by(is_active=True).order_by(Problem.id).all()
+    daily_map = {
+        p.daily_date: p for p in Problem.query.filter(
+            Problem.is_daily.is_(True), Problem.daily_date.isnot(None)
+        ).all()
+    }
+    rows = PracticeSubmission.query.filter_by(
+        student_id=student_id, status='Accepted', is_run=False
+    ).filter(PracticeSubmission.submitted_at.isnot(None)).all()
+    submitted_by_date = {}
+    for row in rows:
+        submitted_by_date.setdefault(row.submitted_at.date(), set()).add(row.problem_id)
+
+    solved_dates = set()
+    for submitted_date, problem_ids in submitted_by_date.items():
+        challenge = _get_daily_problem_for_date(submitted_date, active, daily_map)
+        if challenge and challenge.id in problem_ids:
+            solved_dates.add(submitted_date)
+    return solved_dates, active, daily_map
+
+
+def _streak_from_dates(solved_dates: set, today: date):
+    """Compute challenge-only current and best streaks from recorded solves."""
+    ordered = sorted(solved_dates)
+    best = current = 0
+    previous = None
+    for day in ordered:
+        current = current + 1 if previous and day == previous + timedelta(days=1) else 1
+        best = max(best, current)
+        previous = day
+
+    streak_end = today if today in solved_dates else today - timedelta(days=1)
+    active = streak_end in solved_dates
+    current_streak = 0
+    while active and streak_end in solved_dates:
+        current_streak += 1
+        streak_end -= timedelta(days=1)
+    return current_streak, best
+
+
+def _build_calendar_days(target_year: int, target_month: int, today: date, solved_dates: set):
+    """Build a calendar from actual challenge completions, never generic activity."""
     cal = calendar.Calendar(firstweekday=calendar.SUNDAY)
     weeks = cal.monthdatescalendar(target_year, target_month)
     flat_days = []
@@ -535,15 +607,12 @@ def _build_calendar_days(target_year: int, target_month: int, today: date, solve
             is_current_month = (d.month == target_month and d.year == target_year)
             is_today = (d == today)
             is_future = (d > today)
-
             if is_today:
-                status = 'today_solved' if (d in solved_dates or solved_today) else 'today'
+                status = 'today_solved' if d in solved_dates else 'today'
             elif is_future:
                 status = 'upcoming'
             else:
-                days_ago = (today - d).days
-                was_solved = (d in solved_dates) or (0 <= days_ago < current_streak)
-                status = 'solved' if was_solved else 'missed'
+                status = 'solved' if d in solved_dates else 'missed'
 
             flat_days.append({
                 'day': d.day,
@@ -559,33 +628,37 @@ def _build_calendar_days(target_year: int, target_month: int, today: date, solve
 @require_role('student', 'free_user')
 def daily_challenge():
     today = date.today()
-    problem = _get_daily_problem_for_date(today)
+    # Challenge progress is tied to this date's assigned problem, not any accepted solve.
+    solved_dates, active_problems, daily_problem_map = _daily_completion_history(g.user_id)
+    problem = _get_daily_problem_for_date(today, active_problems, daily_problem_map)
     if not problem:
         return jsonify({'daily': None}), 200
+    solved_today = today in solved_dates
 
-    # Has the user solved today's problem?
-    solved_sub = PracticeSubmission.query.filter_by(
-        student_id=g.user_id, problem_id=problem.id,
-        status='Accepted', is_run=False
-    ).first()
-    solved_today = bool(solved_sub)
-
-    # Acceptance & solvers count from real database
+    # Solvers Today uses accepted, non-run submissions in today's date window only.
+    day_start = datetime.combine(today, time.min)
+    day_end = day_start + timedelta(days=1)
     solvers_count = db.session.query(func.count(func.distinct(PracticeSubmission.student_id))).filter(
         PracticeSubmission.problem_id == problem.id,
         PracticeSubmission.status == 'Accepted',
-        PracticeSubmission.is_run == False
+        PracticeSubmission.is_run.is_(False),
+        PracticeSubmission.submitted_at >= day_start,
+        PracticeSubmission.submitted_at < day_end,
     ).scalar() or 0
-    if solvers_count == 0:
-        seed_num = int(hashlib.md5(f"solvers-{today}-{problem.id}".encode()).hexdigest(), 16)
-        solvers_count = 1150 + (seed_num % 180)
 
-    success_rate = 68
-    if problem.acceptance and problem.acceptance > 0:
-        success_rate = int(round(problem.acceptance * 100))
+    # Prefer the source problem's published acceptance rate; otherwise use only observed submissions.
+    success_rate = None
+    if problem.acceptance is not None and float(problem.acceptance) > 0:
+        success_rate = int(round(float(problem.acceptance) * 100))
     else:
-        diff_rates = {'Easy': 76, 'Medium': 58, 'Hard': 38}
-        success_rate = diff_rates.get(problem.difficulty, 60)
+        total_attempts = PracticeSubmission.query.filter_by(
+            problem_id=problem.id, is_run=False
+        ).count()
+        accepted_attempts = PracticeSubmission.query.filter_by(
+            problem_id=problem.id, status='Accepted', is_run=False
+        ).count()
+        if total_attempts:
+            success_rate = int(round(accepted_attempts / total_attempts * 100))
 
     # Time remaining until midnight UTC
     now_utc = datetime.utcnow()
@@ -611,36 +684,14 @@ def daily_challenge():
     problem_dict['reward_xp'] = 15
     problem_dict['solvers_today'] = f"{solvers_count / 1000:.1f}K" if solvers_count >= 1000 else str(solvers_count)
     problem_dict['solvers_raw'] = solvers_count
-    problem_dict['success_rate'] = f"{success_rate}%"
+    problem_dict['success_rate'] = f"{success_rate}%" if success_rate is not None else None
     problem_dict['success_rate_raw'] = success_rate
     problem_dict['ends_in_seconds'] = ends_in_seconds
     problem_dict['ends_in'] = ends_in_str
     problem_dict['description_hook'] = "You have 24 hours to solve today's challenge. Compete with other learners and keep your streak alive!"
 
-    # Streak & user stats
-    xp = _get_or_create_xp(g.user_id)
-    current_streak = xp.streak_days or 0
-
-    # User's solved dates across all time
-    user_subs = PracticeSubmission.query.filter_by(
-        student_id=g.user_id, status='Accepted', is_run=False
-    ).order_by(PracticeSubmission.submitted_at.asc()).all()
-    solved_dates = set(s.submitted_at.date() for s in user_subs if s.submitted_at)
-
-    # Compute best streak
-    sorted_dates = sorted(solved_dates)
-    longest_streak = 0
-    curr = 0
-    prev_d = None
-    for d in sorted_dates:
-        if prev_d is None or d == prev_d + timedelta(days=1):
-            curr += 1
-        elif d != prev_d:
-            curr = 1
-        prev_d = d
-        if curr > longest_streak:
-            longest_streak = curr
-    best_streak = max(current_streak, longest_streak, 6)
+    # Daily-challenge streak (separate from platform check-in streak).
+    current_streak, best_streak = _streak_from_dates(solved_dates, today)
 
     # Current Week: Monday to Sunday
     monday = today - timedelta(days=today.weekday())
@@ -650,11 +701,7 @@ def daily_challenge():
         d = monday + timedelta(days=i)
         is_today = (d == today)
         is_future = (d > today)
-        is_solved = (d in solved_dates) or (is_today and solved_today)
-        if not is_solved and not is_future:
-            days_ago = (today - d).days
-            if 0 <= days_ago < current_streak:
-                is_solved = True
+        is_solved = d in solved_dates
         week_history.append({
             'day': day_labels[i],
             'date': d.isoformat(),
@@ -671,18 +718,15 @@ def daily_challenge():
     except (ValueError, TypeError):
         target_year, target_month = today.year, today.month
 
-    calendar_days = _build_calendar_days(target_year, target_month, today, solved_dates, solved_today, current_streak)
+    calendar_days = _build_calendar_days(target_year, target_month, today, solved_dates)
 
     # Recent 4 daily challenges
     recent_challenges = []
     for i in range(1, 5):
         past_date = today - timedelta(days=i)
-        past_p = _get_daily_problem_for_date(past_date)
+        past_p = _get_daily_problem_for_date(past_date, active_problems, daily_problem_map)
         if past_p:
-            was_solved = (past_date in solved_dates)
-            days_ago = (today - past_date).days
-            if 0 < days_ago <= current_streak:
-                was_solved = True
+            was_solved = past_date in solved_dates
             recent_challenges.append({
                 'date': past_date.isoformat(),
                 'date_formatted': past_date.strftime('%b %d, %Y'),
@@ -740,22 +784,8 @@ def daily_calendar():
     except (ValueError, TypeError):
         target_year, target_month = today.year, today.month
 
-    xp = _get_or_create_xp(g.user_id)
-    current_streak = xp.streak_days or 0
-
-    user_subs = PracticeSubmission.query.filter_by(
-        student_id=g.user_id, status='Accepted', is_run=False
-    ).all()
-    solved_dates = set(s.submitted_at.date() for s in user_subs if s.submitted_at)
-
-    problem = _get_daily_problem_for_date(today)
-    solved_today = False
-    if problem:
-        solved_today = bool(PracticeSubmission.query.filter_by(
-            student_id=g.user_id, problem_id=problem.id, status='Accepted', is_run=False
-        ).first())
-
-    days = _build_calendar_days(target_year, target_month, today, solved_dates, solved_today, current_streak)
+    solved_dates, _, _ = _daily_completion_history(g.user_id)
+    days = _build_calendar_days(target_year, target_month, today, solved_dates)
     return jsonify({
         'year': target_year,
         'month': target_month,
@@ -815,11 +845,18 @@ def quest_leaderboard():
     if requested == 'institution' and not can_scope_institution:
         requested = 'global'   # free users can't have an institution board
 
-    q = db.session.query(StudentXP, User).join(User, User.id == StudentXP.student_id)
+    q = db.session.query(StudentXP, User).join(User, User.id == StudentXP.student_id).filter(
+        or_(StudentXP.total_xp > 0, StudentXP.problems_solved > 0)
+    )
     if requested == 'institution':
         q = q.filter(User.institution_id == g.institution_id)
 
-    rows = q.order_by(StudentXP.total_xp.desc()).limit(limit).all()
+    # Stable tie-breaks keep positions deterministic across requests. Rank is
+    # computed over the full cohort even when the visible list is limited.
+    rows = q.order_by(
+        StudentXP.total_xp.desc(), StudentXP.problems_solved.desc(),
+        User.full_name.asc(), User.id.asc(),
+    ).all()
 
     entries = []
     my_rank = None
@@ -827,6 +864,8 @@ def quest_leaderboard():
         is_me = user.id == g.user_id
         if is_me:
             my_rank = i
+        if i > limit:
+            continue
         entries.append({
             'rank':            i,
             'student_id':      user.id,
@@ -888,8 +927,11 @@ def list_plans():
             student_id=g.user_id, plan_id=plan.id
         ).first()
         d = plan.to_dict()
+        available_slugs = set(_available_plan_slugs(plan))
+        d['total_problems'] = len(available_slugs)
+        d['title'] = _plan_display_title(plan, len(available_slugs))
         d['enrolled'] = prog is not None
-        d['solved_count'] = len(prog.solved_slugs or []) if prog else 0
+        d['solved_count'] = len(set(prog.solved_slugs or []) & available_slugs) if prog else 0
         d['completed'] = prog.completed_at is not None if prog else False
         result.append(d)
 
@@ -915,12 +957,22 @@ def get_plan(plan_id):
     prog = StudyPlanProgress.query.filter_by(
         student_id=g.user_id, plan_id=plan.id
     ).first()
-    solved_set = set(prog.solved_slugs or []) if prog else set()
+    available_slugs = set(_available_plan_slugs(plan))
+    solved_set = (set(prog.solved_slugs or []) & available_slugs) if prog else set()
 
     sections_data = []
+    included_slugs = set()
     for sec in sections:
-        slugs = sec.problem_ids or []
-        problems = Problem.query.filter(Problem.slug.in_(slugs)).all()
+        slugs = [
+            slug for slug in (sec.problem_ids or [])
+            if slug in available_slugs and slug not in included_slugs
+        ]
+        included_slugs.update(slugs)
+        if not slugs:
+            continue
+        problems = Problem.query.filter(
+            Problem.slug.in_(slugs), Problem.is_active.is_(True)
+        ).all() if slugs else []
         prob_map = {p.slug: p for p in problems}
         probs = []
         for slug in slugs:
@@ -930,14 +982,24 @@ def get_plan(plan_id):
                 d['status'] = 'solved' if slug in solved_set else 'todo'
                 probs.append(d)
         sd = sec.to_dict()
+        sd['problem_ids'] = slugs
+        sd['count'] = len(probs)
         sd['problems'] = probs
-        sd['solved_count'] = sum(1 for s in slugs if s in solved_set)
+        sd['solved_count'] = sum(1 for slug in slugs if slug in solved_set)
         sections_data.append(sd)
 
+    plan_data = plan.to_dict()
+    plan_data['total_problems'] = len(available_slugs)
+    plan_data['title'] = _plan_display_title(plan, len(available_slugs))
+    progress_data = prog.to_dict() if prog else None
+    if progress_data is not None:
+        progress_data['solved_slugs'] = sorted(solved_set)
+        progress_data['solved_count'] = len(solved_set)
+
     return jsonify({
-        'plan': plan.to_dict(),
+        'plan': plan_data,
         'sections': sections_data,
-        'progress': prog.to_dict() if prog else None,
+        'progress': progress_data,
         'certificate_ready': bool(prog and prog.completed_at),
     }), 200
 
@@ -1020,18 +1082,9 @@ def run_problem(slug):
         return jsonify({'error': f'Unsupported language: {language}'}), 400
 
     if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
-        samples = PracticeTestCase.query.filter_by(problem_id=problem.id, is_sample=True).all()
-        if not samples:
-            return jsonify({'results': [{
-                'input': None, 'expected': None,
-                'output': '[Dev mode — write code that solves the problem, then Submit to check]',
-                'passed': None, 'time_ms': 0, 'status': 'No test cases seeded',
-            }]}), 200
-        return jsonify({'results': [
-            {'input': tc.input_data, 'expected': tc.expected, 'output': tc.expected,
-             'passed': True, 'time_ms': 42, 'status': 'Accepted'}
-            for tc in samples
-        ]}), 200
+        return jsonify({
+            'error': 'Code execution is currently unavailable. Your code was not run.'
+        }), 503
 
     samples = PracticeTestCase.query.filter_by(
         problem_id=problem.id, is_sample=True
@@ -1110,24 +1163,9 @@ def submit_problem(slug):
         }), 400
 
     if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
-        total = len(all_cases)
-        sub = PracticeSubmission(
-            student_id=g.user_id, problem_id=problem.id,
-            language=language, code=code, status='Accepted',
-            passed=total, total=total, is_run=False,
-        )
-        xp_earned = 0 if already_solved else xp_reward
-        if not already_solved:
-            sub.xp_earned = xp_earned
-        db.session.add(sub)
-        db.session.flush()
-        if not already_solved:
-            _reward_solve(g.user_id, problem, xp_earned, elapsed_sec)
-        db.session.commit()
         return jsonify({
-            'status': 'Accepted', 'passed': total, 'total': total,
-            'score': 100.0, 'xp_earned': xp_earned, 'runtime_ms': None,
-        }), 200
+            'error': 'Code execution is currently unavailable. Your code was not run or saved.'
+        }), 503
 
     passed_count = 0
     total_ms = 0

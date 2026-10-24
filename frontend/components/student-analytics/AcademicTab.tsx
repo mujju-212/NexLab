@@ -25,6 +25,7 @@ import {
   X,
 } from 'lucide-react';
 import { studentAnalyticsService, type AcademicDashboardResponse } from '@/services/student-analytics.service';
+import { useAuthStore } from '@/store/auth-store';
 import DeltaPill from '@/components/analytics/DeltaPill';
 import styles from './AcademicDashboard.module.css';
 
@@ -58,6 +59,7 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
   dateRange,
 }) => {
   const router = useRouter();
+  const { user } = useAuthStore();
 
   // ── State for Interactive Controls & Dropdowns ─────────────────────────────
   const effectiveSubjectId = selectedSubjectId || initialSubjectId || 'all';
@@ -96,7 +98,7 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
 
   // ── TanStack Query to Fetch Real Backend Academic Analytics ────────────────
   const { data: dashboardData, isLoading, isError, error, refetch } = useQuery<AcademicDashboardResponse>({
-    queryKey: ['student-academic-dashboard', selectedSubject, selectedExperiment, selectedPeriod],
+    queryKey: ['student-academic-dashboard', user?.id ?? 'anonymous', selectedSubject, selectedExperiment, selectedPeriod],
     queryFn: () =>
       studentAnalyticsService.getAcademicDashboard({
         subject_id: selectedSubject !== 'all' ? selectedSubject : undefined,

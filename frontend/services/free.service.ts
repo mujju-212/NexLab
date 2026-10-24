@@ -31,13 +31,21 @@ export interface FreeExercise {
   simulation_path?: string;
   xp_reward: number;
   tags?: string[];
-  acceptance_rate?: number;
+  acceptance_rate?: number | null;
   solves_count?: number;
   solves_display?: string;
   is_solved?: boolean;
   is_attempted?: boolean;
   is_locked?: boolean;
   action_label?: string;
+}
+
+export interface FreeCourseLeaderboardItem {
+  rank: number;
+  user_id: string;
+  name: string;
+  xp: number;
+  solved: number;
 }
 
 export interface CourseUserProgress {
@@ -51,9 +59,9 @@ export interface CourseUserProgress {
   pct_xp: number;
   solved_ids: string[];
   attempted_ids: string[];
-  rank_in_course: number;
-  global_rank: number;
-  top_percentile: number;
+  rank_in_course: number | null;
+  global_rank: number | null;
+  top_percentile: number | null;
 }
 
 export interface TopicSummaryItem {
@@ -73,6 +81,20 @@ export interface RunResult {
   total: number;
   score: number;
   all_passed: boolean;
+}
+
+export interface McqSubmitResult {
+  correct: boolean;
+  your_answer: string;
+  correct_answer: string;
+  explanation: string | null;
+  xp_earned: number;
+}
+
+export interface CompletionResult {
+  solved: boolean;
+  xp_earned: number;
+  status: 'solved' | 'attempted';
 }
 
 export interface SubmitResult {
@@ -129,13 +151,13 @@ export const freeService = {
     return data;
   },
 
-  async submitMcq(exerciseId: string, answer: string) {
-    const { data } = await apiClient.post(`/free/exercises/${exerciseId}/answer`, { answer });
+  async submitMcq(exerciseId: string, answer: string): Promise<McqSubmitResult> {
+    const { data } = await apiClient.post<McqSubmitResult>(`/free/exercises/${exerciseId}/answer`, { answer });
     return data;
   },
 
-  async completeSimulation(exerciseId: string): Promise<SubmitResult> {
-    const { data } = await apiClient.post<SubmitResult>(`/free/exercises/${exerciseId}/complete`);
+  async completeSimulation(exerciseId: string): Promise<CompletionResult> {
+    const { data } = await apiClient.post<CompletionResult>(`/free/exercises/${exerciseId}/complete`);
     return data;
   },
 
@@ -149,8 +171,8 @@ export const freeService = {
     return data;
   },
 
-  async getLeaderboard(courseId: string) {
-    const { data } = await apiClient.get(`/free/leaderboard/${courseId}`);
+  async getLeaderboard(courseId: string): Promise<{ leaderboard: FreeCourseLeaderboardItem[] }> {
+    const { data } = await apiClient.get<{ leaderboard: FreeCourseLeaderboardItem[] }>(`/free/leaderboard/${courseId}`);
     return data;
   },
 

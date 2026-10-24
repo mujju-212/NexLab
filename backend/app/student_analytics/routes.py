@@ -701,8 +701,15 @@ def platform_leaderboard():
     period = request.args.get('period', 'all_time')
     limit = int(request.args.get('limit', 50))
 
-    if scope == 'institution' and not scope_id:
-        scope_id = g.institution_id
+    if scope == 'institution':
+        if g.role == 'student':
+            if not g.institution_id:
+                return jsonify({'error': 'Institution leaderboard is unavailable for this account'}), 403
+            if scope_id and scope_id != g.institution_id:
+                return jsonify({'error': 'Access denied: rankings are limited to your institution'}), 403
+            scope_id = g.institution_id
+        elif not scope_id:
+            scope_id = g.institution_id
 
     data = get_platform_leaderboard(
         scope=scope,
@@ -711,4 +718,8 @@ def platform_leaderboard():
         current_student_id=g.user_id,
         limit=limit,
     )
+    for entry in data.get('leaderboard', []):
+        entry['is_current_user'] = entry.get('student_id') == g.user_id
+    if data.get('my_standing'):
+        data['my_standing']['is_current_user'] = data['my_standing'].get('student_id') == g.user_id
     return jsonify(data), 200

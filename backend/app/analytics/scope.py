@@ -175,7 +175,7 @@ def resolve_scope_entities(
                 for sr in sess_rows:
                     session_ids.add(sr.id)
 
-    elif scope_level == 'institution' or (institution_id and not scope_id):
+    elif scope_level == 'institution':
         iid = institution_id
         if iid:
             users = User.query.filter_by(institution_id=iid, role='student', is_active=True).all()

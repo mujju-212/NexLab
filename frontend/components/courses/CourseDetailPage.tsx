@@ -9,6 +9,7 @@ import {
   type FreeExercise,
   type CourseUserProgress,
   type TopicSummaryItem,
+  type FreeCourseLeaderboardItem,
 } from '@/services/free.service';
 import styles from './CourseDetailPage.module.css';
 import {
@@ -30,6 +31,7 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
   const [exercises, setExercises] = useState<FreeExercise[]>([]);
   const [userProgress, setUserProgress] = useState<CourseUserProgress | null>(null);
   const [topicsSummary, setTopicsSummary] = useState<TopicSummaryItem[]>([]);
+  const [courseLeaderboard, setCourseLeaderboard] = useState<FreeCourseLeaderboardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'problems' | 'topics' | 'discussion' | 'editorials' | 'leaderboard' | 'notes'>('problems');
   const [isSaved, setIsSaved] = useState(false);
@@ -47,6 +49,8 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
       setExercises(data.exercises || []);
       if (data.user_progress) setUserProgress(data.user_progress);
       if (data.topics_summary) setTopicsSummary(data.topics_summary);
+      const leaderboardData = await freeService.getLeaderboard(data.course.id).catch(() => ({ leaderboard: [] }));
+      setCourseLeaderboard(leaderboardData.leaderboard || []);
     } catch (err) {
       console.error('Failed to load course details:', err);
     } finally {
@@ -59,7 +63,7 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
   }, [loadData]);
 
   // Derived progress values (guaranteed 100% from real API payload)
-  const totalExercisesCount = exercises.length || 32;
+  const totalExercisesCount = exercises.length;
   const solvedCount = userProgress?.solved_count ?? exercises.filter(e => e.is_solved).length;
   const attemptedCount = userProgress?.attempted_count ?? exercises.filter(e => e.is_attempted).length;
   const unsolvedCount = userProgress?.unsolved_count ?? Math.max(0, totalExercisesCount - solvedCount - attemptedCount);
@@ -119,7 +123,7 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
     if (sortOrder === 'xp-high') {
       list.sort((a, b) => b.xp_reward - a.xp_reward);
     } else if (sortOrder === 'acceptance-high') {
-      list.sort((a, b) => (b.acceptance_rate || 0) - (a.acceptance_rate || 0));
+      list.sort((a, b) => a.acceptance_rate == null ? (b.acceptance_rate == null ? 0 : 1) : b.acceptance_rate == null ? -1 : b.acceptance_rate - a.acceptance_rate);
     } else if (sortOrder === 'solved-first') {
       list.sort((a, b) => (b.is_solved ? 1 : 0) - (a.is_solved ? 1 : 0));
     } else if (sortOrder === 'unsolved-first') {
@@ -211,14 +215,18 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
                 <Zap size={16} strokeWidth={2.5} color="#d97706" />
                 {totalXP} XP Total
               </span>
-              <span className={styles.metaItem}>
-                <BookMarked size={16} strokeWidth={2.2} color="#6366f1" />
-                {topicsSummary.length || course.topic_count || 8} Topics
-              </span>
-              <span className={styles.metaItem}>
-                <Clock size={16} strokeWidth={2.2} color="#64748b" />
-                Estimated {course.estimated_hours || '4–6 hours'}
-              </span>
+              {(topicsSummary.length > 0 || course.topic_count !== undefined) && (
+                <span className={styles.metaItem}>
+                  <BookMarked size={16} strokeWidth={2.2} color="#6366f1" />
+                  {course.topic_count ?? topicsSummary.length} Topics
+                </span>
+              )}
+              {course.estimated_hours && (
+                <span className={styles.metaItem}>
+                  <Clock size={16} strokeWidth={2.2} color="#64748b" />
+                  Estimated {course.estimated_hours}
+                </span>
+              )}
             </div>
 
             {/* Action buttons */}
@@ -307,17 +315,17 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
           <div className={styles.statChipsRow}>
             <div className={styles.statChip}>
               <Trophy size={16} color="#f59e0b" className={styles.statChipIcon} />
-              <span className={styles.statChipVal}>#{userProgress?.rank_in_course ?? 1}</span>
+              <span className={styles.statChipVal}>{userProgress?.rank_in_course != null ? `#${userProgress.rank_in_course}` : '—'}</span>
               <span className={styles.statChipSub}>In Course</span>
             </div>
             <div className={styles.statChip}>
               <BarChart2 size={16} color="#8b5cf6" className={styles.statChipIcon} />
-              <span className={styles.statChipVal}>{userProgress?.global_rank ?? 86}</span>
+              <span className={styles.statChipVal}>{userProgress?.global_rank ?? '—'}</span>
               <span className={styles.statChipSub}>Global Rank</span>
             </div>
             <div className={styles.statChip}>
               <Crown size={16} color="#eab308" className={styles.statChipIcon} />
-              <span className={styles.statChipVal}>Top {userProgress?.top_percentile ?? 12}%</span>
+              <span className={styles.statChipVal}>{userProgress?.top_percentile != null ? `Top ${userProgress.top_percentile}%` : '—'}</span>
               <span className={styles.statChipSub}>Worldwide</span>
             </div>
           </div>
@@ -477,9 +485,9 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
                             ))}
                           </div>
                           <div className={styles.problemStatsRow}>
-                            <span>{ex.acceptance_rate ?? 0}% acceptance</span>
+                            <span>{ex.acceptance_rate != null ? `${ex.acceptance_rate}% acceptance` : 'Acceptance unavailable'}</span>
                             <span className={styles.problemStatSep}>•</span>
-                            <span>{ex.solves_display || `${ex.solves_count ?? 0} solves`}</span>
+                            <span>{ex.solves_display ?? (ex.solves_count != null ? `${ex.solves_count} solves` : 'Solve count unavailable')}</span>
                           </div>
                         </div>
                       </div>
@@ -533,7 +541,7 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
                 <div className={styles.sidebarCardTitleRow}>
                   <Code2 size={18} className={styles.sidebarCardIcon} />
                   <span className={styles.sidebarCardTitle}>
-                    Course Topics ({topicsSummary.length || 8})
+                    Course Topics ({course.topic_count ?? topicsSummary.length})
                   </span>
                 </div>
                 <button
@@ -689,7 +697,7 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
             Join discussion threads, compare approaches, and get help from fellow engineers.
           </p>
           <div className={styles.emptyState}>
-            💬 12 active discussion threads in this course. Join the conversation on any problem page.
+            No discussion threads have been added for this course yet.
           </div>
         </div>
       )}
@@ -701,7 +709,7 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
             Official visual editorials and complexity breakdowns for all problems.
           </p>
           <div className={styles.emptyState}>
-            📝 Complete visual editorials available for all 32 exercises. Open any exercise and click &quot;Editorial&quot;.
+            No official editorials have been added for this course yet.
           </div>
         </div>
       )}
@@ -712,20 +720,20 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
           <p className={styles.sectionSubtitle}>
             Top learners in Data Structures &amp; Algorithms by XP and solved problems.
           </p>
-          <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#f5f3ff', borderRadius: 10, fontWeight: 700, color: '#7c3aed' }}>
-              <span>#1 Free Learner (You)</span>
-              <span>⚡ {earnedXP} XP • {solvedCount} solved</span>
+          {courseLeaderboard.length ? (
+            <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 10 }}>
+              {courseLeaderboard.map((entry) => (
+                <div key={entry.user_id} style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: entry.rank === 1 ? '#f5f3ff' : '#f8fafc', borderRadius: 10, fontWeight: entry.rank === 1 ? 700 : 500, color: entry.rank === 1 ? '#7c3aed' : '#475569' }}>
+                  <span>#{entry.rank} {entry.name}</span>
+                  <span>⚡ {entry.xp} XP • {entry.solved} solved</span>
+                </div>
+              ))}
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc', borderRadius: 10, color: '#475569' }}>
-              <span>#2 Aryan Mehta</span>
-              <span>⚡ 85 XP • 7 solved</span>
+          ) : (
+            <div className={styles.emptyState} style={{ marginTop: 16 }}>
+              No learners have completed an exercise in this course yet.
             </div>
-            <div style={{ display: 'flex', justifyContent: 'space-between', padding: '12px 16px', background: '#f8fafc', borderRadius: 10, color: '#475569' }}>
-              <span>#3 Rohan Kulkarni</span>
-              <span>⚡ 70 XP • 6 solved</span>
-            </div>
-          </div>
+          )}
         </div>
       )}
 
@@ -736,7 +744,7 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
             Curated cheat sheets on Big-O complexity, Two Pointers, Sliding Window, and Tree Traversals.
           </p>
           <div className={styles.emptyState}>
-            📖 Comprehensive revision notes loaded. Click any problem card to view context-specific notes.
+            No revision notes have been added for this course yet.
           </div>
         </div>
       )}

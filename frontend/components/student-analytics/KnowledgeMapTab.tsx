@@ -2,6 +2,7 @@
 
 import React, { useState, useMemo, useRef } from 'react';
 import { useQuery } from '@tanstack/react-query';
+import { useAuthStore } from '@/store/auth-store';
 import {
   Sparkles,
   Target,
@@ -126,6 +127,8 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
   dateRange,
 }) => {
   // Top filter states
+  const { user } = useAuthStore();
+
   const [viewMode, setViewMode] = useState<'blended' | 'academic' | 'practice'>('blended');
   const [selectedSubject, setSelectedSubject] = useState<string>('all');
   const [selectedTopic, setSelectedTopic] = useState<string>('all');
@@ -163,7 +166,7 @@ export const KnowledgeMapTab: React.FC<KnowledgeMapTabProps> = ({
 
   // Fetch real knowledge map dashboard payload from backend
   const { data: dashboardData, isLoading, isError, error, refetch } = useQuery<KnowledgeMapDashboardResponse>({
-    queryKey: ['student-knowledge-map-dashboard', viewMode, selectedSubject, selectedTopic, selectedPeriod],
+    queryKey: ['student-knowledge-map-dashboard', user?.id ?? 'anonymous', viewMode, selectedSubject, selectedTopic, selectedPeriod],
     queryFn: () =>
       studentAnalyticsService.getKnowledgeMapDashboard({
         view: viewMode,

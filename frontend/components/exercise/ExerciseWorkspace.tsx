@@ -6,8 +6,10 @@ import {
   freeService,
   type FreeCourse,
   type FreeExercise,
+  type CourseUserProgress,
   type RunResult,
   type SubmitResult,
+  type McqSubmitResult,
 } from '@/services/free.service';
 import { useAuthStore } from '@/store/auth-store';
 import styles from './ExerciseWorkspace.module.css';
@@ -35,6 +37,7 @@ export default function ExerciseWorkspace({
   const [course, setCourse] = useState<FreeCourse | null>(null);
   const [exercise, setExercise] = useState<FreeExercise | null>(null);
   const [exercises, setExercises] = useState<FreeExercise[]>([]);
+  const [courseProgress, setCourseProgress] = useState<CourseUserProgress | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Editor state
@@ -46,6 +49,10 @@ export default function ExerciseWorkspace({
   // Execution outputs
   const [runResult, setRunResult] = useState<RunResult | null>(null);
   const [submitResult, setSubmitResult] = useState<SubmitResult | null>(null);
+  const [executionError, setExecutionError] = useState<string | null>(null);
+  const [completionMessage, setCompletionMessage] = useState<string | null>(null);
+  const [mcqAnswer, setMcqAnswer] = useState<string | null>(null);
+  const [mcqResult, setMcqResult] = useState<McqSubmitResult | null>(null);
   const [consoleTab, setConsoleTab] = useState<'output' | 'tests' | 'console'>('output');
 
   // View tabs (Problem / Test Cases / Hints / Simulation)
@@ -60,10 +67,17 @@ export default function ExerciseWorkspace({
       const data = await freeService.getCourse(courseId);
       setCourse(data.course);
       setExercises(data.exercises || []);
+      setCourseProgress(data.user_progress ?? null);
 
       const current = (data.exercises || []).find(e => e.id === exerciseId)
         || await freeService.getExercise(exerciseId);
       setExercise(current);
+      setMcqAnswer(null);
+      setMcqResult(null);
+      setExecutionError(null);
+      setCompletionMessage(null);
+      setRunResult(null);
+      setSubmitResult(null);
 
       if (current.exercise_type === 'simulation' || current.simulation_path) {
         setActiveTab('simulation');
@@ -86,6 +100,16 @@ export default function ExerciseWorkspace({
     loadData();
   }, [loadData]);
 
+  const refreshCourseProgress = async () => {
+    try {
+      const refreshed = await freeService.getCourse(courseId);
+      setCourseProgress(refreshed.user_progress ?? null);
+      setExercises(refreshed.exercises || []);
+    } catch {
+      // The saved result remains visible even if the progress refresh is unavailable.
+    }
+  };
+
   // Index and neighbors
   const currentIndex = useMemo(() => {
     if (!exercises.length || !exercise) return 0;
@@ -96,46 +120,15 @@ export default function ExerciseWorkspace({
   const prevEx = exercises[currentIndex - 1];
   const nextEx = exercises[currentIndex + 1];
 
-  const totalLessons = exercises.length || 18;
-  const currentLessonNum = currentIndex + 1;
-  const lessonPct = totalLessons ? Math.round((currentLessonNum / totalLessons) * 100) : 0;
+  const totalLessons = exercises.length;
+  const currentLessonNum = exercise && exercises.some((item) => item.id === exercise.id) ? currentIndex + 1 : null;
+  const completedLessons = courseProgress?.solved_count ?? (user ? exercises.filter((item) => item.is_solved).length : null);
+  const lessonPct = totalLessons && completedLessons != null
+    ? Math.round((completedLessons / totalLessons) * 100)
+    : null;
 
-  // Examples computed dynamically from database test cases with fallback
-  const example1 = useMemo(() => {
-    if (exercise?.test_cases && exercise.test_cases.length > 0) {
-      return {
-        input: exercise.test_cases[0].input,
-        expected: exercise.test_cases[0].expected,
-      };
-    }
-    return {
-      input: 'arr = [1, 2, 3, 4, 5]',
-      expected: '15',
-    };
-  }, [exercise]);
-
-  const example2 = useMemo(() => {
-    if (exercise?.test_cases && exercise.test_cases.length > 1) {
-      return {
-        input: exercise.test_cases[1].input,
-        expected: exercise.test_cases[1].expected,
-      };
-    }
-    if (!exercise?.test_cases || exercise.test_cases.length === 0) {
-      return {
-        input: 'arr = [-1, 0, 1]',
-        expected: '0',
-      };
-    }
-    return null;
-  }, [exercise]);
-
-  const constraintsList = useMemo(() => {
-    return [
-      '1 ≤ arr.length ≤ 10⁵',
-      '-10⁹ ≤ arr[i] ≤ 10⁹',
-    ];
-  }, []);
+  // Examples come only from the exercise's published public test cases.
+  const publicExamples = exercise?.test_cases ?? [];
 
   // Language change
   const handleLangChange = (newLang: string) => {
@@ -169,30 +162,72 @@ export default function ExerciseWorkspace({
   };
 
   // Run Code action
+  const errorText = (err: unknown, fallback: string) => {
+    const responseError = (err as any)?.response?.data?.error;
+    return typeof responseError === 'string' ? responseError : (err instanceof Error ? err.message : fallback);
+  };
+
   const handleRun = async () => {
     if (!exercise || !code.trim()) return;
     setRunning(true);
     setConsoleTab('output');
+    setExecutionError(null);
+    setCompletionMessage(null);
+    setSubmitResult(null);
     try {
       const res = await freeService.runCode(exercise.id, code, lang);
       setRunResult(res);
     } catch (err) {
+      setRunResult(null);
+      setExecutionError(errorText(err, 'Code execution failed. Your code was not run.'));
       console.error('Run code error:', err);
     } finally {
       setRunning(false);
     }
   };
 
-  // Submit Solution action
+  const handleMcqSubmit = async () => {
+    if (!exercise || !mcqAnswer || submitting) return;
+    setSubmitting(true);
+    setExecutionError(null);
+    try {
+      const result = await freeService.submitMcq(exercise.id, mcqAnswer);
+      setMcqResult(result);
+      if (result.correct) await refreshCourseProgress();
+    } catch (err) {
+      setExecutionError(errorText(err, 'Your answer could not be recorded.'));
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  // Submit Solution / record a non-code completion.
   const handleSubmit = async () => {
-    if (!exercise) return;
-    const submissionCode = code.trim() || (exercise.exercise_type === 'simulation' || exercise.simulation_path ? '# Simulation completed' : '');
+    if (!exercise || submitting) return;
+    setExecutionError(null);
+    setCompletionMessage(null);
+    if (exercise.exercise_type === 'simulation' || exercise.exercise_type === 'reading') {
+      setSubmitting(true);
+      try {
+        const result = await freeService.completeSimulation(exercise.id);
+        setCompletionMessage(result.solved ? `Completed • +${result.xp_earned} XP earned` : 'Completion recorded.');
+        if (result.solved) await refreshCourseProgress();
+      } catch (err) {
+        setExecutionError(errorText(err, 'Completion could not be recorded.'));
+      } finally {
+        setSubmitting(false);
+      }
+      return;
+    }
+
+    const submissionCode = code.trim();
     if (!submissionCode) return;
     setSubmitting(true);
     setConsoleTab('output');
     try {
       const res = await freeService.submitCode(exercise.id, submissionCode, lang || 'python');
       setSubmitResult(res);
+      if (res.solved) await refreshCourseProgress();
       setRunResult({
         results: [],
         passed: res.passed,
@@ -201,6 +236,9 @@ export default function ExerciseWorkspace({
         all_passed: res.solved,
       });
     } catch (err) {
+      setSubmitResult(null);
+      setRunResult(null);
+      setExecutionError(errorText(err, 'Submission failed. Your code was not saved.'));
       console.error('Submit code error:', err);
     } finally {
       setSubmitting(false);
@@ -272,15 +310,13 @@ export default function ExerciseWorkspace({
           </div>
           <div className={styles.courseInfo}>
             <div className={styles.courseTitleRow}>
-              <h1 className={styles.courseTitle}>{course?.title || 'Algorithm Basics'}</h1>
-              <span className={styles.badgeDifficulty}>{course?.difficulty || exercise.difficulty || 'Beginner'}</span>
+              <h1 className={styles.courseTitle}>{course?.title ?? 'Course title unavailable'}</h1>
+              <span className={styles.badgeDifficulty}>{course?.difficulty ?? exercise.difficulty ?? 'Difficulty unavailable'}</span>
               <span className={styles.badgeXp}>
-                <Zap size={12} fill="#f59e0b" color="#d97706" /> +{exercise.xp_reward || 17} XP
+                <Zap size={12} fill="#f59e0b" color="#d97706" /> +{exercise.xp_reward ?? 0} XP
               </span>
             </div>
-            <p className={styles.courseSubtitle}>
-              {course?.description || 'Learn core concepts — arrays, sorting, searching, stacks, queues and more.'}
-            </p>
+            {course?.description && <p className={styles.courseSubtitle}>{course.description}</p>}
           </div>
         </div>
 
@@ -289,12 +325,12 @@ export default function ExerciseWorkspace({
           <div className={styles.progressWrap}>
             <div className={styles.progressLabelRow}>
               <span className={styles.progressLabel}>
-                Lesson {currentLessonNum} of {totalLessons}
+                {completedLessons != null ? `Course progress: ${completedLessons} of ${totalLessons}` : user ? 'Course progress unavailable' : 'Sign in to track course progress'}
               </span>
-              <span className={styles.progressPercent}>{lessonPct}%</span>
+              <span className={styles.progressPercent}>{lessonPct != null ? `${lessonPct}%` : '—'}</span>
             </div>
             <div className={styles.progressBarTrack}>
-              <div className={styles.progressBarFill} style={{ width: `${lessonPct}%` }} />
+              <div className={styles.progressBarFill} style={{ width: `${lessonPct ?? 0}%` }} />
             </div>
           </div>
 
@@ -365,7 +401,7 @@ export default function ExerciseWorkspace({
               </span>
               <h2 className={styles.simulationTitle}>{exercise.title}</h2>
               <span className={styles.badgeXp}>
-                <Zap size={12} fill="#f59e0b" color="#d97706" /> +{exercise.xp_reward || 20} XP
+                <Zap size={12} fill="#f59e0b" color="#d97706" /> +{exercise.xp_reward ?? 0} XP
               </span>
             </div>
             <div className={styles.simulationActions}>
@@ -404,7 +440,7 @@ export default function ExerciseWorkspace({
               <ChevronLeft size={15} /> Previous
             </button>
             <span className={styles.lessonCountCenter}>
-              {currentLessonNum} of {totalLessons}
+              {totalLessons ? `${currentLessonNum} of ${totalLessons}` : `${currentLessonNum}`}
             </span>
             <button
               className={styles.navBtnNext}
@@ -416,7 +452,7 @@ export default function ExerciseWorkspace({
           </div>
         </div>
       ) : (
-        <div className={styles.workspaceGrid}>
+        <div className={styles.workspaceGrid} style={exercise.exercise_type === 'mcq' ? { gridTemplateColumns: '1fr' } : undefined}>
           {/* ── Left Column: Problem Statement ── */}
           <div className={styles.problemPanel}>
             {activeTab === 'problem' && (
@@ -424,10 +460,10 @@ export default function ExerciseWorkspace({
                 <div className={styles.problemHeader}>
                   <div className={styles.problemTopRow}>
                     <span className={styles.problemLessonBreadcrumb}>
-                      {course?.title || 'Algorithm Basics'} — Lesson {currentLessonNum}
+                      {course?.title ? `${course.title} — ` : ''}{currentLessonNum ? `Lesson ${currentLessonNum} of ${totalLessons}` : 'Lesson position unavailable'}
                     </span>
                     <span className={styles.badgeXp}>
-                      <Zap size={12} fill="#f59e0b" color="#d97706" /> +{exercise.xp_reward || 17} XP
+                      <Zap size={12} fill="#f59e0b" color="#d97706" /> +{exercise.xp_reward ?? 0} XP
                     </span>
                   </div>
                   <h2 className={styles.problemMainTitle}>{exercise.title}</h2>
@@ -442,101 +478,89 @@ export default function ExerciseWorkspace({
                       </p>
                     ))
                   ) : (
-                    <>
-                      <p style={{ margin: 0 }}>
-                        Given an array of integers, return the sum of all the elements in the array.
-                      </p>
-                      <p style={{ margin: 0, color: '#475569' }}>
-                        Write a function that takes an array of integers and returns the sum of the elements.
-                      </p>
-                    </>
+                    <p style={{ margin: 0, color: '#64748b' }}>No problem statement has been provided for this exercise yet.</p>
                   )}
                 </div>
 
-                {/* Example 1 Card */}
-                {example1 && (
-                  <div className={styles.exampleCard}>
-                    <span className={styles.exampleTitle}>Example 1</span>
+                {exercise.exercise_type === 'mcq' ? (
+                  <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 18 }}>
+                    <h3 style={{ margin: 0, fontSize: 15, fontWeight: 800 }}>Choose one answer</h3>
+                    {(exercise.mcq_options || []).map((option, index) => {
+                      const letter = String.fromCharCode(65 + index);
+                      const selected = mcqAnswer === letter;
+                      const isCorrect = mcqResult?.correct_answer === letter;
+                      const isWrongSelection = mcqResult?.your_answer === letter && !mcqResult.correct;
+                      return (
+                        <button
+                          key={`${letter}-${option}`}
+                          type="button"
+                          onClick={() => { setMcqAnswer(letter); setMcqResult(null); setExecutionError(null); }}
+                          style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', padding: '12px 14px', borderRadius: 10, border: `1px solid ${isCorrect ? '#86efac' : isWrongSelection ? '#fca5a5' : selected ? '#a78bfa' : '#e2e8f0'}`, background: isCorrect ? '#f0fdf4' : isWrongSelection ? '#fef2f2' : selected ? '#f5f3ff' : '#fff', textAlign: 'left', cursor: 'pointer', color: '#1e293b' }}
+                        >
+                          <span style={{ width: 26, height: 26, display: 'inline-flex', alignItems: 'center', justifyContent: 'center', borderRadius: 7, background: selected ? '#7c3aed' : '#f1f5f9', color: selected ? '#fff' : '#475569', fontWeight: 800, flexShrink: 0 }}>{letter}</span>
+                          <span>{option}</span>
+                        </button>
+                      );
+                    })}
+                    <button type="button" onClick={handleMcqSubmit} disabled={!mcqAnswer || submitting || !exercise.mcq_options?.length} className={styles.primaryBtn} style={{ alignSelf: 'flex-start', opacity: !mcqAnswer || submitting ? 0.55 : 1 }}>
+                      {submitting ? 'Checking…' : 'Submit Answer'}
+                    </button>
+                    {mcqResult && (
+                      <div style={{ padding: 14, borderRadius: 10, background: mcqResult.correct ? '#ecfdf5' : '#fef2f2', border: `1px solid ${mcqResult.correct ? '#a7f3d0' : '#fecaca'}` }}>
+                        <strong style={{ color: mcqResult.correct ? '#047857' : '#b91c1c' }}>{mcqResult.correct ? `Correct • +${mcqResult.xp_earned} XP` : `Not quite • correct answer: ${mcqResult.correct_answer}`}</strong>
+                        {mcqResult.explanation && <p style={{ margin: '6px 0 0', color: '#475569' }}>{mcqResult.explanation}</p>}
+                      </div>
+                    )}
+                    {!exercise.mcq_options?.length && <p style={{ margin: 0, color: '#64748b' }}>No answer choices have been provided for this exercise.</p>}
+                  </div>
+                ) : (
+                  <>
+                {publicExamples.length ? publicExamples.map((example, index) => (
+                  <div key={`example-${index}`} className={styles.exampleCard}>
+                    <span className={styles.exampleTitle}>Example {index + 1}</span>
                     <div className={styles.exampleField}>
                       <span className={styles.exampleLabel}>Input</span>
                       <div className={styles.exampleBox}>
-                        <span>{example1.input}</span>
+                        <span>{example.input}</span>
                         <button
                           className={styles.copyBtn}
-                          onClick={() => handleCopy(example1.input, 'ex1-in')}
+                          onClick={() => handleCopy(example.input, `ex-${index}-in`)}
                           title="Copy"
                         >
-                          {copiedId === 'ex1-in' ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                          {copiedId === `ex-${index}-in` ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
                         </button>
                       </div>
                     </div>
                     <div className={styles.exampleField}>
                       <span className={styles.exampleLabel}>Expected Output</span>
                       <div className={styles.exampleBox}>
-                        <span>{example1.expected}</span>
+                        <span>{example.expected}</span>
                         <button
                           className={styles.copyBtn}
-                          onClick={() => handleCopy(example1.expected, 'ex1-out')}
+                          onClick={() => handleCopy(example.expected, `ex-${index}-out`)}
                           title="Copy"
                         >
-                          {copiedId === 'ex1-out' ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
+                          {copiedId === `ex-${index}-out` ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
                         </button>
                       </div>
                     </div>
                   </div>
+                )) : (
+                  <p style={{ margin: '14px 0 0', color: '#64748b' }}>No examples supplied.</p>
                 )}
-
-                {/* Example 2 Card */}
-                {example2 && (
-                  <div className={styles.exampleCard}>
-                    <span className={styles.exampleTitle}>Example 2</span>
-                    <div className={styles.exampleField}>
-                      <span className={styles.exampleLabel}>Input</span>
-                      <div className={styles.exampleBox}>
-                        <span>{example2.input}</span>
-                        <button
-                          className={styles.copyBtn}
-                          onClick={() => handleCopy(example2.input, 'ex2-in')}
-                          title="Copy"
-                        >
-                          {copiedId === 'ex2-in' ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
-                        </button>
-                      </div>
-                    </div>
-                    <div className={styles.exampleField}>
-                      <span className={styles.exampleLabel}>Expected Output</span>
-                      <div className={styles.exampleBox}>
-                        <span>{example2.expected}</span>
-                        <button
-                          className={styles.copyBtn}
-                          onClick={() => handleCopy(example2.expected, 'ex2-out')}
-                          title="Copy"
-                        >
-                          {copiedId === 'ex2-out' ? <Check size={14} color="#10b981" /> : <Copy size={14} />}
-                        </button>
-                      </div>
-                    </div>
-                  </div>
-                )}
-
-                {/* Constraints */}
-                <div className={styles.constraintsCard}>
-                  <div className={styles.constraintsHead}>
-                    <Settings size={16} color="#7c3aed" /> Constraints
-                  </div>
-                  <ul className={styles.constraintsList}>
-                    {constraintsList.map((c, i) => (
-                      <li key={i}>{c}</li>
-                    ))}
-                  </ul>
+                <div className={styles.exampleCard} style={{ marginTop: 12 }}>
+                  <span className={styles.exampleTitle}>Constraints</span>
+                  <p style={{ margin: 0, color: '#64748b' }}>No structured constraints supplied for this exercise.</p>
                 </div>
+                  </>
+                )}
               </>
             )}
 
             {activeTab === 'testcases' && (
               <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
                 <h3 style={{ margin: 0, fontSize: 16, fontWeight: 700 }}>Public Test Cases</h3>
-                {(exercise.test_cases || []).map((tc, idx) => (
+                {(exercise.test_cases || []).length ? (exercise.test_cases || []).map((tc, idx) => (
                   <div key={idx} className={styles.exampleCard}>
                     <span className={styles.exampleTitle}>Case {idx + 1}</span>
                     <div className={styles.exampleField}>
@@ -552,7 +576,7 @@ export default function ExerciseWorkspace({
                       </div>
                     </div>
                   </div>
-                ))}
+                )) : <p style={{ margin: 0, color: '#64748b' }}>No public test cases are available for this exercise.</p>}
               </div>
             )}
 
@@ -564,7 +588,7 @@ export default function ExerciseWorkspace({
                     <Lightbulb size={16} /> Hint 1
                   </div>
                   <p style={{ margin: 0, fontSize: 13.5, color: '#334155' }}>
-                    {exercise.hint_text || 'Break down the problem into smaller steps. Initialize an accumulator variable and iterate through elements.'}
+                    {exercise.hint_text || 'No hint is available for this exercise yet.'}
                   </p>
                 </div>
               </div>
@@ -686,6 +710,8 @@ export default function ExerciseWorkspace({
                   onClick={() => {
                     setRunResult(null);
                     setSubmitResult(null);
+                    setExecutionError(null);
+                    setCompletionMessage(null);
                   }}
                 >
                   <Trash2 size={12} /> Clear
@@ -698,7 +724,13 @@ export default function ExerciseWorkspace({
 
             {/* Console Output Body */}
             <div className={styles.consoleBody}>
-              {running || submitting ? (
+              {executionError ? (
+                <div role="alert" style={{ width: '100%', padding: 14, borderRadius: 10, background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', fontSize: 13, fontWeight: 600 }}>
+                  <AlertCircle size={16} style={{ verticalAlign: 'middle', marginRight: 8 }} />{executionError}
+                </div>
+              ) : completionMessage ? (
+                <div role="status" style={{ width: '100%', padding: 14, borderRadius: 10, background: '#ecfdf5', border: '1px solid #a7f3d0', color: '#047857', fontSize: 13, fontWeight: 700 }}>{completionMessage}</div>
+              ) : running || submitting ? (
                 <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 10, color: '#7c3aed' }}>
                   <RefreshCw size={24} style={{ animation: 'spin 1s linear infinite' }} />
                   <span style={{ fontSize: 13.5, fontWeight: 600 }}>Executing code in Docker sandbox…</span>

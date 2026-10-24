@@ -257,7 +257,7 @@ def get_free_user_accuracy_and_bests(user_id: str, precomputed_activity: Optiona
                 'slug': best_prob.slug,
                 'title': best_prob.title,
                 'difficulty': best_prob.difficulty,
-                'acceptance': round(float(best_prob.acceptance or 0.0), 3),
+                'acceptance': round(float(best_prob.acceptance), 3) if best_prob.acceptance is not None and best_prob.acceptance > 0 else None,
             }
 
     # If no library problem solved, check course exercises
@@ -382,7 +382,7 @@ def get_free_user_recommendations(user_id: str, limit: int = 5) -> List[Dict[str
             'title': p.title,
             'difficulty': p.difficulty,
             'topic': p.nexlab_topic,
-            'acceptance': round(float(p.acceptance or 0.0), 3),
+            'acceptance': round(float(p.acceptance), 3) if p.acceptance is not None and p.acceptance > 0 else None,
             'reason': reason,
         })
 

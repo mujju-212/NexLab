@@ -4,7 +4,7 @@ Computes real quest progress, streak milestones, weekly calendar activity,
 and handles quest reward claims. Zero mock data.
 """
 from datetime import datetime, date, timedelta, time
-from sqlalchemy import func
+from sqlalchemy import func, or_
 from app.extensions import db
 from app.models.user import User
 from app.models.practice import (
@@ -28,8 +28,15 @@ def _get_or_create_xp(student_id):
 
 
 def get_quest_dashboard_data(user_id: str, role: str = 'student', institution_id: str = None) -> dict:
-    xp = _get_or_create_xp(user_id)
-    db.session.commit()
+    xp = StudentXP.query.filter_by(student_id=user_id).first()
+    if xp is None:
+        # Read-only dashboard access must not create a persistent zero-activity
+        # record; only an explicit check-in or solved submission writes XP state.
+        xp = StudentXP(
+            student_id=user_id, total_xp=0, level=1, level_name='Newcomer',
+            streak_days=0, problems_solved=0, easy_solved=0,
+            medium_solved=0, hard_solved=0,
+        )
 
     badges = StudentBadge.query.filter_by(student_id=user_id).all()
     badge_ids = set([b.badge_id for b in badges])
@@ -37,10 +44,12 @@ def get_quest_dashboard_data(user_id: str, role: str = 'student', institution_id
     # 1. Global / Institution Rank
     rank_q = db.session.query(func.count(StudentXP.id)).join(
         User, User.id == StudentXP.student_id
-    ).filter(StudentXP.total_xp > xp.total_xp)
-    if role == 'student' and institution_id:
-        rank_q = rank_q.filter(User.institution_id == institution_id)
-    global_rank = (rank_q.scalar() or 0) + 1
+    ).filter(
+        or_(StudentXP.total_xp > 0, StudentXP.problems_solved > 0),
+        StudentXP.total_xp > (xp.total_xp or 0),
+    )
+    has_rank_activity = (xp.total_xp or 0) > 0 or (xp.problems_solved or 0) > 0
+    global_rank = (rank_q.scalar() or 0) + 1 if has_rank_activity else None
 
     # 2. Timing & Reset calculations
     now = datetime.utcnow()
@@ -186,7 +195,7 @@ def get_quest_dashboard_data(user_id: str, role: str = 'student', institution_id
         {
             'id': f"daily_streak_1_{today_str}",
             'title': "Maintain 1 Day Streak",
-            'subtitle': "Solve at least 1 problem",
+            'subtitle': "Check in or solve at least one problem today",
             'icon': "flame",
             'xp_reward': 20,
             'progress': q3_prog,

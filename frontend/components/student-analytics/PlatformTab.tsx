@@ -100,7 +100,7 @@ export const PlatformTab: React.FC<PlatformTabProps> = ({
 
   // ── TanStack Query to Fetch Real Backend Platform Analytics ─────────────────
   const { data: dashboardData, isLoading, isError, error, refetch } = useQuery<PlatformDashboardResponse>({
-    queryKey: ['student-platform-dashboard', selectedProblemType, selectedDifficulty, selectedTopic, selectedPeriod],
+    queryKey: ['student-platform-dashboard', user?.id ?? 'anonymous', selectedProblemType, selectedDifficulty, selectedTopic, selectedPeriod],
     queryFn: () =>
       studentAnalyticsService.getPlatformDashboard({
         problem_type: selectedProblemType !== 'all' ? selectedProblemType : undefined,
