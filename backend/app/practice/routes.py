@@ -542,7 +542,7 @@ def _get_daily_problem_for_date(target_date: date, active_problems=None, daily_p
     if daily_problem_map is not None:
         p = daily_problem_map.get(target_date)
     else:
-        p = Problem.query.filter_by(is_daily=True, daily_date=target_date).first()
+        p = Problem.query.filter_by(is_daily=True, daily_date=target_date, is_active=True).first()
     if p:
         return p
     active = active_problems
@@ -559,7 +559,8 @@ def _daily_completion_history(student_id: str):
     active = Problem.query.filter_by(is_active=True).order_by(Problem.id).all()
     daily_map = {
         p.daily_date: p for p in Problem.query.filter(
-            Problem.is_daily.is_(True), Problem.daily_date.isnot(None)
+            Problem.is_daily.is_(True), Problem.daily_date.isnot(None),
+            Problem.is_active.is_(True),
         ).all()
     }
     rows = PracticeSubmission.query.filter_by(
@@ -630,7 +631,10 @@ def daily_challenge():
     today = date.today()
     # Challenge progress is tied to this date's assigned problem, not any accepted solve.
     solved_dates, active_problems, daily_problem_map = _daily_completion_history(g.user_id)
-    problem = _get_daily_problem_for_date(today, active_problems, daily_problem_map)
+    explicitly_assigned = daily_problem_map.get(today)
+    problem = explicitly_assigned or _get_daily_problem_for_date(
+        today, active_problems, daily_problem_map
+    )
     if not problem:
         return jsonify({'daily': None}), 200
     solved_today = today in solved_dates
@@ -681,6 +685,13 @@ def daily_challenge():
 
     problem_dict = problem.to_dict(include_description=False)
     problem_dict['tags'] = tags
+    # The deterministic fallback is the effective daily assignment for this date.
+    # Expose that truth without persisting a synthetic row in the baseline database.
+    problem_dict['is_daily'] = True
+    problem_dict['daily_date'] = today.isoformat()
+    problem_dict['assignment_source'] = (
+        'explicit' if explicitly_assigned else 'deterministic_fallback'
+    )
     problem_dict['reward_xp'] = 15
     problem_dict['solvers_today'] = f"{solvers_count / 1000:.1f}K" if solvers_count >= 1000 else str(solvers_count)
     problem_dict['solvers_raw'] = solvers_count
