@@ -346,25 +346,65 @@ class InstructorSettings(db.Model):
 
     # AI defaults
     allow_ai_hints               = db.Column(db.Boolean, default=True)
+    hint_strictness              = db.Column(db.String(30), default='Balanced')
+
+    # Additional grading defaults
+    passing_threshold            = db.Column(db.Integer, default=40)
+    late_submission_penalty      = db.Column(db.Integer, default=0)
+    max_retry_attempts           = db.Column(db.Integer, default=3)
+    grace_marks                  = db.Column(db.Integer, default=0)
 
     # At-risk thresholds (DB2)
     at_risk_avg_threshold        = db.Column(db.Integer, default=40)
     at_risk_min_threshold        = db.Column(db.Integer, default=20)
+    min_attempts_analysis        = db.Column(db.Integer, default=3)
+    consider_last_sessions       = db.Column(db.Integer, default=5)
 
-    # Notification prefs (JSON list of notification type strings)
+    # Notification prefs and delivery settings
     notification_prefs           = db.Column(db.JSON, default=list)
+    notification_delivery        = db.Column(db.JSON, default=dict)
 
     updated_at                   = db.Column(db.DateTime, onupdate=datetime.utcnow)
 
     def to_dict(self):
+        default_policy = {
+            'lockdown_fullscreen': True, 'block_copy_paste': True,
+            'block_tab_switch': True, 'plagiarism_scan': True,
+            'focus_ml': True, 'webcam_required': False,
+            'screen_recording': True, 'browser_security': True,
+        }
+        if self.default_proctor_policy:
+            default_policy.update(self.default_proctor_policy)
+
+        default_delivery = {
+            'notify_at_risk_new': True,
+            'notify_at_risk_recovered': True,
+            'notify_integrity_violations': True,
+            'show_at_risk_in_roster': True,
+            'include_suggested_actions': True,
+            'persist_notifications': True,
+        }
+        if self.notification_delivery:
+            default_delivery.update(self.notification_delivery)
+
         return {
-            'default_proctor_policy': self.default_proctor_policy or {},
-            'default_rubric': self.default_rubric or {},
-            'default_session_duration_min': self.default_session_duration_min,
-            'default_late_join_window_min': self.default_late_join_window_min,
-            'default_gate_threshold': self.default_gate_threshold,
-            'allow_ai_hints': self.allow_ai_hints,
-            'at_risk_avg_threshold': self.at_risk_avg_threshold,
-            'at_risk_min_threshold': self.at_risk_min_threshold,
+            'default_proctor_policy': default_policy,
+            'default_rubric': self.default_rubric or {
+                'test_cases': 60, 'lab_report': 20, 'code_quality': 10, 'viva': 10, 'quiz': 0
+            },
+            'default_session_duration_min': self.default_session_duration_min if self.default_session_duration_min is not None else 90,
+            'default_late_join_window_min': self.default_late_join_window_min if self.default_late_join_window_min is not None else 10,
+            'default_gate_threshold': self.default_gate_threshold if self.default_gate_threshold is not None else 70,
+            'allow_ai_hints': self.allow_ai_hints if self.allow_ai_hints is not None else True,
+            'hint_strictness': self.hint_strictness or 'Balanced',
+            'passing_threshold': self.passing_threshold if self.passing_threshold is not None else 40,
+            'late_submission_penalty': self.late_submission_penalty if self.late_submission_penalty is not None else 0,
+            'max_retry_attempts': self.max_retry_attempts if self.max_retry_attempts is not None else 3,
+            'grace_marks': self.grace_marks if self.grace_marks is not None else 0,
+            'at_risk_avg_threshold': self.at_risk_avg_threshold if self.at_risk_avg_threshold is not None else 40,
+            'at_risk_min_threshold': self.at_risk_min_threshold if self.at_risk_min_threshold is not None else 20,
+            'min_attempts_analysis': self.min_attempts_analysis if self.min_attempts_analysis is not None else 3,
+            'consider_last_sessions': self.consider_last_sessions if self.consider_last_sessions is not None else 5,
+            'notification_delivery': default_delivery,
             'notification_prefs': self.notification_prefs or [],
         }

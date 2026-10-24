@@ -8,12 +8,17 @@ import Cookies from 'js-cookie';
 
 export interface FeedbackOverviewSessionRow {
   session_id: string;
+  session_date?: string;
   experiment_id: string | null;
   experiment_title: string;
   exp_number?: number | null;
+  topic?: string;
   scheduled_at: string | null;
   status: string;
-  response_count: number;
+  students_enrolled?: number;
+  feedbacks_count?: number;
+  feedbacks_pct?: number;
+  response_count?: number;
   overall_rating: number | null;
   experiment_clarity: number | null;
   session_pacing: number | null;
@@ -31,37 +36,183 @@ export interface FeedbackOverviewSessionRow {
   department_code?: string;
 }
 
+export interface FeedbackKpis {
+  overall_rating: number;
+  overall_delta?: string;
+  experiment_clarity: number;
+  clarity_delta?: string;
+  session_pacing: number;
+  pacing_delta?: string;
+  ai_hint_helpfulness: number;
+  ai_delta?: string;
+  total_ratings: number;
+}
+
+export interface RatingDistributionItem {
+  count: number;
+  pct: number;
+}
+
+export type RatingDistributionMap = Record<string, RatingDistributionItem>;
+
+export interface FeedbackCoverage {
+  completed_count: number;
+  completed_pct: number;
+  not_submitted_count: number;
+  not_submitted_pct: number;
+  total_enrolled: number;
+}
+
+export interface FeedbackTrendPoint {
+  period: string;
+  overall: number;
+  clarity: number;
+  pacing: number;
+  ai_help: number;
+}
+
+export interface SentimentBreakdown {
+  all: number;
+  positive: number;
+  neutral: number;
+  needs_attention: number;
+}
+
+export interface FeedbackItem {
+  id: string;
+  session_id?: string;
+  experiment_title?: string;
+  topic?: string;
+  experiment_clarity: number | null;
+  session_pacing: number | null;
+  ai_hint_helpfulness: number | null;
+  overall_rating: number | null;
+  comment: string | null;
+  helpful_count?: number;
+  submitted_at: string | null;
+  time_ago?: string;
+  subject_id?: string;
+  subject_name?: string;
+  subject_code?: string;
+  section_id?: string;
+  section_name?: string;
+  batch_id?: string | null;
+  batch_name?: string;
+  academic_year?: string;
+  department_id?: string | null;
+  department_name?: string;
+  department_code?: string;
+}
+
 export interface FeedbackOverviewResponse {
   total: number;
+  kpis?: FeedbackKpis;
   averages: {
     experiment_clarity: number | null;
     session_pacing: number | null;
     ai_hint_helpfulness: number | null;
     overall_rating: number | null;
   };
+  trends?: FeedbackTrendPoint[];
+  rating_distribution?: RatingDistributionMap;
+  coverage?: FeedbackCoverage;
   sessions_summary: FeedbackOverviewSessionRow[];
-  feedback: Array<{
+  sentiment_breakdown?: SentimentBreakdown;
+  feedback: FeedbackItem[];
+}
+
+export interface RatingComparisonItem {
+  metric: string;
+  session: number;
+  subject_avg: number;
+}
+
+export interface RecentSessionTrendItem {
+  session_id?: string;
+  label: string;
+  title?: string;
+  overall: number;
+  clarity: number;
+  pacing: number;
+  ai_help: number;
+  is_current?: boolean;
+}
+
+export interface KeyInsightItem {
+  id: string;
+  type: 'positive' | 'warning' | 'info' | 'purple';
+  title: string;
+  description: string;
+  icon?: string;
+}
+
+export interface SessionContextResource {
+  name: string;
+  type: string;
+  size: string;
+  format: string;
+  icon: string;
+}
+
+export interface DetailedRatingBreakdowns {
+  overall: RatingDistributionMap;
+  clarity: RatingDistributionMap;
+  pacing: RatingDistributionMap;
+  ai_helpfulness: RatingDistributionMap;
+}
+
+export interface SessionFeedbackDetailsResponse {
+  session: {
     id: string;
-    session_id: string;
+    title: string;
+    experiment_id: string | null;
     experiment_title: string;
-    experiment_clarity: number | null;
-    session_pacing: number | null;
-    ai_hint_helpfulness: number | null;
-    overall_rating: number | null;
-    comment: string | null;
-    submitted_at: string | null;
-    subject_id?: string;
-    subject_name?: string;
-    subject_code?: string;
-    section_id?: string;
-    section_name?: string;
-    batch_id?: string | null;
-    batch_name?: string;
-    academic_year?: string;
-    department_id?: string | null;
-    department_name?: string;
-    department_code?: string;
-  }>;
+    topic: string;
+    exp_number: number;
+    status: string;
+    subject_name: string;
+    subject_code: string;
+    section_name: string;
+    batch_name: string;
+    academic_year: string;
+    department_name: string;
+    scheduled_at: string | null;
+    formatted_date: string;
+    formatted_time: string;
+    duration_hours: string;
+    duration_minutes: number;
+    students_enrolled: number;
+    feedback_submitted: number;
+    feedback_pct: number;
+  };
+  kpis: {
+    overall_rating: number;
+    experiment_clarity: number;
+    session_pacing: number;
+    ai_hint_helpfulness: number;
+    total_responses: number;
+  };
+  rating_distribution: RatingDistributionMap;
+  detailed_breakdowns?: DetailedRatingBreakdowns;
+  rating_comparison: RatingComparisonItem[];
+  recent_sessions_trend: RecentSessionTrendItem[];
+  key_insights: KeyInsightItem[];
+  sentiment_breakdown: SentimentBreakdown;
+  feedback: FeedbackItem[];
+  context: {
+    aim: string;
+    theory: string;
+    problem_statement: string;
+    difficulty_level: number;
+    test_cases_count: number;
+    attendance_turnout_pct: number;
+    students_present: number;
+    instructor_name?: string;
+    live_conductor_status?: string;
+    description?: string;
+    learning_objectives?: string[];
+    resources?: SessionContextResource[];
+  };
 }
 
 export interface SessionFeedbackData {
@@ -73,15 +224,7 @@ export interface SessionFeedbackData {
     ai_hint_helpfulness: number | null;
     overall_rating: number | null;
   };
-  feedback: {
-    id: string;
-    experiment_clarity: number | null;
-    session_pacing: number | null;
-    ai_hint_helpfulness: number | null;
-    overall_rating: number | null;
-    comment: string | null;
-    submitted_at: string | null;
-  }[];
+  feedback: FeedbackItem[];
 }
 
 export interface VivaListItem {
@@ -412,6 +555,8 @@ export const instructorService = {
     section_id?: string;
     subject_id?: string;
     session_id?: string;
+    experiment_id?: string;
+    date_range?: string;
   }): Promise<FeedbackOverviewResponse> {
     const { data } = await apiClient.get<FeedbackOverviewResponse>("/instructor/feedback-overview", {
       params: params || {},
@@ -421,6 +566,16 @@ export const instructorService = {
 
   async getSessionFeedback(sessionId: string): Promise<SessionFeedbackData> {
     const { data } = await apiClient.get<SessionFeedbackData>(`/instructor/sessions/${sessionId}/feedback`);
+    return data;
+  },
+
+  async getSessionFeedbackDetails(sessionId: string): Promise<SessionFeedbackDetailsResponse> {
+    const { data } = await apiClient.get<SessionFeedbackDetailsResponse>(`/instructor/sessions/${sessionId}/feedback-details`);
+    return data;
+  },
+
+  async upvoteFeedback(feedbackId: string): Promise<{ id: string; helpful_count: number; success: boolean }> {
+    const { data } = await apiClient.post<{ id: string; helpful_count: number; success: boolean }>(`/instructor/feedback/${feedbackId}/upvote`);
     return data;
   },
 

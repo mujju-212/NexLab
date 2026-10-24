@@ -21,6 +21,8 @@ interface User {
   batch_name?: string | null;
   program?: string | null;
   roll_number?: string | null;
+  staff_id?: string | null;
+  designation?: string | null;
   phone?: string | null;
   location?: string | null;
   bio?: string | null;

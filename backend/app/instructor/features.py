@@ -516,6 +516,7 @@ def get_settings():
                 'lockdown_fullscreen': True, 'block_copy_paste': True,
                 'block_tab_switch': True, 'plagiarism_scan': True,
                 'focus_ml': True, 'webcam_required': False,
+                'screen_recording': True, 'browser_security': True,
             },
             'default_rubric': {'test_cases': 60, 'lab_report': 20,
                                'code_quality': 10, 'viva': 10, 'quiz': 0},
@@ -523,8 +524,23 @@ def get_settings():
             'default_late_join_window_min': 10,
             'default_gate_threshold': 70,
             'allow_ai_hints': True,
+            'hint_strictness': 'Balanced',
+            'passing_threshold': 40,
+            'late_submission_penalty': 0,
+            'max_retry_attempts': 3,
+            'grace_marks': 0,
             'at_risk_avg_threshold': 40,
             'at_risk_min_threshold': 20,
+            'min_attempts_analysis': 3,
+            'consider_last_sessions': 5,
+            'notification_delivery': {
+                'notify_at_risk_new': True,
+                'notify_at_risk_recovered': True,
+                'notify_integrity_violations': True,
+                'show_at_risk_in_roster': True,
+                'include_suggested_actions': True,
+                'persist_notifications': True,
+            },
             'notification_prefs': [],
         }}), 200
     return jsonify({'settings': s.to_dict()}), 200
@@ -547,7 +563,7 @@ def patch_settings():
         if not isinstance(policy, dict):
             return jsonify({'error': 'default_proctor_policy must be an object.'}), 400
         allowed = {'lockdown_fullscreen', 'block_copy_paste', 'block_tab_switch',
-                   'plagiarism_scan', 'focus_ml', 'webcam_required'}
+                   'plagiarism_scan', 'focus_ml', 'webcam_required', 'screen_recording', 'browser_security'}
         if any(k in allowed and type(v) is not bool for k, v in policy.items()):
             return jsonify({'error': 'Proctor policy values must be true or false.'}), 400
         current = dict(s.default_proctor_policy or {})
@@ -574,8 +590,14 @@ def patch_settings():
         'default_session_duration_min': (5, 480),
         'default_late_join_window_min': (0, 120),
         'default_gate_threshold': (0, 100),
+        'passing_threshold': (0, 100),
+        'late_submission_penalty': (0, 100),
+        'max_retry_attempts': (1, 50),
+        'grace_marks': (0, 100),
         'at_risk_avg_threshold': (0, 100),
         'at_risk_min_threshold': (0, 100),
+        'min_attempts_analysis': (1, 50),
+        'consider_last_sessions': (1, 50),
     }
     for field, (minimum, maximum) in ranges.items():
         if field in data:
@@ -588,6 +610,18 @@ def patch_settings():
         if type(data['allow_ai_hints']) is not bool:
             return jsonify({'error': 'allow_ai_hints must be true or false.'}), 400
         s.allow_ai_hints = data['allow_ai_hints']
+
+    if 'hint_strictness' in data:
+        strictness = data['hint_strictness']
+        if strictness in ('Guided', 'Balanced', 'Strict'):
+            s.hint_strictness = strictness
+
+    if 'notification_delivery' in data:
+        delivery = data['notification_delivery']
+        if isinstance(delivery, dict):
+            curr_deliv = dict(s.notification_delivery or {})
+            curr_deliv.update({k: bool(v) for k, v in delivery.items()})
+            s.notification_delivery = curr_deliv
 
     if 'notification_prefs' in data:
         prefs = data['notification_prefs']

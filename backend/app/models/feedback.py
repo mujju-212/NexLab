@@ -20,6 +20,7 @@ class SessionFeedback(db.Model):
     ai_hint_helpfulness     = db.Column(db.Integer)   # 1–5
     overall_rating          = db.Column(db.Integer)   # 1–5
     comment                 = db.Column(db.Text)      # optional free text
+    helpful_count           = db.Column(db.Integer, default=0, nullable=False)
     submitted_at            = db.Column(db.DateTime, default=datetime.utcnow)
 
 

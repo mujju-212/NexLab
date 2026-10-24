@@ -633,6 +633,8 @@ export const experienceService = {
     a.href = url;
     a.download = fmt === 'xlsx'
       ? `report_${reportId.slice(0, 8)}.xlsx`
+      : fmt === 'pdf'
+      ? `report_${reportId.slice(0, 8)}.pdf`
       : `report_${reportId.slice(0, 8)}.csv`;
     document.body.appendChild(a);
     a.click();

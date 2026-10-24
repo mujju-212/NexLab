@@ -170,6 +170,40 @@ export interface SubjectGradeSummary {
     graded_count?: number;
     submitted_count?: number;
     class_average_percent?: number | null;
+    rubric?: {
+      test_cases?: number;
+      lab_report?: number;
+      code_quality?: number;
+      viva?: number;
+      quiz?: number;
+    };
+  }>;
+  stats?: {
+    class_average: number;
+    median_score: number;
+    pass_rate: number;
+    top_performers_count: number;
+    at_risk_count: number;
+    distribution: {
+      '0-40': number;
+      '40-60': number;
+      '60-75': number;
+      '75-90': number;
+      '90-100': number;
+    };
+    total_submissions: number;
+    graded_submissions: number;
+    pending_submissions: number;
+    not_submitted_count: number;
+    total_enrolled: number;
+    flag_count: number;
+  };
+  recent_activity?: Array<{
+    id: string;
+    type: 'submission' | 'graded' | 'flag';
+    student_name: string;
+    action: string;
+    timestamp: string | null;
   }>;
   students: Array<{
     student_id: string;
@@ -186,6 +220,10 @@ export interface SubjectGradeSummary {
     subject_percent?: number | null;
     assessed_count?: number;
     assessment_count?: number;
+    pending_count?: number;
+    risk_level?: 'critical' | 'high' | 'watch' | 'ok';
+    attendance_pct?: number;
+    last_active?: string | null;
   }>;
 }
 

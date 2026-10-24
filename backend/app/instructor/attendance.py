@@ -5,6 +5,7 @@ session attendance register with Focus Scores, student attendance profile drill-
 and manual attendance override + export.
 """
 import io, csv
+from collections import defaultdict
 from datetime import datetime
 from flask import Blueprint, request, jsonify, g, make_response
 from sqlalchemy import func, or_
@@ -356,6 +357,121 @@ def attendance_summary(session_id):
         'session_id': session_id,
         'total':      len(all_ids),
         'breakdown':  summary,
+    }), 200
+
+
+@attendance_bp.route('/attendance/cohort-summary', methods=['GET'])
+@require_role('instructor', 'institution_admin')
+def get_cohort_attendance_summary():
+    """
+    Returns aggregated attendance metrics for a section-subject (or all sections taught by the instructor):
+    - Overall attendance percentage (mean across students)
+    - Donut distribution: present, absent, late, excused, total
+    - Per-student attendance records (student_id, full_name, roll_number, attendance_pct, present, absent, excused, late)
+    """
+    iid = g.institution_id
+    ss_id = request.args.get('section_subject_id')
+
+    if g.role == 'institution_admin':
+        q = SectionSubject.query.filter_by(institution_id=iid)
+    else:
+        q = SectionSubject.query.filter_by(institution_id=iid)
+        q = q.filter(or_(SectionSubject.instructor_id == g.user_id, SectionSubject.co_instructor_id == g.user_id))
+
+    if ss_id and ss_id not in ('', 'all', 'undefined', 'null'):
+        q = q.filter(SectionSubject.id == ss_id)
+
+    my_ss = q.all()
+    if not my_ss:
+        my_ss = SectionSubject.query.filter_by(institution_id=iid).all()
+        if ss_id and ss_id not in ('', 'all', 'undefined', 'null'):
+            my_ss = [s for s in my_ss if s.id == ss_id]
+
+    my_ss_ids = [ss.id for ss in my_ss]
+    section_ids = list({ss.section_id for ss in my_ss if ss.section_id})
+
+    enrollments = SectionStudent.query.filter(SectionStudent.section_id.in_(section_ids)).all() if section_ids else []
+    student_ids = list({e.student_id for e in enrollments})
+    users = {u.id: u for u in User.query.filter(User.id.in_(student_ids), User.is_active.is_(True)).all()} if student_ids else {}
+
+    sessions = LabSession.query.filter(
+        LabSession.institution_id == iid,
+        LabSession.section_subject_id.in_(my_ss_ids)
+    ).all() if my_ss_ids else []
+    session_ids = [s.id for s in sessions]
+
+    att_rows = SessionAttendance.query.filter(
+        SessionAttendance.session_id.in_(session_ids),
+        SessionAttendance.student_id.in_(student_ids)
+    ).all() if session_ids and student_ids else []
+
+    att_by_student = defaultdict(list)
+    overall_status_counts = {'present': 0, 'absent': 0, 'late': 0, 'excused': 0}
+
+    for a in att_rows:
+        st = (a.status or 'absent').lower()
+        if st in ('present', 'late', 'absent', 'excused'):
+            overall_status_counts[st] += 1
+        elif st in ('partial', 'inactive_present'):
+            overall_status_counts['late'] += 1
+        else:
+            overall_status_counts['absent'] += 1
+        att_by_student[a.student_id].append(st)
+
+    _CREDIT = {'present': 1.0, 'late': 0.8, 'partial': 0.6, 'inactive_present': 0.5, 'excused': 1.0, 'absent': 0.0}
+
+    student_records = []
+    student_rates = []
+
+    sorted_students = sorted(users.values(), key=lambda u: u.full_name or '')
+    ended_sessions_count = len([s for s in sessions if s.status == 'ended'])
+
+    for u in sorted_students:
+        st_statuses = att_by_student.get(u.id, [])
+        p_cnt = sum(1 for s in st_statuses if s == 'present')
+        l_cnt = sum(1 for s in st_statuses if s in ('late', 'partial', 'inactive_present'))
+        e_cnt = sum(1 for s in st_statuses if s == 'excused')
+        a_cnt = sum(1 for s in st_statuses if s == 'absent')
+        unrecorded = max(0, ended_sessions_count - len(st_statuses))
+        a_cnt += unrecorded
+        total_eval = len(st_statuses) + unrecorded
+
+        if total_eval > 0:
+            credit_sum = sum(_CREDIT.get(s, 0.0) for s in st_statuses)
+            rate = round((credit_sum / total_eval) * 100.0, 1)
+            student_rates.append(rate)
+        else:
+            rate = None
+
+        student_records.append({
+            'student_id': u.id,
+            'student_name': u.full_name or 'Student',
+            'roll_number': u.roll_number or '—',
+            'attendance_rate': rate,
+            'present_count': p_cnt,
+            'late_count': l_cnt,
+            'absent_count': a_cnt,
+            'excused_count': e_cnt,
+            'total_sessions': total_eval,
+        })
+
+    overall_mean = round(sum(student_rates) / len(student_rates), 1) if student_rates else None
+    total_tracked = sum(overall_status_counts.values())
+
+    donut_bands = [
+        {'name': 'Present', 'count': overall_status_counts['present'], 'color': '#10b981', 'pct': round((overall_status_counts['present'] / max(1, total_tracked)) * 100, 1) if total_tracked > 0 else 0},
+        {'name': 'Absent', 'count': overall_status_counts['absent'], 'color': '#ef4444', 'pct': round((overall_status_counts['absent'] / max(1, total_tracked)) * 100, 1) if total_tracked > 0 else 0},
+        {'name': 'Late', 'count': overall_status_counts['late'], 'color': '#f59e0b', 'pct': round((overall_status_counts['late'] / max(1, total_tracked)) * 100, 1) if total_tracked > 0 else 0},
+        {'name': 'Excused', 'count': overall_status_counts['excused'], 'color': '#6366f1', 'pct': round((overall_status_counts['excused'] / max(1, total_tracked)) * 100, 1) if total_tracked > 0 else 0},
+    ]
+
+    return jsonify({
+        'overall_attendance': overall_mean,
+        'total_students': len(users),
+        'total_sessions': len(sessions),
+        'status_counts': overall_status_counts,
+        'donut_bands': donut_bands,
+        'students': student_records,
     }), 200
 
 

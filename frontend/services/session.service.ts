@@ -138,6 +138,14 @@ export const sessionService = {
     return data;
   },
 
+  // GET /api/instructor/attendance/cohort-summary
+  async getCohortAttendanceSummary(sectionSubjectId?: string) {
+    const { data } = await apiClient.get('/instructor/attendance/cohort-summary', {
+      params: sectionSubjectId ? { section_subject_id: sectionSubjectId } : {},
+    });
+    return data;
+  },
+
   // GET /api/instructor/sessions/<id>/attendance/export (authenticated CSV download)
   async exportAttendanceCsv(id: string) {
     const base = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:5000/api';
