@@ -7,6 +7,7 @@ import {
   Loader2, Eye, EyeOff, HelpCircle, Code2, Layers,
 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
+import InstructorWorkspaceTabs from '@/components/layout/InstructorWorkspaceTabs';
 import styles from '../shared.module.css';
 import { examService, type Exam } from '@/services/exam.service';
 
@@ -87,10 +88,11 @@ export default function InstructorExamsPage() {
 
   return (
     <InstructorShell
-      activePage="Exams"
+      activePage="Experiments"
       title="Timed Exams"
       subtitle="Create standalone timed assessments (MCQ / coding) with an availability window and per-attempt countdown"
     >
+      <InstructorWorkspaceTabs active="timed-exams" />
       <div className={styles.actionRow}>
         <button type="button" className={styles.primaryBtn} onClick={() => router.push('/instructor/exams/new')}>
           <Plus size={16} strokeWidth={2.2} /> New Exam

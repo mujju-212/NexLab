@@ -14,6 +14,7 @@ import {
   FileCheck, Award, Eye, CalendarClock
 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
+import InstructorWorkspaceTabs from '@/components/layout/InstructorWorkspaceTabs';
 import { experimentService } from '@/services/experiment.service';
 import { sessionService } from '@/services/session.service';
 import { instructorService } from '@/services/instructor.service';
@@ -473,6 +474,7 @@ export default function ExperimentsPage() {
 
   return (
     <InstructorShell activePage="Experiments">
+      <InstructorWorkspaceTabs active="experiments" />
       <div className={styles.container}>
         {toast && (
           <div style={{

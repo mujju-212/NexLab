@@ -8,6 +8,7 @@ import {
   CheckCircle2, AlertTriangle, XCircle, RefreshCw, Loader2
 } from 'lucide-react';
 import styles from './page.module.css';
+import AdminMonitoringTabs from '@/components/layout/AdminMonitoringTabs';
 
 type Health = Record<string, string>;
 
@@ -74,7 +75,8 @@ export default function MonitoringPage() {
   ];
 
   return (
-    <AdminShell activePage="System Monitoring" title="System Monitoring" subtitle="Live platform health checks & AI consumption — straight from the backend">
+    <AdminShell activePage="System Monitoring" title="Platform Monitoring" subtitle="A single control room for service health, AI usage, and execution capacity.">
+      <AdminMonitoringTabs active="health" />
 
       {/* ── Toolbar ─────────────────────────────────────────────────────── */}
       <div className={styles.tabs}>

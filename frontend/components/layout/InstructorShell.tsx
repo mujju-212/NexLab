@@ -6,7 +6,7 @@ import {
   LayoutDashboard, FlaskConical, PlayCircle, Radio,
   ClipboardCheck, BarChart3,
   LogOut, Settings, Menu,
-  FileText, HeartHandshake, Star, ShieldCheck, Megaphone
+  FileText, HeartHandshake, Star, ShieldCheck, Megaphone, User
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './InstructorShell.module.css';
@@ -33,6 +33,7 @@ const NAV_TEACHING = [
 ];
 
 const NAV_MORE = [
+  { id: 'Profile',         label: 'My Profile',         Icon: User,         route: '/instructor/profile' },
   { id: 'Settings',        label: 'Teaching Settings',  Icon: Settings,     route: '/instructor/settings' },
 ];
 
@@ -97,7 +98,7 @@ export default function InstructorShell({ activePage, children, title, subtitle,
     if (id === 'Feedback' && (activePage === 'Feedback' || activePage === 'Student Feedback')) return true;
     if (id === 'Announcements' && activePage === 'Announcements') return true;
     if (id === 'Management' && (activePage === 'Management' || activePage === 'Class Management' || activePage === 'Students' || activePage === 'Student Management')) return true;
-    if (id === 'Settings' && (activePage === 'Settings' || activePage === 'Profile')) return true;
+    if (id === 'Settings' && activePage === 'Settings') return true;
     return false;
   };
 

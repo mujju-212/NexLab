@@ -7,6 +7,7 @@ import {
   GripVertical, X, CheckCircle2, BarChart3, Settings2, ListOrdered,
 } from 'lucide-react';
 import InstructorShell from '@/components/layout/InstructorShell';
+import InstructorWorkspaceTabs from '@/components/layout/InstructorWorkspaceTabs';
 import styles from '../../../shared.module.css';
 import {
   examService, type Exam, type ExamQuestion, type QuestionType,
@@ -232,7 +233,8 @@ export default function EditExamPage({ params }: { params: Promise<{ examId: str
 
   if (loading) {
     return (
-      <InstructorShell activePage="Exams" title="Edit Exam" subtitle="Loading…">
+      <InstructorShell activePage="Experiments" title="Edit Exam" subtitle="Loading…">
+        <InstructorWorkspaceTabs active="timed-exams" />
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, color: '#6b7280', fontSize: 13.5, padding: 24 }}>
           <Loader2 size={18} className="spin" /> Loading exam…
         </div>
@@ -248,10 +250,11 @@ export default function EditExamPage({ params }: { params: Promise<{ examId: str
 
   return (
     <InstructorShell
-      activePage="Exams"
+      activePage="Experiments"
       title={exam?.title || 'Edit Exam'}
       subtitle={`${questions.length} question${questions.length === 1 ? '' : 's'} · ${exam?.is_published ? 'Published' : 'Draft'}`}
     >
+      <InstructorWorkspaceTabs active="timed-exams" />
       <div className={styles.actionRow} style={{ justifyContent: 'space-between' }}>
         <button type="button" className={styles.secondaryBtn} onClick={() => router.push('/instructor/exams')}>
           <ArrowLeft size={16} /> Back to Exams
