@@ -6,6 +6,7 @@ Free Course Platform Models
 """
 import uuid
 from datetime import datetime
+from sqlalchemy import func
 from app.extensions import db
 
 
@@ -87,7 +88,14 @@ class FreeExercise(db.Model):
     is_published     = db.Column(db.Boolean, default=True)
     created_at       = db.Column(db.DateTime, default=datetime.utcnow)
 
-    def to_dict(self, include_answer=False):
+    def to_dict(self, include_answer=False, actual_solves=None):
+        # Progress rows are the source of truth; the old denormalized counter
+        # may be stale for activity recorded before solve-count maintenance.
+        # Callers serializing a collection can pass a grouped count to avoid N+1.
+        if actual_solves is None:
+            actual_solves = db.session.query(func.count(FreeProgress.id)).filter_by(
+                exercise_id=self.id, status='solved'
+            ).scalar() or 0
         d = {
             'id':           self.id,
             'course_id':    self.course_id,
@@ -99,7 +107,7 @@ class FreeExercise(db.Model):
             'exercise_type':self.exercise_type,
             'tags':         self.tags or [],
             'acceptance_rate': round(float(self.acceptance_rate), 1) if self.acceptance_rate is not None else None,
-            'solves_count': self.solves_count if self.solves_count is not None else 0,
+            'solves_count': actual_solves,
             'allowed_languages': self.allowed_languages or ['python'],
             'starter_code': self.starter_code or {},
             'xp_reward':    self.xp_reward,

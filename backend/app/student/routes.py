@@ -50,6 +50,86 @@ def _parse_iso_z(raw):
         return None
 
 
+def _student_content_module_access(module_id):
+    """Resolve a student-visible content block within the student's own tenant.
+
+    Direct quiz/assignment URLs enforce the same tenant, enrollment, and
+    staged-publishing rules as the parent pre-lab page; UUIDs are not access
+    control. Returns (module, experiment, error_response).
+    """
+    module = ContentModule.query.get(module_id)
+    if not module:
+        return None, None, (jsonify({'error': 'Content module not found'}), 404)
+
+    experiment = Experiment.query.filter_by(
+        id=module.experiment_id, institution_id=g.institution_id
+    ).first()
+    if not experiment:
+        return None, None, (jsonify({'error': 'Content module not found'}), 404)
+
+    section_ids = [row.section_id for row in SectionStudent.query.filter_by(
+        student_id=g.user_id
+    ).all()]
+    if not section_ids:
+        return None, None, (jsonify({'error': 'You are not enrolled in any sections'}), 403)
+
+    enrolled = SectionSubject.query.filter(
+        SectionSubject.section_id.in_(section_ids),
+        SectionSubject.subject_id == experiment.subject_id,
+        SectionSubject.institution_id == g.institution_id,
+    ).first()
+    if not enrolled:
+        return None, None, (jsonify({'error': 'You are not enrolled in this subject'}), 403)
+
+    # Use the frozen publish snapshot where one exists. Live drafts are only
+    # accessible when their page is live/released, or when the instructor has
+    # explicitly launched that quiz in this student's active lab session.
+    from app.services.content_publish import resolve_published_snapshot, snapshot_to_objects
+    snapshot = resolve_published_snapshot(experiment)
+    visible = module.page_id is None
+    in_snapshot = False
+    if snapshot:
+        pages, modules = snapshot_to_objects(snapshot)
+        snapshot_module = next((item for item in modules if item.id == module.id), None)
+        if snapshot_module:
+            in_snapshot = True
+            if snapshot_module.page_id is None:
+                visible = True
+            else:
+                page = next((item for item in pages if item.id == snapshot_module.page_id), None)
+                visible = bool(page and page.is_visible_to_students())
+    else:
+        if module.page_id:
+            page = ContentPage.query.filter_by(
+                id=module.page_id, experiment_id=experiment.id
+            ).first()
+            visible = bool(page and page.is_visible_to_students())
+        else:
+            visible = True
+
+    launched = False
+    if module.module_type == 'quiz' and (not in_snapshot or not visible):
+        from app.models.conductor import LivePageState
+        active_session = LabSession.query.join(
+            SectionSubject, SectionSubject.id == LabSession.section_subject_id
+        ).filter(
+            SectionSubject.section_id.in_(section_ids),
+            SectionSubject.institution_id == g.institution_id,
+            LabSession.experiment_id == experiment.id,
+            LabSession.status == 'active',
+        ).order_by(LabSession.started_at.desc()).first()
+        if active_session:
+            state = LivePageState.query.filter_by(session_id=active_session.id).first()
+            launched = bool(state and state.launched_quiz_module_id == module.id)
+
+    if not visible and not launched:
+        return None, None, (jsonify({'error': 'This content is not currently available'}), 403)
+    if snapshot and not in_snapshot and not launched:
+        return None, None, (jsonify({'error': 'This content has not been published'}), 403)
+
+    return module, experiment, None
+
+
 # â”€â”€ My Subjects & Experiments â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @student_bp.route('/subjects', methods=['GET'])
@@ -703,7 +783,9 @@ def get_prelab_content(experiment_id):
 def get_quiz_questions(module_id):
     """Get shuffled quiz questions (without correct answers)"""
     from app.services.content_publish import resolve_published_snapshot, get_published_module
-    module = ContentModule.query.get_or_404(module_id)
+    module, experiment, access_error = _student_content_module_access(module_id)
+    if access_error:
+        return access_error
     progress = ContentProgress.query.filter_by(
         student_id=g.user_id, module_id=module_id
     ).first()
@@ -711,7 +793,7 @@ def get_quiz_questions(module_id):
     # Serve the PUBLISHED snapshot so edits made after publishing stay hidden
     # until the instructor republishes. Fall back to live rows when unpublished.
     _snap_mod = get_published_module(
-        resolve_published_snapshot(Experiment.query.get(module.experiment_id)), module_id
+        resolve_published_snapshot(experiment), module_id
     )
     config = (_snap_mod.get('content_data') if _snap_mod else module.content_data) or {}
     max_attempts = config.get('max_attempts', 3)
@@ -760,14 +842,16 @@ def get_quiz_questions(module_id):
 def submit_quiz(module_id):
     """Submit quiz answers, get score, update gate status"""
     from app.services.content_publish import resolve_published_snapshot, get_published_module
-    module = ContentModule.query.get_or_404(module_id)
+    module, experiment, access_error = _student_content_module_access(module_id)
+    if access_error:
+        return access_error
     data   = request.get_json()
     answers = data.get('answers', {})   # {question_id: "A"|"B"|"C"|"D"}
 
     # Grade against the PUBLISHED snapshot so edits after publishing don't change
     # an in-flight quiz. Fall back to live rows when the module isn't snapshotted.
     _snap_mod = get_published_module(
-        resolve_published_snapshot(Experiment.query.get(module.experiment_id)), module_id
+        resolve_published_snapshot(experiment), module_id
     )
     if _snap_mod is not None and _snap_mod.get('questions') is not None:
         questions = [{'id': q['id'], 'points': q.get('points', 1),
@@ -1514,7 +1598,9 @@ def mark_module_complete(module_id):
     Mark a text, video, or PDF module as completed.
     (Quiz completion is auto-set by submit_quiz.)
     """
-    module = ContentModule.query.get_or_404(module_id)
+    module, experiment, access_error = _student_content_module_access(module_id)
+    if access_error:
+        return access_error
     if module.module_type == 'quiz':
         return jsonify({'error': 'Quiz completion is set automatically on submit'}), 400
 
@@ -1562,12 +1648,13 @@ def submit_assignment(module_id):
     from app.models.experiment import TestCase
     from app.models.conductor import TestCaseResult
 
-    module = ContentModule.query.get_or_404(module_id)
+    module, exp, access_error = _student_content_module_access(module_id)
+    if access_error:
+        return access_error
     if module.module_type != 'assign':
         return jsonify({'error': 'This module is not a graded assignment.'}), 400
 
     from app.services.content_publish import resolve_published_snapshot, get_published_module
-    exp = Experiment.query.get(module.experiment_id)
     # Grade against the PUBLISHED snapshot when available (stable, frozen test
     # cases + config), else fall back to live rows for unpublished/legacy modules.
     _snap_mod = get_published_module(resolve_published_snapshot(exp), module_id)
@@ -1814,7 +1901,9 @@ def submit_viva(module_id):
     Body: { "answers": { "<index>": "student answer text", ... } }
     Returns: { score, passed, threshold, per_question: [...], attempts_used }
     """
-    module = ContentModule.query.get_or_404(module_id)
+    module, experiment, access_error = _student_content_module_access(module_id)
+    if access_error:
+        return access_error
     if module.module_type != 'viva':
         return jsonify({'error': 'This module is not a viva block.'}), 400
 

@@ -1775,11 +1775,14 @@ def analytics_overview():
             'days_idle': {'value': s_days_idle},
         })
 
-        score = round(risk_res['risk_score'])
+        raw_risk_score = risk_res.get('risk_score')
+        score = round(raw_risk_score) if raw_risk_score is not None else None
         band = risk_res['risk_band']
         primary_driver = risk_res['primary_reason']
 
-        if band == 'critical':
+        if band == 'unknown':
+            action = 'Wait for more activity'
+        elif band == 'critical':
             action = 'Check in during lab' if 'attendance' in primary_driver.lower() else 'Review submission'
         elif band == 'high':
             action = 'Assign practice' if 'mastery' in primary_driver.lower() else 'Review submission'

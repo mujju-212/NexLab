@@ -228,7 +228,7 @@ def cohort_leaderboard():
                     return jsonify({'error': 'Access denied: rankings are limited to your own section'}), 403
             scope_id = scope_id or (section_ids[0] if section_ids else None)
         elif scope_level == 'subject':
-            own_subject_ids = [row.id for row in SectionSubject.query.filter(SectionSubject.section_id.in_(section_ids)).all()] if section_ids else []
+            own_subject_ids = [row.subject_id for row in SectionSubject.query.filter(SectionSubject.section_id.in_(section_ids)).all()] if section_ids else []
             if scope_id and scope_id not in own_subject_ids:
                 return jsonify({'error': 'Access denied: rankings are limited to your enrolled subjects'}), 403
             scope_id = scope_id or (own_subject_ids[0] if own_subject_ids else None)

@@ -102,8 +102,9 @@ def free_analytics_overview():
     if standing.get('global_percentile') and standing['global_percentile'] >= 80:
         top_pct = max(1, 100 - int(standing['global_percentile']))
         highlights.append(f"Top {top_pct}% Platform Rank Worldwide")
-    if standing.get('streak_days', 0) >= 3:
-        highlights.append(f"🔥 Active {standing['streak_days']}-Day Practice Streak")
+    streak_days = standing.get('streak_days') or 0
+    if streak_days >= 3:
+        highlights.append(f"🔥 Active {streak_days}-Day Practice Streak")
     if unlocks.get('hard_unlocked'):
         highlights.append("Unlocked Hard-tier algorithmic challenges")
     elif unlocks.get('medium_unlocked'):

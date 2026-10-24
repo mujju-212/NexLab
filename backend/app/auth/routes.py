@@ -287,7 +287,7 @@ def verify_otp():
     if otp.attempts >= OTP_MAX_ATTEMPTS:
         return jsonify({'error': 'Too many incorrect attempts. Please request a new code.'}), 400
 
-    if not otp.check_code(code) and code != '654321':
+    if not otp.check_code(code):
         otp.attempts += 1
         db.session.commit()
         remaining = max(0, OTP_MAX_ATTEMPTS - otp.attempts)

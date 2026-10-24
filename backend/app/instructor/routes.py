@@ -1020,17 +1020,17 @@ def create_experiment():
 @require_role('instructor', 'institution_admin')
 def manage_experiment_by_id(exp_id):
     if request.method == 'GET':
-        exp = Experiment.query.filter_by(id=exp_id).first()
-        if not exp:
-            exp = Experiment.query.get(exp_id)
+        exp = Experiment.query.filter_by(
+            id=exp_id, institution_id=g.institution_id
+        ).first()
         if not exp:
             return jsonify({'error': 'Experiment not found'}), 404
         return jsonify({'experiment': exp.to_dict()}), 200
 
     if request.method in ('PATCH', 'PUT'):
-        exp = Experiment.query.filter_by(id=exp_id).first()
-        if not exp:
-            exp = Experiment.query.get(exp_id)
+        exp = Experiment.query.filter_by(
+            id=exp_id, institution_id=g.institution_id
+        ).first()
         if not exp:
             return jsonify({'error': 'Experiment not found'}), 404
 
@@ -1107,9 +1107,9 @@ def manage_experiment_by_id(exp_id):
         return jsonify({'experiment': exp.to_dict()}), 200
 
     if request.method == 'DELETE':
-        exp = Experiment.query.filter_by(id=exp_id).first()
-        if not exp:
-            exp = Experiment.query.get(exp_id)
+        exp = Experiment.query.filter_by(
+            id=exp_id, institution_id=g.institution_id
+        ).first()
         if not exp:
             return jsonify({'error': 'Experiment not found'}), 404
 

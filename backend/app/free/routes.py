@@ -4,6 +4,7 @@ Accessible by: free_user, student, instructor, platform_admin (all authenticated
 Course listing is fully PUBLIC (no auth required).
 """
 import os
+from sqlalchemy import func
 from flask import Blueprint, request, jsonify, g, current_app, send_file
 from app.extensions import db
 from app.models.free import FreeCourse, FreeExercise, FreeProgress
@@ -152,9 +153,17 @@ def get_course(course_id):
         "top_percentile": top_percentile,
     }
 
+    exercise_ids = [e.id for e in exercises]
+    solved_counts = dict(db.session.query(
+        FreeProgress.exercise_id, func.count(FreeProgress.id)
+    ).filter(
+        FreeProgress.exercise_id.in_(exercise_ids),
+        FreeProgress.status == 'solved',
+    ).group_by(FreeProgress.exercise_id).all()) if exercise_ids else {}
+
     formatted_exercises = []
     for e in exercises:
-        d = e.to_dict()
+        d = e.to_dict(actual_solves=solved_counts.get(e.id, 0))
         is_solved = e.id in solved_ids
         is_attempted = e.id in attempted_ids
         is_locked = (e.order_index > 6 and not is_solved)
@@ -162,7 +171,8 @@ def get_course(course_id):
         d['is_attempted'] = is_attempted
         d['is_locked'] = is_locked
         d['action_label'] = 'Solve Again' if is_solved else ('Unlock' if is_locked else 'Solve')
-        d['solves_display'] = f"{e.solves_count / 1000:.1f}k solves" if (e.solves_count or 0) >= 1000 else f"{e.solves_count or 0} solves"
+        solves_count = d.get('solves_count', 0)
+        d['solves_display'] = f"{solves_count / 1000:.1f}k solves" if solves_count >= 1000 else f"{solves_count} solves"
         formatted_exercises.append(d)
 
     course_dict = course.to_dict()
@@ -359,6 +369,7 @@ def submit_exercise(exercise_id):
             prog.status    = 'solved'
             prog.solved_at = datetime.utcnow()
             prog.xp_earned = ex.xp_reward
+            ex.solves_count = (ex.solves_count or 0) + 1
 
             # Real-time Track-2 platform sync
             from app.models.practice import StudentXP, StudentBadge
@@ -418,6 +429,7 @@ def submit_mcq(exercise_id):
         prog.best_score = 100.0
         prog.solved_at  = datetime.utcnow()
         prog.xp_earned  = ex.xp_reward
+        ex.solves_count = (ex.solves_count or 0) + 1
 
         from app.models.practice import StudentXP, StudentBadge
         from app.platform_rank.rating import compute_student_platform_rating
@@ -469,6 +481,7 @@ def complete_simulation(exercise_id):
         prog.best_score = 100.0
         prog.solved_at  = datetime.utcnow()
         prog.xp_earned  = ex.xp_reward
+        ex.solves_count = (ex.solves_count or 0) + 1
 
         from app.models.practice import StudentXP, StudentBadge
         from app.platform_rank.rating import compute_student_platform_rating, update_all_platform_ranks
