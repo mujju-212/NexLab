@@ -34,16 +34,16 @@ def get_practice_topic_mastery(student_id: str, window_start: Optional[datetime]
         sub_q = sub_q.filter(PracticeSubmission.submitted_at >= window_start)
     subs = sub_q.all()
 
-    # 2. Fetch course exercise records from FreeProgress (Track 2 unified)
-    from app.models.free import FreeProgress, FreeExercise, FreeCourse
+    # 2. Fetch course exercise records from PlatformProgress (Track 2 unified)
+    from app.models.platform_content import PlatformProgress, PlatformExercise, PlatformCourse
     course_records = (
-        db.session.query(FreeProgress, FreeExercise, FreeCourse)
-        .join(FreeExercise, FreeProgress.exercise_id == FreeExercise.id)
-        .join(FreeCourse, FreeProgress.course_id == FreeCourse.id)
-        .filter(FreeProgress.user_id == student_id)
+        db.session.query(PlatformProgress, PlatformExercise, PlatformCourse)
+        .join(PlatformExercise, PlatformProgress.exercise_id == PlatformExercise.id)
+        .join(PlatformCourse, PlatformProgress.course_id == PlatformCourse.id)
+        .filter(PlatformProgress.user_id == student_id)
     )
     if window_start is not None:
-        course_q = course_records.filter(FreeProgress.updated_at >= window_start)
+        course_q = course_records.filter(PlatformProgress.updated_at >= window_start)
         course_records = course_q.all()
     else:
         course_records = course_records.all()

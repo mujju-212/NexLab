@@ -1,8 +1,8 @@
 """
 Free Course Platform Models
-- FreeCourse  : platform-curated course catalog
-- FreeExercise: individual coding/MCQ problems inside a course
-- FreeProgress: per-user completion record
+- PlatformCourse  : platform-curated course catalog
+- PlatformExercise: individual coding/MCQ problems inside a course
+- PlatformProgress: per-user completion record
 """
 import uuid
 from datetime import datetime
@@ -10,8 +10,8 @@ from sqlalchemy import func
 from app.extensions import db
 
 
-class FreeCourse(db.Model):
-    __tablename__ = 'free_courses'
+class PlatformCourse(db.Model):
+    __tablename__ = 'platform_courses'
 
     id          = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     slug        = db.Column(db.String(80), unique=True, nullable=False)  # e.g. "python-basics"
@@ -25,8 +25,8 @@ class FreeCourse(db.Model):
     order_index = db.Column(db.Integer, default=0)               # display order
     created_at  = db.Column(db.DateTime, default=datetime.utcnow)
 
-    exercises   = db.relationship('FreeExercise', backref='course',
-                                  order_by='FreeExercise.order_index', lazy='dynamic')
+    exercises   = db.relationship('PlatformExercise', backref='course',
+                                  order_by='PlatformExercise.order_index', lazy='dynamic')
 
     def to_dict(self, with_stats=False):
         exs = self.exercises.all()
@@ -48,14 +48,14 @@ class FreeCourse(db.Model):
         return d
 
 
-class FreeExercise(db.Model):
-    __tablename__ = 'free_exercises'
+class PlatformExercise(db.Model):
+    __tablename__ = 'platform_exercises'
     __table_args__ = (
-        db.Index('ix_free_exercises_course_order', 'course_id', 'order_index'),
+        db.Index('ix_platform_exercises_course_order', 'course_id', 'order_index'),
     )
 
     id           = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    course_id    = db.Column(db.String(36), db.ForeignKey('free_courses.id'), nullable=False)
+    course_id    = db.Column(db.String(36), db.ForeignKey('platform_courses.id'), nullable=False)
     order_index  = db.Column(db.Integer, default=0)
 
     title        = db.Column(db.Text, nullable=False)
@@ -93,7 +93,7 @@ class FreeExercise(db.Model):
         # may be stale for activity recorded before solve-count maintenance.
         # Callers serializing a collection can pass a grouped count to avoid N+1.
         if actual_solves is None:
-            actual_solves = db.session.query(func.count(FreeProgress.id)).filter_by(
+            actual_solves = db.session.query(func.count(PlatformProgress.id)).filter_by(
                 exercise_id=self.id, status='solved'
             ).scalar() or 0
         d = {
@@ -127,13 +127,13 @@ class FreeExercise(db.Model):
         return d
 
 
-class FreeProgress(db.Model):
-    __tablename__ = 'free_progress'
+class PlatformProgress(db.Model):
+    __tablename__ = 'platform_progress'
 
     id           = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     user_id      = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
-    exercise_id  = db.Column(db.String(36), db.ForeignKey('free_exercises.id'), nullable=False)
-    course_id    = db.Column(db.String(36), db.ForeignKey('free_courses.id'), nullable=False)
+    exercise_id  = db.Column(db.String(36), db.ForeignKey('platform_exercises.id'), nullable=False, index=True)
+    course_id    = db.Column(db.String(36), db.ForeignKey('platform_courses.id'), nullable=False, index=True)
 
     status       = db.Column(db.String(10), default='attempted')  # attempted | solved
     attempts     = db.Column(db.Integer, default=0)
@@ -146,8 +146,8 @@ class FreeProgress(db.Model):
     updated_at   = db.Column(db.DateTime, onupdate=datetime.utcnow)
 
     __table_args__ = (
-        db.UniqueConstraint('user_id', 'exercise_id', name='uq_free_progress'),
-        db.Index('ix_free_progress_user_course', 'user_id', 'course_id', 'status'),
+        db.UniqueConstraint('user_id', 'exercise_id', name='uq_platform_progress'),
+        db.Index('ix_platform_progress_user_course', 'user_id', 'course_id', 'status'),
     )
 
     def to_dict(self):

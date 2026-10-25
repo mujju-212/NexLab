@@ -155,6 +155,11 @@ def _generate_plan_certificate(student_id, plan) -> str:
     out_dir.mkdir(exist_ok=True)
     path = out_dir / f'plan_{plan.slug}_{student_id[:8]}.pdf'
     path.write_bytes(pdf_bytes)
+    try:
+        from app.services.storage import store_file
+        store_file(str(path), f'certificates/{path.name}')
+    except Exception:
+        pass
     return str(path)
 
 
@@ -167,13 +172,14 @@ def _reward_solve(student_id, problem, xp_earned, elapsed_sec=None):
     xp = _get_or_create_xp(student_id)
     xp.add_xp(xp_earned)
     xp.update_streak()
-    xp.problems_solved += 1
+    # None-safe counters: the row may have been created this request.
+    xp.problems_solved = (xp.problems_solved or 0) + 1
     if problem.difficulty == 'Easy':
-        xp.easy_solved += 1
+        xp.easy_solved = (xp.easy_solved or 0) + 1
     elif problem.difficulty == 'Medium':
-        xp.medium_solved += 1
+        xp.medium_solved = (xp.medium_solved or 0) + 1
     elif problem.difficulty == 'Hard':
-        xp.hard_solved += 1
+        xp.hard_solved = (xp.hard_solved or 0) + 1
 
     # Milestone badges
     if xp.problems_solved == 1:
@@ -223,7 +229,7 @@ def _reward_solve(student_id, problem, xp_earned, elapsed_sec=None):
 # ── Problem List ──────────────────────────────────────────────────────────────
 
 @practice_bp.route('/problems', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def list_problems():
     """List problems with optional filters: topic, difficulty, status, search"""
     q = Problem.query.filter_by(is_active=True)
@@ -272,7 +278,7 @@ def list_problems():
 # ── Problem Detail ────────────────────────────────────────────────────────────
 
 @practice_bp.route('/problems/<slug>', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def get_problem(slug):
     problem = Problem.query.filter_by(slug=slug, is_active=True).first_or_404()
 
@@ -324,7 +330,7 @@ def get_problem(slug):
 
 
 @practice_bp.route('/problems/<slug>/submissions', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def problem_submissions(slug):
     """Full submission history for the current student on this problem (newest first).
     Includes code (owner-scoped) so the UI can diff consecutive attempts."""
@@ -340,9 +346,9 @@ def problem_submissions(slug):
 
 
 @practice_bp.route('/submissions/recent', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def recent_submissions():
-    """Recent submissions across all practice problems for the current student/free_user."""
+    """Recent submissions across all practice problems for the current student/platform_user."""
     limit = min(int(request.args.get('limit', 15)), 100)
     subs = PracticeSubmission.query.filter_by(
         student_id=g.user_id, is_run=False
@@ -374,7 +380,7 @@ def recent_submissions():
 
 
 @practice_bp.route('/profile-overview', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def profile_overview():
     """Consolidated profile stats with problem library totals, solve counts, and difficulty breakdown."""
     xp = _get_or_create_xp(g.user_id)
@@ -426,7 +432,7 @@ def profile_overview():
 # ── Topics ────────────────────────────────────────────────────────────────────
 
 @practice_bp.route('/topics', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def list_topics():
     """All topic groups with problem counts, difficulty breakdown, and student's solved count."""
     from sqlalchemy import func
@@ -626,7 +632,7 @@ def _build_calendar_days(target_year: int, target_month: int, today: date, solve
 
 
 @practice_bp.route('/daily', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def daily_challenge():
     today = date.today()
     # Challenge progress is tied to this date's assigned problem, not any accepted solve.
@@ -786,7 +792,7 @@ def daily_challenge():
 
 
 @practice_bp.route('/daily/calendar', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def daily_calendar():
     today = date.today()
     try:
@@ -807,7 +813,7 @@ def daily_calendar():
 # ── Quest / XP ────────────────────────────────────────────────────────────────
 
 @practice_bp.route('/quest/stats', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def quest_stats():
     from app.practice.quest_service import get_quest_dashboard_data
     data = get_quest_dashboard_data(g.user_id, g.role, g.institution_id)
@@ -815,7 +821,7 @@ def quest_stats():
 
 
 @practice_bp.route('/quest/dashboard', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def quest_dashboard():
     from app.practice.quest_service import get_quest_dashboard_data
     data = get_quest_dashboard_data(g.user_id, g.role, g.institution_id)
@@ -823,7 +829,7 @@ def quest_dashboard():
 
 
 @practice_bp.route('/quest/claim', methods=['POST'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def quest_claim():
     from app.practice.quest_service import claim_quest_reward
     data = request.get_json() or {}
@@ -838,7 +844,7 @@ def quest_claim():
 
 
 @practice_bp.route('/quest/leaderboard', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def quest_leaderboard():
     """XP leaderboard. Two independent boards:
        - scope=institution : only students of the caller's institution (institution board)
@@ -899,7 +905,7 @@ def quest_leaderboard():
 
 
 @practice_bp.route('/quest/daily-checkin', methods=['POST'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def daily_checkin():
     """Log a daily visit — advances the streak at most once per day, small XP on first check-in."""
     xp = _get_or_create_xp(g.user_id)
@@ -928,7 +934,7 @@ def daily_checkin():
 # ── Study Plans ───────────────────────────────────────────────────────────────
 
 @practice_bp.route('/plans', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def list_plans():
     plans = StudyPlan.query.order_by(StudyPlan.order_index).all()
 
@@ -958,7 +964,7 @@ def _resolve_plan(plan_id):
 
 
 @practice_bp.route('/plans/<plan_id>', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def get_plan(plan_id):
     plan = _resolve_plan(plan_id)
     sections = StudyPlanSection.query.filter_by(
@@ -1016,7 +1022,7 @@ def get_plan(plan_id):
 
 
 @practice_bp.route('/plans/<plan_id>/certificate', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def download_plan_certificate(plan_id):
     """Download the plan-completion certificate PDF (generated at completion)."""
     import os
@@ -1040,7 +1046,7 @@ def download_plan_certificate(plan_id):
 
 
 @practice_bp.route('/plans/<plan_id>/enroll', methods=['POST'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def enroll_plan(plan_id):
     plan = _resolve_plan(plan_id)
     existing = StudyPlanProgress.query.filter_by(
@@ -1074,7 +1080,7 @@ def _exec_case(lang_id, code, stdin):
 
 
 @practice_bp.route('/problems/<slug>/run', methods=['POST'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def run_problem(slug):
     """Run code against visible sample test cases only."""
     from flask import current_app
@@ -1141,7 +1147,7 @@ def run_problem(slug):
 
 
 @practice_bp.route('/problems/<slug>/submit', methods=['POST'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def submit_problem(slug):
     """Submit code — run all hidden cases, store submission, award XP + badges."""
     from flask import current_app
@@ -1210,10 +1216,36 @@ def submit_problem(slug):
     avg_ms   = round(total_ms / n) if n else None
     avg_kb   = round(total_kb / n) if n else None
 
+    # The runner's 'status' describes EXECUTION (Accepted = clean exit), not
+    # grading. A failed case only inherits it when the run itself failed
+    # (Runtime Error / TLE / Compile Error); a clean run with wrong output is
+    # a Wrong Answer — recording it as 'Accepted' would block first-solve XP
+    # and pollute solve-based analytics. Runner verdicts are also longer than
+    # the 20-char column ('Runtime Error (exit 1)'), so canonicalize.
+    def _canon(raw):
+        # Only reached when grading FAILED, so a clean-execution 'Accepted'
+        # from the runner means the output was wrong: Wrong Answer.
+        if not raw:
+            return 'Wrong Answer'
+        for prefix, canon in (
+            ('Time Limit', 'Time Limit Exceeded'),
+            ('Compilation Error', 'Compilation Error'),
+            ('Runtime Error', 'Runtime Error'),
+            ('Internal Error', 'Internal Error'),
+        ):
+            if raw.startswith(prefix):
+                return canon
+        return 'Wrong Answer'
+
+    if accepted:
+        verdict = 'Accepted'
+    else:
+        verdict = _canon(first_bad_status)
+
     sub = PracticeSubmission(
         student_id=g.user_id, problem_id=problem.id,
         language=language, code=code,
-        status='Accepted' if accepted else (first_bad_status or 'Wrong Answer'),
+        status=verdict,
         passed=passed_count, total=n,
         time_ms=avg_ms, memory_kb=avg_kb, is_run=False,
     )

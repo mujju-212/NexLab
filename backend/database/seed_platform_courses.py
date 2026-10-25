@@ -5,7 +5,7 @@ Seeds beginner-level Python and DSA courses with sample exercises.
 Usage:
     cd backend
     flask db upgrade
-    python database/seed_free_courses.py
+    python database/seed_platform_courses.py
 """
 import sys, os
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
@@ -15,7 +15,7 @@ load_dotenv()
 
 from app import create_app
 from app.extensions import db
-from app.models.free import FreeCourse, FreeExercise
+from app.models.platform_content import PlatformCourse, PlatformExercise
 
 app = create_app()
 
@@ -207,18 +207,18 @@ with app.app_context():
     seeded_exercises = 0
 
     for cd in COURSES:
-        existing = FreeCourse.query.filter_by(slug=cd['slug']).first()
+        existing = PlatformCourse.query.filter_by(slug=cd['slug']).first()
         if existing:
             print(f"  [SKIP] Exists: {cd['slug']}")
             continue
 
         exercises_data = cd.pop('exercises', [])
-        course = FreeCourse(**cd, is_published=True)
+        course = PlatformCourse(**cd, is_published=True)
         db.session.add(course)
         db.session.flush()  # get id
 
         for i, ed in enumerate(exercises_data):
-            ex = FreeExercise(
+            ex = PlatformExercise(
                 course_id=course.id,
                 order_index=i + 1,
                 **ed,

@@ -1,6 +1,6 @@
 """
-seed_free_learner_activity.py
-Populates rich, realistic analytics telemetry for free@nexlab.io
+seed_platform_user_activity.py
+Populates rich, realistic analytics telemetry for platform@nexlab.io
 so all tabs (Hero, Overview, Ladder, Skills, Activity, Courses) display live, vibrant charts.
 """
 from datetime import datetime, timedelta
@@ -18,7 +18,7 @@ from app.models.practice import (
     BADGE_CATALOG,
     xp_to_level,
 )
-from app.models.free import FreeCourse, FreeExercise, FreeProgress
+from app.models.platform_content import PlatformCourse, PlatformExercise, PlatformProgress
 from app.platform_rank.rating import (
     compute_student_platform_rating,
     update_all_platform_ranks,
@@ -27,9 +27,9 @@ from app.platform_rank.rating import (
 app = create_app()
 
 with app.app_context():
-    user = User.query.filter_by(email="free@nexlab.io").first()
+    user = User.query.filter_by(email="platform@nexlab.io").first()
     if not user:
-        print("User free@nexlab.io not found!")
+        print("User platform@nexlab.io not found!")
         exit(1)
 
     print(f"Seeding telemetry for: {user.full_name} ({user.id})")
@@ -43,7 +43,7 @@ with app.app_context():
     xp.streak_days = 6
     xp.streak_last_date = datetime.utcnow().date()
     xp.profile_public = True
-    xp.profile_slug = "free-learner"
+    xp.profile_slug = "platform-learner"
 
     # 2. Add realistic Practice Submissions across diverse problems
     problems = Problem.query.all()
@@ -84,12 +84,12 @@ with app.app_context():
             )
             db.session.add(b)
 
-    # 4. Add Course Progress via FreeExercise
-    courses = FreeCourse.query.all()
+    # 4. Add Course Progress via PlatformExercise
+    courses = PlatformCourse.query.all()
     if courses:
         print(f"Found {len(courses)} free courses.")
         for i, c in enumerate(courses[:3]):
-            exercises = FreeExercise.query.filter_by(course_id=c.id).order_by(FreeExercise.order_index).all()
+            exercises = PlatformExercise.query.filter_by(course_id=c.id).order_by(PlatformExercise.order_index).all()
             if not exercises:
                 continue
             
@@ -97,9 +97,9 @@ with app.app_context():
             # For second course, solve half
             count_to_solve = len(exercises) if i == 0 else max(1, len(exercises) // 2)
             for ex in exercises[:count_to_solve]:
-                prog = FreeProgress.query.filter_by(user_id=user.id, exercise_id=ex.id).first()
+                prog = PlatformProgress.query.filter_by(user_id=user.id, exercise_id=ex.id).first()
                 if not prog:
-                    prog = FreeProgress(
+                    prog = PlatformProgress(
                         user_id=user.id,
                         course_id=c.id,
                         exercise_id=ex.id,

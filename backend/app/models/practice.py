@@ -307,7 +307,9 @@ class StudentXP(db.Model):
     profile_slug        = db.Column(db.String(40), index=True)
 
     def add_xp(self, amount: int):
-        self.total_xp += amount
+        # None-safe: a row constructed this request (not yet flushed) has no
+        # Python-side defaults applied yet, so counters read as None.
+        self.total_xp = (self.total_xp or 0) + amount
         self.level, self.level_name = xp_to_level(self.total_xp)
 
     def update_streak(self):
@@ -318,7 +320,7 @@ class StudentXP(db.Model):
         from datetime import timedelta
         yesterday = today - timedelta(days=1)
         if self.streak_last_date == yesterday:
-            self.streak_days += 1
+            self.streak_days = (self.streak_days or 0) + 1
         else:
             self.streak_days = 1
         self.streak_last_date = today

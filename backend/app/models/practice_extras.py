@@ -1,5 +1,5 @@
 """
-Free-user enhancement models (Tier: retention + social layer):
+Platform-user enhancement models (Tier: retention + social layer):
 
 ProblemBookmark    — star + private note per (user, problem)
 PlaygroundSession  — saved playground work with optional share slugs
@@ -21,7 +21,7 @@ class ProblemBookmark(db.Model):
                            default=lambda: str(uuid.uuid4()))
     user_id    = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
     problem_id = db.Column(db.String(36), db.ForeignKey('practice_problems.id'),
-                           nullable=False)
+                           nullable=False, index=True)
     note       = db.Column(db.Text)   # private note — visible only to the author
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -178,7 +178,7 @@ class ContestParticipant(db.Model):
                             default=lambda: str(uuid.uuid4()))
     contest_id  = db.Column(db.String(36), db.ForeignKey('coding_contests.id'),
                             nullable=False)
-    user_id     = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
+    user_id     = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False, index=True)
     joined_at   = db.Column(db.DateTime, default=datetime.utcnow)
     solved_slugs = db.Column(db.JSON, default=list)
     score       = db.Column(db.Integer, default=0)

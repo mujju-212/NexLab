@@ -1,37 +1,37 @@
 """
 Free Platform Routes — public course catalog + practice execution
-Accessible by: free_user, student, instructor, platform_admin (all authenticated roles)
+Accessible by: platform_user, student, instructor, platform_admin (all authenticated roles)
 Course listing is fully PUBLIC (no auth required).
 """
 import os
 from sqlalchemy import func
 from flask import Blueprint, request, jsonify, g, current_app, send_file
 from app.extensions import db
-from app.models.free import FreeCourse, FreeExercise, FreeProgress
+from app.models.platform_content import PlatformCourse, PlatformExercise, PlatformProgress
 from app.models.user import User
 from app.auth.utils import require_auth, require_role
 from app.execution.languages import resolve as resolve_language
 from datetime import datetime
 
-free_bp = Blueprint('free', __name__)
+platform_user_bp = Blueprint('platform_user', __name__)
 
 
 # ── Public: Course Catalog ────────────────────────────────────────────────────
 
-@free_bp.route('/courses', methods=['GET'])
+@platform_user_bp.route('/courses', methods=['GET'])
 def list_courses():
-    """Public — list all published free courses."""
+    """Public — list all published platform courses."""
     difficulty = request.args.get('difficulty')
     language   = request.args.get('language')
     tag        = request.args.get('tag')
 
-    q = FreeCourse.query.filter_by(is_published=True)
+    q = PlatformCourse.query.filter_by(is_published=True)
     if difficulty:
         q = q.filter_by(difficulty=difficulty)
     if language:
         q = q.filter_by(language=language)
 
-    courses = q.order_by(FreeCourse.order_index).all()
+    courses = q.order_by(PlatformCourse.order_index).all()
 
     if tag:
         courses = [c for c in courses if tag in (c.tags or [])]
@@ -39,12 +39,12 @@ def list_courses():
     return jsonify({'courses': [c.to_dict() for c in courses]}), 200
 
 
-@free_bp.route('/courses/<course_id>', methods=['GET'])
+@platform_user_bp.route('/courses/<course_id>', methods=['GET'])
 def get_course(course_id):
     """Public — course detail with enriched real exercise list and user progress."""
     # Accept slug or UUID
-    course = FreeCourse.query.filter(
-        (FreeCourse.id == course_id) | (FreeCourse.slug == course_id)
+    course = PlatformCourse.query.filter(
+        (PlatformCourse.id == course_id) | (PlatformCourse.slug == course_id)
     ).filter_by(is_published=True).first_or_404()
 
     exercises = course.exercises.filter_by(is_published=True).all()
@@ -73,7 +73,7 @@ def get_course(course_id):
     solved_ids = set()
     attempted_ids = set()
     if user_id:
-        progs = FreeProgress.query.filter_by(user_id=user_id, course_id=course.id).all()
+        progs = PlatformProgress.query.filter_by(user_id=user_id, course_id=course.id).all()
         for p in progs:
             if p.status == 'solved':
                 solved_ids.add(p.exercise_id)
@@ -114,9 +114,9 @@ def get_course(course_id):
         from sqlalchemy import func
         if user_id and solved_count > 0:
             per_user_xp = db.session.query(
-                FreeProgress.user_id.label('user_id'),
-                func.sum(FreeProgress.xp_earned).label('course_xp'),
-            ).filter_by(course_id=course.id, status='solved').group_by(FreeProgress.user_id).subquery()
+                PlatformProgress.user_id.label('user_id'),
+                func.sum(PlatformProgress.xp_earned).label('course_xp'),
+            ).filter_by(course_id=course.id, status='solved').group_by(PlatformProgress.user_id).subquery()
             better_count = db.session.query(func.count()).select_from(per_user_xp).filter(
                 per_user_xp.c.course_xp > earned_xp
             ).scalar() or 0
@@ -155,11 +155,11 @@ def get_course(course_id):
 
     exercise_ids = [e.id for e in exercises]
     solved_counts = dict(db.session.query(
-        FreeProgress.exercise_id, func.count(FreeProgress.id)
+        PlatformProgress.exercise_id, func.count(PlatformProgress.id)
     ).filter(
-        FreeProgress.exercise_id.in_(exercise_ids),
-        FreeProgress.status == 'solved',
-    ).group_by(FreeProgress.exercise_id).all()) if exercise_ids else {}
+        PlatformProgress.exercise_id.in_(exercise_ids),
+        PlatformProgress.status == 'solved',
+    ).group_by(PlatformProgress.exercise_id).all()) if exercise_ids else {}
 
     formatted_exercises = []
     for e in exercises:
@@ -186,10 +186,10 @@ def get_course(course_id):
     }), 200
 
 
-@free_bp.route('/exercises/<exercise_id>', methods=['GET'])
+@platform_user_bp.route('/exercises/<exercise_id>', methods=['GET'])
 def get_exercise(exercise_id):
     """Public — single exercise detail (hidden test cases excluded)."""
-    ex = FreeExercise.query.get_or_404(exercise_id)
+    ex = PlatformExercise.query.get_or_404(exercise_id)
     if not ex.is_published:
         return jsonify({'error': 'Exercise not available'}), 404
     return jsonify({'exercise': ex.to_dict()}), 200
@@ -221,14 +221,14 @@ def _run_case(lang_id, code, stdin):
     return result, None
 
 
-@free_bp.route('/exercises/<exercise_id>/run', methods=['POST'])
+@platform_user_bp.route('/exercises/<exercise_id>/run', methods=['POST'])
 @require_auth
 def run_exercise(exercise_id):
     """
     Run code against public test cases only (no hidden cases exposed).
     Each case executes in the Docker sandbox (fixed 5 s / 256 MB caps).
     """
-    ex = FreeExercise.query.get_or_404(exercise_id)
+    ex = PlatformExercise.query.get_or_404(exercise_id)
     data = request.get_json()
     code     = data.get('code', '')
     language = data.get('language', 'python')
@@ -284,14 +284,14 @@ def run_exercise(exercise_id):
 
 # ── Authenticated: Submit (save progress) ────────────────────────────────────
 
-@free_bp.route('/exercises/<exercise_id>/submit', methods=['POST'])
+@platform_user_bp.route('/exercises/<exercise_id>/submit', methods=['POST'])
 @require_auth
 def submit_exercise(exercise_id):
     """
     Run code against ALL test cases (including hidden), store progress.
     Returns per-test-case results with hidden test cases masked.
     """
-    ex = FreeExercise.query.get_or_404(exercise_id)
+    ex = PlatformExercise.query.get_or_404(exercise_id)
     data = request.get_json()
     code     = data.get('code', '')
     language = data.get('language', 'python')
@@ -344,12 +344,12 @@ def submit_exercise(exercise_id):
     solved = passed_count == len(all_cases)
 
     # Upsert progress
-    prog = FreeProgress.query.filter_by(
+    prog = PlatformProgress.query.filter_by(
         user_id=g.user_id, exercise_id=exercise_id
     ).first()
 
     if not prog:
-        prog = FreeProgress(
+        prog = PlatformProgress(
             user_id=g.user_id,
             exercise_id=exercise_id,
             course_id=ex.course_id,
@@ -403,11 +403,11 @@ def submit_exercise(exercise_id):
 
 # ── Authenticated: MCQ Submit ─────────────────────────────────────────────────
 
-@free_bp.route('/exercises/<exercise_id>/answer', methods=['POST'])
+@platform_user_bp.route('/exercises/<exercise_id>/answer', methods=['POST'])
 @require_auth
 def submit_mcq(exercise_id):
     """Submit MCQ answer — reveals correct answer + explanation."""
-    ex = FreeExercise.query.get_or_404(exercise_id)
+    ex = PlatformExercise.query.get_or_404(exercise_id)
     if ex.exercise_type != 'mcq':
         return jsonify({'error': 'Not an MCQ exercise'}), 400
 
@@ -415,11 +415,11 @@ def submit_mcq(exercise_id):
     correct = answer == (ex.mcq_answer or '').upper()
 
     # Save progress
-    prog = FreeProgress.query.filter_by(
+    prog = PlatformProgress.query.filter_by(
         user_id=g.user_id, exercise_id=exercise_id
     ).first()
     if not prog:
-        prog = FreeProgress(user_id=g.user_id, exercise_id=exercise_id, course_id=ex.course_id)
+        prog = PlatformProgress(user_id=g.user_id, exercise_id=exercise_id, course_id=ex.course_id)
         db.session.add(prog)
 
     prog.attempts    = (prog.attempts or 0) + 1
@@ -457,19 +457,19 @@ def submit_mcq(exercise_id):
 
 # ── Authenticated: My Progress ────────────────────────────────────────────────
 
-@free_bp.route('/exercises/<exercise_id>/complete', methods=['POST'])
+@platform_user_bp.route('/exercises/<exercise_id>/complete', methods=['POST'])
 @require_auth
 def complete_simulation(exercise_id):
     """Mark a simulation experiment or reading module as completed — awards XP once."""
-    ex = FreeExercise.query.get_or_404(exercise_id)
+    ex = PlatformExercise.query.get_or_404(exercise_id)
     if ex.exercise_type not in ('simulation', 'reading'):
         return jsonify({'error': 'Not a simulation or reading exercise'}), 400
 
-    prog = FreeProgress.query.filter_by(
+    prog = PlatformProgress.query.filter_by(
         user_id=g.user_id, exercise_id=exercise_id
     ).first()
     if not prog:
-        prog = FreeProgress(user_id=g.user_id, exercise_id=exercise_id,
+        prog = PlatformProgress(user_id=g.user_id, exercise_id=exercise_id,
                             course_id=ex.course_id)
         db.session.add(prog)
 
@@ -505,12 +505,12 @@ def complete_simulation(exercise_id):
     }), 200
 
 
-@free_bp.route('/progress', methods=['GET'])
+@platform_user_bp.route('/progress', methods=['GET'])
 @require_auth
 def my_progress():
-    """Get current user's progress across all free courses, incorporating StudentXP and Practice solves."""
+    """Get current user's progress across all platform courses, incorporating StudentXP and Practice solves."""
     from app.models.practice import StudentXP, PracticeSubmission
-    records = FreeProgress.query.filter_by(user_id=g.user_id).all()
+    records = PlatformProgress.query.filter_by(user_id=g.user_id).all()
 
     # Group by course
     by_course = {}
@@ -525,8 +525,8 @@ def my_progress():
             by_course[cid]['attempted'] += 1
 
     xp = StudentXP.query.filter_by(student_id=g.user_id).first()
-    ex_map = {e.id: e.title for e in FreeExercise.query.filter(
-        FreeExercise.id.in_([r.exercise_id for r in records])
+    ex_map = {e.id: e.title for e in PlatformExercise.query.filter(
+        PlatformExercise.id.in_([r.exercise_id for r in records])
     ).all()} if records else {}
 
     practice_solved = db.session.query(PracticeSubmission.problem_id).filter_by(
@@ -544,14 +544,14 @@ def my_progress():
     }), 200
 
 
-@free_bp.route('/courses/<course_id>/certificate', methods=['GET'])
+@platform_user_bp.route('/courses/<course_id>/certificate', methods=['GET'])
 @require_auth
 def course_certificate(course_id):
-    """Download verified certificate for a completed free course or study plan."""
+    """Download verified certificate for a completed platform course or study plan."""
     import pathlib
     from app.models.user import User as _User
 
-    course = FreeCourse.query.filter((FreeCourse.id == course_id) | (FreeCourse.slug == course_id)).first()
+    course = PlatformCourse.query.filter((PlatformCourse.id == course_id) | (PlatformCourse.slug == course_id)).first()
     if not course:
         # Check if it's a study plan
         from app.models.practice import StudyPlan, StudyPlanProgress
@@ -570,11 +570,11 @@ def course_certificate(course_id):
         return jsonify({'error': 'Course not found.'}), 404
 
     # Check that user solved all exercises in this course
-    total_exercises = FreeExercise.query.filter_by(course_id=course.id).count()
+    total_exercises = PlatformExercise.query.filter_by(course_id=course.id).count()
     if total_exercises == 0:
         return jsonify({'error': 'Course has no exercises.'}), 400
 
-    solved_count = FreeProgress.query.filter_by(
+    solved_count = PlatformProgress.query.filter_by(
         user_id=g.user_id, course_id=course.id, status='solved'
     ).count()
 
@@ -624,11 +624,21 @@ def course_certificate(course_id):
             'enable-local-file-access': '',
         })
         path.write_bytes(pdf_bytes)
+        try:
+            from app.services.storage import store_file
+            store_file(str(path), f'certificates/{path.name}')
+        except Exception:
+            pass
     except Exception:
         try:
             from app.services.pdf_service import _render_pdf
             pdf_bytes = _render_pdf(html)
             path.write_bytes(pdf_bytes)
+            try:
+                from app.services.storage import store_file
+                store_file(str(path), f'certificates/{path.name}')
+            except Exception:
+                pass
         except Exception:
             html_path = out_dir / f'course_{course.slug}_{g.user_id[:8]}.html'
             html_path.write_text(html, encoding='utf-8')
@@ -637,11 +647,11 @@ def course_certificate(course_id):
     return send_file(path, as_attachment=True, download_name=f'nexlab_certificate_{course.slug}.pdf')
 
 
-@free_bp.route('/progress/<course_id>', methods=['GET'])
+@platform_user_bp.route('/progress/<course_id>', methods=['GET'])
 @require_auth
 def course_progress(course_id):
     """Progress for a specific course — which exercises solved/attempted."""
-    records = FreeProgress.query.filter_by(
+    records = PlatformProgress.query.filter_by(
         user_id=g.user_id, course_id=course_id
     ).all()
     solved_ids = {r.exercise_id for r in records if r.status == 'solved'}
@@ -653,16 +663,16 @@ def course_progress(course_id):
 
 # ── Public: Leaderboard ───────────────────────────────────────────────────────
 
-@free_bp.route('/leaderboard/<course_id>', methods=['GET'])
+@platform_user_bp.route('/leaderboard/<course_id>', methods=['GET'])
 def leaderboard(course_id):
     """Top users by XP earned in a course."""
     from sqlalchemy import func
     rows = db.session.query(
-        FreeProgress.user_id,
-        func.sum(FreeProgress.xp_earned).label('total_xp'),
-        func.count(FreeProgress.id).label('solved'),
+        PlatformProgress.user_id,
+        func.sum(PlatformProgress.xp_earned).label('total_xp'),
+        func.count(PlatformProgress.id).label('solved'),
     ).filter_by(course_id=course_id, status='solved').group_by(
-        FreeProgress.user_id
+        PlatformProgress.user_id
     ).order_by(db.text('total_xp DESC')).limit(20).all()
 
     user_ids = [r[0] for r in rows]
@@ -675,20 +685,20 @@ def leaderboard(course_id):
     ]}), 200
 
 
-# ── Platform Admin: Manage Free Courses ──────────────────────────────────────
+# ── Platform Admin: Manage Platform Courses ──────────────────────────────────────
 
-@free_bp.route('/admin/courses', methods=['POST'])
+@platform_user_bp.route('/admin/courses', methods=['POST'])
 @require_role('platform_admin')
 def create_course():
-    """Platform admin creates a free course."""
+    """Platform admin creates a platform course."""
     data = request.get_json()
     if not data.get('title') or not data.get('slug'):
         return jsonify({'error': 'title and slug required'}), 400
 
-    if FreeCourse.query.filter_by(slug=data['slug']).first():
+    if PlatformCourse.query.filter_by(slug=data['slug']).first():
         return jsonify({'error': 'Slug already exists'}), 409
 
-    course = FreeCourse(
+    course = PlatformCourse(
         slug=data['slug'],
         title=data['title'],
         description=data.get('description'),
@@ -703,14 +713,14 @@ def create_course():
     return jsonify({'course': course.to_dict()}), 201
 
 
-@free_bp.route('/admin/courses/<course_id>/exercises', methods=['POST'])
+@platform_user_bp.route('/admin/courses/<course_id>/exercises', methods=['POST'])
 @require_role('platform_admin')
 def create_exercise(course_id):
-    """Add an exercise to a free course."""
-    course = FreeCourse.query.get_or_404(course_id)
+    """Add an exercise to a platform course."""
+    course = PlatformCourse.query.get_or_404(course_id)
     data = request.get_json()
 
-    ex = FreeExercise(
+    ex = PlatformExercise(
         course_id=course.id,
         title=data['title'],
         description=data.get('description'),
@@ -734,11 +744,11 @@ def create_exercise(course_id):
     return jsonify({'exercise': ex.to_dict(include_answer=True)}), 201
 
 
-@free_bp.route('/admin/courses/<course_id>/publish', methods=['POST'])
+@platform_user_bp.route('/admin/courses/<course_id>/publish', methods=['POST'])
 @require_role('platform_admin')
 def publish_course(course_id):
-    """Publish or unpublish a free course."""
-    course = FreeCourse.query.get_or_404(course_id)
+    """Publish or unpublish a platform course."""
+    course = PlatformCourse.query.get_or_404(course_id)
     published = request.get_json().get('published', True)
     course.is_published = published
     db.session.commit()

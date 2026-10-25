@@ -44,14 +44,14 @@ def compute_student_platform_rating(student_id: str, commit: bool = True) -> Dic
         if sub.problem_id not in first_solves:
             first_solves[sub.problem_id] = sub
 
-    # 3. Fetch all solved course exercises from FreeProgress (Track 2 unified)
-    from app.models.free import FreeProgress, FreeExercise
+    # 3. Fetch all solved course exercises from PlatformProgress (Track 2 unified)
+    from app.models.platform_content import PlatformProgress, PlatformExercise
     course_solves = (
-        db.session.query(FreeProgress, FreeExercise)
-        .join(FreeExercise, FreeProgress.exercise_id == FreeExercise.id)
+        db.session.query(PlatformProgress, PlatformExercise)
+        .join(PlatformExercise, PlatformProgress.exercise_id == PlatformExercise.id)
         .filter(
-            FreeProgress.user_id == student_id,
-            FreeProgress.status == 'solved',
+            PlatformProgress.user_id == student_id,
+            PlatformProgress.status == 'solved',
         )
         .all()
     )

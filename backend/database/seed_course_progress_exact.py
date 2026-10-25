@@ -6,7 +6,7 @@ import random
 from app import create_app
 from app.extensions import db
 from app.models.user import User
-from app.models.free import FreeCourse, FreeExercise, FreeProgress
+from app.models.platform_content import PlatformCourse, PlatformExercise, PlatformProgress
 from app.models.practice import StudentXP, StudentBadge
 from app.platform_rank.rating import compute_student_platform_rating, update_all_platform_ranks
 
@@ -231,9 +231,9 @@ with app.app_context():
 
     # 1. Ensure all courses exist with correct exercise counts and metadata
     for item in TARGET_COURSES:
-        course = FreeCourse.query.filter_by(slug=item['slug']).first()
+        course = PlatformCourse.query.filter_by(slug=item['slug']).first()
         if not course:
-            course = FreeCourse(slug=item['slug'], title=item['title'], is_published=True)
+            course = PlatformCourse(slug=item['slug'], title=item['title'], is_published=True)
             db.session.add(course)
             db.session.flush()
 
@@ -246,12 +246,12 @@ with app.app_context():
         course.is_published = True
 
         # Ensure correct exercise count
-        current_exercises = FreeExercise.query.filter_by(course_id=course.id).order_by(FreeExercise.order_index).all()
+        current_exercises = PlatformExercise.query.filter_by(course_id=course.id).order_by(PlatformExercise.order_index).all()
         target_count = item['exercise_count']
         
         if len(current_exercises) < target_count:
             for idx in range(len(current_exercises) + 1, target_count + 1):
-                ex = FreeExercise(
+                ex = PlatformExercise(
                     course_id=course.id,
                     title=f"{item['title']} — Exercise {idx}",
                     description=f"Interactive coding and concepts practice for {item['title']}.",
@@ -268,16 +268,16 @@ with app.app_context():
             db.session.flush()
 
         # Re-fetch exercises
-        exercises = FreeExercise.query.filter_by(course_id=course.id).order_by(FreeExercise.order_index).all()
+        exercises = PlatformExercise.query.filter_by(course_id=course.id).order_by(PlatformExercise.order_index).all()
 
         # Update solved progress for free learner
         solved_count = item['solved_count']
         now = datetime.utcnow()
         for i, ex in enumerate(exercises):
-            prog = FreeProgress.query.filter_by(user_id=user.id, exercise_id=ex.id).first()
+            prog = PlatformProgress.query.filter_by(user_id=user.id, exercise_id=ex.id).first()
             if i < solved_count:
                 if not prog:
-                    prog = FreeProgress(
+                    prog = PlatformProgress(
                         user_id=user.id,
                         course_id=course.id,
                         exercise_id=ex.id,
@@ -296,7 +296,7 @@ with app.app_context():
     db.session.commit()
 
     # Re-compute course stats
-    from app.free_analytics.course_stats import get_user_course_analytics
+    from app.platform_user_analytics.course_stats import get_user_course_analytics
     stats = get_user_course_analytics(user.id)
     print("\n--- NEW COMPUTED COURSE STATS ---")
     print(f"Total Courses: {stats['total_courses']}")

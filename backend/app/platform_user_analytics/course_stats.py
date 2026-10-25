@@ -1,5 +1,5 @@
 """
-Free User Course Statistics & Certificate Eligibility Engine
+Platform User Course Statistics & Certificate Eligibility Engine
 Computes per-course completion %, exercises solved/total, XP earned,
 and certificate eligibility (100% completion) across the curated catalog.
 """
@@ -8,7 +8,7 @@ from typing import Dict, Any, List, Optional
 from collections import defaultdict
 
 from app.extensions import db
-from app.models.free import FreeCourse, FreeExercise, FreeProgress
+from app.models.platform_content import PlatformCourse, PlatformExercise, PlatformProgress
 
 
 def get_user_course_analytics(user_id: str) -> Dict[str, Any]:
@@ -17,10 +17,10 @@ def get_user_course_analytics(user_id: str) -> Dict[str, Any]:
     for a free / self-signup user across all published courses.
     """
     # 1. Fetch all published courses ordered by order_index
-    courses = FreeCourse.query.filter_by(is_published=True).order_by(FreeCourse.order_index.asc()).all()
+    courses = PlatformCourse.query.filter_by(is_published=True).order_by(PlatformCourse.order_index.asc()).all()
 
     # 2. Fetch all progress records for this user
-    progress_records = FreeProgress.query.filter_by(user_id=user_id).all()
+    progress_records = PlatformProgress.query.filter_by(user_id=user_id).all()
     prog_by_course = defaultdict(list)
     for p in progress_records:
         prog_by_course[p.course_id].append(p)
@@ -74,7 +74,7 @@ def get_user_course_analytics(user_id: str) -> Dict[str, Any]:
                 'course_slug': course.slug,
                 'completed_at': completed_at,
                 'verification_slug': f"cert-{cert_id.lower()}",
-                'download_url': f"/api/free/courses/{course.id}/certificate",
+                'download_url': f"/api/platform-user/courses/{course.id}/certificate",
                 'type': 'course',
             })
         else:

@@ -1,7 +1,7 @@
 """
-Free User Analytics Routes & Platform Track Surface
-Prefix: /api/free/analytics
-Accessible by free users (and all platform participants).
+Platform User Analytics Routes & Platform Track Surface
+Prefix: /api/platform-user/analytics
+Accessible by platform users (and all platform participants).
 
 Endpoints:
   GET   /overview           -> The One Profile Call (Standing + Difficulty Mix + Topics + Unlocks + Heatmap + Courses + Highlights)
@@ -32,14 +32,14 @@ from app.platform_rank.rating import (
 from app.platform_rank.leaderboard import get_platform_leaderboard
 from app.platform_rank.practice_mastery import get_practice_topic_mastery
 from app.platform_rank.unlock import check_content_unlocks
-from app.free_analytics.course_stats import get_user_course_analytics
-from app.free_analytics.activity import (
-    get_free_user_activity,
-    get_free_user_accuracy_and_bests,
-    get_free_user_recommendations,
+from app.platform_user_analytics.course_stats import get_user_course_analytics
+from app.platform_user_analytics.activity import (
+    get_platform_user_activity,
+    get_platform_user_accuracy_and_bests,
+    get_platform_user_recommendations,
 )
 
-free_analytics_bp = Blueprint('free_analytics', __name__)
+platform_user_analytics_bp = Blueprint('platform_user_analytics', __name__)
 
 
 def _ensure_user_xp(user_id: str) -> StudentXP:
@@ -69,11 +69,11 @@ def _slugify_name(name: str, fallback: str) -> str:
 # 1. THE ONE PROFILE CALL (Overview)
 # ══════════════════════════════════════════════════════════════════════════════
 
-@free_analytics_bp.route('/overview', methods=['GET'])
+@platform_user_analytics_bp.route('/overview', methods=['GET'])
 @require_auth
 def free_analytics_overview():
     """
-    Unified Profile payload for the Free User Analytics Hub:
+    Unified Profile payload for the Platform User Analytics Hub:
     Standing + Difficulty Mix + Topic Strength + Unlocks + Heatmap + Courses + Highlights.
     """
     user_id = g.user_id
@@ -82,10 +82,10 @@ def free_analytics_overview():
     standing = get_student_platform_standing(user_id)
 
     # 2. Activity Heatmap & Trends (last 365 days) — computed once and shared
-    activity = get_free_user_activity(user_id, days=365)
+    activity = get_platform_user_activity(user_id, days=365)
 
     # 3. Accuracy & Difficulty Mix
-    accuracy_data = get_free_user_accuracy_and_bests(user_id, precomputed_activity=activity)
+    accuracy_data = get_platform_user_accuracy_and_bests(user_id, precomputed_activity=activity)
     difficulty_mix = accuracy_data['difficulty_mix']
 
     # 4. Topic Strength
@@ -142,7 +142,7 @@ def free_analytics_overview():
 # 2. STANDING & RATING
 # ══════════════════════════════════════════════════════════════════════════════
 
-@free_analytics_bp.route('/standing', methods=['GET'])
+@platform_user_analytics_bp.route('/standing', methods=['GET'])
 @require_auth
 def get_standing():
     """
@@ -157,7 +157,7 @@ def get_standing():
 # 3. ACTIVITY HEATMAP & TRENDS
 # ══════════════════════════════════════════════════════════════════════════════
 
-@free_analytics_bp.route('/activity', methods=['GET'])
+@platform_user_analytics_bp.route('/activity', methods=['GET'])
 @require_auth
 def get_activity():
     """
@@ -170,7 +170,7 @@ def get_activity():
     except (ValueError, TypeError):
         days = 365
 
-    data = get_free_user_activity(g.user_id, days=days)
+    data = get_platform_user_activity(g.user_id, days=days)
     return jsonify(data), 200
 
 
@@ -178,14 +178,14 @@ def get_activity():
 # 4. ACCURACY & PERSONAL BESTS
 # ══════════════════════════════════════════════════════════════════════════════
 
-@free_analytics_bp.route('/accuracy', methods=['GET'])
+@platform_user_analytics_bp.route('/accuracy', methods=['GET'])
 @require_auth
 def get_accuracy():
     """
     Comprehensive accuracy stats:
     Acceptance rate, first-attempt solve rate, average attempts to solve, and personal records.
     """
-    data = get_free_user_accuracy_and_bests(g.user_id)
+    data = get_platform_user_accuracy_and_bests(g.user_id)
     return jsonify(data), 200
 
 
@@ -193,7 +193,7 @@ def get_accuracy():
 # 5. COURSE ROLLUPS & CERTIFICATES
 # ══════════════════════════════════════════════════════════════════════════════
 
-@free_analytics_bp.route('/courses', methods=['GET'])
+@platform_user_analytics_bp.route('/courses', methods=['GET'])
 @require_auth
 def get_courses():
     """
@@ -207,7 +207,7 @@ def get_courses():
 # 6. TOPIC MASTERY STRENGTH
 # ══════════════════════════════════════════════════════════════════════════════
 
-@free_analytics_bp.route('/topic-strength', methods=['GET'])
+@platform_user_analytics_bp.route('/topic-strength', methods=['GET'])
 @require_auth
 def get_topic_strength():
     """
@@ -222,7 +222,7 @@ def get_topic_strength():
 # 7. CONTENT UNLOCKS & PROGRESSION
 # ══════════════════════════════════════════════════════════════════════════════
 
-@free_analytics_bp.route('/unlocks', methods=['GET'])
+@platform_user_analytics_bp.route('/unlocks', methods=['GET'])
 @require_auth
 def get_unlocks():
     """
@@ -236,7 +236,7 @@ def get_unlocks():
 # 8. PLATFORM LEADERBOARDS
 # ══════════════════════════════════════════════════════════════════════════════
 
-@free_analytics_bp.route('/leaderboard', methods=['GET'])
+@platform_user_analytics_bp.route('/leaderboard', methods=['GET'])
 @require_auth
 def get_leaderboard():
     """
@@ -270,7 +270,7 @@ def get_leaderboard():
 # 9. TARGETED RECOMMENDATIONS
 # ══════════════════════════════════════════════════════════════════════════════
 
-@free_analytics_bp.route('/recommendations', methods=['GET'])
+@platform_user_analytics_bp.route('/recommendations', methods=['GET'])
 @require_auth
 def get_recommendations():
     """
@@ -283,7 +283,7 @@ def get_recommendations():
     except (ValueError, TypeError):
         limit = 5
 
-    picks = get_free_user_recommendations(g.user_id, limit=limit)
+    picks = get_platform_user_recommendations(g.user_id, limit=limit)
     return jsonify({'recommendations': picks}), 200
 
 
@@ -291,7 +291,7 @@ def get_recommendations():
 # 10. PUBLIC SHOWCASE PROFILE (Fixed & Upgraded)
 # ══════════════════════════════════════════════════════════════════════════════
 
-@free_analytics_bp.route('/showcase/<slug>', methods=['GET'])
+@platform_user_analytics_bp.route('/showcase/<slug>', methods=['GET'])
 def get_public_showcase(slug):
     """
     Public achievement showcase portfolio — NO AUTH REQUIRED.
@@ -373,7 +373,7 @@ def get_public_showcase(slug):
     }), 200
 
 
-@free_analytics_bp.route('/showcase/me', methods=['GET'])
+@platform_user_analytics_bp.route('/showcase/me', methods=['GET'])
 @require_auth
 def get_my_showcase():
     """Returns current user's showcase configuration and public URL."""
@@ -385,7 +385,7 @@ def get_my_showcase():
     }), 200
 
 
-@free_analytics_bp.route('/showcase', methods=['PATCH'])
+@platform_user_analytics_bp.route('/showcase', methods=['PATCH'])
 @require_auth
 def toggle_showcase():
     """
@@ -412,7 +412,7 @@ def toggle_showcase():
     }), 200
 
 
-@free_analytics_bp.route('/submissions', methods=['GET'])
+@platform_user_analytics_bp.route('/submissions', methods=['GET'])
 @require_auth
 def get_user_submissions():
     """

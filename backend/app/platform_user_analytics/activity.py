@@ -1,5 +1,5 @@
 """
-Free User Activity Heatmap, Accuracy & Personal Bests Engine
+Platform User Activity Heatmap, Accuracy & Personal Bests Engine
 Generates GitHub-style 365-day activity heatmaps, solve trajectories,
 XP growth trends, accuracy metrics (first-try rate, acceptance), and personal records.
 """
@@ -10,11 +10,11 @@ from sqlalchemy import func, desc
 
 from app.extensions import db
 from app.models.practice import Problem, PracticeSubmission, StudentXP, PlatformRating
-from app.models.free import FreeCourse, FreeExercise, FreeProgress
+from app.models.platform_content import PlatformCourse, PlatformExercise, PlatformProgress
 from app.platform_rank.practice_mastery import get_practice_topic_mastery
 
 
-def get_free_user_activity(user_id: str, days: int = 365) -> Dict[str, Any]:
+def get_platform_user_activity(user_id: str, days: int = 365) -> Dict[str, Any]:
     """
     Builds a GitHub-style activity calendar heatmap and solve/XP growth trends
     from practice submissions and course exercise activity.
@@ -38,10 +38,10 @@ def get_free_user_activity(user_id: str, days: int = 365) -> Dict[str, Any]:
 
     # 2. Fetch course progress records in the window
     course_progs = (
-        FreeProgress.query
+        PlatformProgress.query
         .filter(
-            FreeProgress.user_id == user_id,
-            (FreeProgress.solved_at >= start_dt) | (FreeProgress.created_at >= start_dt),
+            PlatformProgress.user_id == user_id,
+            (PlatformProgress.solved_at >= start_dt) | (PlatformProgress.created_at >= start_dt),
         )
         .all()
     )
@@ -175,7 +175,7 @@ def get_free_user_activity(user_id: str, days: int = 365) -> Dict[str, Any]:
     }
 
 
-def get_free_user_accuracy_and_bests(user_id: str, precomputed_activity: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+def get_platform_user_accuracy_and_bests(user_id: str, precomputed_activity: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
     """
     Computes accuracy metrics (acceptance rate, first-try rate, average attempts)
     and personal bests across both practice library and course exercises.
@@ -210,7 +210,7 @@ def get_free_user_accuracy_and_bests(user_id: str, precomputed_activity: Optiona
                 practice_first_try += 1
 
     # 2. Course exercises
-    course_progs = FreeProgress.query.filter_by(user_id=user_id).all()
+    course_progs = PlatformProgress.query.filter_by(user_id=user_id).all()
     total_course_attempts = sum(p.attempts or 1 for p in course_progs)
     course_solved = [p for p in course_progs if p.status == 'solved']
     distinct_course_solved = len(course_solved)
@@ -263,7 +263,7 @@ def get_free_user_accuracy_and_bests(user_id: str, precomputed_activity: Optiona
     # If no library problem solved, check course exercises
     if not hardest_problem and course_solved:
         ex_ids = [p.exercise_id for p in course_solved]
-        solved_exs = FreeExercise.query.filter(FreeExercise.id.in_(ex_ids)).all()
+        solved_exs = PlatformExercise.query.filter(PlatformExercise.id.in_(ex_ids)).all()
         rank_order = {'hard': 3, 'medium': 2, 'easy': 1}
         solved_exs.sort(key=lambda e: rank_order.get((e.difficulty or 'easy').lower(), 0), reverse=True)
         if solved_exs:
@@ -281,7 +281,7 @@ def get_free_user_accuracy_and_bests(user_id: str, precomputed_activity: Optiona
     longest_streak = xp_rec.streak_days if xp_rec else 0
 
     # Most active day (reuse precomputed_activity when provided to avoid duplicate scan)
-    act_data = precomputed_activity if precomputed_activity is not None else get_free_user_activity(user_id, days=180)
+    act_data = precomputed_activity if precomputed_activity is not None else get_platform_user_activity(user_id, days=180)
     most_active_day = {
         'date': act_data['summary']['most_active_date'],
         'count': act_data['summary']['max_daily_count'],
@@ -313,9 +313,9 @@ def get_free_user_accuracy_and_bests(user_id: str, precomputed_activity: Optiona
     }
 
 
-def get_free_user_recommendations(user_id: str, limit: int = 5) -> List[Dict[str, Any]]:
+def get_platform_user_recommendations(user_id: str, limit: int = 5) -> List[Dict[str, Any]]:
     """
-    Produces smart recommendations for free users:
+    Produces smart recommendations for platform users:
     - Prioritizes topics with lowest mastery/accuracy
     - Suggests problems at appropriate difficulty
     - Excludes already solved problems

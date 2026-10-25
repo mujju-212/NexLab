@@ -66,18 +66,18 @@ def get_platform_leaderboard(
             student_solved_counts[sid] = student_solved_counts.get(sid, 0) + 1
 
         # Also blend course exercises matching this topic tag
-        from app.models.free import FreeProgress, FreeExercise, FreeCourse
+        from app.models.platform_content import PlatformProgress, PlatformExercise, PlatformCourse
         free_course_solves = (
             db.session.query(
-                FreeProgress.user_id,
-                FreeExercise.id,
-                FreeExercise.difficulty,
-                FreeCourse.tags,
-                FreeCourse.title,
+                PlatformProgress.user_id,
+                PlatformExercise.id,
+                PlatformExercise.difficulty,
+                PlatformCourse.tags,
+                PlatformCourse.title,
             )
-            .join(FreeExercise, FreeProgress.exercise_id == FreeExercise.id)
-            .join(FreeCourse, FreeProgress.course_id == FreeCourse.id)
-            .filter(FreeProgress.status == 'solved')
+            .join(PlatformExercise, PlatformProgress.exercise_id == PlatformExercise.id)
+            .join(PlatformCourse, PlatformProgress.course_id == PlatformCourse.id)
+            .filter(PlatformProgress.status == 'solved')
             .all()
         )
         for uid, ex_id, ex_diff, tags, ctitle in free_course_solves:

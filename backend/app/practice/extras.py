@@ -3,7 +3,7 @@ Free-user enhancement endpoints (recommendations, bookmarks, collections,
 playground save/share, contests, public showcase, plan certificates, meter).
 
 Blueprint prefix: /api/practice  (same as the practice library — it serves
-the same audience: 'student' + 'free_user').
+the same audience: 'student' + 'platform_user').
 """
 import re
 from flask import Blueprint, request, jsonify, g, current_app
@@ -14,7 +14,7 @@ from app.models.practice import (
     Problem, PracticeTestCase, PracticeSubmission, StudyPlan, StudyPlanProgress,
     StudentXP, StudentBadge, BADGE_CATALOG, XP_TABLE,
 )
-from app.models.free_extra import (
+from app.models.practice_extras import (
     ProblemBookmark, PlaygroundSession, ProblemCollection,
     CollectionItem, CodingContest, ContestParticipant,
 )
@@ -58,7 +58,7 @@ def _difficulty_rank(d):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @extra_bp.route('/recommended', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def recommended_problems():
     """
     Pick 5 problems from topics where the user most recently failed,
@@ -158,7 +158,7 @@ def recommended_problems():
 # ══════════════════════════════════════════════════════════════════════════════
 
 @extra_bp.route('/bookmarks', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def list_bookmarks():
     rows = ProblemBookmark.query.filter_by(user_id=g.user_id).order_by(
         ProblemBookmark.created_at.desc()).limit(200).all()
@@ -166,7 +166,7 @@ def list_bookmarks():
 
 
 @extra_bp.route('/bookmarks/ids', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def bookmark_ids():
     """Lightweight starred-state map for the problem list."""
     rows = ProblemBookmark.query.filter_by(user_id=g.user_id).all()
@@ -174,7 +174,7 @@ def bookmark_ids():
 
 
 @extra_bp.route('/bookmarks', methods=['POST'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def toggle_bookmark():
     """
     Star/unstar a problem. Body: {problem_id, note?}
@@ -204,7 +204,7 @@ def toggle_bookmark():
 
 
 @extra_bp.route('/bookmarks/<bookmark_id>/note', methods=['PATCH'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def update_bookmark_note(bookmark_id):
     row = ProblemBookmark.query.filter_by(
         id=bookmark_id, user_id=g.user_id).first()
@@ -220,7 +220,7 @@ def update_bookmark_note(bookmark_id):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @extra_bp.route('/collections', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def list_collections():
     rows = ProblemCollection.query.filter_by(user_id=g.user_id).order_by(
         ProblemCollection.created_at.desc()).all()
@@ -236,7 +236,7 @@ def list_collections():
 
 
 @extra_bp.route('/collections', methods=['POST'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def create_collection():
     data = request.get_json() or {}
     title = (data.get('title') or '').strip()
@@ -255,7 +255,7 @@ def create_collection():
 
 
 @extra_bp.route('/collections/<coll_id>', methods=['DELETE'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def delete_collection(coll_id):
     row = ProblemCollection.query.filter_by(id=coll_id, user_id=g.user_id).first()
     if not row:
@@ -267,7 +267,7 @@ def delete_collection(coll_id):
 
 
 @extra_bp.route('/collections/<coll_id>/items', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def list_collection_items(coll_id):
     row = ProblemCollection.query.filter_by(id=coll_id, user_id=g.user_id).first()
     if not row:
@@ -279,7 +279,7 @@ def list_collection_items(coll_id):
 
 
 @extra_bp.route('/collections/<coll_id>/items', methods=['POST'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def add_collection_item(coll_id):
     coll = ProblemCollection.query.filter_by(id=coll_id, user_id=g.user_id).first()
     if not coll:
@@ -306,7 +306,7 @@ def add_collection_item(coll_id):
 
 
 @extra_bp.route('/collections/<coll_id>/items/<item_id>', methods=['DELETE'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def remove_collection_item(coll_id, item_id):
     row = ProblemCollection.query.filter_by(id=coll_id, user_id=g.user_id).first()
     if not row:
@@ -324,7 +324,7 @@ def remove_collection_item(coll_id, item_id):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @extra_bp.route('/playground/sessions', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def list_playground_sessions():
     rows = PlaygroundSession.query.filter_by(user_id=g.user_id).order_by(
         PlaygroundSession.updated_at.desc()).limit(50).all()
@@ -332,7 +332,7 @@ def list_playground_sessions():
 
 
 @extra_bp.route('/playground/sessions', methods=['POST'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def save_playground_session():
     """Save (or update) a playground session. Body: {id?, title, language, code, stdin_data?}"""
     data = request.get_json() or {}
@@ -364,7 +364,7 @@ def save_playground_session():
 
 
 @extra_bp.route('/playground/sessions/<row_id>', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def get_playground_session(row_id):
     row = PlaygroundSession.query.filter_by(id=row_id, user_id=g.user_id).first()
     if not row:
@@ -373,7 +373,7 @@ def get_playground_session(row_id):
 
 
 @extra_bp.route('/playground/sessions/<row_id>', methods=['DELETE'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def delete_playground_session(row_id):
     row = PlaygroundSession.query.filter_by(id=row_id, user_id=g.user_id).first()
     if not row:
@@ -384,7 +384,7 @@ def delete_playground_session(row_id):
 
 
 @extra_bp.route('/playground/sessions/<row_id>/share', methods=['POST'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def share_playground_session(row_id):
     """Publish a session — generates a public read-only share slug."""
     row = PlaygroundSession.query.filter_by(id=row_id, user_id=g.user_id).first()
@@ -399,7 +399,7 @@ def share_playground_session(row_id):
 
 
 @extra_bp.route('/playground/sessions/<row_id>/share', methods=['DELETE'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def unshare_playground_session(row_id):
     row = PlaygroundSession.query.filter_by(id=row_id, user_id=g.user_id).first()
     if not row:
@@ -433,7 +433,7 @@ def get_shared_playground(share_slug):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @extra_bp.route('/showcase', methods=['PATCH'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def toggle_showcase():
     """
     Opt in/out of the public profile. Body: {profile_public: bool}
@@ -454,7 +454,7 @@ def toggle_showcase():
 
 
 @extra_bp.route('/showcase/me', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def my_showcase():
     xp = _ensure_xp()
     return jsonify({
@@ -511,12 +511,12 @@ def public_showcase(slug):
 # ══════════════════════════════════════════════════════════════════════════════
 
 @extra_bp.route('/meter', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def ai_meter():
     """Today's AI usage vs the free-tier limit (PlatformConfig)."""
     from sqlalchemy import func
     from app.models.ai_usage import AIUsageLog
-    limit = int(PlatformConfig.get('free_user_daily_ai_calls', 10))
+    limit = int(PlatformConfig.get('platform_user_daily_ai_calls', 10))
     day_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
     used = db.session.query(func.count(AIUsageLog.id)).filter(
         AIUsageLog.user_id == g.user_id,
@@ -534,7 +534,7 @@ def ai_meter():
 # ══════════════════════════════════════════════════════════════════════════════
 
 @extra_bp.route('/contests', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def list_contests():
     rows = CodingContest.query.order_by(CodingContest.starts_at.desc()).limit(50).all()
     now = datetime.utcnow()
@@ -552,7 +552,7 @@ def list_contests():
 
 
 @extra_bp.route('/contests/<contest_id>', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def contest_detail(contest_id):
     c = CodingContest.query.get(contest_id)
     if not c:
@@ -583,7 +583,7 @@ def contest_detail(contest_id):
 
 
 @extra_bp.route('/contests/<contest_id>/join', methods=['POST'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def join_contest(contest_id):
     c = CodingContest.query.get(contest_id)
     if not c:
@@ -603,7 +603,7 @@ def join_contest(contest_id):
 
 
 @extra_bp.route('/contests/<contest_id>/leaderboard', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def contest_leaderboard(contest_id):
     """
     Computed live from accepted submissions of the contest's problems inside
