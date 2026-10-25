@@ -7,6 +7,6 @@ import { useRouter } from 'next/navigation';
 // years/departments/batches/sections/subjects in their portal.
 export default function AcademicYearsRedirect() {
   const router = useRouter();
-  useEffect(() => { router.replace('/admin/institutions'); }, [router]);
+  useEffect(() => { router.replace('/admin/academic'); }, [router]);
   return null;
 }

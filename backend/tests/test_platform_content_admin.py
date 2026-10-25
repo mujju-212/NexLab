@@ -523,7 +523,15 @@ def test_user_role_and_tenant_change_requires_distinct_platform_admins(admin_cli
         )
         db.session.add_all([target, reviewer])
         db.session.commit()
-        target_id, destination_id, reviewer_id = target.id, destination.id, reviewer.id
+        reject_target = User(
+            id=str(uuid.uuid4()), email=f"reject-{uuid.uuid4().hex[:8]}@example.invalid",
+            password_hash="test-only", full_name="Temporary Reject Target", role="student",
+            institution_id=source.id, is_active=True,
+        )
+        db.session.add(reject_target)
+        db.session.commit()
+        target_id, reject_target_id = target.id, reject_target.id
+        source_id, destination_id, reviewer_id = source.id, destination.id, reviewer.id
 
     created = admin_client.post("/api/admin/user-change-requests", json={
         "user_id": target_id, "to_role": "instructor", "to_institution_id": destination_id,
@@ -555,7 +563,21 @@ def test_user_role_and_tenant_change_requires_distinct_platform_admins(admin_cli
     assert approved.get_json()["request"]["status"] == "approved"
     assert reviewer_client.post(f"/api/admin/user-change-requests/{request_id}/approve", json={}).status_code == 409
 
+    rejected_request = admin_client.post("/api/admin/user-change-requests", json={
+        "user_id": reject_target_id, "to_role": "instructor", "to_institution_id": destination_id,
+        "reason": "Reject this test request to validate the negative decision path.",
+    })
+    assert rejected_request.status_code == 201, rejected_request.get_json()
+    rejected_id = rejected_request.get_json()["request"]["id"]
+    rejected = reviewer_client.post(f"/api/admin/user-change-requests/{rejected_id}/reject", json={"review_note": "Not approved for this test."})
+    assert rejected.status_code == 200, rejected.get_json()
+    assert rejected.get_json()["request"]["status"] == "rejected"
+
     with app.app_context():
+        unchanged = db.session.get(User, reject_target_id)
+        assert unchanged.role == "student"
+        assert unchanged.institution_id == source_id
+        assert AuditLog.query.filter_by(action="admin.user.change_request.reject", target_id=reject_target_id).count() == 1
         moved = db.session.get(User, target_id)
         assert moved.role == "instructor"
         assert moved.institution_id == destination_id
