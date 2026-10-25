@@ -3,9 +3,19 @@ version: '3.8'
 services:
 
   # ── PostgreSQL Database ────────────────────────────────────────────────────
+  # pgvector build of postgres 15 — required for ai_document_chunks.embedding
+  # (pgvector.sqlalchemy Vector(768)); the plain postgres image lacks the
+  # `vector` extension and semantic search would silently break.
   postgres:
-    image: postgres:15-alpine
+    image: pgvector/pgvector:pg15
     container_name: vlab_postgres
+    # Memory tuning sized for a ~24GB host that shares RAM with judge0
+    # sandboxes and redis (details in docker-compose.app.yml).
+    command: >
+      postgres -c shared_buffers=2GB
+               -c effective_cache_size=8GB
+               -c work_mem=16MB
+               -c maintenance_work_mem=256MB
     environment:
       POSTGRES_DB: virtuallab
       POSTGRES_USER: postgres

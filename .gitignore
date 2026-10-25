@@ -52,6 +52,7 @@ backend/docker/redis_data/
 # ── Runtime output directories ──────────────────────────────────────────
 backend/app/reports_out/
 backend/uploads/
+backend/certificates/*.pdf
 backend/.pip_cache/
 *.zip
 

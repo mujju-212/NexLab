@@ -3,6 +3,7 @@ FROM python:3.12-slim
 # Pre-install common science and lab packages so execution is sub-second without runtime downloads
 RUN pip install --no-cache-dir \
     matplotlib \
+    sympy \
     numpy \
     pandas \
     scipy \

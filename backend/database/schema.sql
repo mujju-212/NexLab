@@ -1,16 +1,17 @@
 -- =============================================================================
 -- NexLab Virtual Lab Platform — Complete PostgreSQL Database Schema
 -- Database: virtuallab (PostgreSQL 15+)
--- Contains all 99 tables, constraints, foreign keys, and performance indexes.
+-- Contains all tables, constraints, foreign keys, and performance indexes.
 -- =============================================================================
 
 --
 -- PostgreSQL database dump
 --
 
+\restrict FXMvcRw9b7NzLR1IGZv8kEW3M9f42vxgaydAWq4X4VbqhHkZBLHEU6xnsEgngBS
 
--- Dumped from database version 15.18 (Debian 15.18-1.pgdg13+1)
--- Dumped by pg_dump version 15.18 (Debian 15.18-1.pgdg13+1)
+-- Dumped from database version 15.19 (Debian 15.19-1.pgdg12+2)
+-- Dumped by pg_dump version 15.19 (Debian 15.19-1.pgdg12+2)
 
 SET statement_timeout = 0;
 SET lock_timeout = 0;
@@ -35,6 +36,20 @@ CREATE EXTENSION IF NOT EXISTS pg_trgm WITH SCHEMA public;
 --
 
 COMMENT ON EXTENSION pg_trgm IS 'text similarity measurement and index searching based on trigrams';
+
+
+--
+-- Name: vector; Type: EXTENSION; Schema: -; Owner: -
+--
+
+CREATE EXTENSION IF NOT EXISTS vector WITH SCHEMA public;
+
+
+--
+-- Name: EXTENSION vector; Type: COMMENT; Schema: -; Owner: -
+--
+
+COMMENT ON EXTENSION vector IS 'vector data type and ivfflat and hnsw access methods';
 
 
 SET default_tablespace = '';
@@ -99,14 +114,33 @@ CREATE TABLE public.admin_chat_sessions (
 
 CREATE TABLE public.ai_agent_run (
     id character varying(36) NOT NULL,
-    institution_id character varying(36),
-    user_id character varying(36),
+    institution_id character varying(36) NOT NULL,
+    user_id character varying(36) NOT NULL,
     prompt text,
     tool_calls text,
     result text,
     total_tokens integer,
     status character varying(20) DEFAULT 'pending'::character varying,
-    created_at timestamp without time zone NOT NULL
+    created_at timestamp without time zone
+);
+
+
+--
+-- Name: ai_document_chunks; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ai_document_chunks (
+    id character varying(36) NOT NULL,
+    document_id character varying(36) NOT NULL,
+    institution_id character varying(36),
+    scope_type character varying(30),
+    scope_id character varying(36),
+    chunk_index integer,
+    chunk_id character varying(255) NOT NULL,
+    text text NOT NULL,
+    page integer,
+    embedding public.vector(768),
+    created_at timestamp without time zone
 );
 
 
@@ -153,6 +187,22 @@ CREATE TABLE public.ai_generated_documents (
 
 
 --
+-- Name: ai_learner_memory; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.ai_learner_memory (
+    id character varying(36) NOT NULL,
+    user_id character varying(36) NOT NULL,
+    goal text,
+    preferred_language character varying(30),
+    tutor_notes text,
+    snapshot text,
+    snapshot_at timestamp without time zone,
+    updated_at timestamp without time zone DEFAULT now()
+);
+
+
+--
 -- Name: ai_policy; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -179,18 +229,18 @@ CREATE TABLE public.ai_usage_log (
     id character varying(36) NOT NULL,
     institution_id character varying(36),
     user_id character varying(36),
-    role character varying(30),
-    feature character varying(40) NOT NULL,
+    role character varying(20),
+    feature character varying(30),
     model character varying(80),
     provider character varying(20) DEFAULT 'groq'::character varying,
-    prompt_tokens integer DEFAULT 0 NOT NULL,
-    completion_tokens integer DEFAULT 0 NOT NULL,
-    total_tokens integer DEFAULT 0 NOT NULL,
-    estimated_cost_usd double precision,
+    prompt_tokens integer DEFAULT 0,
+    completion_tokens integer DEFAULT 0,
+    total_tokens integer DEFAULT 0,
+    estimated_cost_usd numeric(12,8),
     latency_ms integer,
-    success boolean DEFAULT true NOT NULL,
+    success boolean DEFAULT true,
     section_subject_id character varying(36),
-    created_at timestamp without time zone NOT NULL
+    created_at timestamp without time zone
 );
 
 
@@ -287,7 +337,7 @@ CREATE TABLE public.announcements (
 
 CREATE TABLE public.audit_logs (
     id character varying(36) NOT NULL,
-    institution_id character varying(36) NOT NULL,
+    institution_id character varying(36),
     actor_id character varying(36) NOT NULL,
     action character varying(50) NOT NULL,
     target_type character varying(30),
@@ -547,6 +597,22 @@ CREATE TABLE public.contest_participants (
 
 
 --
+-- Name: data_export_jobs; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.data_export_jobs (
+    id character varying(36) NOT NULL,
+    user_id character varying(36) NOT NULL,
+    requested_by character varying(36) NOT NULL,
+    kind character varying(20) NOT NULL,
+    status character varying(16) DEFAULT 'pending'::character varying NOT NULL,
+    file_path text,
+    created_at timestamp without time zone DEFAULT now() NOT NULL,
+    expires_at timestamp without time zone NOT NULL
+);
+
+
+--
 -- Name: departments; Type: TABLE; Schema: public; Owner: -
 --
 
@@ -605,7 +671,7 @@ CREATE TABLE public.environment_profiles (
 
 CREATE TABLE public.exam_attempts (
     id character varying(36) NOT NULL,
-    exam_id character varying(36) NOT NULL,
+    exam_id character varying(36),
     student_id character varying(36) NOT NULL,
     started_at timestamp without time zone DEFAULT now(),
     expires_at timestamp without time zone,
@@ -627,7 +693,7 @@ CREATE TABLE public.exam_attempts (
 
 CREATE TABLE public.exam_questions (
     id character varying(36) NOT NULL,
-    exam_id character varying(36) NOT NULL,
+    exam_id character varying(36),
     question_type character varying(10) DEFAULT 'mcq'::character varying,
     prompt text NOT NULL,
     points double precision DEFAULT '1'::double precision,
@@ -664,7 +730,10 @@ CREATE TABLE public.exams (
     is_published boolean DEFAULT false,
     created_at timestamp without time zone DEFAULT now(),
     updated_at timestamp without time zone DEFAULT now(),
-    grade_weight double precision DEFAULT '0'::double precision
+    grade_weight double precision DEFAULT '0'::double precision,
+    proctor_focus_enabled boolean DEFAULT false,
+    proctor_lockdown_enabled boolean DEFAULT false,
+    max_violations integer DEFAULT 0
 );
 
 
@@ -716,8 +785,8 @@ CREATE TABLE public.experiments (
     allow_ai_hints boolean DEFAULT true,
     simulation_entry text,
     simulation_files text,
-    weightage integer DEFAULT 1 NOT NULL,
-    grade_scale integer DEFAULT 100 NOT NULL,
+    weightage integer DEFAULT 1,
+    grade_scale integer DEFAULT 100,
     experiment_type character varying(20) DEFAULT 'coding'::character varying,
     rubric_quiz integer DEFAULT 0,
     proctor_defaults json,
@@ -778,88 +847,9 @@ CREATE TABLE public.focus_scores (
     id character varying(36) NOT NULL,
     student_id character varying(36) NOT NULL,
     session_id character varying(36) NOT NULL,
-    tab_switches integer,
-    window_blurs integer,
-    idle_seconds integer,
-    copy_paste_count integer,
-    face_present_pct double precision,
-    gaze_score double precision,
-    large_paste_detected boolean,
-    typing_speed_avg double precision,
     focus_score double precision,
     recorded_at timestamp without time zone,
     signals json
-);
-
-
---
--- Name: free_courses; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.free_courses (
-    id character varying(36) NOT NULL,
-    slug character varying(80) NOT NULL,
-    title text NOT NULL,
-    description text,
-    thumbnail_url text,
-    difficulty character varying(20) DEFAULT 'beginner'::character varying,
-    tags json,
-    language character varying(20) DEFAULT 'python'::character varying,
-    is_published boolean DEFAULT false,
-    order_index integer DEFAULT 0,
-    created_at timestamp without time zone
-);
-
-
---
--- Name: free_exercises; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.free_exercises (
-    id character varying(36) NOT NULL,
-    course_id character varying(36) NOT NULL,
-    order_index integer DEFAULT 0,
-    title text NOT NULL,
-    description text,
-    hint_text text,
-    difficulty character varying(20) DEFAULT 'easy'::character varying,
-    starter_code json,
-    allowed_languages json,
-    test_cases json,
-    time_limit_sec integer DEFAULT 5,
-    memory_limit_kb integer DEFAULT 131072,
-    exercise_type character varying(10) DEFAULT 'coding'::character varying,
-    mcq_options json,
-    mcq_answer character varying(2),
-    mcq_explanation text,
-    xp_reward integer DEFAULT 10,
-    is_published boolean DEFAULT true,
-    created_at timestamp without time zone,
-    simulation_path text,
-    tags jsonb,
-    acceptance_rate real,
-    solves_count integer
-);
-
-
---
--- Name: free_progress; Type: TABLE; Schema: public; Owner: -
---
-
-CREATE TABLE public.free_progress (
-    id character varying(36) NOT NULL,
-    user_id character varying(36) NOT NULL,
-    exercise_id character varying(36) NOT NULL,
-    course_id character varying(36) NOT NULL,
-    status character varying(10) DEFAULT 'attempted'::character varying,
-    attempts integer DEFAULT 0,
-    best_score double precision DEFAULT '0'::double precision,
-    last_code text,
-    language_used character varying(20),
-    xp_earned integer DEFAULT 0,
-    solved_at timestamp without time zone,
-    created_at timestamp without time zone,
-    updated_at timestamp without time zone
 );
 
 
@@ -870,7 +860,7 @@ CREATE TABLE public.free_progress (
 CREATE TABLE public.grades (
     id character varying(36) NOT NULL,
     student_id character varying(36) NOT NULL,
-    experiment_id character varying(36) NOT NULL,
+    experiment_id character varying(36),
     session_id character varying(36),
     auto_grade double precision,
     manual_grade double precision,
@@ -883,7 +873,9 @@ CREATE TABLE public.grades (
     graded_at timestamp without time zone,
     is_locked boolean,
     created_at timestamp without time zone,
-    quiz_grade double precision
+    quiz_grade double precision,
+    exam_id character varying(36),
+    assessed_components json DEFAULT '{}'::json
 );
 
 
@@ -914,6 +906,21 @@ CREATE TABLE public.hint_logs (
     latency_ms integer,
     is_fallback boolean,
     created_at timestamp without time zone
+);
+
+
+--
+-- Name: impersonation_sessions; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.impersonation_sessions (
+    id character varying(36) NOT NULL,
+    admin_id character varying(36) NOT NULL,
+    target_id character varying(36) NOT NULL,
+    reason text NOT NULL,
+    started_at timestamp without time zone DEFAULT now() NOT NULL,
+    ended_at timestamp without time zone,
+    revoked boolean DEFAULT false NOT NULL
 );
 
 
@@ -984,7 +991,7 @@ CREATE TABLE public.institutions (
     groq_limit_override integer,
     billing_notes text,
     billing_email text,
-    onboarding_status character varying(30) DEFAULT 'pending'::character varying,
+    onboarding_status character varying(20) DEFAULT 'pending'::character varying,
     onboarding_completed_at timestamp without time zone,
     has_users boolean DEFAULT false,
     has_experiments boolean DEFAULT false,
@@ -1016,7 +1023,15 @@ CREATE TABLE public.instructor_settings (
     at_risk_avg_threshold integer DEFAULT 40,
     at_risk_min_threshold integer DEFAULT 20,
     notification_prefs json,
-    updated_at timestamp without time zone
+    updated_at timestamp without time zone,
+    hint_strictness character varying(30) DEFAULT 'Balanced'::character varying,
+    passing_threshold integer DEFAULT 40,
+    late_submission_penalty integer DEFAULT 0,
+    max_retry_attempts integer DEFAULT 3,
+    grace_marks integer DEFAULT 0,
+    min_attempts_analysis integer DEFAULT 3,
+    consider_last_sessions integer DEFAULT 5,
+    notification_delivery json DEFAULT '{}'::json
 );
 
 
@@ -1037,9 +1052,7 @@ CREATE TABLE public.interventions (
     resolved_at timestamp without time zone,
     created_at timestamp without time zone,
     risk_score_before double precision,
-    risk_score_after double precision,
-    updated_at timestamp without time zone,
-    notes text
+    risk_score_after double precision
 );
 
 
@@ -1168,6 +1181,90 @@ CREATE TABLE public.platform_config (
     description text,
     updated_at timestamp without time zone,
     updated_by character varying(36)
+);
+
+
+--
+-- Name: platform_courses; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.platform_courses (
+    id character varying(36) NOT NULL,
+    slug character varying(80) NOT NULL,
+    title text NOT NULL,
+    description text,
+    thumbnail_url text,
+    difficulty character varying(20) DEFAULT 'beginner'::character varying,
+    tags json,
+    language character varying(20) DEFAULT 'python'::character varying,
+    is_published boolean DEFAULT false,
+    order_index integer DEFAULT 0,
+    created_at timestamp without time zone
+);
+
+
+--
+-- Name: platform_exercises; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.platform_exercises (
+    id character varying(36) NOT NULL,
+    course_id character varying(36) NOT NULL,
+    order_index integer DEFAULT 0,
+    title text NOT NULL,
+    description text,
+    hint_text text,
+    difficulty character varying(20) DEFAULT 'easy'::character varying,
+    starter_code json,
+    allowed_languages json,
+    test_cases json,
+    time_limit_sec integer DEFAULT 5,
+    memory_limit_kb integer DEFAULT 131072,
+    exercise_type character varying(10) DEFAULT 'coding'::character varying,
+    mcq_options json,
+    mcq_answer character varying(2),
+    mcq_explanation text,
+    xp_reward integer DEFAULT 10,
+    is_published boolean DEFAULT true,
+    created_at timestamp without time zone,
+    simulation_path text,
+    tags json,
+    acceptance_rate double precision,
+    solves_count integer
+);
+
+
+--
+-- Name: platform_metrics_daily; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.platform_metrics_daily (
+    day date NOT NULL,
+    metric character varying(60) NOT NULL,
+    institution_id character varying(36) DEFAULT 'platform'::character varying NOT NULL,
+    value numeric DEFAULT 0 NOT NULL,
+    computed_at timestamp without time zone DEFAULT now() NOT NULL
+);
+
+
+--
+-- Name: platform_progress; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE public.platform_progress (
+    id character varying(36) NOT NULL,
+    user_id character varying(36) NOT NULL,
+    exercise_id character varying(36) NOT NULL,
+    course_id character varying(36) NOT NULL,
+    status character varying(10) DEFAULT 'attempted'::character varying,
+    attempts integer DEFAULT 0,
+    best_score double precision DEFAULT '0'::double precision,
+    last_code text,
+    language_used character varying(20),
+    xp_earned integer DEFAULT 0,
+    solved_at timestamp without time zone,
+    created_at timestamp without time zone,
+    updated_at timestamp without time zone
 );
 
 
@@ -1413,12 +1510,14 @@ CREATE TABLE public.problem_collections (
 CREATE TABLE public.proctor_events (
     id character varying(36) NOT NULL,
     institution_id character varying(36) NOT NULL,
-    session_id character varying(36) NOT NULL,
+    session_id character varying(36),
     student_id character varying(36) NOT NULL,
     event_type character varying(40) NOT NULL,
     payload json,
     severity character varying(10),
-    recorded_at timestamp without time zone NOT NULL
+    recorded_at timestamp without time zone NOT NULL,
+    exam_id character varying(36),
+    attempt_id character varying(36)
 );
 
 
@@ -1554,16 +1653,16 @@ CREATE TABLE public.scheduled_announcements (
     created_by character varying(36) NOT NULL,
     title text NOT NULL,
     message text NOT NULL,
-    target character varying(20) DEFAULT 'all'::character varying NOT NULL,
+    target character varying(20) DEFAULT 'all'::character varying,
     department_id character varying(36),
     batch_id character varying(36),
     section_id character varying(36),
     academic_year integer,
     send_at timestamp without time zone NOT NULL,
-    status character varying(20) DEFAULT 'pending'::character varying NOT NULL,
+    status character varying(20) DEFAULT 'pending'::character varying,
     sent_at timestamp without time zone,
     recipients_sent integer,
-    created_at timestamp without time zone NOT NULL
+    created_at timestamp without time zone
 );
 
 
@@ -1604,7 +1703,7 @@ CREATE TABLE public.sections (
     name character varying(10) NOT NULL,
     created_at timestamp without time zone,
     class_teacher_id character varying(36),
-    section_code character varying(20),
+    section_code character varying(50),
     max_students integer DEFAULT 60,
     is_active boolean DEFAULT true
 );
@@ -1662,7 +1761,8 @@ CREATE TABLE public.session_feedback (
     ai_hint_helpfulness integer,
     overall_rating integer,
     comment text,
-    submitted_at timestamp without time zone
+    submitted_at timestamp without time zone,
+    helpful_count integer DEFAULT 0 NOT NULL
 );
 
 
@@ -1755,11 +1855,11 @@ CREATE TABLE public.subjects (
     description text,
     env_profile_id character varying(36),
     created_at timestamp without time zone,
-    total_marks integer DEFAULT 100 NOT NULL,
-    icon character varying(50) DEFAULT 'datastruct'::character varying,
+    total_marks integer DEFAULT 100,
+    icon text DEFAULT 'datastruct'::character varying,
     color character varying(30) DEFAULT '#7c3aed'::character varying,
     department_id character varying(36),
-    subject_type character varying(50) DEFAULT 'Theory'::character varying,
+    subject_type character varying(30) DEFAULT 'Theory'::character varying,
     is_active boolean DEFAULT true
 );
 
@@ -1851,12 +1951,15 @@ CREATE TABLE public.users (
     department_id character varying(36),
     year_of_study integer,
     semester integer,
-    must_change_password boolean DEFAULT false NOT NULL,
+    must_change_password boolean DEFAULT false,
     location character varying(100) DEFAULT 'Bengaluru, Karnataka'::character varying,
     bio text DEFAULT 'Empowering education through technology.'::text,
     timezone character varying(50) DEFAULT '(GMT+05:30) Asia/Kolkata'::character varying,
     language character varying(50) DEFAULT 'English (India)'::character varying,
-    two_factor_enabled boolean DEFAULT false
+    two_factor_enabled boolean DEFAULT false,
+    status character varying(16) DEFAULT 'active'::character varying,
+    suspension_reason text,
+    suspended_until timestamp without time zone
 );
 
 
@@ -1927,6 +2030,14 @@ ALTER TABLE ONLY public.ai_agent_run
 
 
 --
+-- Name: ai_document_chunks ai_document_chunks_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_document_chunks
+    ADD CONSTRAINT ai_document_chunks_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: ai_feature_configs ai_feature_configs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -1940,6 +2051,22 @@ ALTER TABLE ONLY public.ai_feature_configs
 
 ALTER TABLE ONLY public.ai_generated_documents
     ADD CONSTRAINT ai_generated_documents_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ai_learner_memory ai_learner_memory_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_learner_memory
+    ADD CONSTRAINT ai_learner_memory_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: ai_learner_memory ai_learner_memory_user_id_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_learner_memory
+    ADD CONSTRAINT ai_learner_memory_user_id_key UNIQUE (user_id);
 
 
 --
@@ -2127,6 +2254,14 @@ ALTER TABLE ONLY public.contest_participants
 
 
 --
+-- Name: data_export_jobs data_export_jobs_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.data_export_jobs
+    ADD CONSTRAINT data_export_jobs_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: departments departments_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2223,38 +2358,6 @@ ALTER TABLE ONLY public.focus_scores
 
 
 --
--- Name: free_courses free_courses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.free_courses
-    ADD CONSTRAINT free_courses_pkey PRIMARY KEY (id);
-
-
---
--- Name: free_courses free_courses_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.free_courses
-    ADD CONSTRAINT free_courses_slug_key UNIQUE (slug);
-
-
---
--- Name: free_exercises free_exercises_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.free_exercises
-    ADD CONSTRAINT free_exercises_pkey PRIMARY KEY (id);
-
-
---
--- Name: free_progress free_progress_pkey; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.free_progress
-    ADD CONSTRAINT free_progress_pkey PRIMARY KEY (id);
-
-
---
 -- Name: grades grades_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2276,6 +2379,14 @@ ALTER TABLE ONLY public.groq_usage
 
 ALTER TABLE ONLY public.hint_logs
     ADD CONSTRAINT hint_logs_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: impersonation_sessions impersonation_sessions_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.impersonation_sessions
+    ADD CONSTRAINT impersonation_sessions_pkey PRIMARY KEY (id);
 
 
 --
@@ -2332,14 +2443,6 @@ ALTER TABLE ONLY public.instructor_settings
 
 ALTER TABLE ONLY public.interventions
     ADD CONSTRAINT interventions_pkey PRIMARY KEY (id);
-
-
---
--- Name: invoices invoices_invoice_number_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.invoices
-    ADD CONSTRAINT invoices_invoice_number_key UNIQUE (invoice_number);
 
 
 --
@@ -2407,6 +2510,46 @@ ALTER TABLE ONLY public.platform_config
 
 
 --
+-- Name: platform_courses platform_courses_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.platform_courses
+    ADD CONSTRAINT platform_courses_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: platform_courses platform_courses_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.platform_courses
+    ADD CONSTRAINT platform_courses_slug_key UNIQUE (slug);
+
+
+--
+-- Name: platform_exercises platform_exercises_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.platform_exercises
+    ADD CONSTRAINT platform_exercises_pkey PRIMARY KEY (id);
+
+
+--
+-- Name: platform_metrics_daily platform_metrics_daily_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.platform_metrics_daily
+    ADD CONSTRAINT platform_metrics_daily_pkey PRIMARY KEY (day, metric, institution_id);
+
+
+--
+-- Name: platform_progress platform_progress_pkey; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.platform_progress
+    ADD CONSTRAINT platform_progress_pkey PRIMARY KEY (id);
+
+
+--
 -- Name: platform_rating_periods platform_rating_periods_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2428,14 +2571,6 @@ ALTER TABLE ONLY public.platform_ratings
 
 ALTER TABLE ONLY public.playground_sessions
     ADD CONSTRAINT playground_sessions_pkey PRIMARY KEY (id);
-
-
---
--- Name: playground_sessions playground_sessions_share_slug_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.playground_sessions
-    ADD CONSTRAINT playground_sessions_share_slug_key UNIQUE (share_slug);
 
 
 --
@@ -2703,14 +2838,6 @@ ALTER TABLE ONLY public.support_tickets
 
 
 --
--- Name: support_tickets support_tickets_ticket_number_key; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.support_tickets
-    ADD CONSTRAINT support_tickets_ticket_number_key UNIQUE (ticket_number);
-
-
---
 -- Name: teacher_notes teacher_notes_pkey; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2783,14 +2910,6 @@ ALTER TABLE ONLY public.experiment_concepts
 
 
 --
--- Name: free_progress uq_free_progress; Type: CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.free_progress
-    ADD CONSTRAINT uq_free_progress UNIQUE (user_id, exercise_id);
-
-
---
 -- Name: ai_feature_configs uq_inst_feature_id; Type: CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -2812,6 +2931,14 @@ ALTER TABLE ONLY public.institution_daily_kpis
 
 ALTER TABLE ONLY public.ai_user_quotas
     ADD CONSTRAINT uq_inst_user_quota UNIQUE (institution_id, user_id);
+
+
+--
+-- Name: platform_progress uq_platform_progress; Type: CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.platform_progress
+    ADD CONSTRAINT uq_platform_progress UNIQUE (user_id, exercise_id);
 
 
 --
@@ -2953,6 +3080,13 @@ CREATE INDEX ix_admin_chat_sessions_institution_id ON public.admin_chat_sessions
 
 
 --
+-- Name: ix_admin_chat_sessions_role_scope; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_admin_chat_sessions_role_scope ON public.admin_chat_sessions USING btree (role_scope);
+
+
+--
 -- Name: ix_admin_chat_sessions_updated_at; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -2974,10 +3108,87 @@ CREATE INDEX ix_admin_chat_sessions_user_role ON public.admin_chat_sessions USIN
 
 
 --
+-- Name: ix_ai_agent_run_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_agent_run_created_at ON public.ai_agent_run USING btree (created_at);
+
+
+--
 -- Name: ix_ai_agent_run_inst; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_ai_agent_run_inst ON public.ai_agent_run USING btree (institution_id, created_at);
+
+
+--
+-- Name: ix_ai_agent_run_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_agent_run_institution_id ON public.ai_agent_run USING btree (institution_id);
+
+
+--
+-- Name: ix_ai_agent_run_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_agent_run_user_id ON public.ai_agent_run USING btree (user_id);
+
+
+--
+-- Name: ix_ai_chunks_embedding; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_chunks_embedding ON public.ai_document_chunks USING ivfflat (embedding public.vector_cosine_ops);
+
+
+--
+-- Name: ix_ai_chunks_scope; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_chunks_scope ON public.ai_document_chunks USING btree (institution_id, scope_type, scope_id);
+
+
+--
+-- Name: ix_ai_document_chunks_chunk_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_document_chunks_chunk_id ON public.ai_document_chunks USING btree (chunk_id);
+
+
+--
+-- Name: ix_ai_document_chunks_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_document_chunks_created_at ON public.ai_document_chunks USING btree (created_at);
+
+
+--
+-- Name: ix_ai_document_chunks_document_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_document_chunks_document_id ON public.ai_document_chunks USING btree (document_id);
+
+
+--
+-- Name: ix_ai_document_chunks_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_document_chunks_institution_id ON public.ai_document_chunks USING btree (institution_id);
+
+
+--
+-- Name: ix_ai_document_chunks_scope_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_document_chunks_scope_id ON public.ai_document_chunks USING btree (scope_id);
+
+
+--
+-- Name: ix_ai_document_chunks_scope_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_document_chunks_scope_type ON public.ai_document_chunks USING btree (scope_type);
 
 
 --
@@ -3044,6 +3255,41 @@ CREATE INDEX ix_ai_usage_inst_user_date ON public.ai_usage_log USING btree (inst
 
 
 --
+-- Name: ix_ai_usage_log_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_usage_log_created_at ON public.ai_usage_log USING btree (created_at);
+
+
+--
+-- Name: ix_ai_usage_log_feature; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_usage_log_feature ON public.ai_usage_log USING btree (feature);
+
+
+--
+-- Name: ix_ai_usage_log_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_usage_log_institution_id ON public.ai_usage_log USING btree (institution_id);
+
+
+--
+-- Name: ix_ai_usage_log_total_tokens; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_usage_log_total_tokens ON public.ai_usage_log USING btree (total_tokens);
+
+
+--
+-- Name: ix_ai_usage_log_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ai_usage_log_user_id ON public.ai_usage_log USING btree (user_id);
+
+
+--
 -- Name: ix_ai_user_quotas_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3055,6 +3301,13 @@ CREATE INDEX ix_ai_user_quotas_institution_id ON public.ai_user_quotas USING btr
 --
 
 CREATE INDEX ix_ai_user_quotas_user_id ON public.ai_user_quotas USING btree (user_id);
+
+
+--
+-- Name: ix_ailm_user; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_ailm_user ON public.ai_learner_memory USING btree (user_id);
 
 
 --
@@ -3177,10 +3430,38 @@ CREATE INDEX ix_batches_year_id ON public.batches USING btree (year_id);
 
 
 --
+-- Name: ix_chat_messages_from_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_chat_messages_from_id ON public.chat_messages USING btree (from_id);
+
+
+--
+-- Name: ix_chat_messages_to_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_chat_messages_to_id ON public.chat_messages USING btree (to_id);
+
+
+--
 -- Name: ix_chat_session; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_chat_session ON public.chat_messages USING btree (session_id);
+
+
+--
+-- Name: ix_checkpoint_progress_checkpoint_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_checkpoint_progress_checkpoint_id ON public.checkpoint_progress USING btree (checkpoint_id);
+
+
+--
+-- Name: ix_checkpoint_progress_student_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_checkpoint_progress_student_id ON public.checkpoint_progress USING btree (student_id);
 
 
 --
@@ -3352,6 +3633,13 @@ CREATE INDEX ix_content_progress_module_id ON public.content_progress USING btre
 
 
 --
+-- Name: ix_contest_participants_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_contest_participants_user_id ON public.contest_participants USING btree (user_id);
+
+
+--
 -- Name: ix_contest_window; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3422,6 +3710,13 @@ CREATE INDEX ix_exam_attempts_exam_student ON public.exam_attempts USING btree (
 
 
 --
+-- Name: ix_exam_attempts_experiment_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_exam_attempts_experiment_id ON public.exam_attempts USING btree (experiment_id);
+
+
+--
 -- Name: ix_exam_attempts_student; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3446,7 +3741,7 @@ CREATE INDEX ix_exam_attempts_student_exp ON public.exam_attempts USING btree (s
 -- Name: ix_exam_questions_exam; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX ix_exam_questions_exam ON public.exam_questions USING btree (exam_id);
+CREATE INDEX ix_exam_questions_exam ON public.exam_questions USING btree (exam_id, display_order);
 
 
 --
@@ -3527,10 +3822,10 @@ CREATE INDEX ix_experiments_subject_id ON public.experiments USING btree (subjec
 
 
 --
--- Name: ix_extension_inst; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_export_jobs_user; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX ix_extension_inst ON public.extensions USING btree (institution_id);
+CREATE INDEX ix_export_jobs_user ON public.data_export_jobs USING btree (user_id);
 
 
 --
@@ -3541,10 +3836,31 @@ CREATE INDEX ix_extension_student_exp ON public.extensions USING btree (student_
 
 
 --
+-- Name: ix_extensions_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_extensions_institution_id ON public.extensions USING btree (institution_id);
+
+
+--
 -- Name: ix_faq_articles_category; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_faq_articles_category ON public.faq_articles USING btree (category);
+
+
+--
+-- Name: ix_feedback_receipts_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_feedback_receipts_student ON public.session_feedback_receipts USING btree (student_id);
+
+
+--
+-- Name: ix_focus_scores_recorded_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_focus_scores_recorded_at ON public.focus_scores USING btree (recorded_at);
 
 
 --
@@ -3562,17 +3878,24 @@ CREATE INDEX ix_focus_scores_student_id ON public.focus_scores USING btree (stud
 
 
 --
--- Name: ix_free_exercises_course_order; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_focus_session_recorded; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX ix_free_exercises_course_order ON public.free_exercises USING btree (course_id, order_index);
+CREATE INDEX ix_focus_session_recorded ON public.focus_scores USING btree (session_id, recorded_at);
 
 
 --
--- Name: ix_free_progress_user_course; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_focus_student_session; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX ix_free_progress_user_course ON public.free_progress USING btree (user_id, course_id, status);
+CREATE INDEX ix_focus_student_session ON public.focus_scores USING btree (student_id, session_id);
+
+
+--
+-- Name: ix_grades_exam_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_grades_exam_id ON public.grades USING btree (exam_id);
 
 
 --
@@ -3601,6 +3924,13 @@ CREATE INDEX ix_grades_session_id ON public.grades USING btree (session_id);
 --
 
 CREATE INDEX ix_grades_student_created ON public.grades USING btree (student_id, created_at);
+
+
+--
+-- Name: ix_grades_student_exam; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_grades_student_exam ON public.grades USING btree (student_id, exam_id);
 
 
 --
@@ -3639,6 +3969,13 @@ CREATE INDEX ix_hint_logs_student_id ON public.hint_logs USING btree (student_id
 
 
 --
+-- Name: ix_imp_sessions_target; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_imp_sessions_target ON public.impersonation_sessions USING btree (target_id);
+
+
+--
 -- Name: ix_inline_comments_grade_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3667,6 +4004,13 @@ CREATE INDEX ix_institution_daily_kpis_snapshot_date ON public.institution_daily
 
 
 --
+-- Name: ix_institution_documents_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_institution_documents_created_at ON public.institution_documents USING btree (created_at);
+
+
+--
 -- Name: ix_institution_documents_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3674,10 +4018,24 @@ CREATE INDEX ix_institution_documents_institution_id ON public.institution_docum
 
 
 --
--- Name: ix_intervention_created; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_institution_documents_scope_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX ix_intervention_created ON public.interventions USING btree (created_at);
+CREATE INDEX ix_institution_documents_scope_id ON public.institution_documents USING btree (scope_id);
+
+
+--
+-- Name: ix_institution_documents_scope_type; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_institution_documents_scope_type ON public.institution_documents USING btree (scope_type);
+
+
+--
+-- Name: ix_institution_documents_uploaded_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_institution_documents_uploaded_by ON public.institution_documents USING btree (uploaded_by);
 
 
 --
@@ -3688,17 +4046,31 @@ CREATE INDEX ix_intervention_followup ON public.interventions USING btree (follo
 
 
 --
--- Name: ix_intervention_inst; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX ix_intervention_inst ON public.interventions USING btree (institution_id);
-
-
---
 -- Name: ix_intervention_student_status; Type: INDEX; Schema: public; Owner: -
 --
 
 CREATE INDEX ix_intervention_student_status ON public.interventions USING btree (student_id, outcome);
+
+
+--
+-- Name: ix_interventions_created_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_interventions_created_at ON public.interventions USING btree (created_at);
+
+
+--
+-- Name: ix_interventions_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_interventions_institution_id ON public.interventions USING btree (institution_id);
+
+
+--
+-- Name: ix_interventions_student_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_interventions_student_id ON public.interventions USING btree (student_id);
 
 
 --
@@ -3800,13 +4172,6 @@ CREATE INDEX ix_pcoll_user ON public.problem_collections USING btree (user_id);
 
 
 --
--- Name: ix_pgsess_slug; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX ix_pgsess_slug ON public.playground_sessions USING btree (share_slug);
-
-
---
 -- Name: ix_pgsess_user; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3842,6 +4207,34 @@ CREATE INDEX ix_plagiarism_flags_session_id ON public.plagiarism_flags USING btr
 
 
 --
+-- Name: ix_platform_exercises_course_order; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_platform_exercises_course_order ON public.platform_exercises USING btree (course_id, order_index);
+
+
+--
+-- Name: ix_platform_progress_course_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_platform_progress_course_id ON public.platform_progress USING btree (course_id);
+
+
+--
+-- Name: ix_platform_progress_exercise_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_platform_progress_exercise_id ON public.platform_progress USING btree (exercise_id);
+
+
+--
+-- Name: ix_platform_progress_user_course; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_platform_progress_user_course ON public.platform_progress USING btree (user_id, course_id, status);
+
+
+--
 -- Name: ix_platform_rating_periods_student_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3856,10 +4249,24 @@ CREATE INDEX ix_platform_ratings_rating ON public.platform_ratings USING btree (
 
 
 --
--- Name: ix_poll_session; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_playground_sessions_share_slug; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX ix_poll_session ON public.session_polls USING btree (session_id);
+CREATE UNIQUE INDEX ix_playground_sessions_share_slug ON public.playground_sessions USING btree (share_slug);
+
+
+--
+-- Name: ix_pmd_metric_day; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_pmd_metric_day ON public.platform_metrics_daily USING btree (metric, day);
+
+
+--
+-- Name: ix_practice_bookmarks_problem_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_practice_bookmarks_problem_id ON public.practice_bookmarks USING btree (problem_id);
 
 
 --
@@ -3926,6 +4333,13 @@ CREATE INDEX ix_practice_student_badges_student_id ON public.practice_student_ba
 
 
 --
+-- Name: ix_practice_student_xp_profile_slug; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_practice_student_xp_profile_slug ON public.practice_student_xp USING btree (profile_slug);
+
+
+--
 -- Name: ix_practice_student_xp_student_id; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3961,6 +4375,20 @@ CREATE INDEX ix_practice_test_cases_problem_id ON public.practice_test_cases USI
 
 
 --
+-- Name: ix_proctor_events_exam_attempt; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_proctor_events_exam_attempt ON public.proctor_events USING btree (exam_id, attempt_id);
+
+
+--
+-- Name: ix_proctor_events_exam_student; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_proctor_events_exam_student ON public.proctor_events USING btree (exam_id, student_id);
+
+
+--
 -- Name: ix_proctor_events_inst_date; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -3982,17 +4410,38 @@ CREATE INDEX ix_proctor_events_inst_student ON public.proctor_events USING btree
 
 
 --
--- Name: ix_qbank_creator; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_proctor_events_institution_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX ix_qbank_creator ON public.question_bank USING btree (created_by);
+CREATE INDEX ix_proctor_events_institution_id ON public.proctor_events USING btree (institution_id);
 
 
 --
--- Name: ix_qbank_inst; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_proctor_events_session_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX ix_qbank_inst ON public.question_bank USING btree (institution_id);
+CREATE INDEX ix_proctor_events_session_id ON public.proctor_events USING btree (session_id);
+
+
+--
+-- Name: ix_proctor_events_student_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_proctor_events_student_id ON public.proctor_events USING btree (student_id);
+
+
+--
+-- Name: ix_question_bank_created_by; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_question_bank_created_by ON public.question_bank USING btree (created_by);
+
+
+--
+-- Name: ix_question_bank_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_question_bank_institution_id ON public.question_bank USING btree (institution_id);
 
 
 --
@@ -4045,6 +4494,13 @@ CREATE INDEX ix_rank_snapshots_student_id ON public.rank_snapshots USING btree (
 
 
 --
+-- Name: ix_recurring_plans_instructor_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_recurring_plans_instructor_id ON public.recurring_plans USING btree (instructor_id);
+
+
+--
 -- Name: ix_reports_inst_creator; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4063,6 +4519,27 @@ CREATE INDEX ix_sched_ann_inst_status ON public.scheduled_announcements USING bt
 --
 
 CREATE INDEX ix_sched_ann_status_sendat ON public.scheduled_announcements USING btree (status, send_at);
+
+
+--
+-- Name: ix_scheduled_announcements_institution_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_scheduled_announcements_institution_id ON public.scheduled_announcements USING btree (institution_id);
+
+
+--
+-- Name: ix_scheduled_announcements_send_at; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_scheduled_announcements_send_at ON public.scheduled_announcements USING btree (send_at);
+
+
+--
+-- Name: ix_scheduled_announcements_status; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_scheduled_announcements_status ON public.scheduled_announcements USING btree (status);
 
 
 --
@@ -4206,10 +4683,10 @@ CREATE INDEX ix_session_feedback_session_submitted ON public.session_feedback US
 
 
 --
--- Name: ix_feedback_receipts_student; Type: INDEX; Schema: public; Owner: -
+-- Name: ix_session_polls_session_id; Type: INDEX; Schema: public; Owner: -
 --
 
-CREATE INDEX ix_feedback_receipts_student ON public.session_feedback_receipts USING btree (student_id);
+CREATE INDEX ix_session_polls_session_id ON public.session_polls USING btree (session_id);
 
 
 --
@@ -4294,6 +4771,13 @@ CREATE INDEX ix_support_tickets_institution_id ON public.support_tickets USING b
 --
 
 CREATE UNIQUE INDEX ix_support_tickets_ticket_number ON public.support_tickets USING btree (ticket_number);
+
+
+--
+-- Name: ix_support_tickets_user_id; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX ix_support_tickets_user_id ON public.support_tickets USING btree (user_id);
 
 
 --
@@ -4388,13 +4872,6 @@ CREATE INDEX ix_viva_sessions_student_id ON public.viva_sessions USING btree (st
 
 
 --
--- Name: ix_xp_slug; Type: INDEX; Schema: public; Owner: -
---
-
-CREATE INDEX ix_xp_slug ON public.practice_student_xp USING btree (profile_slug);
-
-
---
 -- Name: trgm_audit_detail; Type: INDEX; Schema: public; Owner: -
 --
 
@@ -4476,6 +4953,22 @@ ALTER TABLE ONLY public.admin_chat_sessions
 
 
 --
+-- Name: ai_document_chunks ai_document_chunks_document_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_document_chunks
+    ADD CONSTRAINT ai_document_chunks_document_id_fkey FOREIGN KEY (document_id) REFERENCES public.institution_documents(id) ON DELETE CASCADE;
+
+
+--
+-- Name: ai_document_chunks ai_document_chunks_institution_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_document_chunks
+    ADD CONSTRAINT ai_document_chunks_institution_id_fkey FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
 -- Name: ai_feature_configs ai_feature_configs_institution_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4508,11 +5001,27 @@ ALTER TABLE ONLY public.ai_generated_documents
 
 
 --
+-- Name: ai_learner_memory ai_learner_memory_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_learner_memory
+    ADD CONSTRAINT ai_learner_memory_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
 -- Name: ai_policy ai_policy_institution_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.ai_policy
-    ADD CONSTRAINT ai_policy_institution_id_fkey FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+    ADD CONSTRAINT ai_policy_institution_id_fkey FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: ai_policy ai_policy_updated_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_policy
+    ADD CONSTRAINT ai_policy_updated_by_fkey FOREIGN KEY (updated_by) REFERENCES public.users(id);
 
 
 --
@@ -4828,6 +5337,22 @@ ALTER TABLE ONLY public.contest_participants
 
 
 --
+-- Name: data_export_jobs data_export_jobs_requested_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.data_export_jobs
+    ADD CONSTRAINT data_export_jobs_requested_by_fkey FOREIGN KEY (requested_by) REFERENCES public.users(id);
+
+
+--
+-- Name: data_export_jobs data_export_jobs_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.data_export_jobs
+    ADD CONSTRAINT data_export_jobs_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
 -- Name: departments departments_institution_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4948,14 +5473,6 @@ ALTER TABLE ONLY public.extensions
 
 
 --
--- Name: extensions extensions_experiment_id_fkey1; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.extensions
-    ADD CONSTRAINT extensions_experiment_id_fkey1 FOREIGN KEY (experiment_id) REFERENCES public.experiments(id);
-
-
---
 -- Name: extensions extensions_granted_by_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -4964,19 +5481,11 @@ ALTER TABLE ONLY public.extensions
 
 
 --
--- Name: extensions extensions_granted_by_fkey1; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.extensions
-    ADD CONSTRAINT extensions_granted_by_fkey1 FOREIGN KEY (granted_by) REFERENCES public.users(id);
-
-
---
 -- Name: extensions extensions_institution_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.extensions
-    ADD CONSTRAINT extensions_institution_id_fkey FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+    ADD CONSTRAINT extensions_institution_id_fkey FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
 
 
 --
@@ -4988,11 +5497,35 @@ ALTER TABLE ONLY public.extensions
 
 
 --
--- Name: extensions extensions_student_id_fkey1; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: ai_agent_run fk_ai_agent_run_institution_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.extensions
-    ADD CONSTRAINT extensions_student_id_fkey1 FOREIGN KEY (student_id) REFERENCES public.users(id);
+ALTER TABLE ONLY public.ai_agent_run
+    ADD CONSTRAINT fk_ai_agent_run_institution_id FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: ai_agent_run fk_ai_agent_run_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_agent_run
+    ADD CONSTRAINT fk_ai_agent_run_user_id FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: ai_usage_log fk_ai_usage_log_institution_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_usage_log
+    ADD CONSTRAINT fk_ai_usage_log_institution_id FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
+
+
+--
+-- Name: ai_usage_log fk_ai_usage_log_user_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.ai_usage_log
+    ADD CONSTRAINT fk_ai_usage_log_user_id FOREIGN KEY (user_id) REFERENCES public.users(id);
 
 
 --
@@ -5004,11 +5537,35 @@ ALTER TABLE ONLY public.content_modules
 
 
 --
+-- Name: exam_attempts fk_exam_attempts_experiment_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exam_attempts
+    ADD CONSTRAINT fk_exam_attempts_experiment_id FOREIGN KEY (experiment_id) REFERENCES public.experiments(id);
+
+
+--
+-- Name: exam_questions fk_exam_questions_experiment_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.exam_questions
+    ADD CONSTRAINT fk_exam_questions_experiment_id FOREIGN KEY (experiment_id) REFERENCES public.experiments(id);
+
+
+--
 -- Name: sections fk_sections_class_teacher_id; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.sections
     ADD CONSTRAINT fk_sections_class_teacher_id FOREIGN KEY (class_teacher_id) REFERENCES public.users(id);
+
+
+--
+-- Name: subjects fk_subjects_department_id; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.subjects
+    ADD CONSTRAINT fk_subjects_department_id FOREIGN KEY (department_id) REFERENCES public.departments(id);
 
 
 --
@@ -5036,35 +5593,43 @@ ALTER TABLE ONLY public.focus_scores
 
 
 --
--- Name: free_exercises free_exercises_course_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: platform_exercises free_exercises_course_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.free_exercises
-    ADD CONSTRAINT free_exercises_course_id_fkey FOREIGN KEY (course_id) REFERENCES public.free_courses(id);
-
-
---
--- Name: free_progress free_progress_course_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.free_progress
-    ADD CONSTRAINT free_progress_course_id_fkey FOREIGN KEY (course_id) REFERENCES public.free_courses(id);
+ALTER TABLE ONLY public.platform_exercises
+    ADD CONSTRAINT free_exercises_course_id_fkey FOREIGN KEY (course_id) REFERENCES public.platform_courses(id);
 
 
 --
--- Name: free_progress free_progress_exercise_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: platform_progress free_progress_course_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.free_progress
-    ADD CONSTRAINT free_progress_exercise_id_fkey FOREIGN KEY (exercise_id) REFERENCES public.free_exercises(id);
+ALTER TABLE ONLY public.platform_progress
+    ADD CONSTRAINT free_progress_course_id_fkey FOREIGN KEY (course_id) REFERENCES public.platform_courses(id);
 
 
 --
--- Name: free_progress free_progress_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+-- Name: platform_progress free_progress_exercise_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
-ALTER TABLE ONLY public.free_progress
+ALTER TABLE ONLY public.platform_progress
+    ADD CONSTRAINT free_progress_exercise_id_fkey FOREIGN KEY (exercise_id) REFERENCES public.platform_exercises(id);
+
+
+--
+-- Name: platform_progress free_progress_user_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.platform_progress
     ADD CONSTRAINT free_progress_user_id_fkey FOREIGN KEY (user_id) REFERENCES public.users(id);
+
+
+--
+-- Name: grades grades_exam_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.grades
+    ADD CONSTRAINT grades_exam_id_fkey FOREIGN KEY (exam_id) REFERENCES public.exams(id);
 
 
 --
@@ -5124,6 +5689,22 @@ ALTER TABLE ONLY public.hint_logs
 
 
 --
+-- Name: impersonation_sessions impersonation_sessions_admin_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.impersonation_sessions
+    ADD CONSTRAINT impersonation_sessions_admin_id_fkey FOREIGN KEY (admin_id) REFERENCES public.users(id);
+
+
+--
+-- Name: impersonation_sessions impersonation_sessions_target_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.impersonation_sessions
+    ADD CONSTRAINT impersonation_sessions_target_id_fkey FOREIGN KEY (target_id) REFERENCES public.users(id);
+
+
+--
 -- Name: inline_comments inline_comments_grade_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5176,7 +5757,7 @@ ALTER TABLE ONLY public.interventions
 --
 
 ALTER TABLE ONLY public.interventions
-    ADD CONSTRAINT interventions_institution_id_fkey FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+    ADD CONSTRAINT interventions_institution_id_fkey FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
 
 
 --
@@ -5444,11 +6025,19 @@ ALTER TABLE ONLY public.problem_collections
 
 
 --
+-- Name: proctor_events proctor_events_exam_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.proctor_events
+    ADD CONSTRAINT proctor_events_exam_id_fkey FOREIGN KEY (exam_id) REFERENCES public.exams(id);
+
+
+--
 -- Name: proctor_events proctor_events_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
 ALTER TABLE ONLY public.proctor_events
-    ADD CONSTRAINT proctor_events_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.lab_sessions(id) ON DELETE CASCADE;
+    ADD CONSTRAINT proctor_events_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.lab_sessions(id);
 
 
 --
@@ -5456,7 +6045,7 @@ ALTER TABLE ONLY public.proctor_events
 --
 
 ALTER TABLE ONLY public.proctor_events
-    ADD CONSTRAINT proctor_events_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id) ON DELETE CASCADE;
+    ADD CONSTRAINT proctor_events_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id);
 
 
 --
@@ -5576,7 +6165,7 @@ ALTER TABLE ONLY public.scheduled_announcements
 --
 
 ALTER TABLE ONLY public.scheduled_announcements
-    ADD CONSTRAINT scheduled_announcements_institution_id_fkey FOREIGN KEY (institution_id) REFERENCES public.institutions(id) ON DELETE CASCADE;
+    ADD CONSTRAINT scheduled_announcements_institution_id_fkey FOREIGN KEY (institution_id) REFERENCES public.institutions(id);
 
 
 --
@@ -5700,14 +6289,6 @@ ALTER TABLE ONLY public.session_feedback
 
 
 --
--- Name: session_feedback session_feedback_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
---
-
-ALTER TABLE ONLY public.session_feedback
-    ADD CONSTRAINT session_feedback_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.lab_sessions(id);
-
-
---
 -- Name: session_feedback_receipts session_feedback_receipts_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
 --
 
@@ -5721,6 +6302,14 @@ ALTER TABLE ONLY public.session_feedback_receipts
 
 ALTER TABLE ONLY public.session_feedback_receipts
     ADD CONSTRAINT session_feedback_receipts_student_id_fkey FOREIGN KEY (student_id) REFERENCES public.users(id) ON DELETE CASCADE;
+
+
+--
+-- Name: session_feedback session_feedback_session_id_fkey; Type: FK CONSTRAINT; Schema: public; Owner: -
+--
+
+ALTER TABLE ONLY public.session_feedback
+    ADD CONSTRAINT session_feedback_session_id_fkey FOREIGN KEY (session_id) REFERENCES public.lab_sessions(id);
 
 
 --
@@ -5911,4 +6500,5 @@ ALTER TABLE ONLY public.viva_sessions
 -- PostgreSQL database dump complete
 --
 
+\unrestrict FXMvcRw9b7NzLR1IGZv8kEW3M9f42vxgaydAWq4X4VbqhHkZBLHEU6xnsEgngBS
 

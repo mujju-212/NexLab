@@ -1,9 +1,21 @@
 services:
 
   # Flask application database
+  # pgvector build of postgres 15 — provides the `vector` extension required by
+  # ai_document_chunks.embedding (pgvector.sqlalchemy Vector(768)).
   app_db:
-    image: postgres:15
+    image: pgvector/pgvector:pg15
     container_name: vlab_app_db
+    # Sized for a ~24GB host that also runs judge0 sandboxes, redis and dev
+    # servers: shared_buffers ≈ 8% RAM (the OS page cache covers the rest via
+    # effective_cache_size), work_mem is PER sort/hash node PER connection
+    # (16MB × 100 conns worst case ≈ 1.6GB), maintenance_work_mem speeds up
+    # index builds and autovacuum.
+    command: >
+      postgres -c shared_buffers=2GB
+               -c effective_cache_size=8GB
+               -c work_mem=16MB
+               -c maintenance_work_mem=256MB
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: vlabpass
