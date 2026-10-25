@@ -11,7 +11,7 @@ Tests:
   8. Platform Leaderboard Integration
   9. Adaptive Recommendations
   10. Public Showcase Profile & Strict Privacy Safeguards (No email/private data leaks)
-  11. Full HTTP Endpoint Coverage under /api/free/analytics/*
+  11. Full HTTP Endpoint Coverage under /api/platform-user/analytics/*
 """
 import unittest
 import uuid
@@ -29,7 +29,7 @@ from app.models.practice import (
     PlatformRating,
     PlatformRatingPeriod,
 )
-from app.models.free import FreeCourse, FreeExercise, FreeProgress
+from app.models.platform_content import PlatformCourse, PlatformExercise, PlatformProgress
 from app.platform_rank.rating import (
     compute_student_platform_rating,
     update_all_platform_ranks,
@@ -38,15 +38,15 @@ from app.platform_rank.rating import (
 from app.platform_rank.practice_mastery import get_practice_topic_mastery
 from app.platform_rank.unlock import check_content_unlocks
 from app.platform_rank.leaderboard import get_platform_leaderboard
-from app.free_analytics.course_stats import get_user_course_analytics
-from app.free_analytics.activity import (
-    get_free_user_activity,
-    get_free_user_accuracy_and_bests,
-    get_free_user_recommendations,
+from app.platform_user_analytics.course_stats import get_user_course_analytics
+from app.platform_user_analytics.activity import (
+    get_platform_user_activity,
+    get_platform_user_accuracy_and_bests,
+    get_platform_user_recommendations,
 )
 
 
-class TestFreeUserAnalytics(unittest.TestCase):
+class TestPlatformUserAnalytics(unittest.TestCase):
 
     @classmethod
     def setUpClass(cls):
@@ -67,9 +67,9 @@ class TestFreeUserAnalytics(unittest.TestCase):
     def tearDown(self):
         try:
             db.session.rollback()
-            FreeProgress.query.delete()
-            FreeExercise.query.delete()
-            FreeCourse.query.delete()
+            PlatformProgress.query.delete()
+            PlatformExercise.query.delete()
+            PlatformCourse.query.delete()
             PlatformRatingPeriod.query.delete()
             PlatformRating.query.delete()
             PracticeSubmission.query.delete()
@@ -82,7 +82,7 @@ class TestFreeUserAnalytics(unittest.TestCase):
         except Exception:
             db.session.rollback()
 
-    def _create_user(self, name: str, email: str = None, role: str = 'free_user') -> User:
+    def _create_user(self, name: str, email: str = None, role: str = 'platform_user') -> User:
         unique_email = email or f"{uuid.uuid4().hex[:8]}@example.com"
         # If static email passed, make it unique to avoid collision across test runs
         if '@' in unique_email:
@@ -149,9 +149,9 @@ class TestFreeUserAnalytics(unittest.TestCase):
         db.session.add(sub_prob)
         db.session.commit()
 
-        # 2. Create a FreeCourse and FreeExercise solved by user
+        # 2. Create a PlatformCourse and PlatformExercise solved by user
         course_slug = f"py-found-{uuid.uuid4().hex[:6]}"
-        course = FreeCourse(
+        course = PlatformCourse(
             id=str(uuid.uuid4()),
             slug=course_slug,
             title='Python Foundations',
@@ -163,7 +163,7 @@ class TestFreeUserAnalytics(unittest.TestCase):
         db.session.add(course)
         db.session.commit()
 
-        exercise_med = FreeExercise(
+        exercise_med = PlatformExercise(
             id=str(uuid.uuid4()),
             course_id=course.id,
             title='List Comprehensions',
@@ -175,7 +175,7 @@ class TestFreeUserAnalytics(unittest.TestCase):
         db.session.add(exercise_med)
         db.session.commit()
 
-        prog = FreeProgress(
+        prog = PlatformProgress(
             id=str(uuid.uuid4()),
             user_id=user.id,
             exercise_id=exercise_med.id,
@@ -246,7 +246,7 @@ class TestFreeUserAnalytics(unittest.TestCase):
         db.session.add(sub)
         db.session.commit()
 
-        activity = get_free_user_activity(user.id, days=30)
+        activity = get_platform_user_activity(user.id, days=30)
         self.assertIn('heatmap', activity)
         self.assertIn('solve_trend', activity)
         self.assertIn('xp_trend', activity)
@@ -299,7 +299,7 @@ class TestFreeUserAnalytics(unittest.TestCase):
         db.session.commit()
 
         compute_student_platform_rating(user.id, commit=True)
-        acc_data = get_free_user_accuracy_and_bests(user.id)
+        acc_data = get_platform_user_accuracy_and_bests(user.id)
 
         self.assertEqual(acc_data['total_attempts'], 2)
         self.assertEqual(acc_data['total_solved'], 1)
@@ -317,7 +317,7 @@ class TestFreeUserAnalytics(unittest.TestCase):
     def test_course_analytics_and_certificate(self):
         user = self._create_user('Scholar Coder', 'scholar@example.com')
 
-        course = FreeCourse(
+        course = PlatformCourse(
             id=str(uuid.uuid4()),
             slug=f"algo-{uuid.uuid4().hex[:6]}",
             title='Algorithm Basics',
@@ -327,14 +327,14 @@ class TestFreeUserAnalytics(unittest.TestCase):
         db.session.add(course)
         db.session.commit()
 
-        ex1 = FreeExercise(id=str(uuid.uuid4()), course_id=course.id, title='Step 1', xp_reward=10, is_published=True)
-        ex2 = FreeExercise(id=str(uuid.uuid4()), course_id=course.id, title='Step 2', xp_reward=20, is_published=True)
+        ex1 = PlatformExercise(id=str(uuid.uuid4()), course_id=course.id, title='Step 1', xp_reward=10, is_published=True)
+        ex2 = PlatformExercise(id=str(uuid.uuid4()), course_id=course.id, title='Step 2', xp_reward=20, is_published=True)
         db.session.add_all([ex1, ex2])
         db.session.commit()
 
         # Step 1 solved, step 2 attempted (50% complete)
-        p1 = FreeProgress(user_id=user.id, exercise_id=ex1.id, course_id=course.id, status='solved', attempts=1, xp_earned=10)
-        p2 = FreeProgress(user_id=user.id, exercise_id=ex2.id, course_id=course.id, status='attempted', attempts=2)
+        p1 = PlatformProgress(user_id=user.id, exercise_id=ex1.id, course_id=course.id, status='solved', attempts=1, xp_earned=10)
+        p2 = PlatformProgress(user_id=user.id, exercise_id=ex2.id, course_id=course.id, status='attempted', attempts=2)
         db.session.add_all([p1, p2])
         db.session.commit()
 
@@ -374,9 +374,12 @@ class TestFreeUserAnalytics(unittest.TestCase):
         self.assertFalse(unlocks['hard_unlocked'])
         self.assertIn('Medium Difficulty Problems', unlocks['next_unlock']['target'])
 
-        # Grant 15 easy solves to unlock Medium tier
-        r = PlatformRating.query.get(user.id)
-        r.easy_solved = 15
+        # Grant 15 easy solves to unlock Medium tier. compute_student_platform_rating
+        # intentionally creates no synthetic row for a zero-solve student, so seed
+        # the rating row directly to simulate the earned tier.
+        from app.models.practice import PlatformRating
+        r = PlatformRating(student_id=user.id, rating=150.0, problems_solved=15, easy_solved=15)
+        db.session.add(r)
         db.session.commit()
 
         unlocks_after = check_content_unlocks(user.id)
@@ -406,7 +409,7 @@ class TestFreeUserAnalytics(unittest.TestCase):
         compute_student_platform_rating(user.id, commit=True)
 
         # 1. Fetch public showcase (NO AUTH)
-        res = client.get(f"/api/free/analytics/showcase/{showcase_slug}")
+        res = client.get(f"/api/platform-user/analytics/showcase/{showcase_slug}")
         self.assertEqual(res.status_code, 200)
         data = res.get_json()
 
@@ -428,20 +431,20 @@ class TestFreeUserAnalytics(unittest.TestCase):
         xp.profile_public = False
         db.session.commit()
 
-        res_priv = client.get(f"/api/free/analytics/showcase/{showcase_slug}")
+        res_priv = client.get(f"/api/platform-user/analytics/showcase/{showcase_slug}")
         self.assertEqual(res_priv.status_code, 404)
 
     # ──────────────────────────────────────────────────────────────────────────
-    # 7. HTTP Endpoint Coverage for All /api/free/analytics/* Routes
+    # 7. HTTP Endpoint Coverage for All /api/platform-user/analytics/* Routes
     # ──────────────────────────────────────────────────────────────────────────
 
-    def test_free_analytics_http_endpoints(self):
+    def test_platform_analytics_http_endpoints(self):
         client = self.app.test_client()
         user = self._create_user('Tester', 'tester@example.com')
         headers = self._auth_headers(user)
 
-        # 1. /api/free/analytics/overview
-        res = client.get('/api/free/analytics/overview', headers=headers)
+        # 1. /api/platform-user/analytics/overview
+        res = client.get('/api/platform-user/analytics/overview', headers=headers)
         self.assertEqual(res.status_code, 200)
         d = res.get_json()
         self.assertIn('standing', d)
@@ -452,53 +455,53 @@ class TestFreeUserAnalytics(unittest.TestCase):
         self.assertIn('courses', d)
         self.assertIn('highlights', d)
 
-        # 2. /api/free/analytics/standing
-        res = client.get('/api/free/analytics/standing', headers=headers)
+        # 2. /api/platform-user/analytics/standing
+        res = client.get('/api/platform-user/analytics/standing', headers=headers)
         self.assertEqual(res.status_code, 200)
         self.assertIn('rating', res.get_json())
 
-        # 3. /api/free/analytics/activity
-        res = client.get('/api/free/analytics/activity?days=90', headers=headers)
+        # 3. /api/platform-user/analytics/activity
+        res = client.get('/api/platform-user/analytics/activity?days=90', headers=headers)
         self.assertEqual(res.status_code, 200)
         self.assertEqual(len(res.get_json()['heatmap']), 90)
 
-        # 4. /api/free/analytics/accuracy
-        res = client.get('/api/free/analytics/accuracy', headers=headers)
+        # 4. /api/platform-user/analytics/accuracy
+        res = client.get('/api/platform-user/analytics/accuracy', headers=headers)
         self.assertEqual(res.status_code, 200)
         self.assertIn('acceptance_rate', res.get_json())
 
-        # 5. /api/free/analytics/courses
-        res = client.get('/api/free/analytics/courses', headers=headers)
+        # 5. /api/platform-user/analytics/courses
+        res = client.get('/api/platform-user/analytics/courses', headers=headers)
         self.assertEqual(res.status_code, 200)
         self.assertIn('courses', res.get_json())
 
-        # 6. /api/free/analytics/topic-strength
-        res = client.get('/api/free/analytics/topic-strength', headers=headers)
+        # 6. /api/platform-user/analytics/topic-strength
+        res = client.get('/api/platform-user/analytics/topic-strength', headers=headers)
         self.assertEqual(res.status_code, 200)
         self.assertIn('topic_strength', res.get_json())
 
-        # 7. /api/free/analytics/unlocks
-        res = client.get('/api/free/analytics/unlocks', headers=headers)
+        # 7. /api/platform-user/analytics/unlocks
+        res = client.get('/api/platform-user/analytics/unlocks', headers=headers)
         self.assertEqual(res.status_code, 200)
         self.assertIn('unlocked_tiers', res.get_json())
 
-        # 8. /api/free/analytics/leaderboard
-        res = client.get('/api/free/analytics/leaderboard?scope=global', headers=headers)
+        # 8. /api/platform-user/analytics/leaderboard
+        res = client.get('/api/platform-user/analytics/leaderboard?scope=global', headers=headers)
         self.assertEqual(res.status_code, 200)
         self.assertIn('leaderboard', res.get_json())
         self.assertIn('my_standing', res.get_json())
 
-        # 9. /api/free/analytics/recommendations
-        res = client.get('/api/free/analytics/recommendations', headers=headers)
+        # 9. /api/platform-user/analytics/recommendations
+        res = client.get('/api/platform-user/analytics/recommendations', headers=headers)
         self.assertEqual(res.status_code, 200)
         self.assertIn('recommendations', res.get_json())
 
-        # 10. /api/free/analytics/showcase/me and PATCH /showcase
-        res = client.get('/api/free/analytics/showcase/me', headers=headers)
+        # 10. /api/platform-user/analytics/showcase/me and PATCH /showcase
+        res = client.get('/api/platform-user/analytics/showcase/me', headers=headers)
         self.assertEqual(res.status_code, 200)
 
         patch_res = client.patch(
-            '/api/free/analytics/showcase',
+            '/api/platform-user/analytics/showcase',
             headers=headers,
             json={'profile_public': True},
         )

@@ -31,7 +31,7 @@ const ROLE_ROUTES: Record<BackendRole, string> = {
   institution_admin: '/institution/dashboard',
   instructor:        '/instructor/dashboard',
   student:           '/student/dashboard',
-  free_user:         '/practice/dashboard',
+  platform_user:         '/practice/dashboard',
 };
 
 export default function LoginPageClient() {
@@ -96,7 +96,12 @@ export default function LoginPageClient() {
     try {
       const data = await authService.login({ email: em, password: pw });
       setUser(data.user);
-      const targetRoute = ROLE_ROUTES[data.user.role] ?? '/practice/dashboard';
+      // Return the user to where they were heading (e.g. a course page that
+      // required sign-in) instead of always dumping them on the role home.
+      const nextParam = new URLSearchParams(window.location.search).get('next');
+      const targetRoute = (nextParam && nextParam.startsWith('/'))
+        ? nextParam
+        : (ROLE_ROUTES[data.user.role] ?? '/practice/dashboard');
       router.push(targetRoute);
     } catch (err: unknown) {
       // Distinguish "your password is wrong" from "the server/tunnel is not
@@ -435,7 +440,7 @@ export default function LoginPageClient() {
             <p className={styles.signupLinkText}>
               New to NexLab?{' '}
               <Link href="/register" className={styles.signupLinkAccent}>
-                Create free account →
+                Create account →
               </Link>
             </p>
             <p className={styles.signupLinkText}>

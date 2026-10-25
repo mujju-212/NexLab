@@ -1,6 +1,6 @@
 """
-verify_free_analytics.py
-Tests the Free User Analytics backend endpoints using the live Flask server.
+verify_platform_user_analytics.py
+Tests the Platform User Analytics backend endpoints using the live Flask server.
 """
 import requests
 import json
@@ -8,9 +8,9 @@ import json
 BASE_URL = "http://127.0.0.1:5000/api"
 
 def run_checks():
-    print("--- 1. Authenticating as free@nexlab.io ---")
+    print("--- 1. Authenticating as platform@nexlab.io ---")
     login_res = requests.post(f"{BASE_URL}/auth/login", json={
-        "email": "free@nexlab.io",
+        "email": "platform@nexlab.io",
         "password": "Free@123"
     })
     

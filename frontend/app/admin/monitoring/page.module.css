@@ -1,9 +1,9 @@
 
 /* ── Tabs ────────────────────────────────────────────────────────────────── */
 .tabs { display:flex; align-items:center; gap:4px; background:rgba(255,255,255,.4); border-radius:14px; padding:4px; margin-bottom:24px; flex-wrap:wrap; }
-.tab { padding:8px 18px; border-radius:10px; font-size:13.5px; font-weight:700; color:#615a72; cursor:pointer; border:none; background:transparent; transition:all .15s; font-family:'Manrope',sans-serif; }
+.tab { padding:8px 18px; border-radius:10px; font-size:13.5px; font-weight:700; color:#615a72; cursor:pointer; border:none; background:transparent; transition:all .15s; font-family: var(--font-sans); }
 .tabActive { background:rgba(255,255,255,.85); color:#201b2e; box-shadow:0 2px 8px rgba(0,0,0,.06); }
-.refreshBtn { display:flex; align-items:center; gap:6px; margin-left:auto; padding:8px 16px; border-radius:10px; font-size:13px; font-weight:700; color:#7c3aed; cursor:pointer; border:1px solid rgba(147,51,234,.25); background:rgba(243,232,255,.3); transition:all .15s; font-family:'Manrope',sans-serif; }
+.refreshBtn { display:flex; align-items:center; gap:6px; margin-left:auto; padding:8px 16px; border-radius:10px; font-size:13px; font-weight:700; color:#7c3aed; cursor:pointer; border:1px solid rgba(147,51,234,.25); background:rgba(243,232,255,.3); transition:all .15s; font-family: var(--font-sans); }
 .refreshBtn:hover { background:rgba(243,232,255,.5); }
 
 /* ── Cards Grid ──────────────────────────────────────────────────────────── */
@@ -13,26 +13,26 @@
 .serviceCardActive { border-color:rgba(124,58,237,.3); background:rgba(255,255,255,.65); }
 .cardHeader { display:flex; align-items:center; gap:14px; margin-bottom:20px; }
 .cardIconWrap { width:46px; height:46px; border-radius:14px; display:flex; align-items:center; justify-content:center; flex-shrink:0; }
-.cardLabel { font-size:16px; font-weight:700; color:#201b2e; font-family:'Space Grotesk',sans-serif; margin:0 0 4px; }
+.cardLabel { font-size:16px; font-weight:700; color:#201b2e; font-family: var(--font-display); margin:0 0 4px; }
 .statusBadge { display:inline-flex; align-items:center; gap:5px; font-size:12px; font-weight:700; padding:3px 10px; border-radius:999px; }
 .statusOk   { background:rgba(209,250,223,.85); color:#0f8a3f; }
 .statusWarn { background:rgba(254,243,199,.85); color:#b45309; }
 .metricsGrid { display:grid; grid-template-columns:repeat(4,1fr); gap:12px; }
 .metric { background:rgba(255,255,255,.4); border-radius:12px; padding:12px 14px; }
 .metricLabel { font-size:11px; font-weight:700; color:#9891a6; margin:6px 0 2px; }
-.metricValue { font-size:18px; font-weight:700; color:#201b2e; font-family:'Space Grotesk',sans-serif; margin:0; }
+.metricValue { font-size:18px; font-weight:700; color:#201b2e; font-family: var(--font-display); margin:0; }
 
 /* ── Logs ────────────────────────────────────────────────────────────────── */
 .logsSection { margin-top:4px; }
 .logsHeader { display:flex; align-items:center; gap:10px; margin-bottom:14px; }
-.logsTitle { font-size:20px; font-weight:700; color:#201b2e; font-family:'Space Grotesk',sans-serif; margin:0; }
+.logsTitle { font-size:20px; font-weight:700; color:#201b2e; font-family: var(--font-display); margin:0; }
 .liveDot { width:8px; height:8px; border-radius:50%; background:#22c55e; animation:pulse 2s infinite; }
 @keyframes pulse { 0%,100% { opacity:1; } 50% { opacity:.4; } }
 .logsWrap { background:rgba(255,255,255,.42); border:1px solid rgba(255,255,255,.7); border-radius:20px; overflow:hidden; box-shadow:0 10px 30px rgba(20,20,30,.07); }
 .logRow { display:grid; grid-template-columns:80px 60px 160px 1fr; align-items:center; gap:16px; padding:10px 20px; border-bottom:1px solid rgba(255,255,255,.4); font-size:13px; font-weight:600; }
 .logRow:last-child { border-bottom:none; }
 .logRow:hover { background:rgba(255,255,255,.35); }
-.logTime { color:#9891a6; font-family:'JetBrains Mono',monospace; font-size:12px; }
+.logTime { color:#9891a6; font-family: var(--font-mono); font-size:12px; }
 .logLevel { font-size:11px; font-weight:700; padding:2px 7px; border-radius:6px; text-align:center; }
 .logInfo  { background:rgba(243,232,255,.85); color:#6d28d9; }
 .logWarn  { background:rgba(254,243,199,.85); color:#b45309; }

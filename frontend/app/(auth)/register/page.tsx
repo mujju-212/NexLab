@@ -32,7 +32,7 @@ import {
 } from 'lucide-react';
 
 const ROLE_ROUTES: Record<string, string> = {
-  free_user:         '/practice/dashboard',
+  platform_user:         '/practice/dashboard',
   student:           '/student/dashboard',
   instructor:        '/instructor/dashboard',
   institution_admin: '/institution/dashboard',
@@ -430,7 +430,7 @@ function RegisterPageInner() {
           <div className={styles.formTop}>
             <div className={styles.formHeader}>
               <h2 className={styles.formTitle}>
-                {accountType === 'individual' ? 'Create Free Account' : 'Register Institution'}
+                {accountType === 'individual' ? 'Create Account' : 'Register Institution'}
               </h2>
               <p className={styles.formDesc}>
                 {accountType === 'individual'
@@ -856,7 +856,7 @@ function RegisterPageInner() {
                 ) : (
                   <>
                     <span>
-                      {accountType === 'institution' ? 'Register Institution' : 'Create Free Account'}
+                      {accountType === 'institution' ? 'Register Institution' : 'Create Account'}
                     </span>
                     <ArrowRight size={16} />
                   </>

@@ -8,7 +8,7 @@ Verifies plan Verification step 4:
   [A] POST /api/execution/run  -> status_id == 3, and a CodeAttempt row is
       persisted with execution_time_ms / memory_used_kb / compile_status matching
       the response (Docker shape: time_ms is already ms — no Judge0 x1000).
-  [B] POST /api/free/exercises/<id>/run -> engine executes; per-case status
+  [B] POST /api/platform-user/exercises/<id>/run -> engine executes; per-case status
       'Accepted' (== internal status_id 3). Output need not match the expected
       value — we are checking the Docker path, not the student's correctness.
 
@@ -31,18 +31,18 @@ app.config.update(
     SQLALCHEMY_DATABASE_URI='postgresql://postgres:vlabpass@127.0.0.1:5433/virtuallab',
     TESTING=True,
     JWT_SECRET_KEY='test-secret',
-    DOCKER_RUNNER_ENABLED=True,   # /run + free-run both gate on this master switch
+    DOCKER_RUNNER_ENABLED=True,   # /run + platform-run both gate on this master switch
 )
 client = app.test_client()
 
 # Trivial, always-clean programs so the case exits 0 (status 'Accepted') in any
-# of the languages a free exercise might allow.
+# of the languages a platform exercise might allow.
 TRIVIAL = {
-    'python':     'print("free-smoke")',
-    'javascript': 'console.log("free-smoke")',
-    'c':          '#include <stdio.h>\nint main(){printf("free-smoke\\n");return 0;}',
-    'cpp':        '#include <iostream>\nint main(){std::cout<<"free-smoke\\n";return 0;}',
-    'java':       'public class Main{public static void main(String[] a){System.out.println("free-smoke");}}',
+    'python':     'print("platform-smoke")',
+    'javascript': 'console.log("platform-smoke")',
+    'c':          '#include <stdio.h>\nint main(){printf("platform-smoke\\n");return 0;}',
+    'cpp':        '#include <iostream>\nint main(){std::cout<<"platform-smoke\\n";return 0;}',
+    'java':       'public class Main{public static void main(String[] a){System.out.println("platform-smoke");}}',
 }
 
 fails = []
@@ -107,20 +107,20 @@ with app.app_context():
         check(att.compile_status == body.get('status'),
               f"compile_status == response status ({att.compile_status!r} == {body.get('status')!r})")
 
-    # ── [B] /api/free/exercises/<id>/run ────────────────────────────────────────
-    print('\n[B] POST /api/free/exercises/<id>/run  (practice -> Docker sandbox)')
-    from app.models.free import FreeExercise
+    # ── [B] /api/platform-user/exercises/<id>/run ────────────────────────────────────────
+    print('\n[B] POST /api/platform-user/exercises/<id>/run  (practice -> Docker sandbox)')
+    from app.models.platform_content import PlatformExercise
     ex = lang = None
-    for cand in FreeExercise.query.filter_by(is_published=True, exercise_type='coding').all():
+    for cand in PlatformExercise.query.filter_by(is_published=True, exercise_type='coding').all():
         visible = [tc for tc in (cand.test_cases or []) if not tc.get('hidden', False)]
         pick    = next((l for l in (cand.allowed_languages or []) if l in TRIVIAL), None)
         if visible and pick:
             ex, lang = cand, pick
             break
     if not ex:
-        print('      -> skipped (no published coding free exercise with a visible test case)')
+        print('      -> skipped (no published coding platform exercise with a visible test case)')
     else:
-        r = client.post(f'/api/free/exercises/{ex.id}/run', headers=H,
+        r = client.post(f'/api/platform-user/exercises/{ex.id}/run', headers=H,
                         json={'code': TRIVIAL[lang], 'language': lang})
         check(r.status_code == 200, f'HTTP 200 (got {r.status_code}: {r.data[:150]})')
         fb      = r.get_json() or {}
@@ -136,5 +136,5 @@ print('\n' + '=' * 62)
 if fails:
     print(f'SMOKE FAILED — {len(fails)} check(s): ' + '; '.join(fails))
     sys.exit(1)
-print('SMOKE PASSED — /run + free-run execute via Docker; CodeAttempt persists correctly')
+print('SMOKE PASSED — /run + platform-run execute via Docker; CodeAttempt persists correctly')
 sys.exit(0)

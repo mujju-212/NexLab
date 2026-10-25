@@ -1,12 +1,13 @@
 'use client';
 
 import { useState, useEffect, useCallback } from 'react';
+import { useRouter } from 'next/navigation';
 import { adminService, type Institution, type CreateInstitutionDto } from '@/services/admin.service';
 import AdminShell from '@/components/layout/AdminShell';
 import {
   Plus, Search, Building2, RefreshCw, CheckCircle2, XCircle,
   ChevronRight, Shield, Zap, Crown, Eye, EyeOff, Copy, Check,
-  MoreVertical, AlertTriangle, Users, FlaskConical
+  MoreVertical, Pencil, AlertTriangle, Users, FlaskConical
 } from 'lucide-react';
 import styles from './institutions.module.css';
 
@@ -305,6 +306,7 @@ function DetailsModal({ inst, onClose, onSaved }: {
 // ── Main Page ─────────────────────────────────────────────────────────────────
 
 export default function InstitutionsClient() {
+  const router = useRouter();
   const [institutions, setInstitutions] = useState<Institution[]>([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
@@ -525,8 +527,11 @@ export default function InstitutionsClient() {
                               }
                               {inst.is_active ? 'Suspend' : 'Activate'}
                             </button>
+                            <button className={styles.actionItem} onClick={() => router.push(`/admin/institutions/${inst.id}`)}>
+                              <ChevronRight size={13} /> Open Profile
+                            </button>
                             <button className={styles.actionItem} onClick={() => setDetailsInst(inst)}>
-                              <ChevronRight size={13} /> View Details
+                              <Pencil size={13} /> Quick Edit
                             </button>
                           </div>
                         )}

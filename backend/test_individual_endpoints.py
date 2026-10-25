@@ -19,7 +19,7 @@ headers = {"Authorization": f"Bearer {token}"}
 endpoints = [
     ("Dashboard - Quest Stats", f"{BASE}/practice/quest/stats"),
     ("Dashboard - Recommended Problems", f"{BASE}/practice/recommended"),
-    ("Dashboard - Free Analytics Overview", f"{BASE}/free/analytics/overview"),
+    ("Dashboard - Platform Analytics Overview", f"{BASE}/platform-user/analytics/overview"),
     ("Practice - Daily Challenge", f"{BASE}/practice/daily"),
     ("Practice - Study Plans List", f"{BASE}/practice/plans"),
     ("Practice - Topics List", f"{BASE}/practice/topics"),

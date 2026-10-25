@@ -16,14 +16,14 @@ from app.models.submission import CodeVersion, CodeAttempt
 from app.models.grading import Grade, InlineComment, VivaSession, VivaAnswer, HintLog
 from app.models.knowledge import ConceptMastery, StudentRanking, FocusScore, ExperimentConcept, ConceptPrereq
 from app.models.feedback import SessionFeedback, SessionFeedbackReceipt, PlagiarismFlag, Notification
-from app.models.free import FreeCourse, FreeExercise, FreeProgress
+from app.models.platform_content import PlatformCourse, PlatformExercise, PlatformProgress
 from app.models.otp import EmailOTP
 from app.models.ai_usage import AIUsageLog, AIPolicy, AIAgentRun
 from app.models.proctor_event import ProctorEvent
 from app.models.scheduled_announcement import ScheduledAnnouncement
 from app.models.intervention import Intervention, Extension
 from app.models.enhancements import BankQuestion, TeacherNote, SessionPoll
-from app.models.free_extra import (
+from app.models.practice_extras import (
     ProblemBookmark, PlaygroundSession, ProblemCollection,
     CollectionItem, CodingContest, ContestParticipant,
 )
@@ -64,7 +64,7 @@ __all__ = [
     'Grade', 'InlineComment', 'VivaSession', 'VivaAnswer', 'HintLog',
     'ConceptMastery', 'StudentRanking', 'FocusScore',
     'SessionFeedback', 'SessionFeedbackReceipt', 'PlagiarismFlag', 'Notification',
-    'FreeCourse', 'FreeExercise', 'FreeProgress',
+    'PlatformCourse', 'PlatformExercise', 'PlatformProgress',
     'EmailOTP',
     'AIUsageLog', 'AIPolicy', 'AIAgentRun',
     'ProctorEvent',

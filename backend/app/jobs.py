@@ -104,6 +104,16 @@ def start():
         replace_existing=True
     )
 
+    # Job 8: Nightly platform-wide metric snapshots (Phase 3, M3) — keeps the
+    # admin dashboards O(1) instead of recomputing across hot tables.
+    scheduler.add_job(
+        func=_platform_metric_snapshots,
+        trigger='cron',
+        hour=2, minute=15,
+        id='platform_metric_snapshots',
+        replace_existing=True
+    )
+
     scheduler.start()
 
 
@@ -480,3 +490,16 @@ def _run_nightly_metric_snapshots():
 
 
 compute_all_snapshots = _run_nightly_metric_snapshots
+
+
+def _platform_metric_snapshots():
+    """Snapshot yesterday's platform-wide metrics (see app/admin/metrics.py)."""
+    with scheduler.app.app_context():
+        from app.admin.metrics import snapshot_platform_metrics
+        try:
+            res = snapshot_platform_metrics()
+            scheduler.app.logger.info('[jobs] platform metric snapshot: %s', res)
+        except Exception as exc:
+            from app.extensions import db
+            db.session.rollback()
+            scheduler.app.logger.warning('[jobs] platform metric snapshot failed: %s', exc)

@@ -18,13 +18,13 @@ import {
   ShieldCheck,
   Code2,
 } from 'lucide-react';
-import { freeService, type FreeShowcaseData } from '@/services/free.service';
+import { platformUserService, type PlatformShowcaseData } from '@/services/platform-user.service';
 
 export default function PublicShowcasePage() {
   const params = useParams<{ slug: string }>();
   const slug = params?.slug;
 
-  const [data, setData] = useState<FreeShowcaseData | null>(null);
+  const [data, setData] = useState<PlatformShowcaseData | null>(null);
   const [state, setState] = useState<'loading' | 'ok' | 'private'>('loading');
   const [copied, setCopied] = useState(false);
 
@@ -34,7 +34,7 @@ export default function PublicShowcasePage() {
       return;
     }
 
-    freeService
+    platformUserService
       .getShowcase(slug)
       .then((res) => {
         setData(res);

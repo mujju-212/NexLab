@@ -28,7 +28,7 @@ interface QuotaField {
 
 const QUOTA_FIELDS: QuotaField[] = [
   { key: 'groq_daily_limit',          label: 'Groq Daily AI Call Limit',      desc: 'Platform-wide daily cap on AI calls.' },
-  { key: 'free_user_daily_ai_calls',  label: 'Free User Daily AI Calls',      desc: 'Daily AI calls per platform-direct (non-institution) user.' },
+  { key: 'platform_user_daily_ai_calls',  label: 'Free User Daily AI Calls',      desc: 'Daily AI calls per platform-direct (non-institution) user.' },
   { key: 'max_students_free',         label: 'Max Students — Free Plan',      desc: 'Student seat cap for free-tier institutions.' },
   { key: 'max_students_pro',          label: 'Max Students — Pro Plan',       desc: 'Student seat cap for pro-tier institutions.' },
   { key: 'max_students_enterprise',  label: 'Max Students — Enterprise',     desc: 'Student seat cap for enterprise institutions.' },
@@ -68,7 +68,7 @@ export default function SettingsPage() {
         const cfg = configRes.config || {};
         setQuotas({
           groq_daily_limit: cfg.groq_daily_limit ?? '200',
-          free_user_daily_ai_calls: cfg.free_user_daily_ai_calls ?? '10',
+          platform_user_daily_ai_calls: cfg.platform_user_daily_ai_calls ?? '10',
           max_students_free: cfg.max_students_free ?? '100',
           max_students_pro: cfg.max_students_pro ?? '500',
           max_students_enterprise: cfg.max_students_enterprise ?? '99999',

@@ -61,9 +61,9 @@ USERS = [
         'roll_number': 'NDU2024001',
     },
     {
-        'role':      'free_user',
-        'full_name': 'Free Learner',
-        'email':     'free@nexlab.io',
+        'role':      'platform_user',
+        'full_name': 'Platform Learner',
+        'email':     'platform@nexlab.io',
         'password':  'Free@123',
         'institution_id': None,
     },

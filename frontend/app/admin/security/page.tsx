@@ -2,9 +2,9 @@
 
 import { useEffect, useState } from 'react';
 import AdminShell from '@/components/layout/AdminShell';
-import { adminService, type AuditLogEntry } from '@/services/admin.service';
+import { adminService, adminGovernanceService, type AuditLogEntry, type ImpersonationSessionRow, type ExportJobRow } from '@/services/admin.service';
 import {
-  Shield, Users, Key, ClipboardList,
+  Shield, Users, Key, ClipboardList, Eye,
   CheckCircle2, AlertTriangle, Loader2, ChevronLeft, ChevronRight
 } from 'lucide-react';
 import styles from './page.module.css';
@@ -35,7 +35,7 @@ const ACTION_STYLE = (action: string) => {
 };
 
 export default function SecurityPage() {
-  const [tab, setTab] = useState<'roles' | 'audit' | 'auth'>('audit');
+  const [tab, setTab] = useState<'roles' | 'audit' | 'governance' | 'auth'>('audit');
 
   // Audit log state
   const [days, setDays] = useState(7);
@@ -43,6 +43,8 @@ export default function SecurityPage() {
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(0);
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [impSessions, setImpSessions] = useState<ImpersonationSessionRow[]>([]);
+  const [exportJobs, setExportJobs] = useState<ExportJobRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -72,6 +74,7 @@ export default function SecurityPage() {
         {[
           { id: 'roles', label: 'Role Matrix', Icon: Users },
           { id: 'audit', label: 'Audit Logs', Icon: ClipboardList },
+          { id: 'governance', label: 'Governance', Icon: Eye },
           { id: 'auth', label: 'Auth Details', Icon: Key },
         ].map(t => (
           <button
@@ -160,6 +163,42 @@ export default function SecurityPage() {
                 Next <ChevronRight size={14} strokeWidth={2} />
               </button>
             </div>
+          </div>
+        </div>
+      )}
+
+
+      {/* ── Governance (Phase 4) ───────────────────────────────────────── */}
+      {tab === 'governance' && (
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>Impersonation history</h3>
+          {impSessions.length === 0 && <p style={{ color: '#9891a6', fontSize: 13, fontWeight: 600 }}>No impersonation sessions recorded.</p>}
+          {impSessions.map(s => (
+            <div key={s.id} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,.7)', fontSize: 13 }}>
+              <span style={{ fontWeight: 700, color: s.active ? '#b45309' : '#463f57', minWidth: 90 }}>
+                {s.active ? '● active' : 'ended'}
+              </span>
+              <span style={{ flex: 1 }}>{s.admin_name || 'admin'} → <strong>{s.target_name}</strong> ({s.target_email})</span>
+              <span style={{ color: '#9891a6', fontSize: 12 }}>{s.reason}</span>
+            </div>
+          ))}
+
+          <h3 className={styles.cardTitle} style={{ marginTop: 22 }}>Data export jobs</h3>
+          {exportJobs.length === 0 && <p style={{ color: '#9891a6', fontSize: 13, fontWeight: 600 }}>No export jobs yet — generate one from any User-360 profile.</p>}
+          {exportJobs.map(j => (
+            <div key={j.id} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,.7)', fontSize: 13 }}>
+              <span style={{ fontWeight: 700, color: j.status === 'ready' ? '#15803d' : '#b45309', minWidth: 70 }}>{j.status}</span>
+              <span style={{ flex: 1 }}>GDPR bundle · expires {new Date(j.expires_at).toLocaleString()}</span>
+              {j.status === 'ready' && (
+                <a href={`/api/admin/exports/${j.id}`} download style={{ fontWeight: 700, color: '#6d28d9' }}>Download</a>
+              )}
+            </div>
+          ))}
+
+          <div style={{ marginTop: 22, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <a className={styles.btnSecondary} style={{ textDecoration: 'none' }} href={adminGovernanceService.auditExportUrl(30)} download>
+              Export audit log CSV (30 days)
+            </a>
           </div>
         </div>
       )}

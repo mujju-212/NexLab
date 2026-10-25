@@ -35,7 +35,7 @@ export default function AdminLayout({ children }: { children: React.ReactNode })
       router.replace('/student/dashboard');
     } else if (user?.role === 'instructor') {
       router.replace('/instructor/dashboard');
-    } else if (user?.role === 'free_user') {
+    } else if (user?.role === 'platform_user') {
       router.replace('/practice/dashboard');
     }
     // only platform_admin is allowed through

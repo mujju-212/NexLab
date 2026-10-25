@@ -64,8 +64,8 @@ class TestStudentSideAnalytics(unittest.TestCase):
         try:
             db.session.rollback()
             from app.models.practice import PlatformRatingPeriod
-            from app.models.free import FreeProgress
-            FreeProgress.query.delete()
+            from app.models.platform_content import PlatformProgress
+            PlatformProgress.query.delete()
             PlatformRatingPeriod.query.delete()
             PlatformRating.query.delete()
             PracticeSubmission.query.delete()
@@ -90,8 +90,8 @@ class TestStudentSideAnalytics(unittest.TestCase):
     def setUp(self):
         db.session.rollback()
         from app.models.practice import PlatformRatingPeriod
-        from app.models.free import FreeProgress
-        FreeProgress.query.delete()
+        from app.models.platform_content import PlatformProgress
+        PlatformProgress.query.delete()
         PlatformRatingPeriod.query.delete()
         PlatformRating.query.delete()
         PracticeSubmission.query.delete()

@@ -26,7 +26,7 @@ export interface RegisterDto {
 
 export type OtpPurpose = 'individual_register' | 'institution_register';
 
-export type BackendRole = 'platform_admin' | 'institution_admin' | 'instructor' | 'student' | 'free_user';
+export type BackendRole = 'platform_admin' | 'institution_admin' | 'instructor' | 'student' | 'platform_user';
 
 export interface AuthUser {
   id: string;

@@ -2,10 +2,10 @@
 
 import { useEffect, useState } from 'react';
 import AdminShell from '@/components/layout/AdminShell';
-import { adminService, type PlatformAnalytics } from '@/services/admin.service';
+import { adminService, adminGrowthService, type PlatformAnalytics, type AdminFunnelStage, type AdminCohort } from '@/services/admin.service';
 import {
   TrendingUp, Users, Brain, Activity,
-  BarChart3, Building2, RefreshCw, UserPlus
+  BarChart3, Building2, RefreshCw, UserPlus, Download, Filter
 } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -24,6 +24,24 @@ export default function AnalyticsPage() {
   const [sessionsTrend, setSessionsTrend] = useState<{ date: string; sessions: number }[]>([]);
   const [groqTrend, setGroqTrend] = useState<{ date: string; total: number }[]>([]);
   const [insts, setInsts] = useState<{ id: string; name: string; plan: string; users: number; sessions: number; sessions_per_user: number }[]>([]);
+  const [funnel, setFunnel] = useState<AdminFunnelStage[] | null>(null);
+  const [cohorts, setCohorts] = useState<AdminCohort[] | null>(null);
+  const [pusers, setPUsers] = useState<{ total: number; active: number; signups_in_window: number; growth: { date: string; count: number }[]; dau: { date: string; count: number }[]; xp_distribution: Record<string, number>; top_learners: { id: string; name: string; xp: number }[] } | null>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [f, c, pu] = await Promise.all([
+          adminGrowthService.getFunnel(60),
+          adminGrowthService.getCohorts(8),
+          adminGrowthService.getPlatformUsers(30),
+        ]);
+        setFunnel(f.stages);
+        setCohorts(c.cohorts);
+        setPUsers(pu);
+      } catch { /* growth section shows its own empty state */ }
+    })();
+  }, []);
 
   const days = PERIODS.find(p => p.id === period)?.days ?? 30;
 
@@ -167,6 +185,119 @@ export default function AnalyticsPage() {
         <p style={{ fontSize: 12, color: '#9891a6', margin: '12px 0 0', display: 'flex', alignItems: 'center', gap: 6 }}>
           <TrendingUp size={13} strokeWidth={2} /> Figures aggregated across all institutions from the Groq usage ledger.
         </p>
+      </div>
+
+      {/* ══ GROWTH (Phase 3) ═══════════════════════════════════════════ */}
+      <div style={{ marginTop: 24, display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))', gap: 18 }}>
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>Acquisition funnel <span style={{ fontWeight: 600, fontSize: 12, color: '#9891a6' }}>(last 60d signups)</span></h3>
+          {funnel ? funnel.map(st => {
+            const width = Math.max(4, st.pct);
+            return (
+              <div key={st.key} style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, fontWeight: 700, color: '#463f57', marginBottom: 4 }}>
+                  <span>{st.label}</span>
+                  <span>{st.count} · {st.pct}%</span>
+                </div>
+                <div style={{ height: 10, borderRadius: 99, background: 'rgba(124,58,237,.12)', overflow: 'hidden' }}>
+                  <div style={{ width: `${width}%`, height: '100%', background: 'linear-gradient(90deg,#7c3aed,#a855f7)' }} />
+                </div>
+              </div>
+            );
+          }) : <p style={{ color: '#9891a6', fontSize: 13 }}>Funnel unavailable.</p>}
+        </div>
+
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>Weekly signup cohorts <span style={{ fontWeight: 600, fontSize: 12, color: '#9891a6' }}>(% active in week N)</span></h3>
+          {cohorts && cohorts.length > 0 ? (
+            <div style={{ overflowX: 'auto' }}>
+              <table style={{ borderCollapse: 'collapse', fontSize: 11.5, width: '100%' }}>
+                <thead>
+                  <tr>
+                    <th style={{ padding: '4px 8px', textAlign: 'left', color: '#9891a6' }}>Cohort</th>
+                    <th style={{ padding: '4px 6px', color: '#9891a6' }}>n</th>
+                    {cohorts[0].cells.map((_, i) => (
+                      <th key={i} style={{ padding: '4px 6px', color: '#9891a6' }}>W{i}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {cohorts.map(c => (
+                    <tr key={c.cohort}>
+                      <td style={{ padding: '4px 8px', fontWeight: 700, color: '#463f57', whiteSpace: 'nowrap' }}>
+                        {new Date(c.cohort).toLocaleDateString('en-US', { month: 'short', day: 'numeric' })}
+                      </td>
+                      <td style={{ padding: '4px 6px', textAlign: 'center', color: '#9891a6', fontWeight: 700 }}>{c.size}</td>
+                      {c.cells.map(cell => {
+                        const intensity = cell.pct == null ? 0 : Math.min(1, cell.pct / 100);
+                        return (
+                          <td key={cell.week} style={{ padding: 3 }}>
+                            <div title={cell.pct != null ? `${cell.count} active (${cell.pct}%)` : 'future'} style={{
+                              minWidth: 34, padding: '4px 0', textAlign: 'center', borderRadius: 6, fontWeight: 700,
+                              background: intensity > 0 ? `rgba(124,58,237,${0.12 + intensity * 0.6})` : 'rgba(148,163,184,.12)',
+                              color: intensity > 0.5 ? '#fff' : '#615a72',
+                            }}>
+                              {cell.pct != null ? (cell.pct > 0 ? `${cell.pct}%` : '·') : '—'}
+                            </div>
+                          </td>
+                        );
+                      })}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          ) : <p style={{ color: '#9891a6', fontSize: 13 }}>Cohorts unavailable.</p>}
+        </div>
+
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>Direct (platform) users</h3>
+          {pusers ? (
+            <>
+              <div style={{ display: 'flex', gap: 18, marginBottom: 12, fontSize: 13, fontWeight: 700, color: '#463f57' }}>
+                <span>{pusers.total} total</span>
+                <span>{pusers.active} active</span>
+                <span style={{ color: '#db2777' }}>+{pusers.signups_in_window} in 30d</span>
+              </div>
+              <div style={{ display: 'flex', gap: 6, alignItems: 'flex-end', height: 40, marginBottom: 8 }}>
+                {pusers.dau.map(d => {
+                  const max = Math.max(1, ...pusers.dau.map(x => x.count));
+                  return (
+                    <div key={d.date} title={`${d.date}: ${d.count}`} style={{
+                      flex: 1, minWidth: 3, height: `${Math.max(6, (d.count / max) * 100)}%`,
+                      background: d.count ? '#db2777' : 'rgba(219,39,119,.12)', borderRadius: 2,
+                    }} />
+                  );
+                })}
+              </div>
+              <p style={{ fontSize: 11.5, color: '#9891a6', margin: '0 0 10px' }}>Daily active (30d)</p>
+              {pusers.top_learners.slice(0, 5).map((t, i) => (
+                <div key={t.id} style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, fontWeight: 700, color: '#463f57', padding: '3px 0' }}>
+                  <span>{i + 1}. {t.name}</span>
+                  <span style={{ color: '#7c3aed' }}>{t.xp.toLocaleString()} XP</span>
+                </div>
+              ))}
+            </>
+          ) : <p style={{ color: '#9891a6', fontSize: 13 }}>Direct-user cohort unavailable.</p>}
+        </div>
+
+        <div className={styles.card}>
+          <h3 className={styles.cardTitle}>Exports</h3>
+          <p style={{ fontSize: 12.5, color: '#64748b', fontWeight: 600, margin: '0 0 12px' }}>
+            CSV streams generated live from the database — every export is written to the audit log.
+          </p>
+          <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+            <a className={styles.btnSecondary} style={{ textDecoration: 'none' }} href={adminGrowthService.exportUrl('users')} download>
+              <Download size={14} /> Users CSV
+            </a>
+            <a className={styles.btnSecondary} style={{ textDecoration: 'none' }} href={adminGrowthService.exportUrl('activity')} download>
+              <Download size={14} /> Activity CSV
+            </a>
+          </div>
+          <p style={{ fontSize: 11.5, color: '#9891a6', margin: '10px 0 0', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <Filter size={12} /> Exports carry your access token automatically via the API client cookie session.
+          </p>
+        </div>
       </div>
     </AdminShell>
   );

@@ -1,6 +1,6 @@
 // ─── User / Auth ──────────────────────────────────────────────────────────────
 // Roles match backend JWT payload exactly
-export type Role = 'platform_admin' | 'institution_admin' | 'instructor' | 'student' | 'free_user';
+export type Role = 'platform_admin' | 'institution_admin' | 'instructor' | 'student' | 'platform_user';
 
 export interface User {
   id: string;

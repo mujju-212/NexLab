@@ -9,12 +9,12 @@ r = requests.post(f"{BASE}/auth/login", json={
 token = r['token']
 headers = {"Authorization": f"Bearer {token}"}
 
-overall = requests.get(f"{BASE}/free/progress", headers=headers).json()
-print("=== Overall Free Progress ===")
+overall = requests.get(f"{BASE}/platform-user/progress", headers=headers).json()
+print("=== Overall Platform Progress ===")
 print(json.dumps(overall, indent=2))
 
-course = requests.get(f"{BASE}/free/courses/dsa-fundamentals", headers=headers).json()['course']
+course = requests.get(f"{BASE}/platform-user/courses/dsa-fundamentals", headers=headers).json()['course']
 cid = course['id']
-course_prog = requests.get(f"{BASE}/free/progress/{cid}", headers=headers).json()
+course_prog = requests.get(f"{BASE}/platform-user/progress/{cid}", headers=headers).json()
 print(f"=== Course Progress for {course['title']} ===")
 print(json.dumps(course_prog, indent=2))

@@ -2,6 +2,11 @@
 :root {
   /* Brand */
   --primary:          #7c3aed;
+  /* System font stacks (self-hosted by design — see app/layout.tsx: no remote
+     font fetches). Display = headings, Sans = UI, Mono = code. */
+  --font-display:    'Space Grotesk', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-sans:       'Manrope', 'Segoe UI', system-ui, -apple-system, sans-serif;
+  --font-mono:       'JetBrains Mono', 'Fira Code', 'Cascadia Code', Consolas, monospace;
   --primary-light:    #9333ea;
   --primary-pale:     #faf5ff;
   --primary-glow:     rgba(124,58,237,0.16);
@@ -130,3 +135,45 @@ body:has([aria-modal="true"]) [class*="copilotContainer"]:not([class*="copilotCo
   visibility: hidden !important;
 }
 
+
+/* ── Print: clean white page behind every printable view ─────────────── */
+@media print {
+  body {
+    background: #ffffff !important;
+  }
+}
+@media print {
+  nav,
+  aside {
+    display: none !important;
+  }
+}
+
+/* Institution users drawer: profile detail cards stack on phones */
+@media (max-width: 640px) {
+  .usersDrawerStack { grid-template-columns: 1fr !important; }
+}
+
+/* ══ Institution portal: every data table scrolls horizontally on phones ══
+   Tables size to their content (min-width: min(max-content, 640px)) instead of
+   compressing columns; the nearest block wrapper becomes the scroll surface. */
+@media (max-width: 768px) {
+  [data-portal="institution"] div:has(> table) {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  [data-portal="institution"] table {
+    min-width: min(max-content, 640px) !important;
+  }
+}
+
+/* ══ Smooth interaction polish (both desktop and mobile) ══ */
+button, [role="button"] {
+  transition: transform .12s ease, box-shadow .15s ease, opacity .15s ease, background-color .15s ease, border-color .15s ease, color .15s ease;
+}
+button:active, [role="button"]:active {
+  transform: scale(.98);
+}
+@media (prefers-reduced-motion: reduce) {
+  button:active, [role="button"]:active { transform: none; }
+}

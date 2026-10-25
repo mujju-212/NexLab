@@ -107,16 +107,30 @@ def create_app(config_name=None):
     from app.execution.routes import execution_bp
     from app.ai.routes import ai_bp
     from app.ml.routes import ml_bp
-    from app.free.routes import free_bp
+    from app.platform_user.routes import platform_user_bp
     from app.practice.routes import practice_bp
     from app.practice.extras import extra_bp
     from app.notifications import notif_bp
     from app.analytics.routes import student_analytics_bp
     from app.student_analytics.routes import student_facing_analytics_bp, platform_public_bp
-    from app.free_analytics.routes import free_analytics_bp
+    from app.platform_user_analytics.routes import platform_user_analytics_bp
+    from app.admin.users import admin_users_bp
+    from app.admin.tenant import admin_tenant_bp
+    from app.admin.content import admin_content_bp
+    from app.admin.growth import admin_growth_bp
+    from app.admin.metrics import admin_metrics_bp
+    from app.admin.governance import admin_governance_bp
+    from app.ai.tutor_routes import tutor_bp
 
     app.register_blueprint(auth_bp,               url_prefix='/api/auth')
     app.register_blueprint(admin_bp,              url_prefix='/api/admin')
+    app.register_blueprint(admin_users_bp,         url_prefix='/api/admin')
+    app.register_blueprint(admin_tenant_bp,        url_prefix='/api/admin')
+    app.register_blueprint(admin_content_bp,      url_prefix='/api/admin')
+    app.register_blueprint(admin_growth_bp,       url_prefix='/api/admin')
+    app.register_blueprint(admin_metrics_bp,      url_prefix='/api/admin')
+    app.register_blueprint(admin_governance_bp,   url_prefix='/api/admin')
+    app.register_blueprint(tutor_bp,             url_prefix='/api/ai')
     app.register_blueprint(platform_bp,           url_prefix='/api/platform')
     app.register_blueprint(platform_public_bp,    url_prefix='/api/platform')
     app.register_blueprint(announcements_inst_bp, url_prefix='/api/institution')
@@ -139,8 +153,8 @@ def create_app(config_name=None):
     app.register_blueprint(execution_bp,       url_prefix='/api/execution')
     app.register_blueprint(ai_bp,              url_prefix='/api/ai')
     app.register_blueprint(ml_bp,              url_prefix='/api/ml')
-    app.register_blueprint(free_bp,            url_prefix='/api/free')
-    app.register_blueprint(free_analytics_bp,  url_prefix='/api/free/analytics')
+    app.register_blueprint(platform_user_bp,            url_prefix='/api/platform-user')
+    app.register_blueprint(platform_user_analytics_bp,  url_prefix='/api/platform-user/analytics')
     app.register_blueprint(practice_bp,        url_prefix='/api/practice')
     app.register_blueprint(extra_bp,           url_prefix='/api/practice')
     app.register_blueprint(notif_bp,           url_prefix='/api')
@@ -227,8 +241,8 @@ def create_app(config_name=None):
                 "CREATE INDEX IF NOT EXISTS ix_exam_attempts_student_exam ON exam_attempts (student_id, exam_id)",
                 "CREATE INDEX IF NOT EXISTS ix_exam_attempts_student_exp ON exam_attempts (student_id, experiment_id)",
                 "CREATE INDEX IF NOT EXISTS ix_practice_subs_stu_run_status_dt ON practice_submissions (student_id, is_run, status, submitted_at)",
-                "CREATE INDEX IF NOT EXISTS ix_free_exercises_course_order ON free_exercises (course_id, order_index)",
-                "CREATE INDEX IF NOT EXISTS ix_free_progress_user_course ON free_progress (user_id, course_id, status)",
+                "CREATE INDEX IF NOT EXISTS ix_platform_exercises_course_order ON platform_exercises (course_id, order_index)",
+                "CREATE INDEX IF NOT EXISTS ix_platform_progress_user_course ON platform_progress (user_id, course_id, status)",
                 "CREATE INDEX IF NOT EXISTS ix_admin_chat_sessions_user_role ON admin_chat_sessions (user_id, role_scope)",
                 "CREATE INDEX IF NOT EXISTS ix_inst_docs_scope ON institution_documents (scope_type, scope_id)",
             ]
@@ -277,7 +291,7 @@ def create_app(config_name=None):
         p = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'test_live_instructor.html')
         return send_file(p)
 
-    # ── Serve workspace (free courses) as static files ────────────────────
+    # ── Serve workspace (platform courses) as static files ────────────────────
     @app.route('/workspace/')
     @app.route('/workspace/<path:filename>')
     def serve_workspace(filename='index.html'):

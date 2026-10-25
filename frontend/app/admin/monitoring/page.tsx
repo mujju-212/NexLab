@@ -2,6 +2,7 @@
 
 import { useCallback, useEffect, useState } from 'react';
 import AdminShell from '@/components/layout/AdminShell';
+import { adminGovernanceService, type JobsMonitor } from '@/services/admin.service';
 import { adminService } from '@/services/admin.service';
 import {
   Server, Database, Code2, Brain, Building2,
@@ -36,6 +37,10 @@ export default function MonitoringPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+  const [jobs, setJobs] = useState<JobsMonitor | null>(null);
+  useEffect(() => {
+    adminGovernanceService.getJobsMonitor().then(setJobs).catch(() => setJobs(null));
+  }, []);
 
   const ok = (s?: string) => s === 'online' || s === 'configured';
   const warn = (s?: string) => s === 'degraded' || s === 'not_configured' || s === 'unknown';
@@ -135,6 +140,34 @@ export default function MonitoringPage() {
             ))
           )}
         </div>
+      </div>
+
+
+      {/* ── Background Jobs (Phase 4) ─────────────────────────────────── */}
+      <div style={{ marginTop: 22, background: 'rgba(255,255,255,.45)', border: '1px solid rgba(255,255,255,.7)', borderRadius: 20, padding: 22 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 14 }}>
+          <h3 style={{ margin: 0, fontSize: 16, fontWeight: 800 }}>Background jobs</h3>
+          <span style={{ fontSize: 12.5, fontWeight: 700, color: jobs?.scheduler_running ? '#15803d' : '#b45309' }}>
+            ● scheduler {jobs?.scheduler_running ? 'running' : 'stopped'}
+          </span>
+        </div>
+        {(jobs?.jobs || []).length === 0 && (
+          <p style={{ color: '#9891a6', fontSize: 13, fontWeight: 600 }}>No jobs registered (scheduler not started in this process).</p>
+        )}
+        {(jobs?.jobs || []).map(j => (
+          <div key={j.id} style={{ display: 'flex', gap: 14, padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,.7)', fontSize: 13, flexWrap: 'wrap' }}>
+            <strong style={{ color: '#201b2e', minWidth: 220 }}>{j.id}</strong>
+            <span style={{ color: '#64748b', flex: 1 }}>{j.trigger}</span>
+            <span style={{ color: '#7c3aed', fontWeight: 700 }}>
+              {j.next_run ? `next ${new Date(j.next_run).toLocaleString()}` : 'pending'}
+            </span>
+          </div>
+        ))}
+        {(jobs?.metric_snapshots || []).length > 0 && (
+          <p style={{ fontSize: 11.5, color: '#9891a6', marginTop: 12 }}>
+            Metric snapshots fresh through {jobs?.metric_snapshots?.[0]?.last_day} ({jobs?.metric_snapshots?.length} metrics tracked).
+          </p>
+        )}
       </div>
 
       <p style={{ fontSize: 12, color: '#9891a6', marginTop: 14, display: 'flex', alignItems: 'center', gap: 6 }}>

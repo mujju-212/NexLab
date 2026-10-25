@@ -10,7 +10,7 @@ const ROLE_ROUTES: Record<string, string> = {
   institution_admin: '/institution/dashboard',
   instructor:        '/instructor/dashboard',
   student:           '/student/dashboard',
-  free_user:         '/practice/dashboard',
+  platform_user:         '/practice/dashboard',
 };
 
 export function useAuth() {

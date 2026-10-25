@@ -24,7 +24,7 @@ from app.models.grading import Grade
 from app.models.session import LabSession, SessionAttendance
 from app.models.knowledge import ConceptMastery
 from app.models.practice import Problem, PracticeSubmission, StudentXP, PlatformRating, PlatformRatingPeriod
-from app.models.free import FreeProgress
+from app.models.platform_content import PlatformProgress
 
 from app.analytics.completion import compute_student_completion_rollup, compute_student_attendance_rollup
 from app.platform_rank.rating import compute_student_platform_rating, get_student_platform_standing

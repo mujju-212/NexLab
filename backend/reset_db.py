@@ -27,13 +27,13 @@ with app.app_context():
     except Exception as e:
         print(f"Error seeding test users: {e}")
 
-    # Seed free courses
+    # Seed platform courses
     try:
-        from database.seed_free_courses import seed_free_courses
-        seed_free_courses()
-        print("[SUCCESS] Seeded free courses successfully")
+        from database.seed_platform_courses import seed_platform_courses
+        seed_platform_courses()
+        print("[SUCCESS] Seeded platform courses successfully")
     except Exception as e:
-        print(f"Error seeding free courses: {e}")
+        print(f"Error seeding platform courses: {e}")
 
     # Seed simulation courses
     try:

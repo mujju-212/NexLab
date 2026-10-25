@@ -5,7 +5,7 @@ tests = [
     ('inst.admin@nexlab.demo', 'InstAdmin@123'),
     ('instructor@nexlab.demo', 'Instructor@123'),
     ('student@nexlab.demo',    'Student@123'),
-    ('free@nexlab.io',         'Free@123'),
+    ('platform@nexlab.io',         'Free@123'),
 ]
 
 print('=== Login Verification ===')

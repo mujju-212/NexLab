@@ -11,8 +11,10 @@ import {
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './StudentShell.module.css';
+import ImpersonationBanner from '@/components/shared/ImpersonationBanner';
 import { ShellNotifications, ShellSearchBox, ShellProfileMenu, type SearchHit } from './shell-widgets';
 import AgentChatPanel from './AgentChatPanel';
+import { AppToaster } from '@/components/ui/toast';
 import { studentService } from '@/services/student.service';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
@@ -104,6 +106,7 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
 
   return (
     <div className={styles.stage}>
+      <ImpersonationBanner />
       <div className={`${styles.blob} ${styles.blob1}`} />
       <div className={`${styles.blob} ${styles.blob2}`} />
       <div className={`${styles.blob} ${styles.blob3}`} />
@@ -278,6 +281,7 @@ export default function StudentShell({ activePage, children, title, subtitle }: 
         </main>
       </div>
 
+      <AppToaster />
       <AgentChatPanel roleOverride="student" pageContext={{ page_title: title || activePage }} />
     </div>
   );

@@ -1,11 +1,11 @@
 
 .topHeaderRow { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; flex-wrap: wrap; gap: 12px; }
-.backBtn { display: inline-flex; align-items: center; gap: 7px; background: rgba(255,255,255,.55); border: 1px solid rgba(255,255,255,.65); padding: 8px 16px; border-radius: 12px; font-size: 13px; font-weight: 700; color: #463f57; cursor: pointer; transition: background .15s; font-family: 'Manrope', sans-serif; }
+.backBtn { display: inline-flex; align-items: center; gap: 7px; background: rgba(255,255,255,.55); border: 1px solid rgba(255,255,255,.65); padding: 8px 16px; border-radius: 12px; font-size: 13px; font-weight: 700; color: #463f57; cursor: pointer; transition: background .15s; font-family: var(--font-sans); }
 .backBtn:hover { background: rgba(255,255,255,.85); }
 
 .templateGroup { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
 .templateLabel { font-size: 12.5px; font-weight: 700; color: #9891a6; }
-.templateBtn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 10px; font-size: 12.5px; font-weight: 700; color: #7c3aed; background: rgba(243,232,255,.35); border: 1px solid rgba(147,51,234,.25); cursor: pointer; transition: background .15s; font-family: 'Manrope', sans-serif; }
+.templateBtn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 10px; font-size: 12.5px; font-weight: 700; color: #7c3aed; background: rgba(243,232,255,.35); border: 1px solid rgba(147,51,234,.25); cursor: pointer; transition: background .15s; font-family: var(--font-sans); }
 .templateBtn:hover { background: rgba(243,232,255,.6); }
 
 /* Upload Card */
@@ -13,18 +13,18 @@
 .dropzone { border: 2px dashed rgba(147,51,234,.35); background: rgba(255,255,255,.4); border-radius: 20px; padding: 48px 32px; text-align: center; cursor: pointer; transition: all .2s; display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .dropzoneActive, .dropzone:hover { border-color: #7c3aed; background: rgba(243,232,255,.3); }
 .dropIcon { width: 64px; height: 64px; border-radius: 18px; background: rgba(243,232,255,.5); display: flex; align-items: center; justify-content: center; margin-bottom: 16px; }
-.dropTitle { font-size: 20px; font-weight: 700; color: #201b2e; font-family: 'Space Grotesk', sans-serif; margin: 0 0 8px; }
+.dropTitle { font-size: 20px; font-weight: 700; color: #201b2e; font-family: var(--font-display); margin: 0 0 8px; }
 .dropSub { font-size: 13.5px; color: #9891a6; font-weight: 500; margin: 0 0 20px; max-width: 480px; }
 
 .noticeBox { display: flex; gap: 14px; background: rgba(243,232,255,.25); border: 1px solid rgba(147,51,234,.2); border-radius: 16px; padding: 18px 22px; margin-top: 24px; align-items: flex-start; }
-.noticeTitle { font-size: 14px; font-weight: 700; color: #5b21b6; font-family: 'Space Grotesk', sans-serif; margin: 0 0 4px; }
+.noticeTitle { font-size: 14px; font-weight: 700; color: #5b21b6; font-family: var(--font-display); margin: 0 0 4px; }
 .noticeText { font-size: 13px; color: #615a72; font-weight: 500; margin: 0; line-height: 1.5; }
 
 /* Buttons */
-.btnPrimary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 22px; border-radius: 12px; font-size: 13.5px; font-weight: 700; cursor: pointer; border: none; background: linear-gradient(135deg,#7c3aed,#9333ea); color: #fff; box-shadow: 0 6px 18px rgba(124,58,237,.3); transition: all .15s; font-family: 'Manrope', sans-serif; }
+.btnPrimary { display: inline-flex; align-items: center; justify-content: center; gap: 8px; padding: 11px 22px; border-radius: 12px; font-size: 13.5px; font-weight: 700; cursor: pointer; border: none; background: linear-gradient(135deg,#7c3aed,#9333ea); color: #fff; box-shadow: 0 6px 18px rgba(124,58,237,.3); transition: all .15s; font-family: var(--font-sans); }
 .btnPrimary:hover { box-shadow: 0 8px 22px rgba(124,58,237,.4); transform: translateY(-1px); }
 .btnDisabled { opacity: .5; cursor: not-allowed; transform: none !important; box-shadow: none !important; }
-.btnSecondary { display: inline-flex; align-items: center; gap: 7px; padding: 10px 18px; border-radius: 12px; font-size: 13.5px; font-weight: 700; cursor: pointer; background: rgba(255,255,255,.6); border: 1px solid rgba(255,255,255,.7); color: #463f57; transition: all .15s; font-family: 'Manrope', sans-serif; }
+.btnSecondary { display: inline-flex; align-items: center; gap: 7px; padding: 10px 18px; border-radius: 12px; font-size: 13.5px; font-weight: 700; cursor: pointer; background: rgba(255,255,255,.6); border: 1px solid rgba(255,255,255,.7); color: #463f57; transition: all .15s; font-family: var(--font-sans); }
 .btnSecondary:hover { background: rgba(255,255,255,.9); }
 
 /* Warnings & Summary */
@@ -46,8 +46,8 @@
 .errorRow { background: rgba(254,226,226,.3) !important; }
 .errorRow:hover { background: rgba(254,226,226,.45) !important; }
 
-.cellInput { width: 100%; padding: 6px 10px; border-radius: 8px; border: 1.5px solid #7c3aed; background: #fff; font-size: 13px; font-weight: 600; color: #201b2e; outline: none; font-family: 'Manrope', sans-serif; }
-.code { font-family: 'JetBrains Mono', monospace; font-size: 12px; background: rgba(255,255,255,.7); padding: 3px 8px; border-radius: 6px; color: #615a72; }
+.cellInput { width: 100%; padding: 6px 10px; border-radius: 8px; border: 1.5px solid #7c3aed; background: #fff; font-size: 13px; font-weight: 600; color: #201b2e; outline: none; font-family: var(--font-sans); }
+.code { font-family: var(--font-mono); font-size: 12px; background: rgba(255,255,255,.7); padding: 3px 8px; border-radius: 6px; color: #615a72; }
 
 .pillValid { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: rgba(209,250,223,.85); color: #0f8a3f; }
 .pillError { display: inline-flex; align-items: center; gap: 4px; font-size: 11.5px; font-weight: 700; padding: 3px 10px; border-radius: 999px; background: rgba(254,226,226,.85); color: #b91c1c; cursor: help; }
@@ -67,7 +67,7 @@
 .successCard { background: rgba(255,255,255,.45); border: 1.5px solid rgba(255,255,255,.7); border-radius: 24px; padding: 32px; box-shadow: 0 10px 30px rgba(20,20,30,.06); }
 .successHeader { text-align: center; margin-bottom: 28px; }
 .successIcon { width: 68px; height: 68px; border-radius: 50%; background: linear-gradient(135deg,#22c55e,#16a34a); display: flex; align-items: center; justify-content: center; margin: 0 auto 16px; box-shadow: 0 10px 24px rgba(34,197,94,.3); }
-.successHeader h2 { font-size: 26px; font-weight: 700; color: #201b2e; font-family: 'Space Grotesk', sans-serif; margin: 0 0 6px; }
+.successHeader h2 { font-size: 26px; font-weight: 700; color: #201b2e; font-family: var(--font-display); margin: 0 0 6px; }
 .successHeader p { font-size: 14px; color: #615a72; margin: 0; }
 
 .reportSummary { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; }

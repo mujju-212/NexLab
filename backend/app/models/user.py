@@ -55,6 +55,12 @@ class User(db.Model):
     force_logout_at = db.Column(db.DateTime)   # set by admin — invalidates all older tokens
     must_change_password = db.Column(db.Boolean, default=False)   # set on temp credentials
 
+    # Administrative lifecycle (platform admin console). JWT revocation for
+    # suspension reuses force_logout_at — no separate token_version needed.
+    status              = db.Column(db.String(16), default='active')  # active|suspended|pending_deletion
+    suspension_reason   = db.Column(db.Text)
+    suspended_until     = db.Column(db.DateTime)
+
     def __init__(self, **kwargs):
         super().__init__(**kwargs)
 
@@ -85,6 +91,9 @@ class User(db.Model):
             'two_factor_enabled': bool(self.two_factor_enabled),
             'is_active': self.is_active,
             'must_change_password': bool(self.must_change_password),
+            'status': self.status or 'active',
+            'suspension_reason': self.suspension_reason,
+            'suspended_until': self.suspended_until.isoformat() + 'Z' if self.suspended_until else None,
             'created_at': self.created_at.isoformat() + 'Z' if self.created_at else None,
             'last_login': self.last_login.isoformat() + 'Z' if self.last_login else None,
         }

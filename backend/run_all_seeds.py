@@ -3,7 +3,7 @@ run_all_seeds.py — Sequentially executes all database seeding scripts:
 1. database/seed_test_users.py
 2. database/seed_institution_demo.py
 3. database/seed_full_demo.py
-4. database/seed_free_courses.py
+4. database/seed_platform_courses.py
 5. database/seed_simulation_courses.py
 6. scripts/seed_problems.py
 7. seed_test_cases.py
@@ -23,7 +23,7 @@ scripts_to_run = [
     "database/seed_test_users.py",
     "database/seed_institution_demo.py",
     "database/seed_full_demo.py",
-    "database/seed_free_courses.py",
+    "database/seed_platform_courses.py",
     "database/seed_simulation_courses.py",
     "scripts/seed_problems.py",
     "seed_test_cases.py",

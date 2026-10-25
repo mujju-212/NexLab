@@ -3,7 +3,7 @@ sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..'))
 
 from app import create_app
 from app.extensions import db
-from app.models.free import FreeCourse, FreeExercise
+from app.models.platform_content import PlatformCourse, PlatformExercise
 
 app = create_app()
 
@@ -167,15 +167,15 @@ COURSES_DATA = [
 with app.app_context():
     # Hide any duplicates
     for dup in ['algo-3feddd', 'py-found-84a27f']:
-        c = FreeCourse.query.filter_by(slug=dup).first()
+        c = PlatformCourse.query.filter_by(slug=dup).first()
         if c:
             c.is_published = False
 
     for item in COURSES_DATA:
         slug = item['slug']
-        c = FreeCourse.query.filter_by(slug=slug).first()
+        c = PlatformCourse.query.filter_by(slug=slug).first()
         if not c:
-            c = FreeCourse(slug=slug, title=item['title'], is_published=True)
+            c = PlatformCourse(slug=slug, title=item['title'], is_published=True)
             db.session.add(c)
             db.session.flush()
 
@@ -191,7 +191,7 @@ with app.app_context():
         needed = item['exercise_count'] - existing_count
         if needed > 0:
             for i in range(needed):
-                ex = FreeExercise(
+                ex = PlatformExercise(
                     course_id=c.id,
                     title=f"{item['title']} Lesson {existing_count + i + 1}",
                     description=f"Hands-on practice exercise for {item['title']}.",
@@ -208,5 +208,5 @@ with app.app_context():
 
     db.session.commit()
     print('Courses database synced successfully!')
-    for c in FreeCourse.query.filter_by(is_published=True).order_by(FreeCourse.order_index.asc()).all():
+    for c in PlatformCourse.query.filter_by(is_published=True).order_by(PlatformCourse.order_index.asc()).all():
         print(c.order_index, c.slug, '|', c.title, '|', c.exercises.count(), 'exs |', c.difficulty)

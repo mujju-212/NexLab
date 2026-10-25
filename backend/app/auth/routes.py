@@ -1,4 +1,4 @@
-from flask import Blueprint, request, jsonify, current_app
+from flask import Blueprint, request, jsonify, current_app, g
 from flask_jwt_extended import create_access_token
 from datetime import datetime, timedelta
 import bcrypt
@@ -7,6 +7,8 @@ import re
 import uuid
 
 from app.extensions import db, limiter
+from app.services.storage_helper import upload_icon_file as _upload_icon_file
+from app.auth.utils import require_auth
 from app.models.user import User
 from app.models.institution import Institution
 from app.models.otp import EmailOTP, OTP_EXPIRY_MINUTES, OTP_MAX_ATTEMPTS
@@ -31,6 +33,20 @@ def login():
     user = User.query.filter_by(email=email, is_active=True).first()
     if not user:
         return jsonify({'error': 'Invalid credentials'}), 401
+
+    # Administrative suspension gate (platform admin console). A temp
+    # suspension that has already expired lifts itself here.
+    if user.status == 'suspended':
+        if user.suspended_until and user.suspended_until <= datetime.utcnow():
+            user.status = 'active'
+            user.suspension_reason = None
+            user.suspended_until = None
+            db.session.commit()
+        else:
+            return jsonify({
+                'error': 'Account suspended. Contact support for assistance.',
+                'code': 'ACCOUNT_SUSPENDED',
+            }), 403
 
     if not bcrypt.checkpw(password.encode(), user.password_hash.encode()):
         demo_passwords = {'Student@123', 'Passw0rd@123', 'student123', 'password', 'Demo@1234', 'student', '123456', 'Instructor@123', 'Admin@123', 'InstAdmin@123', 'AdminPassword123!'}
@@ -66,13 +82,30 @@ def login():
 @auth_bp.route('/me', methods=['GET'])
 def me():
     from flask_jwt_extended import verify_jwt_in_request, get_jwt
+    from app.auth.utils import _is_force_logged_out, _force_logout_response, _password_change_block
     verify_jwt_in_request()
     claims = get_jwt()
+    if _is_force_logged_out(claims):
+        return _force_logout_response()
     user = User.query.get(claims['sub'])
     if not user:
         return jsonify({'error': 'User not found'}), 404
 
     user_dict = user.to_dict()
+    if claims.get('imp'):
+        from app.models.governance import ImpersonationSession
+        from app.models.user import User as _U
+        imp = claims['imp']
+        sess = ImpersonationSession.query.get(imp.get('sid'))
+        admin = _U.query.get(imp.get('by'))
+        user_dict['impersonation'] = {
+            'active': True,
+            'session_id': imp.get('sid'),
+            'impersonator_id': imp.get('by'),
+            'impersonator_name': admin.full_name if admin else None,
+            'reason': sess.reason if sess else None,
+            'read_only': True,
+        }
 
     # Enrich with human-readable institution, department, and section details
     if user.institution_id:
@@ -178,10 +211,37 @@ def export_user_data():
     }), 200
 
 
+
+
+@auth_bp.route('/me/avatar', methods=['POST'])
+@require_auth
+def upload_avatar():
+    """Upload the caller's profile picture (multipart 'file') -> Cloudinary
+    URL saved on profile_pic_url."""
+    from werkzeug.utils import secure_filename
+    if 'file' not in request.files:
+        return jsonify({'error': 'No file provided'}), 400
+    file = request.files['file']
+    if not file.filename:
+        return jsonify({'error': 'Empty filename'}), 400
+    try:
+        url = _upload_icon_file(file, 'avatars')
+    except ValueError as exc:
+        return jsonify({'error': str(exc)}), 400
+    user = User.query.get(g.user_id)
+    user.profile_pic_url = url
+    db.session.commit()
+    return jsonify({'profile_pic_url': url, 'user': user.to_dict()}), 200
+
+
 @auth_bp.route('/change-password', methods=['POST'])
 def change_password():
     from flask_jwt_extended import verify_jwt_in_request, get_jwt
     verify_jwt_in_request()
+    from app.auth.utils import reject_if_impersonating
+    _imp = reject_if_impersonating()
+    if _imp:
+        return _imp
     claims = get_jwt()
     data = request.get_json()
 
@@ -225,7 +285,7 @@ def _generate_institution_code(name: str) -> str:
 
 # ── Email OTP Verification (self-registration ONLY) ─────────────────────────────────────
 # NOTE: This flow is used ONLY when someone signs themselves up (an individual
-# free_user, or an institution registering itself + its first admin). Accounts
+# platform_user, or an institution registering itself + its first admin). Accounts
 # created BY an institution/platform admin (POST /institution/users, bulk
 # upload, POST /admin/institutions) are trusted, admin-initiated actions and
 # never require OTP.
@@ -305,8 +365,8 @@ def register():
     """
     Self-registration — two flows, both require a fresh verified EmailOTP:
 
-      1. Individual account (role omitted / free_user): creates a standalone
-         free_user with no institution affiliation.
+      1. Individual account (role omitted / platform_user): creates a standalone
+         platform_user with no institution affiliation.
       2. Institution self-registration (role='institution_admin' +
          institution_name): creates a new Institution AND its first
          institution_admin user in one call.
@@ -404,13 +464,13 @@ def register():
             'institution': institution.to_dict(),
         }), 201
 
-    # ── Individual free_user account (no institution_id) ───────────────────────
+    # ── Individual platform_user account (no institution_id) ───────────────────────
     user = User(
         institution_id=None,
         email=email,
         password_hash=bcrypt.hashpw(password.encode(), bcrypt.gensalt()).decode(),
         full_name=full_name,
-        role='free_user',
+        role='platform_user',
         phone=data.get('phone'),
     )
     db.session.add(user)

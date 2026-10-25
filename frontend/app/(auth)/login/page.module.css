@@ -12,7 +12,7 @@
   background: radial-gradient(circle at 10% 20%, #f7f3ff 0%, #ffffff 50%, #f3ebff 100%);
   overflow: hidden;
   padding: 24px;
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-display);
   box-sizing: border-box;
 }
 
@@ -336,7 +336,7 @@
 }
 
 .compilerPillText {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 600;
   color: #f8fafc;
