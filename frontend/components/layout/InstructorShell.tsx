@@ -6,7 +6,8 @@ import {
   LayoutDashboard, FlaskConical, PlayCircle, Radio,
   ClipboardCheck, BarChart3,
   LogOut, Settings, Menu,
-  FileText, HeartHandshake, Star, ShieldCheck, Megaphone, User
+  FileText, HeartHandshake, Star, ShieldCheck, Megaphone, User,
+  MoreHorizontal, X
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './InstructorShell.module.css';
@@ -38,6 +39,16 @@ const NAV_MORE = [
   { id: 'Settings',        label: 'Teaching Settings',  Icon: Settings,     route: '/instructor/settings' },
 ];
 
+/* Mobile bottom tab bar — 5 primary destinations one tap away for faculty on mobile.
+   Remaining sections live in the "More" bottom sheet. */
+const BOTTOM_TABS = [
+  { id: 'Dashboard',   label: 'Home',      Icon: LayoutDashboard, route: '/instructor/dashboard' },
+  { id: 'Sessions',    label: 'Sessions',  Icon: PlayCircle,       route: '/instructor/sessions' },
+  { id: 'Grading',     label: 'Grading',   Icon: ClipboardCheck,  route: '/instructor/grading' },
+  { id: 'Management',  label: 'Classes',   Icon: HeartHandshake,  route: '/instructor/management' },
+  { id: 'More',        label: 'More',      Icon: MoreHorizontal,   route: '' },
+];
+
 interface InstructorShellProps {
   activePage: string;
   children: React.ReactNode;
@@ -51,6 +62,7 @@ export default function InstructorShell({ activePage, children, title, subtitle,
   const { user, clearAuth } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [signingOut, setSigningOut] = useState(false);
 
   useEffect(() => {
@@ -79,6 +91,7 @@ export default function InstructorShell({ activePage, children, title, subtitle,
 
   const go = useCallback(async (id: string, route: string) => {
     setDrawerOpen(false);
+    setMoreOpen(false);
     if (id === 'Logout') {
       setSigningOut(true);
       try {
@@ -248,7 +261,41 @@ export default function InstructorShell({ activePage, children, title, subtitle,
         {/* ══ MAIN ══ */}
         <main className={styles.content} style={noScroll ? { overflow: 'hidden', display: 'flex', flexDirection: 'column' } : undefined}>
           
-          {/* Top Header */}
+          {/* ══ MOBILE APP BAR (phone view; hidden on desktop) ══ */}
+          <div className={styles.mobileAppBar}>
+            <button className={styles.mobileBarBtn} onClick={() => setDrawerOpen(true)} aria-label="Open menu">
+              <Menu size={20} strokeWidth={2.1} />
+            </button>
+            <div className={styles.mobileBarTitleWrap}>
+              <span className={styles.mobileBarTitle}>{title || activePage}</span>
+              <span className={styles.mobileRoleBadge}>Faculty</span>
+            </div>
+            <div className={styles.mobileBarActions}>
+              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} role="instructor" />
+              <ShellProfileMenu
+                name={fullName}
+                email={user?.email}
+                initials={initials}
+                roleLabel="Instructor"
+                profileHref="/instructor/profile"
+                settingsHref="/instructor/settings"
+                buttonClass={styles.profileChip}
+                avatarClass={styles.avatarLg}
+                avatarStyle={{ background: '#7c3aed', width: 32, height: 32, fontSize: 12 }}
+                onSignOut={() => go('Logout', '/login')}
+              />
+            </div>
+          </div>
+          <div className={styles.mobileSearchRow}>
+            <ShellSearchBox
+              className={styles.searchBar}
+              placeholder="Search students, experiments, sessions..."
+              fetcher={(q) => experienceService.instructorSearch(q)}
+              onSelect={(hit: SearchHit) => router.push(hit.link ?? '/instructor/management')}
+            />
+          </div>
+
+          {/* Top Header (Desktop only) */}
           <div className={styles.contentHeader}>
             <button className={styles.mobileMenuBtn} onClick={() => setDrawerOpen(true)} aria-label="Open menu">
               <Menu size={17} strokeWidth={2} />
@@ -292,6 +339,94 @@ export default function InstructorShell({ activePage, children, title, subtitle,
           {children}
         </main>
       </div>
+
+      {/* ══ MOBILE BOTTOM TAB BAR (fixed at bottom on phones) ══ */}
+      <nav className={styles.bottomTabBar} aria-label="Instructor Primary Navigation">
+        {BOTTOM_TABS.map(({ id, label, Icon, route }) => {
+          const active = id !== 'More' && isItemActive(id);
+          return (
+            <button
+              key={id}
+              type="button"
+              className={`${styles.bottomTab} ${active ? styles.bottomTabActive : ''}`}
+              onClick={() => (id === 'More' ? setMoreOpen(true) : go(id, route))}
+            >
+              <Icon size={20} strokeWidth={active ? 2.3 : 1.9} />
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* ══ MOBILE "MORE" SHEET (bottom sheet modal) ══ */}
+      {moreOpen && (
+        <>
+          <div className={styles.sheetBackdrop} onClick={() => setMoreOpen(false)} />
+          <div className={styles.moreSheet} role="dialog" aria-label="Instructor Sections">
+            <div className={styles.moreSheetHeader}>
+              <div>
+                <p className={styles.moreSheetTitle}>{fullName || 'Instructor Portal'}</p>
+                <p className={styles.moreSheetRole}>Teaching & Academic Hub</p>
+              </div>
+              <button className={styles.moreSheetClose} onClick={() => setMoreOpen(false)} aria-label="Close menu">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className={styles.moreSheetBody}>
+              <p className={styles.moreSheetGroup}>Curriculum & Teaching</p>
+              <button className={`${styles.moreSheetItem} ${isItemActive('Experiments') ? styles.moreSheetItemActive : ''}`} onClick={() => go('Experiments', '/instructor/experiments')}>
+                <FlaskConical size={16} className={styles.moreSheetIcon} />
+                Experiments & Exam Studio
+              </button>
+              <button className={`${styles.moreSheetItem} ${isItemActive('Live Conductor') ? styles.moreSheetItemActive : ''}`} onClick={() => go('Live Conductor', '/instructor/live-lab')}>
+                <Radio size={16} className={styles.moreSheetIcon} />
+                Live Conductor
+              </button>
+              <button className={`${styles.moreSheetItem} ${isItemActive('Grading') ? styles.moreSheetItemActive : ''}`} onClick={() => go('Grading', '/instructor/grading')}>
+                <ClipboardCheck size={16} className={styles.moreSheetIcon} />
+                Grading & Evaluation Hub
+              </button>
+              <button className={`${styles.moreSheetItem} ${isItemActive('Management') ? styles.moreSheetItemActive : ''}`} onClick={() => go('Management', '/instructor/management')}>
+                <HeartHandshake size={16} className={styles.moreSheetIcon} />
+                Class & Student Management
+              </button>
+
+              <p className={styles.moreSheetGroup}>Insights & Communication</p>
+              <button className={`${styles.moreSheetItem} ${isItemActive('Analytics') ? styles.moreSheetItemActive : ''}`} onClick={() => go('Analytics', '/instructor/analytics')}>
+                <BarChart3 size={16} className={styles.moreSheetIcon} />
+                Analytics Pulse & Insights
+              </button>
+              <button className={`${styles.moreSheetItem} ${isItemActive('Feedback') ? styles.moreSheetItemActive : ''}`} onClick={() => go('Feedback', '/instructor/feedback')}>
+                <Star size={16} className={styles.moreSheetIcon} />
+                Student Feedback & Sentiment
+              </button>
+              <button className={`${styles.moreSheetItem} ${isItemActive('Announcements') ? styles.moreSheetItemActive : ''}`} onClick={() => go('Announcements', '/instructor/announcements')}>
+                <Megaphone size={16} className={styles.moreSheetIcon} />
+                Announcements Broadcast
+              </button>
+              <button className={`${styles.moreSheetItem} ${isItemActive('Reports') ? styles.moreSheetItemActive : ''}`} onClick={() => go('Reports', '/instructor/reports')}>
+                <FileText size={16} className={styles.moreSheetIcon} />
+                Reports Studio & Exports
+              </button>
+
+              <p className={styles.moreSheetGroup}>Account & Workspace</p>
+              <button className={`${styles.moreSheetItem} ${isItemActive('Profile') ? styles.moreSheetItemActive : ''}`} onClick={() => go('Profile', '/instructor/profile')}>
+                <User size={16} className={styles.moreSheetIcon} />
+                My Profile & Showcase
+              </button>
+              <button className={`${styles.moreSheetItem} ${isItemActive('Settings') ? styles.moreSheetItemActive : ''}`} onClick={() => go('Settings', '/instructor/settings')}>
+                <Settings size={16} className={styles.moreSheetIcon} />
+                Teaching Settings & Security
+              </button>
+              <button className={`${styles.moreSheetItem} ${styles.moreSheetItemLogout}`} onClick={() => go('Logout', '/login')}>
+                <LogOut size={16} className={styles.moreSheetIcon} style={{ color: '#dc2626' }} />
+                Sign Out
+              </button>
+            </div>
+          </div>
+        </>
+      )}
 
       <AppToaster />
       <AgentChatPanel roleOverride="instructor" pageContext={{ page_title: title || activePage }} />

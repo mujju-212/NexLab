@@ -6,7 +6,7 @@
  * carries `impersonation`), render the fixed read-only banner with an
  * End-session control that restores the admin token.
  */
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { Eye, LogOut } from 'lucide-react';
 import { useAuthStore } from '@/store/auth-store';
@@ -16,9 +16,15 @@ export default function ImpersonationBanner() {
   const { user, setUser, isAuthenticated } = useAuthStore();
   const router = useRouter();
   const [ending, setEnding] = useState(false);
+  const [mounted, setMounted] = useState(false);
+
+  useEffect(() => {
+    setMounted(true);
+  }, []);
+
   const imp = (user as unknown as { impersonation?: { active: boolean; impersonator_name?: string; reason?: string } })?.impersonation;
 
-  if (!isAuthenticated || !imp?.active) return null;
+  if (!mounted || !isAuthenticated || !imp?.active) return null;
 
   const end = async () => {
     setEnding(true);
