@@ -11,6 +11,7 @@ Code execution itself is served by /api/execution/playground and /run
 import subprocess
 from flask import Blueprint, jsonify, current_app
 from app.auth.utils import require_auth
+from app.exec_engine.availability import execution_is_enabled
 
 exec_v2_bp = Blueprint('exec_v2', __name__)
 
@@ -34,7 +35,7 @@ def engine_health():
     and active/orphan container counts. Consumed by the admin monitoring page.
     """
     docker_bin = current_app.config.get('DOCKER_BIN', 'docker')
-    enabled    = current_app.config.get('DOCKER_RUNNER_ENABLED', False)
+    enabled    = execution_is_enabled()
     overrides  = current_app.config.get('EXEC_ENGINE_OVERRIDES', '')
 
     # ── Docker daemon ────────────────────────────────────────────────────────

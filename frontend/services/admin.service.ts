@@ -167,9 +167,35 @@ export const adminService = {
     return data;
   },
 
+  async getPendingEnvironments() {
+    const { data } = await apiClient.get('/admin/environments/pending');
+    return data as { pending: Array<{
+      id: string; name: string; display_name: string; docker_image: string;
+      institution_id: string | null; is_platform_default: boolean;
+      pip_packages: string[]; apt_packages: string[]; build_status: string;
+      created_at: string | null;
+    }> };
+  },
+  async approveEnvironment(id: string) {
+    const { data } = await apiClient.post(`/admin/environments/${id}/approve`);
+    return data;
+  },
+  async rejectEnvironment(id: string) {
+    const { data } = await apiClient.post(`/admin/environments/${id}/reject`);
+    return data;
+  },
+
   // GET /api/platform/institutions/<iid>/onboarding
   async getOnboardingChecklist(iid: string) {
     const { data } = await apiClient.get(`/platform/institutions/${iid}/onboarding`);
+    return data;
+  },
+  async completeOnboarding(iid: string) {
+    const { data } = await apiClient.post(`/platform/institutions/${iid}/onboarding/complete`);
+    return data;
+  },
+  async resetOnboarding(iid: string) {
+    const { data } = await apiClient.post(`/platform/institutions/${iid}/onboarding/reset`);
     return data;
   },
 
@@ -184,6 +210,11 @@ export const adminService = {
   // PATCH /api/platform/config
   async updatePlatformConfig(updates: Record<string, string>): Promise<void> {
     await apiClient.patch('/platform/config', updates);
+  },
+
+  async setMaintenance(enabled: boolean, message: string): Promise<{ maintenance_mode: boolean; message: string }> {
+    const { data } = await apiClient.post('/platform/config/maintenance', { enabled, message });
+    return data;
   },
 
   // GET /api/platform/config/features
@@ -229,6 +260,14 @@ export const adminService = {
   // GET /api/platform/institutions/<iid>/billing
   async getBilling(iid: string) {
     const { data } = await apiClient.get(`/platform/institutions/${iid}/billing`);
+    return data;
+  },
+  async updateBillingPlan(iid: string, payload: { plan: 'free' | 'pro' | 'enterprise'; billing_email: string; billing_notes: string }) {
+    const { data } = await apiClient.patch(`/platform/institutions/${iid}/billing/plan`, payload);
+    return data;
+  },
+  async setInstitutionGroqLimit(iid: string, limit: number | null) {
+    const { data } = await apiClient.patch(`/platform/institutions/${iid}/billing/groq-limit`, { limit });
     return data;
   },
 

@@ -8,6 +8,10 @@ from flask_jwt_extended import create_access_token
 from app import create_app
 from app.extensions import db
 from app.models.user import User
+from app.models.institution import Institution, PlatformConfig
+from app.models.academic import AuditLog
+from app.models.subject import EnvironmentProfile
+from app.exec_engine.availability import execution_is_enabled
 
 
 @pytest.fixture(scope="module")
@@ -208,6 +212,69 @@ def test_problem_bank_admin_create_and_test_case_edit(admin_client):
     assert admin_client.post("/api/admin/content/problems", json={**payload, "slug": f"{slug}-empty", "test_cases": [], "is_active": True}).status_code == 400
 
 
+def test_onboarding_cannot_be_completed_with_missing_checklist_items(admin_client):
+    app = admin_client.application
+    with app.app_context():
+        institution = Institution(
+            id=str(uuid.uuid4()), name="Temporary onboarding QA", code=f"QA{uuid.uuid4().hex[:6]}",
+            onboarding_status="pending",
+        )
+        db.session.add(institution)
+        db.session.commit()
+        institution_id = institution.id
+
+    checklist_response = admin_client.get(f"/api/platform/institutions/{institution_id}/onboarding")
+    assert checklist_response.status_code == 200
+    checklist = checklist_response.get_json()["checklist"]
+    assert checklist["institution_created"] is True
+    assert checklist["admin_account_exists"] is False
+    assert checklist_response.get_json()["complete"] is False
+
+    blocked = admin_client.post(f"/api/platform/institutions/{institution_id}/onboarding/complete")
+    assert blocked.status_code == 409
+    assert "admin_account_exists" in blocked.get_json()["incomplete"]
+    with app.app_context():
+        assert db.session.get(Institution, institution_id).onboarding_status == "pending"
+
+
+def test_platform_settings_are_validated_persistent_and_audited(admin_client):
+    app = admin_client.application
+    before = admin_client.get("/api/platform/config").get_json()["config"]["groq_daily_limit"]
+    assert admin_client.patch("/api/platform/config", json={"unknown_flag": "true"}).status_code == 400
+    assert admin_client.patch("/api/platform/config", json={"groq_daily_limit": "-1"}).status_code == 400
+    after = admin_client.get("/api/platform/config").get_json()["config"]["groq_daily_limit"]
+    assert after == before
+
+    assert admin_client.patch(
+        "/api/platform/config/features/allow_self_registration", json={"enabled": "false"}
+    ).status_code == 400
+    assert admin_client.patch(
+        "/api/platform/config/features/allow_self_registration", json={"enabled": False}
+    ).status_code == 200
+
+    with app.app_context():
+        PlatformConfig.seed_defaults()
+        assert PlatformConfig.get("allow_self_registration") == "false"
+        app.config["DOCKER_RUNNER_ENABLED"] = True
+        PlatformConfig.set("code_execution_enabled", "true")
+        assert execution_is_enabled() is True
+        PlatformConfig.set("code_execution_enabled", "false")
+        assert execution_is_enabled() is False
+        app.config["DOCKER_RUNNER_ENABLED"] = False
+
+    enabled = admin_client.post(
+        "/api/platform/config/maintenance", json={"enabled": True, "message": "Maintenance test"}
+    )
+    assert enabled.status_code == 200
+    assert admin_client.get("/api/platform/config/maintenance/status").get_json() == {
+        "enabled": True, "message": "Maintenance test",
+    }
+    assert admin_client.post("/api/platform/config/maintenance", json={"enabled": False}).status_code == 200
+    with app.app_context():
+        assert AuditLog.query.filter_by(action="admin.platform.maintenance").count() == 2
+        assert AuditLog.query.filter_by(action="admin.platform.feature_toggle").count() >= 1
+
+
 def test_update_field_validation_null_clearing_and_legacy_publish_guard(admin_client):
     course_id = _new_course(admin_client)
     created = admin_client.post(
@@ -248,3 +315,104 @@ def test_update_field_validation_null_clearing_and_legacy_publish_guard(admin_cl
     )
     assert legacy_draft.status_code == 201, legacy_draft.get_json()
     assert legacy_draft.get_json()["exercise"]["is_published"] is False
+
+
+def test_environment_approval_is_audited_truthful_and_role_protected(admin_client):
+    with admin_client.application.app_context():
+        profile = EnvironmentProfile(
+            id=str(uuid.uuid4()),
+            institution_id=None,
+            name=f"test-env-{uuid.uuid4().hex[:8]}",
+            display_name="Temporary environment request",
+            docker_image="example.invalid/nexlab/test:temporary",
+            is_platform_default=False,
+            pip_packages=["numpy==1.26.4"],
+            apt_packages=[],
+            build_status="pending",
+        )
+        db.session.add(profile)
+        db.session.commit()
+        profile_id = profile.id
+
+    denied = admin_client.application.test_client()
+    with admin_client.application.app_context():
+        admin_user = User.query.filter_by(role="platform_admin").first()
+        token = create_access_token(
+            identity=admin_user.id,
+            additional_claims={
+                "role": "institution_admin", "institution_id": str(uuid.uuid4()),
+                "must_change_password": False, "iat_f": time.time(),
+            },
+        )
+    denied.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+    assert denied.post(f"/api/admin/environments/{profile_id}/approve").status_code == 403
+
+    response = admin_client.post(f"/api/admin/environments/{profile_id}/approve")
+    assert response.status_code == 200, response.get_json()
+    result = response.get_json()
+    assert "no image build was initiated" in result["message"]
+    assert result["profile"]["build_status"] == "approved"
+    assert result["profile"]["approved_by"]
+    assert admin_client.post(f"/api/admin/environments/{profile_id}/approve").status_code == 409
+
+    with admin_client.application.app_context():
+        entry = AuditLog.query.filter_by(
+            action="approve_environment_profile", target_id=profile_id
+        ).first()
+        assert entry is not None
+        assert "no image build was initiated" in entry.detail
+
+
+def test_institution_billing_persists_validates_audits_and_honors_zero(admin_client):
+    with admin_client.application.app_context():
+        institution = Institution(
+            id=str(uuid.uuid4()), name="Temporary billing QA", code=f"TQA{uuid.uuid4().hex[:6]}",
+            plan="free", billing_email="billing@example.invalid", billing_notes="old note",
+        )
+        db.session.add(institution)
+        db.session.commit()
+        institution_id = institution.id
+
+    first = admin_client.get(f"/api/platform/institutions/{institution_id}/billing")
+    assert first.status_code == 200
+    assert first.get_json()["student_limit"] == 100
+
+    invalid = admin_client.patch(
+        f"/api/platform/institutions/{institution_id}/billing/plan",
+        json={"plan": "pro", "billing_email": "not-an-email", "billing_notes": "should not persist"},
+    )
+    assert invalid.status_code == 400
+
+    updated = admin_client.patch(
+        f"/api/platform/institutions/{institution_id}/billing/plan",
+        json={"plan": "pro", "billing_email": "ops@example.invalid", "billing_notes": ""},
+    )
+    assert updated.status_code == 200, updated.get_json()
+    assert admin_client.get(f"/api/platform/institutions/{institution_id}/billing").get_json()["billing_email"] == "ops@example.invalid"
+    cleared = admin_client.patch(
+        f"/api/platform/institutions/{institution_id}/billing/plan",
+        json={"plan": "pro", "billing_email": "", "billing_notes": ""},
+    )
+    assert cleared.status_code == 200, cleared.get_json()
+    zero = admin_client.patch(
+        f"/api/platform/institutions/{institution_id}/billing/groq-limit", json={"limit": 0}
+    )
+    assert zero.status_code == 200, zero.get_json()
+    assert admin_client.patch(
+        f"/api/platform/institutions/{institution_id}/billing/groq-limit", json={"limit": True}
+    ).status_code == 400
+
+    current = admin_client.get(f"/api/platform/institutions/{institution_id}/billing").get_json()
+    assert current["plan"] == "pro"
+    assert current["billing_email"] is None
+    assert current["billing_notes"] == ""
+    assert current["student_limit"] == 500
+    assert current["groq_limit"] == 0
+    assert current["groq_limit_source"] == "override"
+
+    with admin_client.application.app_context():
+        actions = AuditLog.query.filter(
+            AuditLog.target_id == institution_id,
+            AuditLog.action.in_(["admin.billing.plan_update", "admin.billing.groq_limit"]),
+        ).all()
+        assert {item.action for item in actions} == {"admin.billing.plan_update", "admin.billing.groq_limit"}

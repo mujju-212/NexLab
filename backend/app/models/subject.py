@@ -65,9 +65,15 @@ class EnvironmentProfile(db.Model):
     def to_dict(self):
         return {
             'id': self.id,
+            'institution_id': self.institution_id,
             'name': self.name,
             'display_name': self.display_name,
-            'is_platform_default': self.is_platform_default,
-            'pip_packages': self.pip_packages,
+            'docker_image': self.docker_image,
+            'is_platform_default': bool(self.is_platform_default),
+            'pip_packages': self.pip_packages or [],
+            'apt_packages': self.apt_packages or [],
             'build_status': self.build_status,
+            'created_by': self.created_by,
+            'approved_by': self.approved_by,
+            'created_at': self.created_at.isoformat() if self.created_at else None,
         }

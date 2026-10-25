@@ -5,12 +5,13 @@ Course listing is fully PUBLIC (no auth required).
 """
 import os
 from sqlalchemy import func
-from flask import Blueprint, request, jsonify, g, current_app, send_file
+from flask import Blueprint, request, jsonify, g, send_file
 from app.extensions import db
 from app.models.platform_content import PlatformCourse, PlatformExercise, PlatformProgress
 from app.models.user import User
 from app.auth.utils import require_auth, require_role
 from app.execution.languages import resolve as resolve_language
+from app.exec_engine.availability import execution_is_enabled
 from datetime import datetime
 
 platform_user_bp = Blueprint('platform_user', __name__)
@@ -251,9 +252,9 @@ def run_exercise(exercise_id):
 
     visible_cases = [tc for tc in (ex.test_cases or []) if not tc.get('hidden', False)]
 
-    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+    if not execution_is_enabled():
         return jsonify({
-            'error': 'Code execution is currently unavailable. Your code was not run.'
+            'error': 'Code execution is currently disabled by the platform or unavailable on this server.'
         }), 503
 
     results = []
@@ -319,9 +320,9 @@ def submit_exercise(exercise_id):
     results = []
     passed_count = 0
 
-    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+    if not execution_is_enabled():
         return jsonify({
-            'error': 'Code execution is currently unavailable. Your code was not run or saved.'
+            'error': 'Code execution is currently disabled by the platform or unavailable on this server.'
         }), 503
     else:
         for tc in all_cases:

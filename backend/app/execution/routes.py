@@ -1,6 +1,7 @@
 from flask import Blueprint, request, jsonify, current_app, g
 from app.auth.utils import require_auth
 from app.extensions import db, limiter
+from app.exec_engine.availability import execution_is_enabled
 from app.models.submission import CodeVersion, CodeAttempt
 from app.ml.code_quality import analyze_code_quality, quality_to_score
 from app.execution.languages import (
@@ -119,7 +120,7 @@ def run_code():
         return jsonify({'error': 'Invalid code or language'}), 400
     if spec['engine'] == 'browser':
         return jsonify({'error': 'Browser languages run client-side only.'}), 400
-    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+    if not execution_is_enabled():
         return jsonify({'error': 'Code execution engine is not enabled on this server.'}), 503
 
     # Live-session rules: enrollment + mode matrix + pre-lab gate, enforced
@@ -498,7 +499,7 @@ def list_languages():
     return jsonify({
         'languages': catalog(),
         'groups': GROUP_ORDER,
-        'docker_runner_enabled': bool(current_app.config.get('DOCKER_RUNNER_ENABLED', False)),
+        'docker_runner_enabled': execution_is_enabled(),
     }), 200
 
 
@@ -530,7 +531,7 @@ def playground_run():
         return jsonify({'error': f'Source is too large (limit {MAX_CODE_CHARS:,} characters).'}), 413
     if len(stdin) > MAX_STDIN_CHARS:
         return jsonify({'error': f'Input is too large (limit {MAX_STDIN_CHARS:,} characters).'}), 413
-    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+    if not execution_is_enabled():
         return jsonify({'error': 'Code execution engine is not enabled on this server.'}), 503
 
     result, error = _run_docker(code, spec['id'], stdin, g.user_id, packages=packages, extra_files=extra_files)

@@ -171,10 +171,12 @@ def system_health():
     import subprocess
     from flask import current_app
 
+    from app.exec_engine.availability import execution_is_enabled
+
     health = {'execution': 'unknown', 'database': 'unknown', 'groq': 'unknown'}
 
-    # Check the Docker execution engine (daemon reachable + enabled)
-    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+    # Check both the infrastructure switch and the live platform kill switch.
+    if not execution_is_enabled():
         health['execution'] = 'disabled'
     else:
         try:
@@ -355,23 +357,40 @@ def pending_environments():
 @admin_bp.route('/environments/<env_id>/approve', methods=['POST'])
 @require_role('platform_admin')
 def approve_environment(env_id):
-    """Approve + mark an environment as building"""
+    """Approve a custom environment request without claiming an image was built."""
     from app.models.subject import EnvironmentProfile
     profile = EnvironmentProfile.query.get_or_404(env_id)
+    if profile.is_platform_default:
+        return jsonify({'error': 'Platform defaults do not use the request approval workflow.'}), 409
+    if profile.build_status != 'pending':
+        return jsonify({'error': f'Only pending requests can be approved (current state: {profile.build_status}).'}), 409
     profile.build_status = 'approved'
+    profile.approved_by = g.user_id
+    _audit_platform(
+        'approve_environment_profile', 'environment_profile', profile.id,
+        f"Approved environment profile request {profile.display_name}; no image build was initiated.",
+    )
     db.session.commit()
-    return jsonify({'message': f'{profile.display_name} approved for build', 'profile': profile.to_dict()}), 200
+    return jsonify({'message': f'{profile.display_name} approved; no image build was initiated.', 'profile': profile.to_dict()}), 200
 
 
 @admin_bp.route('/environments/<env_id>/reject', methods=['POST'])
 @require_role('platform_admin')
 def reject_environment(env_id):
-    """Reject a custom environment request"""
+    """Reject a pending custom environment request."""
     from app.models.subject import EnvironmentProfile
     profile = EnvironmentProfile.query.get_or_404(env_id)
+    if profile.is_platform_default:
+        return jsonify({'error': 'Platform defaults cannot be rejected through the request workflow.'}), 409
+    if profile.build_status != 'pending':
+        return jsonify({'error': f'Only pending requests can be rejected (current state: {profile.build_status}).'}), 409
     profile.build_status = 'rejected'
+    _audit_platform(
+        'reject_environment_profile', 'environment_profile', profile.id,
+        f"Rejected environment profile request {profile.display_name}.", severity='high',
+    )
     db.session.commit()
-    return jsonify({'message': f'{profile.display_name} rejected'}), 200
+    return jsonify({'message': f'{profile.display_name} rejected.', 'profile': profile.to_dict()}), 200
 
 
 # ── Platform-Wide Announcements ────────────────────────────────────────────────

@@ -2068,7 +2068,8 @@ def system_health():
         components.append({'label': 'Database', 'status': 'down', 'ok': False})
 
     # Code execution — driven by the platform flag.
-    exec_on = str(PlatformConfig.get('code_execution_enabled', 'true')).lower() == 'true'
+    from app.exec_engine.availability import execution_is_enabled
+    exec_on = execution_is_enabled()
     components.append({
         'label':  'Code Execution',
         'status': 'operational' if exec_on else 'disabled',

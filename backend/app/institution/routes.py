@@ -1764,8 +1764,9 @@ def _probe_system_status():
         checks.append({"name": "Live Session Servers", "status": "Not configured", "healthy": False,
                        "detail": "LIVEKIT_URL / LIVEKIT_API_KEY missing"})
 
-    # 4. Code execution — reflects the real DOCKER_RUNNER_ENABLED switch
-    if current_app.config.get('DOCKER_RUNNER_ENABLED'):
+    # 4. Code execution — requires infrastructure and the live platform switch.
+    from app.exec_engine.availability import execution_is_enabled
+    if execution_is_enabled():
         import shutil
         docker_bin = current_app.config.get('DOCKER_BIN', 'docker')
         if shutil.which(docker_bin):
@@ -1776,7 +1777,7 @@ def _probe_system_status():
                        "detail": detail})
     else:
         checks.append({"name": "Code Execution", "status": "Disabled", "healthy": False,
-                       "detail": "DOCKER_RUNNER_ENABLED=false — /run returns 503"})
+                       "detail": "Execution is disabled by the platform setting or runner configuration; /run returns 503"})
 
     # 5. AI services — report which providers actually have keys
     providers = []

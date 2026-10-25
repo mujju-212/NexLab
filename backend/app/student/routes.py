@@ -6,6 +6,7 @@ Handles: dashboard, pre-lab content, quiz gate, join session, catch-up,
 from flask import Blueprint, request, jsonify, g, current_app
 from app.auth.utils import require_role
 from app.extensions import db, limiter
+from app.exec_engine.availability import execution_is_enabled
 from app.models.experiment import Experiment, ContentModule, ContentPage, ContentProgress, QuizQuestion
 from app.models.session import LabSession, SessionAttendance
 from app.models.submission import CodeAttempt, CodeVersion
@@ -1706,7 +1707,7 @@ def submit_assignment(module_id):
         return jsonify({'error': f'Unknown language: {language}'}), 400
     if spec['engine'] == 'browser':
         return jsonify({'error': 'Browser languages run client-side only.'}), 400
-    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+    if not execution_is_enabled():
         return jsonify({'error': 'Code execution engine is not enabled on this server.'}), 503
 
     # â”€â”€ Run the submission against each test case â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€

@@ -18,6 +18,7 @@ from flask import Blueprint, request, jsonify, g, current_app
 
 from app.auth.utils import require_role
 from app.extensions import db, limiter
+from app.exec_engine.availability import execution_is_enabled
 from app.models.exam import (
     Exam, ExamQuestion, ExamAttempt,
     normalize_mcq_options, normalize_mcq_correct_answer,
@@ -443,7 +444,7 @@ def exam_detail(exam_id):
             getattr(exam, 'exam_type', None) in ('coding', 'mixed')
             or ExamQuestion.query.filter_by(exam_id=exam.id, question_type='coding').first() is not None
         )
-    code_execution_available = not has_coding or bool(current_app.config.get('DOCKER_RUNNER_ENABLED', False))
+    code_execution_available = not has_coding or execution_is_enabled()
     can_start = (
         exam.window_state(now) == 'open'
         and (in_progress is not None or attempts_remaining > 0)
@@ -485,8 +486,8 @@ def start_exam(exam_id):
         has_coding = TestCase.query.filter_by(experiment_id=exam.id).count() > 0 or getattr(exam, 'starter_code', None) is not None
     else:
         has_coding = ExamQuestion.query.filter_by(exam_id=exam.id, question_type='coding').first() is not None
-    if has_coding and not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
-        return jsonify({'error': 'Code execution engine is not enabled on this server.'}), 503
+    if has_coding and not execution_is_enabled():
+        return jsonify({'error': 'Code execution is disabled by the platform or unavailable on this server.'}), 503
 
     atts = _attempts_for(exam_id)
     in_progress = next((a for a in atts if a.status == 'in_progress'), None)
