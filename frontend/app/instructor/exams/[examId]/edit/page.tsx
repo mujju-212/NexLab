@@ -473,151 +473,235 @@ export default function EditExamPage({ params }: { params: Promise<{ examId: str
           ) : studentResults.length === 0 ? (
             <p style={{ color: '#9ca3af', fontSize: 13.5, margin: 0, padding: '16px 0' }}>No attempts yet.</p>
           ) : (
-            <table className={styles.table}>
-              <thead>
-                <tr>
-                  <th>Student</th><th>Attempts</th><th>Best Score</th><th>Result</th>
-                  <th>Violations</th><th>Last Activity</th><th></th>
-                </tr>
-              </thead>
-              <tbody>
-                {studentResults.map(st => (
-                  <Fragment key={st.student_id}>
-                    <tr>
-                      <td>
-                        <span className={styles.tdStrong}>{st.student_name}</span><br />
-                        <span style={{ fontSize: 11.5, color: '#9ca3af' }}>{st.student_email}</span>
-                      </td>
-                      <td>
-                        {st.attempts_used} / {exam?.max_attempts ?? '—'}
-                        {st.attempts_count > st.attempts_used && (
-                          <span style={{ fontSize: 11, color: '#9ca3af' }}> ({st.attempts_count} total)</span>
-                        )}
-                      </td>
-                      <td>
-                        {st.best_score != null
-                          ? <span className={styles.tdStrong}>{Math.round(st.best_score)}%</span>
-                          : <span style={{ color: '#9ca3af' }}>—</span>}
-                      </td>
-                      <td>
-                        {st.best_score == null
-                          ? <span className={`${styles.badge} ${styles.blueBadge}`}>{st.latest_status}</span>
-                          : st.best_passed
-                            ? <span className={`${styles.badge} ${styles.greenBadge}`}>Passed</span>
-                            : <span className={`${styles.badge} ${styles.redBadge}`}>Failed</span>}
-                      </td>
-                      <td>
-                        {st.violation_count > 0
-                          ? <span className={`${styles.badge} ${styles.redBadge}`} title="Proctoring violations across attempts">{st.violation_count}</span>
-                          : <span style={{ color: '#9ca3af', fontSize: 12 }}>none</span>}
-                      </td>
-                      <td>{fmtDateTime(st.latest_submitted_at)}</td>
-                      <td>
-                        <button
-                          type="button"
-                          className={styles.ghostBtn}
-                          onClick={() => { setOpenStudent(openStudent === st.student_id ? null : st.student_id); setOpenAttempt(null); }}
-                        >
-                          {openStudent === st.student_id ? 'Hide' : `View attempts (${st.attempts_count})`}
-                        </button>
-                      </td>
-                    </tr>
+            <>
+              <div className={styles.desktopTableView} style={{ overflowX: 'auto' }}>
+              <table className={styles.table}>
+                <thead>
+                  <tr>
+                    <th>Student</th><th>Attempts</th><th>Best Score</th><th>Result</th>
+                    <th>Violations</th><th>Last Activity</th><th></th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {studentResults.map(st => (
+                    <Fragment key={st.student_id}>
+                      <tr>
+                        <td>
+                          <span className={styles.tdStrong}>{st.student_name}</span><br />
+                          <span style={{ fontSize: 11.5, color: '#9ca3af' }}>{st.student_email}</span>
+                        </td>
+                        <td>
+                          {st.attempts_used} / {exam?.max_attempts ?? '—'}
+                          {st.attempts_count > st.attempts_used && (
+                            <span style={{ fontSize: 11, color: '#9ca3af' }}> ({st.attempts_count} total)</span>
+                          )}
+                        </td>
+                        <td>
+                          {st.best_score != null
+                            ? <span className={styles.tdStrong}>{Math.round(st.best_score)}%</span>
+                            : <span style={{ color: '#9ca3af' }}>—</span>}
+                        </td>
+                        <td>
+                          {st.best_score == null
+                            ? <span className={`${styles.badge} ${styles.blueBadge}`}>{st.latest_status}</span>
+                            : st.best_passed
+                              ? <span className={`${styles.badge} ${styles.greenBadge}`}>Passed</span>
+                              : <span className={`${styles.badge} ${styles.redBadge}`}>Failed</span>}
+                        </td>
+                        <td>
+                          {st.violation_count > 0
+                            ? <span className={`${styles.badge} ${styles.redBadge}`} title="Proctoring violations across attempts">{st.violation_count}</span>
+                            : <span style={{ color: '#9ca3af', fontSize: 12 }}>none</span>}
+                        </td>
+                        <td>{fmtDateTime(st.latest_submitted_at)}</td>
+                        <td>
+                          <button
+                            type="button"
+                            className={styles.ghostBtn}
+                            onClick={() => { setOpenStudent(openStudent === st.student_id ? null : st.student_id); setOpenAttempt(null); }}
+                          >
+                            {openStudent === st.student_id ? 'Hide' : `View attempts (${st.attempts_count})`}
+                          </button>
+                        </td>
+                      </tr>
 
-                    {openStudent === st.student_id && st.attempts.map((a, idx) => (
-                      <Fragment key={a.attempt_id}>
-                        <tr style={{ background: '#fbfaff' }}>
-                          <td style={{ paddingLeft: 28 }}>
-                            <span style={{ fontWeight: 700, color: '#4c1d95' }}>Attempt {st.attempts.length - idx}</span>
-                            <br />
-                            <span style={{ fontSize: 11.5, color: '#9ca3af' }}>
-                              <span className={`${styles.badge} ${a.status === 'submitted' ? styles.greenBadge : a.status === 'expired' ? styles.amberBadge : styles.blueBadge}`}>{a.status}</span>
-                            </span>
-                          </td>
-                          <td>
-                            <span style={{ fontWeight: 700 }}>{Math.round(a.score ?? 0)}%</span>
-                            <br />
-                            <span style={{ fontSize: 11.5, color: '#9ca3af' }}>{a.total_points ?? 0} / {a.max_points ?? 0} pts</span>
-                          </td>
-                          <td>
-                            {a.status === 'in_progress'
-                              ? <span className={`${styles.badge} ${styles.blueBadge}`}>In progress</span>
-                              : a.passed
-                                ? <span className={`${styles.badge} ${styles.greenBadge}`}>Passed</span>
-                                : <span className={`${styles.badge} ${styles.redBadge}`}>Failed</span>}
-                          </td>
-                          <td>
-                            {(a.violation_count ?? 0) > 0
-                              ? <span style={{ color: '#b91c1c', fontWeight: 700, fontSize: 12.5 }}>{a.violation_count} ⚠️</span>
-                              : <span style={{ color: '#9ca3af', fontSize: 12 }}>—</span>}
-                          </td>
-                          <td>{fmtDateTime(a.submitted_at)}</td>
-                          <td>
+                      {openStudent === st.student_id && st.attempts.map((a, idx) => (
+                        <Fragment key={a.attempt_id}>
+                          <tr style={{ background: '#fbfaff' }}>
+                            <td style={{ paddingLeft: 28 }}>
+                              <span style={{ fontWeight: 700, color: '#4c1d95' }}>Attempt {st.attempts.length - idx}</span>
+                              <br />
+                              <span style={{ fontSize: 11.5, color: '#9ca3af' }}>
+                                <span className={`${styles.badge} ${a.status === 'submitted' ? styles.greenBadge : a.status === 'expired' ? styles.amberBadge : styles.blueBadge}`}>{a.status}</span>
+                              </span>
+                            </td>
+                            <td>
+                              <span style={{ fontWeight: 700 }}>{Math.round(a.score ?? 0)}%</span>
+                              <br />
+                              <span style={{ fontSize: 11.5, color: '#9ca3af' }}>{a.total_points ?? 0} / {a.max_points ?? 0} pts</span>
+                            </td>
+                            <td>
+                              {a.status === 'in_progress'
+                                ? <span className={`${styles.badge} ${styles.blueBadge}`}>In progress</span>
+                                : a.passed
+                                  ? <span className={`${styles.badge} ${styles.greenBadge}`}>Passed</span>
+                                  : <span className={`${styles.badge} ${styles.redBadge}`}>Failed</span>}
+                            </td>
+                            <td>
+                              {(a.violation_count ?? 0) > 0
+                                ? <span style={{ color: '#b91c1c', fontWeight: 700, fontSize: 12.5 }}>{a.violation_count} ⚠️</span>
+                                : <span style={{ color: '#9ca3af', fontSize: 12 }}>—</span>}
+                            </td>
+                            <td>{fmtDateTime(a.submitted_at)}</td>
+                            <td>
+                              {a.answers && a.answers.length > 0 && (
+                                <button
+                                  type="button"
+                                  className={styles.ghostBtn}
+                                  onClick={() => setOpenAttempt(openAttempt === a.attempt_id ? null : a.attempt_id)}
+                                >
+                                  {openAttempt === a.attempt_id ? 'Hide' : `Answers (${a.answers.length})`}
+                                </button>
+                              )}
+                            </td>
+                            <td />
+                          </tr>
+
+                          {openAttempt === a.attempt_id && (a.violations?.length ?? 0) > 0 && (
+                            <tr>
+                              <td colSpan={7} style={{ background: '#fef2f2', padding: '10px 16px' }}>
+                                <div style={{ fontSize: 12.5, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>
+                                  Proctoring violations
+                                </div>
+                                {a.violations!.map((v, vi) => (
+                                  <div key={vi} style={{ fontSize: 12.5, color: '#7f1d1d' }}>
+                                    {fmtDateTime(v.recorded_at)} — <strong>{v.event_type.replace(/_/g, ' ')}</strong>
+                                    {v.severity ? ` (${v.severity})` : ''}
+                                    {v.payload?.detail ? ` · ${String(v.payload.detail)}` : ''}
+                                  </div>
+                                ))}
+                              </td>
+                            </tr>
+                          )}
+
+                          {openAttempt === a.attempt_id && a.answers && a.answers.length > 0 && (
+                            <tr>
+                              <td colSpan={7} style={{ background: '#faf9ff', padding: '4px 16px 18px' }}>
+                                <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                                  {a.answers.map((qq, qi) => (
+                                    <div key={qq.question_id} style={{ borderLeft: `3px solid ${qq.is_correct ? '#16a34a' : '#dc2626'}`, paddingLeft: 12 }}>
+                                      <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 4 }}>
+                                        {qi + 1}. {qq.prompt}
+                                      </div>
+                                      <div style={{ fontSize: 12.5, color: '#374151' }}>
+                                        Student answered:{' '}
+                                        <strong style={{ color: qq.is_correct ? '#16a34a' : '#dc2626' }}>
+                                          {qq.student_answer_text == null || qq.student_answer_text === '' ? '(left blank)' : String(qq.student_answer_text)}
+                                        </strong>
+                                      </div>
+                                      {!qq.is_correct && (
+                                        <div style={{ fontSize: 12.5, color: '#374151' }}>
+                                          Correct answer: <strong style={{ color: '#16a34a' }}>{String(qq.correct_answer_text ?? '—')}</strong>
+                                        </div>
+                                      )}
+                                      <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 2 }}>
+                                        {qq.earned != null ? `${qq.earned} / ${qq.points ?? '—'} points` : 'Ungraded'}
+                                      </div>
+                                    </div>
+                                  ))}
+                                </div>
+                              </td>
+                            </tr>
+                          )}
+                        </Fragment>
+                      ))}
+                    </Fragment>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+
+            {/* Mobile Card Feed */}
+            <div className={styles.mobileStudentCards}>
+              {studentResults.map(st => {
+                const passed = st.best_passed;
+                const statusCls = st.best_score == null ? styles.blueBadge : passed ? styles.greenBadge : styles.redBadge;
+                const statusText = st.best_score == null ? st.latest_status : passed ? 'Passed' : 'Failed';
+                return (
+                  <div key={st.student_id} className={styles.mobileCard}>
+                    <div className={styles.mobileCardHeader}>
+                      <div>
+                        <div style={{ fontSize: 14.5, fontWeight: 800, color: '#0f172a' }}>{st.student_name}</div>
+                        <div style={{ fontSize: 11.5, color: '#64748b' }}>{st.student_email}</div>
+                      </div>
+                      <span className={`${styles.badge} ${statusCls}`}>{statusText}</span>
+                    </div>
+
+                    <div className={styles.mobileCardBody}>
+                      <div className={styles.mobileCardStat}>
+                        <span className={styles.mobileCardStatLabel}>Best Score</span>
+                        <span className={styles.mobileCardStatValue} style={{ color: passed ? '#16a34a' : '#dc2626' }}>
+                          {st.best_score != null ? `${Math.round(st.best_score)}%` : '—'}
+                        </span>
+                      </div>
+                      <div className={styles.mobileCardStat}>
+                        <span className={styles.mobileCardStatLabel}>Attempts</span>
+                        <span className={styles.mobileCardStatValue}>
+                          {st.attempts_used} / {exam?.max_attempts ?? '—'}
+                        </span>
+                      </div>
+                      <div className={styles.mobileCardStat}>
+                        <span className={styles.mobileCardStatLabel}>Violations</span>
+                        <span className={styles.mobileCardStatValue} style={{ color: st.violation_count > 0 ? '#dc2626' : '#64748b' }}>
+                          {st.violation_count}
+                        </span>
+                      </div>
+                    </div>
+
+                    <div className={styles.mobileCardActions}>
+                      <button
+                        type="button"
+                        className={styles.ghostBtn}
+                        style={{ width: '100%', minHeight: 44, borderRadius: 10, fontSize: 13, fontWeight: 700, border: '1px solid #e2e8f0' }}
+                        onClick={() => { setOpenStudent(openStudent === st.student_id ? null : st.student_id); setOpenAttempt(null); }}
+                      >
+                        {openStudent === st.student_id ? 'Hide Attempts' : `View Attempts (${st.attempts_count}) →`}
+                      </button>
+                    </div>
+
+                    {openStudent === st.student_id && (
+                      <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 8, borderTop: '1px dashed #e2e8f0', paddingTop: 10 }}>
+                        {st.attempts.map((a, idx) => (
+                          <div key={a.attempt_id} style={{ background: '#f8fafc', borderRadius: 12, padding: 12, border: '1px solid #e2e8f0' }}>
+                            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 6 }}>
+                              <span style={{ fontWeight: 800, fontSize: 13, color: '#4c1d95' }}>Attempt {st.attempts.length - idx}</span>
+                              <span className={`${styles.badge} ${a.passed ? styles.greenBadge : styles.redBadge}`}>
+                                {Math.round(a.score ?? 0)}%
+                              </span>
+                            </div>
+                            <div style={{ fontSize: 11.5, color: '#64748b', marginBottom: 6 }}>
+                              Submitted: {fmtDateTime(a.submitted_at)} · {a.total_points ?? 0}/{a.max_points ?? 0} pts
+                            </div>
                             {a.answers && a.answers.length > 0 && (
                               <button
                                 type="button"
                                 className={styles.ghostBtn}
+                                style={{ fontSize: 12, padding: '4px 8px', marginTop: 4 }}
                                 onClick={() => setOpenAttempt(openAttempt === a.attempt_id ? null : a.attempt_id)}
                               >
-                                {openAttempt === a.attempt_id ? 'Hide' : `Answers (${a.answers.length})`}
+                                {openAttempt === a.attempt_id ? 'Hide answers' : `Inspect ${a.answers.length} answers`}
                               </button>
                             )}
-                          </td>
-                          <td />
-                        </tr>
-
-                        {openAttempt === a.attempt_id && (a.violations?.length ?? 0) > 0 && (
-                          <tr>
-                            <td colSpan={7} style={{ background: '#fef2f2', padding: '10px 16px' }}>
-                              <div style={{ fontSize: 12.5, fontWeight: 700, color: '#991b1b', marginBottom: 6 }}>
-                                Proctoring violations
-                              </div>
-                              {a.violations!.map((v, vi) => (
-                                <div key={vi} style={{ fontSize: 12.5, color: '#7f1d1d' }}>
-                                  {fmtDateTime(v.recorded_at)} — <strong>{v.event_type.replace(/_/g, ' ')}</strong>
-                                  {v.severity ? ` (${v.severity})` : ''}
-                                  {v.payload?.detail ? ` · ${String(v.payload.detail)}` : ''}
-                                </div>
-                              ))}
-                            </td>
-                          </tr>
-                        )}
-
-                        {openAttempt === a.attempt_id && a.answers && a.answers.length > 0 && (
-                          <tr>
-                            <td colSpan={7} style={{ background: '#faf9ff', padding: '4px 16px 18px' }}>
-                              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
-                                {a.answers.map((qq, qi) => (
-                                  <div key={qq.question_id} style={{ borderLeft: `3px solid ${qq.is_correct ? '#16a34a' : '#dc2626'}`, paddingLeft: 12 }}>
-                                    <div style={{ fontSize: 13, fontWeight: 600, color: '#111827', marginBottom: 4 }}>
-                                      {qi + 1}. {qq.prompt}
-                                    </div>
-                                    <div style={{ fontSize: 12.5, color: '#374151' }}>
-                                      Student answered:{' '}
-                                      <strong style={{ color: qq.is_correct ? '#16a34a' : '#dc2626' }}>
-                                        {qq.student_answer_text == null || qq.student_answer_text === '' ? '(left blank)' : String(qq.student_answer_text)}
-                                      </strong>
-                                    </div>
-                                    {!qq.is_correct && (
-                                      <div style={{ fontSize: 12.5, color: '#374151' }}>
-                                        Correct answer: <strong style={{ color: '#16a34a' }}>{String(qq.correct_answer_text ?? '—')}</strong>
-                                      </div>
-                                    )}
-                                    <div style={{ fontSize: 11.5, color: '#6b7280', marginTop: 2 }}>
-                                      {qq.earned != null ? `${qq.earned} / ${qq.points ?? '—'} points` : 'Ungraded'}
-                                    </div>
-                                  </div>
-                                ))}
-                              </div>
-                            </td>
-                          </tr>
-                        )}
-                      </Fragment>
-                    ))}
-                  </Fragment>
-                ))}
-              </tbody>
-            </table>
-          )}
+                          </div>
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                );
+              })}
+            </div>
+          </>
+        )}
         </section>
       )}
 

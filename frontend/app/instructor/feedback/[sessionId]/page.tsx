@@ -837,6 +837,8 @@ export default function SessionFeedbackDetailsPage({
                             style={{ cursor: 'pointer' }}
                             onMouseEnter={() => setHoveredTrendIdx(idx)}
                             onMouseLeave={() => setHoveredTrendIdx(null)}
+                            onClick={() => setHoveredTrendIdx(idx === hoveredTrendIdx ? null : idx)}
+                            onTouchStart={() => setHoveredTrendIdx(idx === hoveredTrendIdx ? null : idx)}
                           />
                         ))}
                       </svg>

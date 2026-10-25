@@ -135,8 +135,8 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({
         </div>
       </div>
 
-      {/* ── STUDENTS DATA TABLE ────────────────────────────────────────── */}
-      <div className={styles.tableWrapper}>
+      {/* ── DESKTOP STUDENTS DATA TABLE (Hidden on mobile) ──────────────── */}
+      <div className={`${styles.tableWrapper} ${styles.desktopTableView}`}>
         <table className={styles.dataTable}>
           <thead>
             <tr>
@@ -250,6 +250,80 @@ export const StudentsTab: React.FC<StudentsTabProps> = ({
             )}
           </tbody>
         </table>
+      </div>
+
+      {/* ── NATIVE MOBILE STUDENT CARDS (Shown on mobile only) ───────────── */}
+      <div className={styles.mobileStudentCards}>
+        {filtered.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '2.5rem 1rem', background: '#fff', borderRadius: 14, color: '#94a3b8' }}>
+            No students found matching current filters.
+          </div>
+        ) : (
+          filtered.map((s, idx) => {
+            const band = s.risk_band || s.status_band || 'ok';
+            const progressPct = s.completion?.completion_pct ?? s.mastery_pct ?? Math.round(s.progress || 0);
+            const score = s.grade_avg != null ? Math.round(s.grade_avg) : (s.avg_score != null ? Math.round(s.avg_score) : null);
+            const attRate = s.attendance_rate != null ? Math.round(s.attendance_rate) : (s.attendance_pct != null ? Math.round(s.attendance_pct) : null);
+
+            return (
+              <div
+                key={s.student_id || idx}
+                className={styles.mobileStudentCard}
+                onClick={() => onSelectStudent(s.student_id)}
+              >
+                <div className={styles.mobileCardTop}>
+                  <div className={styles.studentCell}>
+                    <div className={styles.studentAvatar}>
+                      {(s.initials || (s.student_name || s.full_name || 'S').slice(0, 2)).toUpperCase()}
+                    </div>
+                    <div className={styles.studentMeta}>
+                      <span className={styles.studentName}>
+                        {s.student_name || s.full_name || 'Student'}
+                      </span>
+                      <span className={styles.studentRoll}>
+                        {s.roll_number || s.email || '—'}
+                      </span>
+                    </div>
+                  </div>
+                  <span className={`${styles.riskPill} ${getRiskBadgeClass(band)}`}>
+                    {band}
+                  </span>
+                </div>
+
+                <div className={styles.mobileCardMetrics}>
+                  <div className={styles.mobileMetricItem}>
+                    <span className={styles.mobileMetricLabel}>Progress</span>
+                    <span className={styles.mobileMetricVal}>{progressPct}%</span>
+                  </div>
+                  <div className={styles.mobileMetricItem}>
+                    <span className={styles.mobileMetricLabel}>Attendance</span>
+                    <span className={styles.mobileMetricVal}>{attRate != null ? `${attRate}%` : '—'}</span>
+                  </div>
+                  <div className={styles.mobileMetricItem}>
+                    <span className={styles.mobileMetricLabel}>Avg. Score</span>
+                    <span className={styles.mobileMetricVal}>{score != null ? `${score}%` : '—'}</span>
+                  </div>
+                </div>
+
+                <div className={styles.mobileCardFooter}>
+                  <span className={styles.mobileCardLastActive}>
+                    {s.last_active_at ? `Active ${new Date(s.last_active_at).toLocaleDateString()}` : 'Active recently'}
+                  </span>
+                  <button
+                    type="button"
+                    className={styles.mobileCardActionBtn}
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      onSelectStudent(s.student_id);
+                    }}
+                  >
+                    Dossier 360° →
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
       </div>
     </div>
   );

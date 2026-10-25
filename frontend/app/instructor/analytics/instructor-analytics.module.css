@@ -218,6 +218,8 @@
   align-items: center;
   gap: 6px;
   overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
   padding: 4px;
   background: #f1f5f9;
   border-radius: 12px;
@@ -289,7 +291,18 @@
 
 @media (max-width: 640px) {
   .kpiGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+  .kpiCard {
+    padding: 12px 14px !important;
+    border-radius: 14px !important;
+  }
+  .kpiValue {
+    font-size: 1.45rem !important;
+  }
+  .kpiLabel {
+    font-size: 0.72rem !important;
   }
 }
 
@@ -3232,3 +3245,23 @@
   cursor: not-allowed;
   pointer-events: none;
 }
+
+/* ── Mobile Layout Polish (≤768px and ≤640px) ────────────────────────────── */
+@media (max-width: 768px) {
+  .headerRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .controlBar {
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .chartsGrid, .analyticsGrid {
+    grid-template-columns: 1fr !important;
+  }
+  .tableContainer, .tableWrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

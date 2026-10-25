@@ -831,6 +831,8 @@ export default function StudentFeedbackHubPage() {
                     style={{ cursor: 'pointer' }}
                     onMouseEnter={() => setHoveredTrendIdx(idx)}
                     onMouseLeave={() => setHoveredTrendIdx(null)}
+                    onClick={() => setHoveredTrendIdx(idx === hoveredTrendIdx ? null : idx)}
+                    onTouchStart={() => setHoveredTrendIdx(idx === hoveredTrendIdx ? null : idx)}
                   />
                 ))}
               </svg>

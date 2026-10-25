@@ -282,7 +282,7 @@ export default function SettingsPage() {
   return (
     <InstitutionShell activePage="Institution Settings" title="Settings" subtitle="Manage your account, notifications, and institution preferences.">
       {/* Tab navigation */}
-      <div style={{ display: 'flex', gap: 4, marginBottom: 28, background: 'rgba(255,255,255,0.5)', borderRadius: 14, padding: 4, border: '1px solid rgba(255,255,255,0.8)', width: 'fit-content' }}>
+      <div style={{ display: 'flex', gap: 4, marginBottom: 28, background: 'rgba(255,255,255,0.5)', borderRadius: 14, padding: 4, border: '1px solid rgba(255,255,255,0.8)', width: 'fit-content', maxWidth: '100%', overflowX: 'auto', scrollbarWidth: 'none', WebkitOverflowScrolling: 'touch' }}>
         {TABS.map(t => (
           <button key={t.id} onClick={() => {
             if (t.id === 'notifications') {
@@ -303,6 +303,7 @@ export default function SettingsPage() {
               display: 'flex', alignItems: 'center', gap: 7, padding: '9px 18px', borderRadius: 10,
               border: 'none', cursor: 'pointer', fontSize: 13, fontWeight: 600,
               fontFamily: "'Space Grotesk', sans-serif",
+              whiteSpace: 'nowrap', flexShrink: 0,
               background: tab === t.id ? '#fff' : 'transparent',
               color: tab === t.id ? '#201b2e' : '#9891a6',
               boxShadow: tab === t.id ? '0 2px 8px rgba(0,0,0,0.06)' : 'none',

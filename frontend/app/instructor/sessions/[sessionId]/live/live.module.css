@@ -508,3 +508,68 @@
   color: #0f172a;
 }
 
+/* ── Responsive Video Conference Layout ── */
+.videoFlexContainer {
+  display: flex;
+  gap: 14px;
+  flex: 1;
+  min-height: 0;
+  overflow-y: auto;
+  overflow-x: hidden;
+  align-items: flex-start;
+  padding-bottom: 4px;
+}
+
+.videoMainCol {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 640px;
+}
+
+.videoSidebarCol {
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+  position: sticky;
+  top: 0;
+  align-self: flex-start;
+}
+
+@media (max-width: 768px) {
+  .videoFlexContainer {
+    flex-direction: column !important;
+    gap: 16px !important;
+    overflow-x: hidden !important;
+  }
+
+  .videoMainCol {
+    width: 100% !important;
+    min-height: 380px !important;
+  }
+
+  .videoSidebarCol {
+    width: 100% !important;
+    position: static !important;
+    align-self: stretch !important;
+  }
+
+  .sessionRightSidebar {
+    padding: 12px;
+    border-radius: 14px;
+  }
+
+  .sharePopIcon {
+    bottom: 80px;
+    right: 16px;
+  }
+
+  .shareDrawerCard {
+    bottom: 80px;
+    right: 16px;
+    width: calc(100vw - 32px);
+    max-width: 360px;
+  }
+}
+

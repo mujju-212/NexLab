@@ -71,6 +71,59 @@
   box-shadow: 0 1px 2px rgba(0, 0, 0, 0.04);
 }
 
+.mobileFilterSummaryBar {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .mobileFilterSummaryBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    background: #ffffff;
+    padding: 10px 12px;
+    border-radius: 12px;
+    border: 1px solid #e2e8f0;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  }
+  .filterRibbon {
+    display: none;
+  }
+  .filterRibbonMobileOpen {
+    display: flex !important;
+  }
+}
+
+.mobileFilterScopeText {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: #334155;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  min-width: 0;
+}
+
+.mobileFilterToggleBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 5px;
+  padding: 6px 12px;
+  border-radius: 8px;
+  background: #f5f3ff;
+  border: 1px solid #ddd6fe;
+  color: #7c3aed;
+  font-size: 0.74rem;
+  font-weight: 700;
+  cursor: pointer;
+  white-space: nowrap;
+  flex-shrink: 0;
+}
+
 /* ── Cascading Filter Ribbon ────────────────────────────────────────────── */
 .filterRibbon {
   display: flex;
@@ -365,6 +418,19 @@
   letter-spacing: 0.04em;
 }
 
+.attendanceDonutGrid {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 1.25rem;
+  align-items: center;
+}
+
+.attendanceLegendGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.75rem;
+}
+
 .chartLegendList {
   display: flex;
   flex-direction: column;
@@ -441,6 +507,108 @@
   padding: 0.85rem 1rem;
   vertical-align: middle;
   color: #1e293b;
+}
+
+/* ── Mobile vs Desktop Student Views ── */
+.desktopTableView {
+  display: block;
+}
+
+.mobileStudentCards {
+  display: none;
+}
+
+@media (max-width: 768px) {
+  .desktopTableView {
+    display: none !important;
+  }
+  .mobileStudentCards {
+    display: flex !important;
+    flex-direction: column;
+    gap: 10px;
+  }
+}
+
+.mobileStudentCard {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+  transition: transform 0.15s ease, box-shadow 0.15s ease;
+}
+
+.mobileCardTop {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+}
+
+.mobileCardMetrics {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: 8px;
+  background: #f8fafc;
+  border-radius: 10px;
+  padding: 8px 10px;
+  border: 1px solid #f1f5f9;
+}
+
+.mobileMetricItem {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.mobileMetricLabel {
+  font-size: 0.68rem;
+  font-weight: 600;
+  color: #64748b;
+  text-transform: uppercase;
+}
+
+.mobileMetricVal {
+  font-size: 0.84rem;
+  font-weight: 700;
+  color: #0f172a;
+}
+
+.mobileCardFooter {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding-top: 6px;
+  border-top: 1px solid #f8fafc;
+}
+
+.mobileCardLastActive {
+  font-size: 0.72rem;
+  color: #94a3b8;
+}
+
+.mobileCardActionBtn {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 6px 14px;
+  border-radius: 8px;
+  background: #f5f3ff;
+  color: #7c3aed;
+  font-size: 0.76rem;
+  font-weight: 700;
+  border: 1px solid #ddd6fe;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.mobileCardActionBtn:active {
+  background: #7c3aed;
+  color: #ffffff;
 }
 
 /* ── Student Profile Cell ───────────────────────────────────────────────── */
@@ -952,3 +1120,118 @@
   padding-top: 0.5rem;
   border-top: 1px solid #f1f5f9;
 }
+
+/* ══ MOBILE DESIGN (≤768px and ≤640px): native app experience ══ */
+@media (max-width: 768px) {
+  .container {
+    padding: 0.75rem 0.5rem 2rem 0.5rem;
+    gap: 1rem;
+  }
+  .headerRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 0.75rem;
+  }
+  .filterRibbon {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 0.75rem;
+  }
+  .filterGroup {
+    width: 100%;
+    min-width: 0;
+  }
+  .tabBar {
+    padding-bottom: 0.4rem;
+    -webkit-overflow-scrolling: touch;
+    flex-wrap: nowrap;
+  }
+  .tabBtn {
+    flex-shrink: 0;
+  }
+}
+
+@media (max-width: 640px) {
+  .kpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+  .kpiCard {
+    padding: 12px 13px !important;
+    border-radius: 14px !important;
+  }
+  .kpiValue {
+    font-size: 1.35rem !important;
+  }
+  .kpiLabel {
+    font-size: 0.72rem !important;
+  }
+  .analyticsGrid {
+    grid-template-columns: 1fr !important;
+  }
+  .tableContainer, .tableWrapper, .card {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tableContainer table, .tableWrapper table {
+    min-width: 620px;
+  }
+  .attendanceDonutGrid {
+    grid-template-columns: 1fr !important;
+    gap: 1rem !important;
+  }
+  .attendanceLegendGrid {
+    grid-template-columns: 1fr 1fr !important;
+    gap: 0.5rem !important;
+  }
+}
+
+.attendanceVisualGrid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 1.25rem;
+}
+
+@media (max-width: 900px) {
+  .attendanceVisualGrid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.twoColGrid {
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  gap: 1.25rem;
+  align-items: start;
+}
+
+@media (max-width: 900px) {
+  .twoColGrid {
+    grid-template-columns: 1fr !important;
+  }
+}
+
+.conceptListPane {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.85rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+.heatmapPane {
+  background: #ffffff;
+  border: 1px solid #e2e8f0;
+  border-radius: 14px;
+  padding: 1.25rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.03);
+}
+
+
+

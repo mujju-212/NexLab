@@ -36,7 +36,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '1.25rem' }}>
       {/* ── TOP VISUAL SUMMARY (2 Cards) ─────────────────────────────── */}
-      <div style={{ display: 'grid', gridTemplateColumns: '320px 1fr', gap: '1.25rem' }}>
+      <div className={styles.attendanceVisualGrid}>
         {/* Left: Overall Attendance Card */}
         <div className={styles.card}>
           <div className={styles.cardHeader}>
@@ -67,7 +67,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({
             </span>
           </div>
 
-          <div style={{ display: 'grid', gridTemplateColumns: '180px 1fr', gap: '1rem', alignItems: 'center' }}>
+          <div className={styles.attendanceDonutGrid}>
             <div className={styles.donutWrapper} style={{ height: 160 }}>
               <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
@@ -94,7 +94,7 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({
             </div>
 
             {/* Breakdown Legend Grid */}
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '0.75rem' }}>
+            <div className={styles.attendanceLegendGrid}>
               {donutBands.map((b: any) => (
                 <div
                   key={b.name}
@@ -124,9 +124,10 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({
         </div>
       </div>
 
-      {/* ── ATTENDANCE DATA TABLE ─────────────────────────────────────── */}
-      <div className={styles.tableWrapper}>
-        <table className={styles.dataTable}>
+      {/* ── ATTENDANCE DATA TABLE (Desktop) ───────────────────────── */}
+      <div className={styles.desktopTableView}>
+        <div className={styles.tableWrapper}>
+          <table className={styles.dataTable}>
           <thead>
             <tr>
               <th style={{ width: 44, textAlign: 'center' }}>#</th>
@@ -210,6 +211,83 @@ export const AttendanceTab: React.FC<AttendanceTabProps> = ({
             })}
           </tbody>
         </table>
+        </div>
+      </div>
+
+      {/* ── MOBILE ATTENDANCE CARDS (≤768px native mobile ergonomics) ── */}
+      <div className={styles.mobileStudentCards}>
+        {studentList.map((st: any, idx: number) => {
+          const rate = st.attendance_rate != null ? Math.round(st.attendance_rate) : 0;
+
+          return (
+            <div key={st.student_id || idx} className={styles.mobileStudentCard}>
+              <div className={styles.mobileCardTop}>
+                <div className={styles.studentCell}>
+                  <div className={styles.studentAvatar}>
+                    {(st.student_name || 'S').slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className={styles.studentMeta}>
+                    <span className={styles.studentName}>
+                      {st.student_name || 'Student'}
+                    </span>
+                    <span className={styles.studentRoll}>{st.roll_number || '—'}</span>
+                  </div>
+                </div>
+                <span
+                  className={`${styles.riskPill} ${
+                    rate >= 75 ? styles.riskOk : (rate >= 60 ? styles.riskWatch : styles.riskCritical)
+                  }`}
+                >
+                  {rate}% Attendance
+                </span>
+              </div>
+
+              {/* Progress bar */}
+              <div style={{ height: 6, background: '#e2e8f0', borderRadius: 4, overflow: 'hidden' }}>
+                <div
+                  style={{
+                    width: `${Math.min(100, rate)}%`,
+                    height: '100%',
+                    background: rate >= 75 ? '#10b981' : (rate >= 60 ? '#f59e0b' : '#ef4444'),
+                    borderRadius: 4,
+                  }}
+                />
+              </div>
+
+              {/* 3 Metric counters */}
+              <div className={styles.mobileCardMetrics}>
+                <div className={styles.mobileCardMetricItem}>
+                  <span className={styles.mobileMetricLabel}>Present</span>
+                  <span className={styles.mobileMetricVal} style={{ color: '#16a34a' }}>
+                    {st.present_count ?? '—'}
+                  </span>
+                </div>
+                <div className={styles.mobileCardMetricItem}>
+                  <span className={styles.mobileMetricLabel}>Absent</span>
+                  <span className={styles.mobileMetricVal} style={{ color: '#dc2626' }}>
+                    {st.absent_count ?? '—'}
+                  </span>
+                </div>
+                <div className={styles.mobileCardMetricItem}>
+                  <span className={styles.mobileMetricLabel}>Excused</span>
+                  <span className={styles.mobileMetricVal} style={{ color: '#6366f1' }}>
+                    {st.excused_count ?? '0'}
+                  </span>
+                </div>
+              </div>
+
+              <div className={styles.mobileCardFooter}>
+                <button
+                  type="button"
+                  className={styles.mobileCardActionBtn}
+                  onClick={() => st.student_id && onSelectStudent(st.student_id)}
+                >
+                  Dossier 360° →
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

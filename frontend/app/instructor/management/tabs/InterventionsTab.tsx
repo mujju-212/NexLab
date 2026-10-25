@@ -182,9 +182,10 @@ export const InterventionsTab: React.FC<InterventionsTabProps> = ({
         </div>
       </div>
 
-      {/* ── INTERVENTIONS DATA TABLE ──────────────────────────────────── */}
-      <div className={styles.tableWrapper}>
-        <table className={styles.dataTable}>
+      {/* ── INTERVENTIONS DATA TABLE (Desktop) ───────────────────────── */}
+      <div className={styles.desktopTableView}>
+        <div className={styles.tableWrapper}>
+          <table className={styles.dataTable}>
           <thead>
             <tr>
               <th style={{ width: 44, textAlign: 'center' }}>#</th>
@@ -313,6 +314,82 @@ export const InterventionsTab: React.FC<InterventionsTabProps> = ({
             })}
           </tbody>
         </table>
+        </div>
+      </div>
+
+      {/* ── MOBILE INTERVENTION CARDS (≤768px native mobile ergonomics) ── */}
+      <div className={styles.mobileStudentCards}>
+        {displayList.map((item: any, idx: number) => {
+          const outcome = item.outcome || 'open';
+          const isClosed = outcome !== 'open';
+          const statusLabel = isClosed ? 'Closed' : (item.status || 'Open');
+
+          return (
+            <div key={item.id || idx} className={styles.mobileStudentCard}>
+              <div className={styles.mobileCardTop}>
+                <div className={styles.studentCell}>
+                  <div className={styles.studentAvatar}>
+                    {(item.student_name || 'S').slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className={styles.studentMeta}>
+                    <span className={styles.studentName}>
+                      {item.student_name || 'Student'}
+                    </span>
+                    <span className={styles.studentRoll}>{item.roll_number || '—'}</span>
+                  </div>
+                </div>
+                <span
+                  className={`${styles.riskPill} ${
+                    statusLabel.toLowerCase() === 'open'
+                      ? styles.riskWatch
+                      : (statusLabel.toLowerCase() === 'closed' ? styles.riskOk : styles.riskCritical)
+                  }`}
+                >
+                  {statusLabel}
+                </span>
+              </div>
+
+              {/* Action type and Target Date */}
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 6, background: '#f8fafc', padding: '10px 12px', borderRadius: 12 }}>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                  <span style={{ fontSize: 11, fontWeight: 700, color: '#64748b', textTransform: 'uppercase' }}>Action Plan</span>
+                  <span style={{ fontSize: 12, fontWeight: 700, color: '#6d28d9', background: '#f5f3ff', padding: '2px 8px', borderRadius: 6 }}>
+                    {item.action_type?.replace(/_/g, ' ') || 'Diagnostic review'}
+                  </span>
+                </div>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', fontSize: 12, color: '#475569' }}>
+                  <span>Assigned: <strong>{item.assigned_to || item.created_by_name || 'Dr. Instructor'}</strong></span>
+                  <span>Target: <strong>{item.target_date || (item.follow_up_at ? new Date(item.follow_up_at).toLocaleDateString() : '—')}</strong></span>
+                </div>
+              </div>
+
+              <div className={styles.mobileCardFooter}>
+                <span style={{ fontSize: 11.5, fontWeight: 700, color: outcome === 'improved' ? '#16a34a' : '#ea580c' }}>
+                  Outcome: {outcome === 'improved' ? 'Improved' : (outcome === 'no_change' ? 'No change' : 'Pending Review')}
+                </span>
+                {!isClosed && item.id ? (
+                  <button
+                    type="button"
+                    className={styles.mobileCardActionBtn}
+                    style={{ background: '#7c3aed', color: '#ffffff', border: 'none' }}
+                    disabled={updatingId === item.id}
+                    onClick={() => handleUpdateOutcome(item.id, 'improved')}
+                  >
+                    {updatingId === item.id ? <Loader2 size={12} className="animate-spin" /> : 'Mark Resolved ✓'}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    className={styles.mobileCardActionBtn}
+                    onClick={() => item.student_id && onSelectStudent(item.student_id)}
+                  >
+                    Dossier 360° →
+                  </button>
+                )}
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

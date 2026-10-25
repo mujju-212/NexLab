@@ -1,7 +1,7 @@
 'use client';
 
-import React from 'react';
-import { Building2, Calendar, Layers, Hash, BookOpen } from 'lucide-react';
+import React, { useState, useMemo } from 'react';
+import { Building2, Calendar, Layers, Hash, BookOpen, SlidersHorizontal, Check, X } from 'lucide-react';
 import styles from '../class-management.module.css';
 
 export interface FilterOption {
@@ -45,8 +45,56 @@ export const CascadingFilterBar: React.FC<CascadingFilterBarProps> = ({
   selectedSubject,
   onSelectSubject,
 }) => {
+  const [isMobileOpen, setIsMobileOpen] = useState(false);
+
+  const activeCount = useMemo(() => {
+    let count = 0;
+    if (selectedDept !== 'all') count++;
+    if (selectedYear !== 'all') count++;
+    if (selectedBatch !== 'all') count++;
+    if (selectedSection !== 'all') count++;
+    if (selectedSubject !== 'all') count++;
+    return count;
+  }, [selectedDept, selectedYear, selectedBatch, selectedSection, selectedSubject]);
+
+  const scopeSummary = useMemo(() => {
+    const parts = [];
+    if (selectedDept !== 'all') parts.push(selectedDept);
+    if (selectedYear !== 'all') parts.push(selectedYear);
+    if (selectedSection !== 'all') parts.push(`Sec ${selectedSection}`);
+    if (selectedSubject !== 'all') {
+      const s = subjects.find(sub => sub.id === selectedSubject);
+      parts.push(s ? s.name : selectedSubject);
+    }
+    return parts.length > 0 ? parts.join(' • ') : 'All Classes & Sections';
+  }, [selectedDept, selectedYear, selectedSection, selectedSubject, subjects]);
+
   return (
-    <div className={styles.filterRibbon}>
+    <>
+      {/* ── NATIVE MOBILE FILTER SCOPE BAR (Shown on phones) ───────── */}
+      <div className={styles.mobileFilterSummaryBar}>
+        <div className={styles.mobileFilterScopeText}>
+          <span style={{ color: '#7c3aed' }}>Scope:</span>
+          <span>{scopeSummary}</span>
+        </div>
+        <button
+          type="button"
+          className={styles.mobileFilterToggleBtn}
+          onClick={() => setIsMobileOpen(prev => !prev)}
+        >
+          {isMobileOpen ? (
+            <>
+              <X size={13} /> Close
+            </>
+          ) : (
+            <>
+              <SlidersHorizontal size={13} /> Filters{activeCount > 0 ? ` (${activeCount})` : ''}
+            </>
+          )}
+        </button>
+      </div>
+
+      <div className={`${styles.filterRibbon} ${isMobileOpen ? styles.filterRibbonMobileOpen : ''}`}>
       {/* 1. Department */}
       <div className={styles.filterGroup}>
         <label className={styles.filterLabel}>
@@ -142,5 +190,6 @@ export const CascadingFilterBar: React.FC<CascadingFilterBarProps> = ({
         </select>
       </div>
     </div>
+  </>
   );
 };

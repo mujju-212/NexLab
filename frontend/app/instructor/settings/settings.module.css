@@ -916,3 +916,36 @@
     grid-template-columns: 1fr;
   }
 }
+
+@media (max-width: 640px) {
+  .pageContainer {
+    padding: 12px 8px 80px;
+  }
+  .headerRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .saveBtn {
+    width: 100%;
+    justify-content: center;
+  }
+  .navCardsGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  .navCard {
+    padding: 10px 12px !important;
+    gap: 8px !important;
+    border-radius: 12px !important;
+  }
+  .navCardTitle {
+    font-size: 12px !important;
+  }
+  .navCardSub {
+    font-size: 10.5px !important;
+  }
+  .rubricInputsRow {
+    grid-template-columns: 1fr !important;
+  }
+}

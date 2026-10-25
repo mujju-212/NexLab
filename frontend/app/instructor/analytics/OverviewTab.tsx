@@ -452,7 +452,7 @@ export function OverviewTab({
             <div className={styles.donutWithLegend}>
               {/* Donut Chart */}
               <div className={styles.donutWrapper} style={{ width: 120, height: 120 }}>
-                <ResponsiveContainer width={120} height={120}>
+                <ResponsiveContainer width="100%" height="100%">
                   <PieChart>
                     <Pie
                       data={riskDistBands}
@@ -586,7 +586,7 @@ export function OverviewTab({
             </div>
 
             {/* Recharts Area Chart */}
-            <div style={{ width: '100%', height: 115, marginTop: 4 }}>
+            <div style={{ width: '100%', height: 155, marginTop: 4 }}>
               {riskTrendData.length === 0 ? (
                 <div
                   style={{
@@ -867,7 +867,7 @@ export function OverviewTab({
           <div className={styles.qualityTableWrapper} style={{ marginTop: 12 }}>
             {/* Interactive Donut */}
             <div className={styles.donutWrapper} style={{ width: 130, height: 130 }}>
-              <ResponsiveContainer width={130} height={130}>
+              <ResponsiveContainer width="100%" height="100%">
                 <PieChart>
                   <Pie
                     data={qualityBreakdown}

@@ -222,13 +222,20 @@
 
 @media (max-width: 900px) {
   .kpiGrid {
-    grid-template-columns: repeat(2, 1fr);
+    grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 }
 
-@media (max-width: 500px) {
+@media (max-width: 640px) {
   .kpiGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 10px !important;
+  }
+  .kpiCard {
+    padding: 12px 13px !important;
+  }
+  .kpiValue {
+    font-size: 1.4rem !important;
   }
 }
 
@@ -1881,5 +1888,44 @@
 .clearFilterBtn:hover {
   background: #ede9fe;
 }
+
+/* ── Mobile Layout Polish (≤768px and ≤640px) ────────────────────────────── */
+@media (max-width: 768px) {
+  .container {
+    padding: 0 0 40px;
+  }
+  .headerRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+  }
+  .sectionCard, .chartCard, .filterCard {
+    padding: 14px 12px;
+    border-radius: 14px;
+  }
+  .tableToolbar {
+    width: 100%;
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .searchInputWrapper {
+    width: 100%;
+  }
+}
+
+@media (max-width: 640px) {
+  .chartHeader {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+  .chartLegend {
+    width: 100%;
+    overflow-x: auto;
+    padding-bottom: 4px;
+    flex-wrap: nowrap;
+  }
+}
+
 
 
