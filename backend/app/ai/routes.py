@@ -420,7 +420,7 @@ _ASSIST_MODES = {
     'hint': {
         'max_tokens': 220,
         'prompt': (
-            "You are a programming tutor sitting beside a student in a free-practice "
+            "You are a programming tutor sitting beside a student in a platform-practice "
             "code playground. They want a nudge, not the answer.\n"
             "Point at the weakest part of their logic, or — if there is an error "
             "message — name its likely cause and the line to inspect.\n"
@@ -588,22 +588,22 @@ def _check_quota(institution_id: str) -> bool:
     Two meters:
       - institution users: legacy request-count meter (`groq_usage`, seeded by
         database/init.sql) + the token quota the AI gate enforces on top.
-      - platform-direct users (free_user / any caller without an institution):
-        counted from AIUsageLog against PlatformConfig `free_user_daily_ai_calls`
+      - platform-direct users (platform_user / any caller without an institution):
+        counted from AIUsageLog against PlatformConfig `platform_user_daily_ai_calls`
         (default 10/day). Previously `None` institution short-circuited to
-        always-allow — free users consumed AI with no meter at all.
+        always-allow — platform users consumed AI with no meter at all.
 
     Fails **open** on meter-read failures so the AI tutor never goes down with
     the counter.
     """
     from datetime import date, datetime
     if not institution_id:
-        # ── Free-tier meter (per-user, from the usage log we already write) ──
+        # ── Platform-user meter (per-user, from the usage log we already write) ──
         try:
             from app.models.institution import PlatformConfig
             from app.models.ai_usage import AIUsageLog
             from sqlalchemy import func
-            limit = int(PlatformConfig.get('free_user_daily_ai_calls', 10))
+            limit = int(PlatformConfig.get('platform_user_daily_ai_calls', 10))
             day_start = datetime.utcnow().replace(hour=0, minute=0, second=0, microsecond=0)
             used = db.session.query(func.count(AIUsageLog.id)).filter(
                 AIUsageLog.user_id == g.user_id,
@@ -611,7 +611,7 @@ def _check_quota(institution_id: str) -> bool:
             ).scalar() or 0
             return used < limit
         except Exception:
-            current_app.logger.warning('[ai] free-tier quota lookup failed; allowing request', exc_info=True)
+            current_app.logger.warning('[ai] platform-user quota lookup failed; allowing request', exc_info=True)
             return True
     from datetime import date
     from app.extensions import db
@@ -635,7 +635,7 @@ def _require_institution_account():
     """
     Lab AI features (hints, chat, code-assist, viva, explain) exist inside
     institution labs only. Platform-direct accounts have no lab experiments —
-    returning 403 also closes the cost/content-leak hole where a free user
+    returning 403 also closes the cost/content-leak hole where a platform user
     could hint/assist against someone else's experiment id.
     Returns None when the caller is fine, else a (response, status) tuple.
     """
@@ -1045,7 +1045,7 @@ def delete_chat_session(session_id):
 def send_chat_message():
     """
     Unified Multi-Role AI Harness messaging endpoint (supports all 5 roles:
-    student, free_user, instructor, institution_admin, admin).
+    student, platform_user, instructor, institution_admin, admin).
     Accepts:
       - session_id: optional (creates new if missing)
       - prompt: string (required)
@@ -1068,8 +1068,8 @@ def send_chat_message():
     session_id = data.get('session_id')
     page_context = data.get('page_context') if isinstance(data.get('page_context'), dict) else {}
 
-    # Students and Free Users are always in Socratic 'chat' mode (cannot execute administrative agent mutations)
-    if g.role in ('student', 'free_user'):
+    # Students and Platform Users are always in Socratic 'chat' mode (cannot execute administrative agent mutations)
+    if g.role in ('student', 'platform_user'):
         mode = 'chat'
 
     if not prompt:
@@ -1198,7 +1198,7 @@ def send_chat_message():
         try:
             from app.ai.gate import guarded_ai_call
             title_text, _, is_fb, _ = guarded_ai_call(
-                'chat' if g.role in ('student', 'free_user') else 'agent',
+                'chat' if g.role in ('student', 'platform_user') else 'agent',
                 institution_id=g.institution_id,
                 user_id=g.user_id,
                 role=g.role,
@@ -1248,8 +1248,8 @@ def execute_chat_action():
     from app.ai.role_tools import execute_role_action
     from app.models.admin_copilot import AdminChatMessage
 
-    if g.role in ('student', 'free_user'):
-        return jsonify({'error': 'Students and free learners cannot execute administrative write actions.'}), 403
+    if g.role in ('student', 'platform_user'):
+        return jsonify({'error': 'Students and platform learners cannot execute administrative write actions.'}), 403
 
     data = request.get_json(silent=True) or {}
     action_payload = data.get('action_payload')

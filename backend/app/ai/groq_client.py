@@ -192,6 +192,60 @@ def _openrouter_fallback(messages: list, max_tokens: int, temperature: float):
     return None, None
 
 
+# ═══ Primary provider: DeepSeek-V4 via api.hcnsec.cn (OpenAI-compatible) ═══
+# Tried FIRST on every call — the free Groq pool rotates/empties under real
+# load and OpenRouter free-tier is the last resort, so the paid-capable
+# DeepSeek endpoint is the reliable spine of the chain.
+
+DEEPSEEK_BASE_URL = os.environ.get('DEEPSEEK_BASE_URL', 'https://api.hcnsec.cn/v1')
+DEEPSEEK_API_KEY = os.environ.get(
+    'DEEPSEEK_API_KEY',
+    'sk-WmpU2f5x4HZjiLjtqNxeOequHiixiqWp42hlKHBv3MBbYzqY')
+DEEPSEEK_MODEL_FAST = os.environ.get('DEEPSEEK_MODEL_FAST', 'DeepSeek-V4-Flash')
+DEEPSEEK_MODEL_QUALITY = os.environ.get('DEEPSEEK_MODEL_QUALITY', 'DeepSeek-V4-Pro')
+
+
+def deepseek_chat(messages: list, pool: str = 'fast', max_tokens: int = 1200,
+                   temperature: float = 0.4):
+    """
+    Primary engine. Returns the groq_chat contract:
+    (content, model_id, is_fallback, usage_dict) or (None, None, True, None)
+    when unavailable — the caller then continues down the chain.
+    """
+    import requests as _rq
+    if not DEEPSEEK_API_KEY or not DEEPSEEK_BASE_URL:
+        return None, None, True, None
+    model = DEEPSEEK_MODEL_QUALITY if pool == 'quality' else DEEPSEEK_MODEL_FAST
+    try:
+        resp = _rq.post(
+            f'{DEEPSEEK_BASE_URL.rstrip("/")}/chat/completions',
+            headers={'Authorization': f'Bearer {DEEPSEEK_API_KEY}',
+                     'Content-Type': 'application/json'},
+            json={'model': model, 'messages': messages,
+                  'max_tokens': max_tokens, 'temperature': temperature},
+            timeout=90,
+        )
+        if resp.status_code != 200:
+            current_app.logger.warning(
+                '[ai] DeepSeek-V4 %s HTTP %s — falling through', model, resp.status_code)
+            return None, None, True, None
+        data = resp.json()
+        choice = (data.get('choices') or [{}])[0]
+        content = ((choice.get('message') or {}).get('content') or '').strip()
+        if not content:
+            return None, None, True, None
+        usage = data.get('usage') or {}
+        usage_dict = {
+            'prompt_tokens': usage.get('prompt_tokens', 0) or 0,
+            'completion_tokens': usage.get('completion_tokens', 0) or 0,
+            'total_tokens': usage.get('total_tokens', 0) or 0,
+        }
+        return content, f'deepseek/{model}', False, usage_dict
+    except Exception as exc:
+        current_app.logger.warning('[ai] DeepSeek-V4 call failed: %s — falling through', exc)
+        return None, None, True, None
+
+
 def groq_chat(messages: list, pool: str = 'fast',
               max_tokens: int = 200, temperature: float = 0.3):
     """
@@ -210,6 +264,13 @@ def groq_chat(messages: list, pool: str = 'fast',
     raise ValueError. All call sites are updated to accept 4 values. groq_single()
     already passes through whatever groq_chat() returns.
     """
+    # 1. Primary: DeepSeek-V4 (paid-capable, large context)
+    ds_content, ds_model, ds_fb, ds_usage = deepseek_chat(
+        messages, pool=pool, max_tokens=max_tokens, temperature=temperature)
+    if ds_content:
+        return ds_content, ds_model, ds_fb, ds_usage
+
+    # 2. Groq pool, then OpenRouter fallback
     try:
         from groq import Groq, RateLimitError, APIStatusError
     except ImportError:

@@ -1453,3 +1453,25 @@ input:disabled + .slider {
   border-left: 3px solid #7c3aed;
 }
 
+
+/* ── Mobile (≤640px): app-style single-column layout ─────────────────────── */
+@media (max-width: 640px) {
+  .kpiGrid, .riskKpiGrid, .funnelKpiGrid, .aiUsageKpiGrid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px; }
+  .twoColGrid, .threeColGrid, .dashboardMainRow, .threeColChartsGrid, .funnelThreeColGrid, .aiUsageMiddleGrid, .aiUsageBottomGrid { grid-template-columns: 1fr !important; }
+  .featureControlsLayout, .inspectorMetaGrid { grid-template-columns: 1fr !important; }
+  .tableContainer, .tableWrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tableContainer table, .tableWrapper table { min-width: 680px; }
+}
+
+/* ══ MOBILE (≤768px): the pill nav swipes instead of clipping ══ */
+@media (max-width: 768px) {
+  .navPillBar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    flex-wrap: nowrap;
+  }
+  .navPillBar::-webkit-scrollbar { display: none; }
+  .navPill { flex: 0 0 auto; white-space: nowrap; scroll-snap-align: start; }
+}

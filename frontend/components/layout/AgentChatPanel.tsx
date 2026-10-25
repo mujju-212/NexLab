@@ -236,7 +236,7 @@ const ROLE_CONFIGS: Record<string, RoleHarnessConfig> = {
     ],
     agentSuggestions: [],
   },
-  free_user: {
+  platform_user: {
     title: 'NexLab Coding Coach',
     badgeText: 'Self-Learner AI',
     launcherLabel: 'Ask AI Coach',
@@ -354,7 +354,7 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
     if (roleOverride) return roleOverride;
     if (user?.role) return user.role;
     if (pathname?.startsWith('/student')) return 'student';
-    if (pathname?.startsWith('/practice')) return 'free_user';
+    if (pathname?.startsWith('/practice')) return 'platform_user';
     if (pathname?.startsWith('/instructor')) return 'instructor';
     if (pathname?.startsWith('/admin')) return 'admin';
     return 'institution_admin';
@@ -366,7 +366,7 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
   const [isExpanded, setIsExpanded] = useState(false);
   const [mode, setMode] = useState<'chat' | 'agent'>('chat');
 
-  // Ensure student / free_user stay in 'chat' mode
+  // Ensure student / platform_user stay in 'chat' mode
   useEffect(() => {
     if (!roleCfg.supportsAgentMode && mode !== 'chat') {
       setMode('chat');
@@ -789,6 +789,35 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
         message_id: msg.id,
       });
 
+      // Build a full, chat-style answer from the execution result instead of a
+      // single "done" line — the agent should report outcomes with the same
+      // richness as chat-mode replies.
+      const formatActionResult = (result: any): string => {
+        if (!result) return 'Done.';
+        const skip = new Set(['success', 'message', 'found_error']);
+        const isIdKey = (k: string) => k === 'id' || k.endsWith('_id') || k.endsWith('_path') || k.endsWith('_count');
+        const lines: string[] = [];
+        if (result.message) lines.push(String(result.message));
+        for (const [k, v] of Object.entries(result)) {
+          if (skip.has(k) || isIdKey(k) || v == null || v === '') continue;
+          const label = k.replace(/_/g, ' ');
+          if (Array.isArray(v)) {
+            if (!v.length) continue;
+            const titles = v
+              .slice(0, 5)
+              .map((it: any) => (typeof it === 'string' ? it : it?.title || it?.name || it?.label))
+              .filter(Boolean);
+            lines.push(`- **${label}:** ${titles.length ? titles.join(', ') : `${v.length} item(s)`}`);
+          } else if (typeof v === 'object') {
+            const t = (v as any).title || (v as any).name;
+            if (t) lines.push(`- **${label}:** ${t}`);
+          } else {
+            lines.push(`- **${label}:** ${String(v).slice(0, 200)}`);
+          }
+        }
+        return lines.length ? lines.join('\n') : 'Done.';
+      };
+
       setMessages(prev =>
         prev.map(m =>
           m.id === msg.id
@@ -796,7 +825,7 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                 ...m,
                 applied: true,
                 pending_action: null,
-                content: `${m.content}\n\n**✓ Action Executed:** ${res.result?.message || 'Done.'}`,
+                content: `${m.content}\n\n---\n\n**✓ Action Executed**\n\n${formatActionResult(res.result)}`,
               }
             : m
         )
@@ -840,18 +869,16 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
 
   return (
     <div className={`${styles.copilotContainer} ${open ? styles.copilotContainerOpen : ''}`}>
-      {/* ── Floating Launcher ── */}
+      {/* ── Floating Launcher (avatar-style) ── */}
       {!open && !hasActiveOverlay && (
         <button
           onClick={() => setOpen(true)}
           className={styles.launcherBtn}
-          aria-label="Open NexLab AI"
-          title="Press Ctrl+K or Ctrl+/ to toggle"
+          aria-label={`Open ${roleCfg.launcherLabel}`}
+          title={`${roleCfg.launcherLabel} — Ctrl+K`}
         >
+          <Bot size={26} strokeWidth={2} />
           <span className={styles.pulseDot} />
-          <Sparkles size={16} strokeWidth={2.2} />
-          <span>{roleCfg.launcherLabel}</span>
-          <span className={styles.shortcutBadge}>Ctrl+K</span>
         </button>
       )}
 

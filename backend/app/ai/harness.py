@@ -12,7 +12,7 @@ Powered by the Claw-Code Autonomous Engine (`claw_runtime.py`):
 3. 6-Layer Dynamic System Prompt Builder with 2-Stage Tool Pool Routing.
 4. Rolling Memory Auto-Compaction (`maybe_compact_session_memory`).
 5. Deterministic Code-Level Socratic Output Filter (`enforce_socratic_guardrail`) for
-   `student` and `free_user`.
+   `student` and `platform_user`.
 """
 import csv
 import io
@@ -271,7 +271,7 @@ def search_scoped_documents(institution_id: str, user_id: str, role: str,
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 2. Deterministic Socratic Output Guardrail (Student & Free-User Protection)
+# 2. Deterministic Socratic Output Guardrail (Student & Platform-User Protection)
 # ══════════════════════════════════════════════════════════════════════════════
 
 _CODE_BLOCK_RE = re.compile(r"```(?:[a-zA-Z0-9_+-]*)\n(.*?)```", re.DOTALL)
@@ -282,7 +282,7 @@ _SOLUTION_SIGNATURE_RE = re.compile(
 
 
 def enforce_socratic_guardrail(text: str, role: str) -> tuple[str, bool]:
-    if role not in ('student', 'free_user') or not text:
+    if role not in ('student', 'platform_user') or not text:
         return text, False
 
     was_filtered = False
@@ -357,8 +357,8 @@ ROLE_PERSONAS = {
   2. NEVER reveal hidden test case inputs/outputs (`is_hidden=True`).
   3. Guide the student using progressive 3-level hints (Level 1 Conceptual -> Level 2 Structural -> Level 3 Diagnostic).""",
 
-    'free_user': """LAYER 2 — ROLE PERSONA: SELF-PACED SOCRATIC CODING COACH & WORKSPACE ARCHITECT
-- You are an active coding mentor and workspace builder for an independent learner on NexLab Free Platform.
+    'platform_user': """LAYER 2 — ROLE PERSONA: SELF-PACED SOCRATIC CODING COACH & WORKSPACE ARCHITECT
+- You are an active coding mentor and workspace builder for an independent learner on NexLab Platform.
 - AUTONOMOUS CAPABILITIES: You can directly create custom Problem Collections & bookmarks (`build_personal_problem_collection`), create saved Playground workspaces (`create_saved_playground_workspace`), enroll in Study Plans (`enroll_and_build_study_plan`), generate downloadable study roadmaps/cheat sheets, and analyze practice submissions.
 - NEVER dump full copy-pasteable solution code (>5 lines); teach the pattern and let the learner write the code.""",
 
@@ -372,17 +372,18 @@ ROLE_PERSONAS = {
 
     'admin': """LAYER 2 — ROLE PERSONA: PLATFORM SUPER-ADMIN AUTONOMOUS GOVERNANCE HARNESS
 - You are the cross-tenant platform operations harness for the NexLab Super Admin.
-- AUTONOMOUS EXECUTION: Directly onboard new Institution tenants (`autonomous_onboard_institution`), create global Free Courses or Coding Contests (`autonomous_create_free_course_or_contest`), update tenant plans/quotas or PlatformConfig flags (`autonomous_update_tenant_or_platform_config`), and query cross-tenant telemetry.""",
+- AUTONOMOUS EXECUTION: Directly onboard new Institution tenants (`autonomous_onboard_institution`), create global Platform Courses or Coding Contests (`autonomous_create_platform_course_or_contest`), update tenant plans/quotas or PlatformConfig flags (`autonomous_update_tenant_or_platform_config`), and query cross-tenant telemetry.""",
 }
 
 
 def build_six_layer_prompt(role: str, mode: str, user: User = None,
                            inst: Institution = None, page_context: dict = None,
                            compact_memory: str = None, rag_chunks: list = None,
-                           catalog_str: str = '', is_planner: bool = False) -> str:
+                           catalog_str: str = '', is_planner: bool = False,
+                           role_context: str = '') -> str:
     role_key = (role or 'student').lower().strip()
     u_name = user.full_name if user else 'User'
-    inst_name = inst.name if inst else ('NexLab Free Platform' if role_key == 'free_user' else 'NexLab Platform')
+    inst_name = inst.name if inst else ('NexLab Platform' if role_key == 'platform_user' else 'NexLab Platform')
     ctx_dict = page_context or {}
 
     layer_1 = (
@@ -410,6 +411,8 @@ def build_six_layer_prompt(role: str, mode: str, user: User = None,
         ctx_lines.append(f"- Compacted Prior Conversation Memory:\n{compact_memory}")
 
     layer_3 = "LAYER 3 — LIVE CONTEXT & MEMORY:\n" + "\n".join(ctx_lines)
+    if role_context:
+        layer_3 += "\n\n" + role_context
 
     layer_4 = (
         "LAYER 4 — NEXLAB DOMAIN & METRIC DEFINITIONS:\n"
@@ -622,7 +625,7 @@ def _run_deterministic_autonomous_fallback(prompt: str, role_key: str, role_tool
         else:
             _call('analyze_my_code')
 
-    elif role_key == 'free_user':
+    elif role_key == 'platform_user':
         if any(w in p_lower for w in ('/collection', 'playlist', 'collection', 'bookmark')):
             _call('build_personal_problem_collection')
         elif any(w in p_lower for w in ('/playground', 'playground', 'workspace')):
@@ -638,9 +641,9 @@ def _run_deterministic_autonomous_fallback(prompt: str, role_key: str, role_tool
         if any(w in p_lower for w in ('/onboard', 'onboard', 'provision', 'create institution')):
             name = _extract_quoted_or_tail(prompt, 'NIT Autonomous Campus')
             _call('autonomous_onboard_institution', name=name)
-        elif any(w in p_lower for w in ('free course', 'create course', 'contest')):
+        elif any(w in p_lower for w in ('platform course', 'create course', 'contest')):
             title = _extract_quoted_or_tail(prompt, 'Mastering Python & Algorithms')
-            _call('autonomous_create_free_course_or_contest', entity_type='contest' if 'contest' in p_lower else 'free_course', title=title)
+            _call('autonomous_create_platform_course_or_contest', entity_type='contest' if 'contest' in p_lower else 'platform_course', title=title)
         elif any(w in p_lower for w in ('list institution', 'institutions', 'tenants')):
             _call('list_platform_institutions')
         else:
@@ -663,8 +666,14 @@ def run_harness_turn(prompt: str, institution_id: str, user_id: str, role: str,
     - Chains up to 6 sequential read/create/setup/authoring tools in a single turn
     - Auto-executes all non-destructive tools immediately in the database
     - Emits real-time Socket.IO events (`ai:tool_start`, `ai:tool_result`, `ai:token`, `ai:done`)
-    - Enforces deterministic Socratic output filtering for `student` and `free_user`
+    - Enforces deterministic Socratic output filtering for `student` and `platform_user`
     """
+    # Live role context (learner memory / teaching / platform snapshot)
+    from app.ai.learner_context import build_role_context
+    try:
+        role_context_block = build_role_context(current_user)
+    except Exception:
+        role_context_block = ''
     role_key = (role or 'student').lower().strip()
     g.user_id = user_id
     g.institution_id = institution_id
@@ -731,6 +740,7 @@ def run_harness_turn(prompt: str, institution_id: str, user_id: str, role: str,
         rag_chunks=rag_chunks,
         catalog_str=catalog_str,
         is_planner=True,
+        role_context=role_context_block,
     )
 
     planner_history = [{'role': 'system', 'content': planner_sys}]
@@ -746,7 +756,7 @@ def run_harness_turn(prompt: str, institution_id: str, user_id: str, role: str,
         user_content += "\n\nPre-retrieved observations:\n" + "\n\n".join(pre_observations)
     planner_history.append({'role': 'user', 'content': user_content})
 
-    gate_feature = 'chat' if role_key in ('student', 'free_user') else 'agent'
+    gate_feature = 'chat' if role_key in ('student', 'platform_user') else 'agent'
 
     # 4. Claw-Code Multi-Turn QueryEngine Loop (Up to 6 Chained Tool Calls!)
     for _turn in range(ENGINE_CONFIG.max_turns):
@@ -852,6 +862,7 @@ def run_harness_turn(prompt: str, institution_id: str, user_id: str, role: str,
         compact_memory=compact_memory,
         rag_chunks=rag_chunks,
         is_planner=False,
+        role_context=role_context_block,
     )
 
     answer, _model, is_fallback, usage = guarded_ai_call(
@@ -891,7 +902,7 @@ def run_harness_turn(prompt: str, institution_id: str, user_id: str, role: str,
         else:
             answer = "Here are the latest results from your NexLab workspace."
 
-    # 7. Enforce Deterministic Socratic Output Guardrail for Student & Free User
+    # 7. Enforce Deterministic Socratic Output Guardrail for Student & Platform User
     answer, socratic_filtered = enforce_socratic_guardrail(answer, role_key)
 
     # Sanitize hallucinated "Confirm & Apply" promises if no actual pending_action card exists

@@ -12,7 +12,7 @@ engineered specifically for the NexLab multi-tenant virtual lab platform:
   `/autograde`, `/collection`, `/playground`, `/studyplan`, `/report`, `/onboard`) mapped
   to role-scoped autonomous workflows.
 - `ToolPool` & `ExecutionRegistry`: Scores and routes prompts across all 5 roles
-  (`institution_admin`, `instructor`, `student`, `free_user`, `admin`).
+  (`institution_admin`, `instructor`, `student`, `platform_user`, `admin`).
 - `TranscriptStore`: Manages turn history and rolling compaction.
 """
 from __future__ import annotations
@@ -124,7 +124,7 @@ class ToolPermissionContext:
     """
     Controls which tools execute autonomously inside the multi-step QueryEngine loop
     vs. which tools are blocked or require explicit confirmation.
-    - Students & Free Users: strictly blocked from staff/admin mutation tools.
+    - Students & Platform Users: strictly blocked from staff/admin mutation tools.
     - Instructors, Institution Admins & Platform Admins: ALL creation, setup, authoring,
       enrollment, scheduling, grading, and report tools AUTO-EXECUTE immediately!
       Only destructive tools (`is_destructive=True` or in `gate_prefixes`) pause for confirmation.
@@ -187,21 +187,21 @@ SLASH_COMMANDS: tuple[SlashCommandSpec, ...] = (
     ),
     SlashCommandSpec(
         name='/collection',
-        role_scope=('student', 'free_user'),
+        role_scope=('student', 'platform_user'),
         target_tool='build_personal_problem_collection',
         description='Create a custom Practice Problem Collection playlist in your account targeted at a topic or skill gap',
         prompt_template='Build a personal practice problem collection in my account for: {args}',
     ),
     SlashCommandSpec(
         name='/playground',
-        role_scope=('student', 'free_user'),
+        role_scope=('student', 'platform_user'),
         target_tool='create_saved_playground_workspace',
         description='Create a saved Playground coding session pre-loaded with a starter template and sample stdin',
         prompt_template='Create a saved playground coding workspace in my account for: {args}',
     ),
     SlashCommandSpec(
         name='/studyplan',
-        role_scope=('student', 'free_user'),
+        role_scope=('student', 'platform_user'),
         target_tool='enroll_and_build_study_plan',
         description='Enroll in a Study Plan and generate a personalized multi-day roadmap',
         prompt_template='Enroll me and generate a study plan for: {args}',
@@ -217,7 +217,7 @@ SLASH_COMMANDS: tuple[SlashCommandSpec, ...] = (
         name='/onboard',
         role_scope=('admin',),
         target_tool='autonomous_onboard_institution',
-        description='Provision a new Institution tenant, admin account, academic year, AI policy, and Free Course/Contest setup',
+        description='Provision a new Institution tenant, admin account, academic year, AI policy, and Platform Course/Contest setup',
         prompt_template='Onboard institution tenant: {args}',
     ),
 )

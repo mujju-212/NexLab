@@ -12,6 +12,7 @@ import {
   Eye, Copy, Check
 } from 'lucide-react';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { toast } from '@/components/ui/toast';
 import styles from './ai-usage.module.css';
 import {
   institutionService,
@@ -38,7 +39,6 @@ export default function AIUsagePage() {
 
   const [activeTab, setActiveTab] = useState<TabKey>(initialTab);
   const [days, setDays] = useState<number>(30);
-  const [toast, setToast] = useState<string | null>(null);
   const [loading, setLoading] = useState<boolean>(true);
 
   // Data states
@@ -86,7 +86,7 @@ export default function AIUsagePage() {
   const [bulkQuotaVal, setBulkQuotaVal] = useState<number>(100000);
   const [editFeatureModal, setEditFeatureModal] = useState<AIFeatureItem | null>(null);
   const [featureRateLimit, setFeatureRateLimit] = useState<number>(100);
-  const [featureModel, setFeatureModel] = useState<string>('GPT-4o (Institution)');
+  const [featureModel, setFeatureModel] = useState<string>('');
 
   // Hover state for Trend Chart
   const [hoveredTrendIdx, setHoveredTrendIdx] = useState<number | null>(null);
@@ -101,22 +101,9 @@ export default function AIUsagePage() {
     failed_requests: logsData?.kpis?.failed_requests || { value: '0', change: '' },
   };
 
-  const logActivityTrend = logsData?.activity_trend && logsData.activity_trend.length > 0 ? logsData.activity_trend : [
-    ...[6, 5, 4, 3, 2, 1, 0].map(daysAgo => {
-      const d = new Date();
-      d.setDate(d.getDate() - daysAgo);
-      const iso = d.toISOString().slice(0, 10);
-      const label = d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
-      return {
-        date: iso,
-        label,
-        total_requests: 0,
-        successful: 0,
-        failed: 0,
-        avg_response_time: 0
-      };
-    })
-  ];
+  // Honest empty state: when there is no log activity yet, render nothing
+  // instead of a fabricated zero-filled trend.
+  const logActivityTrend = logsData?.activity_trend || [];
 
   const logEventBreakdown = logsData?.event_type_breakdown && logsData.event_type_breakdown.length > 0 ? logsData.event_type_breakdown : [];
 
@@ -124,10 +111,7 @@ export default function AIUsagePage() {
   const currentActiveLog = selectedLog || logList[0];
   const totalLogsCount = logsData?.total || 0;
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3000);
-  };
+  const showToast = (msg: string) => toast.info(msg);
 
   const copyToClipboard = (text: string, label: string) => {
     navigator.clipboard.writeText(text);
@@ -417,12 +401,6 @@ export default function AIUsagePage() {
   return (
     <InstitutionShell activePage="AI & Usage" title="AI & Usage" subtitle="Control, monitor, and optimize AI features across your institution.">
       {/* Floating Toast Notification */}
-      {toast && (
-        <div className={styles.toast}>
-          <Sparkles size={16} /> {toast}
-        </div>
-      )}
-
       <div className={styles.container}>
         {/* ══ TOP HEADER ══ */}
         <div className={styles.headerRow}>
@@ -1887,7 +1865,9 @@ export default function AIUsagePage() {
                 </div>
                 <div className={styles.kpiValue}>{featuresData.kpis.enabled_features}</div>
                 <div className={`${styles.kpiBadge} ${styles.kpiBadgeUp}`}>
-                  {Math.round((featuresData.kpis.enabled_features / featuresData.kpis.total_features) * 100)}% of total
+                  {featuresData.kpis.total_features > 0
+                    ? `${Math.round((featuresData.kpis.enabled_features / featuresData.kpis.total_features) * 100)}% of total`
+                    : 'No features configured yet'}
                 </div>
               </div>
 
@@ -1900,7 +1880,9 @@ export default function AIUsagePage() {
                 </div>
                 <div className={styles.kpiValue}>{featuresData.kpis.disabled_features}</div>
                 <div className={`${styles.kpiBadge} ${styles.kpiBadgeDanger}`}>
-                  {Math.round((featuresData.kpis.disabled_features / featuresData.kpis.total_features) * 100)}% of total
+                  {featuresData.kpis.total_features > 0
+                    ? `${Math.round((featuresData.kpis.disabled_features / featuresData.kpis.total_features) * 100)}% of total`
+                    : 'No features configured yet'}
                 </div>
               </div>
 
@@ -2036,7 +2018,7 @@ export default function AIUsagePage() {
                               setSelectedFeature(feat);
                               setEditFeatureModal(feat);
                               setFeatureRateLimit(feat.rate_limit_per_hour);
-                              setFeatureModel(feat.default_model);
+                              setFeatureModel(feat.default_model || '');
                             }}
                           >
                             Configure
@@ -2141,7 +2123,7 @@ export default function AIUsagePage() {
                           onClick={() => {
                             setEditFeatureModal(selectedFeature);
                             setFeatureRateLimit(selectedFeature.rate_limit_per_hour);
-                            setFeatureModel(selectedFeature.default_model);
+                            setFeatureModel(selectedFeature.default_model || '');
                           }}
                         >
                           Edit Config
@@ -2228,7 +2210,7 @@ export default function AIUsagePage() {
                 </div>
                 <div className={styles.kpiValue}>{securityData.kpis.security_score.value}</div>
                 <div className={`${styles.kpiBadge} ${styles.kpiBadgeUp}`}>
-                  <TrendingUp size={12} /> {securityData.kpis.security_score.change || '+4 vs. last month'}
+                  <TrendingUp size={12} /> {securityData.kpis.security_score.change}
                 </div>
               </div>
 
@@ -2482,7 +2464,7 @@ export default function AIUsagePage() {
                 </div>
                 <div className={styles.kpiValue}>{logKpis.total_logs.value}</div>
                 <div className={`${styles.kpiBadge} ${styles.kpiBadgeUp}`}>
-                  <TrendingUp size={12} /> {logKpis.total_logs.change || '+18% vs. last 30 days'}
+                  <TrendingUp size={12} /> {logKpis.total_logs.change}
                 </div>
               </div>
 
@@ -2495,7 +2477,7 @@ export default function AIUsagePage() {
                 </div>
                 <div className={styles.kpiValue}>{logKpis.unique_users.value}</div>
                 <div className={`${styles.kpiBadge} ${styles.kpiBadgeUp}`}>
-                  <TrendingUp size={12} /> {logKpis.unique_users.change || '+12%'}
+                  <TrendingUp size={12} /> {logKpis.unique_users.change}
                 </div>
               </div>
 
@@ -2508,7 +2490,7 @@ export default function AIUsagePage() {
                 </div>
                 <div className={styles.kpiValue}>{logKpis.total_tokens.value}</div>
                 <div className={`${styles.kpiBadge} ${styles.kpiBadgeUp}`}>
-                  <TrendingUp size={12} /> {logKpis.total_tokens.change || '+25%'}
+                  <TrendingUp size={12} /> {logKpis.total_tokens.change}
                 </div>
               </div>
 
@@ -2521,7 +2503,7 @@ export default function AIUsagePage() {
                 </div>
                 <div className={styles.kpiValue}>{logKpis.failed_requests.value}</div>
                 <div className={`${styles.kpiBadge} ${styles.kpiBadgeDanger}`}>
-                  <AlertTriangle size={12} /> {logKpis.failed_requests.change || '+6%'}
+                  <AlertTriangle size={12} /> {logKpis.failed_requests.change}
                 </div>
               </div>
             </div>
@@ -2545,11 +2527,17 @@ export default function AIUsagePage() {
                 </div>
 
                 <div className={styles.chartContainer}>
-                  <ActivityTrendChart
-                    data={logActivityTrend}
-                    hoveredIdx={hoveredLogTrendIdx}
-                    onHover={setHoveredLogTrendIdx}
-                  />
+                  {logActivityTrend.length > 0 ? (
+                    <ActivityTrendChart
+                      data={logActivityTrend}
+                      hoveredIdx={hoveredLogTrendIdx}
+                      onHover={setHoveredLogTrendIdx}
+                    />
+                  ) : (
+                    <div style={{ height: '100%', minHeight: 180, display: 'grid', placeItems: 'center', color: '#9891a6', fontSize: 13 }}>
+                      No AI activity recorded yet — logs will appear here as the features are used.
+                    </div>
+                  )}
                 </div>
               </div>
 
@@ -3115,7 +3103,7 @@ export default function AIUsagePage() {
                 </div>
                 <div>
                   <span style={{ fontSize: 11, color: '#64748b', display: 'block' }}>Model / Status</span>
-                  <strong style={{ fontSize: 12.5, color: '#1e293b' }}>{currentActiveLog.model || 'GPT-4o'}</strong>
+                  <strong style={{ fontSize: 12.5, color: '#1e293b' }}>{currentActiveLog.model || '—'}</strong>
                   <div>
                     <span className={`${styles.statusBadge} ${currentActiveLog.status === 'Success' ? styles.statusSuccess : currentActiveLog.status === 'Blocked' ? styles.statusBlocked : styles.statusFailed}`}>
                       {currentActiveLog.status}

@@ -13,14 +13,15 @@ Engineered from a full 556-route audit of the NexLab codebase:
   * Institution Admin Full-Stack Setup (`autonomous_campus_setup`, `autonomous_assign_and_enroll`,
     `autonomous_schedule_sessions`): Creates `AcademicYear`, `Department`, `Batch`, `Section`, `Subject`,
     `SectionSubject`, `SectionStudent`, and `RecurringPlan` + `_generate_sessions_for_plan(plan)`!
-  * Student & Free-Learner Active Workspace (`build_personal_problem_collection`,
+  * Student & Platform-Learner Active Workspace (`build_personal_problem_collection`,
     `create_saved_playground_workspace`, `enroll_and_build_study_plan`): Creates real
     `ProblemCollection` + `CollectionItem`, `ProblemBookmark`, `PlaygroundSession`, and `StudyPlanProgress` rows!
-  * Platform Super-Admin (`autonomous_onboard_institution`, `autonomous_create_free_course_or_contest`):
-    Creates `Institution` + initial admin `User` + `AcademicYear` + `AIPolicy` + `FreeCourse`/`CodingContest`!
+  * Platform Super-Admin (`autonomous_onboard_institution`, `autonomous_create_platform_course_or_contest`):
+    Creates `Institution` + initial admin `User` + `AcademicYear` + `AIPolicy` + `PlatformCourse`/`CodingContest`!
 - Only gates destructive operations (`is_destructive=True`, e.g., force-logout, session cancellation,
   tenant suspension) behind confirmation cards.
 """
+from app.ai.tutor_routes import save_learning_goal_tool, SAVE_GOAL_DESC
 import csv
 import io
 import json
@@ -55,8 +56,8 @@ from app.models.announcement import Announcement
 from app.models.proctor_event import ProctorEvent
 from app.models.ai_governance import AIUserQuota, SecurityEvent, ComplianceSetting
 from app.models.practice import Problem, PracticeTestCase, PracticeSubmission, StudyPlan, StudyPlanProgress, StudentXP
-from app.models.free import FreeCourse, FreeExercise, FreeProgress
-from app.models.free_extra import ProblemBookmark, PlaygroundSession, ProblemCollection, CollectionItem, CodingContest
+from app.models.platform_content import PlatformCourse, PlatformExercise, PlatformProgress
+from app.models.practice_extras import ProblemBookmark, PlaygroundSession, ProblemCollection, CollectionItem, CodingContest
 from app.models.ai_usage import AIUsageLog, AIPolicy
 from app.models.admin_copilot import AIGeneratedDocument
 from app.services.content_publish import publish_experiment_content
@@ -163,7 +164,7 @@ def save_generated_document(title: str, fmt: str, content_text: str = None,
 
 
 # ══════════════════════════════════════════════════════════════════════════════
-# 1. STUDENT & FREE-USER SOCRATIC + AUTONOMOUS WORKSPACE TOOLS
+# 1. STUDENT & PLATFORM-USER SOCRATIC + AUTONOMOUS WORKSPACE TOOLS
 # ══════════════════════════════════════════════════════════════════════════════
 
 def student_analyze_my_code(experiment_id: str = None, code: str = None,
@@ -396,7 +397,7 @@ def student_get_my_attendance(**_):
 def student_get_my_spark_and_skills(**_):
     """Fetch the student's SPARK 5D behavioral score, class rank, and weak/strong concepts."""
     uid = g.user_id
-    ranking = StudentRanking.query.filter_by(student_id=uid).order_by(StudentRanking.calculated_at.desc()).first()
+    ranking = StudentRanking.query.filter_by(student_id=uid).order_by(StudentRanking.updated_at.desc()).first()
     masteries = ConceptMastery.query.filter_by(student_id=uid).order_by(ConceptMastery.mastery_score.asc()).all()
 
     weak_concepts = [
@@ -546,7 +547,7 @@ def build_personal_problem_collection(collection_title: str = None, topic: str =
                                       difficulty: str = None, count: int = 5,
                                       bookmark_with_notes: bool = True, **_):
     """
-    [AUTONOMOUS WORKSPACE ACTION — Student & Free User]
+    [AUTONOMOUS WORKSPACE ACTION — Student & Platform User]
     Automatically creates a persistent `ProblemCollection` playlist (`problem_collections` +
     `collection_items`) and `ProblemBookmark` study notes in the user's account targeted
     at their weak concepts or requested topic, so it appears immediately in their Practice Library UI!
@@ -608,7 +609,7 @@ def build_personal_problem_collection(collection_title: str = None, topic: str =
 def create_saved_playground_workspace(title: str = None, topic_or_pattern: str = 'Two Pointers & Sliding Window',
                                       language: str = 'python', share_publicly: bool = True, **_):
     """
-    [AUTONOMOUS WORKSPACE ACTION — Student & Free User]
+    [AUTONOMOUS WORKSPACE ACTION — Student & Platform User]
     Creates a saved `PlaygroundSession` in the user's account pre-loaded with a Socratic
     starter template (skeleton + dry-run test harness + sample stdin, never spoiling exam answers)
     so the user can open and run it immediately in the Playground / Compiler UI.
@@ -674,7 +675,7 @@ def create_saved_playground_workspace(title: str = None, topic_or_pattern: str =
 def enroll_and_build_study_plan(plan_name_or_goal: str = 'Data Structures & Algorithms Mastery',
                                 days: int = 7, **_):
     """
-    [AUTONOMOUS WORKSPACE ACTION — Student & Free User]
+    [AUTONOMOUS WORKSPACE ACTION — Student & Platform User]
     Enrolls the user in a matching `StudyPlan` (`StudyPlanProgress` in DB), creates a custom
     `ProblemCollection` playlist for Day 1–N problems, and generates a downloadable `.md` study plan!
     """
@@ -690,7 +691,7 @@ def enroll_and_build_study_plan(plan_name_or_goal: str = 'Data Structures & Algo
     if plan:
         prog = StudyPlanProgress.query.filter_by(student_id=uid, plan_id=plan.id).first()
         if not prog:
-            prog = StudyPlanProgress(student_id=uid, plan_id=plan.id, solved_ids=[])
+            prog = StudyPlanProgress(student_id=uid, plan_id=plan.id, solved_slugs=[])
             db.session.add(prog)
             db.session.commit()
         enrolled_plan_title = plan.title
@@ -700,7 +701,7 @@ def enroll_and_build_study_plan(plan_name_or_goal: str = 'Data Structures & Algo
         topic=plan_name_or_goal if len(plan_name_or_goal) < 25 else None,
         count=min(int(days or 7), 8),
     )
-    doc_res = free_generate_study_plan(target_goal=plan_name_or_goal, days=days)
+    doc_res = platform_generate_study_plan(target_goal=plan_name_or_goal, days=days)
 
     return {
         'success': True,
@@ -771,8 +772,8 @@ def student_generate_study_sheet(topic_or_subject: str = None, include_flashcard
     }
 
 
-def free_get_my_practice_stats(**_):
-    """Get the self-learner's complete practice problem statistics, XP, and FreeCourse progress."""
+def platform_get_my_practice_stats(**_):
+    """Get the self-learner's complete practice problem statistics, XP, and PlatformCourse progress."""
     uid = g.user_id
     subs = PracticeSubmission.query.filter_by(student_id=uid, is_run=False).order_by(PracticeSubmission.submitted_at.desc()).all()
     solved_problem_ids = {s.problem_id for s in subs if s.status == 'Accepted'}
@@ -791,9 +792,9 @@ def free_get_my_practice_stats(**_):
         t_name = p.nexlab_topic if p else 'General'
         by_topic[t_name]['attempts'] += 1
 
-    free_prog = FreeProgress.query.filter_by(user_id=uid).all()
-    exercises_solved = sum(1 for fp in free_prog if fp.status == 'solved')
-    total_xp = sum(int(fp.xp_earned or 0) for fp in free_prog) + sum(int(s.xp_earned or 0) for s in subs)
+    platform_prog = PlatformProgress.query.filter_by(user_id=uid).all()
+    exercises_solved = sum(1 for fp in platform_prog if fp.status == 'solved')
+    total_xp = sum(int(fp.xp_earned or 0) for fp in platform_prog) + sum(int(s.xp_earned or 0) for s in subs)
 
     topic_summary = [
         {
@@ -817,7 +818,7 @@ def free_get_my_practice_stats(**_):
     }
 
 
-def free_analyze_practice_code(problem_slug: str = None, code: str = None,
+def platform_analyze_practice_code(problem_slug: str = None, code: str = None,
                                language: str = None, error: str = None, **_):
     """Analyze the self-learner's practice code or latest PracticeSubmission using Socratic guidance."""
     uid = g.user_id
@@ -861,10 +862,10 @@ def free_analyze_practice_code(problem_slug: str = None, code: str = None,
     }
 
 
-def free_generate_study_plan(target_goal: str = 'Data Structures & Algorithms Mastery',
+def platform_generate_study_plan(target_goal: str = 'Data Structures & Algorithms Mastery',
                              days: int = 7, **_):
     """Generate a personalized multi-day coding study plan (.md)."""
-    stats = free_get_my_practice_stats()
+    stats = platform_get_my_practice_stats()
     recs = student_recommend_next_problem(limit=8)
     days = max(3, min(int(days or 7), 30))
 
@@ -2261,7 +2262,7 @@ def instructor_get_student_360(student_name_or_roll: str = None, **_):
     present_cnt = sum(1 for a in atts if a.status in ('present', 'late', 'partial'))
     att_rate = round((present_cnt / len(atts)) * 100.0, 1) if atts else 100.0
 
-    ranking = StudentRanking.query.filter_by(student_id=stu.id).order_by(StudentRanking.calculated_at.desc()).first()
+    ranking = StudentRanking.query.filter_by(student_id=stu.id).order_by(StudentRanking.updated_at.desc()).first()
     interventions = Intervention.query.filter_by(student_id=stu.id).order_by(Intervention.created_at.desc()).limit(5).all()
     extensions = Extension.query.filter_by(student_id=stu.id).order_by(Extension.created_at.desc()).limit(5).all()
     proctor_high = ProctorEvent.query.filter_by(student_id=stu.id, severity='high').count()
@@ -3460,8 +3461,8 @@ def autonomous_onboard_institution(
     }
 
 
-def autonomous_create_free_course_or_contest(
-    entity_type: str = 'free_course',
+def autonomous_create_platform_course_or_contest(
+    entity_type: str = 'platform_course',
     title: str = None,
     difficulty: str = 'beginner',
     language: str = 'python',
@@ -3470,12 +3471,12 @@ def autonomous_create_free_course_or_contest(
 ):
     """
     [AUTONOMOUS PLATFORM CONTENT BUILDER — Executes Immediately]
-    Creates and publishes a global `FreeCourse` (with `FreeExercise` coding/MCQ/simulation items)
+    Creates and publishes a global `PlatformCourse` (with `PlatformExercise` coding/MCQ/simulation items)
     or a platform-wide `CodingContest`!
     """
     if not title:
         raise AgentToolError('title is required.')
-    e_type = (entity_type or 'free_course').lower().strip()
+    e_type = (entity_type or 'platform_course').lower().strip()
     slug = re.sub(r'[^a-z0-9]+', '-', title.lower()).strip('-')[:60]
 
     if e_type == 'contest':
@@ -3503,9 +3504,9 @@ def autonomous_create_free_course_or_contest(
             'message': f"Created live Coding Contest '{contest.title}' with {len(probs)} problems.",
         }
 
-    if FreeCourse.query.filter_by(slug=slug).first():
+    if PlatformCourse.query.filter_by(slug=slug).first():
         slug = f"{slug}-{str(uuid.uuid4())[:4]}"
-    course = FreeCourse(
+    course = PlatformCourse(
         slug=slug,
         title=title.strip(),
         description=f"Interactive hands-on course on {title.strip()}.",
@@ -3519,7 +3520,7 @@ def autonomous_create_free_course_or_contest(
 
     ex_cnt = max(1, min(int(exercise_count or 3), 8))
     for i in range(1, ex_cnt + 1):
-        ex = FreeExercise(
+        ex = PlatformExercise(
             course_id=course.id,
             order_index=i,
             title=f"{title.strip()} — Module {i}",
@@ -3541,7 +3542,7 @@ def autonomous_create_free_course_or_contest(
         'slug': course.slug,
         'title': course.title,
         'exercises_created': ex_cnt,
-        'message': f"Created and published Free Course '{course.title}' with {ex_cnt} interactive exercises.",
+        'message': f"Created and published Platform Course '{course.title}' with {ex_cnt} interactive exercises.",
     }
 
 
@@ -3586,6 +3587,11 @@ def autonomous_update_tenant_or_platform_config(
 # ══════════════════════════════════════════════════════════════════════════════
 
 STUDENT_TOOLS = {
+    'save_learning_goal': (
+        save_learning_goal_tool,
+        SAVE_GOAL_DESC,
+        'both',
+    ),
     'analyze_my_code': (
         student_analyze_my_code,
         'analyze_my_code(experiment_id?, code?, language?, error?) — Inspect my current editor code or latest lab attempt for logic/syntax issues (Socratic mode)',
@@ -3648,14 +3654,19 @@ STUDENT_TOOLS = {
     ),
 }
 
-FREE_USER_TOOLS = {
+PLATFORM_USER_TOOLS = {
+    'save_learning_goal': (
+        save_learning_goal_tool,
+        SAVE_GOAL_DESC,
+        'both',
+    ),
     'get_my_practice_stats': (
-        free_get_my_practice_stats,
+        platform_get_my_practice_stats,
         'get_my_practice_stats() — Get my solved problem counts (Easy/Medium/Hard), topic accuracy, XP, and course progress',
         'both',
     ),
     'analyze_practice_code': (
-        free_analyze_practice_code,
+        platform_analyze_practice_code,
         'analyze_practice_code(problem_slug?, code?, language?, error?) — Socratic review of my current practice code or last submission',
         'both',
     ),
@@ -3685,7 +3696,7 @@ FREE_USER_TOOLS = {
         'both',
     ),
     'generate_study_plan': (
-        free_generate_study_plan,
+        platform_generate_study_plan,
         'generate_study_plan(target_goal?, days?) — Generate a personalized downloadable multi-day coding study plan (.md)',
         'both',
     ),
@@ -3769,7 +3780,59 @@ INSTRUCTOR_TOOLS = {
     ),
 }
 
+def platform_admin_user_lookup(q: str = '', role: str = '', status: str = '', **_):
+    """Platform-admin AI tool: search the global user directory (P1 engine)."""
+    from app.models.user import User as _U
+    from app.models.institution import Institution as _I
+    query = _U.query
+    if q:
+        like = f'%{q}%'
+        query = query.filter(db.or_(_U.full_name.ilike(like), _U.email.ilike(like)))
+    if role:
+        query = query.filter_by(role=role)
+    if status:
+        query = query.filter_by(status=status)
+    rows = query.order_by(_U.last_login.desc().nullslast()).limit(8).all()
+    inst_names = {i.id: i.name for i in _I.query.all()}
+    return {'users': [{
+        'id': u.id, 'name': u.full_name, 'email': u.email, 'role': u.role,
+        'institution': inst_names.get(u.institution_id) or 'direct',
+        'status': u.status or 'active',
+        'last_login': u.last_login.isoformat() + 'Z' if u.last_login else None,
+    } for u in rows]}
+
+
+def platform_admin_user_stats(user_id: str = '', email: str = '', **_):
+    """Platform-admin AI tool: User-360 quick stats (solves, XP, submissions)."""
+    from app.models.user import User as _U
+    from app.models.practice import StudentXP, PracticeSubmission
+    from app.models.platform_content import PlatformProgress
+    u = _U.query.get(user_id) if user_id else _U.query.filter_by(email=email).first()
+    if not u:
+        return {'error': 'User not found.'}
+    xp = StudentXP.query.filter_by(student_id=u.id).first()
+    return {
+        'user': {'name': u.full_name, 'email': u.email, 'role': u.role,
+                 'status': u.status or 'active'},
+        'course_solves': PlatformProgress.query.filter_by(user_id=u.id, status='solved').count(),
+        'practice_accepted': PracticeSubmission.query.filter_by(
+            student_id=u.id, status='Accepted', is_run=False).count(),
+        'total_xp': (xp.total_xp or 0) if xp else 0,
+        'level': (xp.level, xp.level_name) if xp else None,
+    }
+
+
 PLATFORM_ADMIN_TOOLS = {
+    'platform_admin_user_lookup': (
+        platform_admin_user_lookup,
+        'platform_admin_user_lookup(q?, role?, status?) — Search the global user directory by name/email with role and status filters. Returns up to 8 users with institution, status, last login.',
+        'both',
+    ),
+    'platform_admin_user_stats': (
+        platform_admin_user_stats,
+        'platform_admin_user_stats(user_id? or email?) — User-360 quick stats for one account: solves, accepted submissions, XP, level, status.',
+        'both',
+    ),
     'get_platform_overview': (
         platform_get_overview,
         'get_platform_overview() — Get cross-tenant institution count, users by role, global AI token usage, and platform flags',
@@ -3785,9 +3848,9 @@ PLATFORM_ADMIN_TOOLS = {
         'autonomous_onboard_institution(name, subdomain?, plan="enterprise", admin_email?, max_students=1000, daily_token_quota=500000) — Autonomously onboard a new Institution tenant, provision its initial admin user, academic year, and AI quota',
         'both',
     ),
-    'autonomous_create_free_course_or_contest': (
-        autonomous_create_free_course_or_contest,
-        "autonomous_create_free_course_or_contest(entity_type='free_course'|'contest', title, difficulty='beginner', language='python', exercise_count=3) — Autonomously create and publish a global Free Course or Coding Contest",
+    'autonomous_create_platform_course_or_contest': (
+        autonomous_create_platform_course_or_contest,
+        "autonomous_create_platform_course_or_contest(entity_type='platform_course'|'contest', title, difficulty='beginner', language='python', exercise_count=3) — Autonomously create and publish a global Platform Course or Coding Contest",
         'both',
     ),
     'autonomous_update_tenant_or_platform_config': (
@@ -3803,8 +3866,8 @@ def get_tools_for_role(role: str) -> dict:
     r = (role or 'student').lower().strip()
     if r == 'student':
         return STUDENT_TOOLS
-    if r == 'free_user':
-        return FREE_USER_TOOLS
+    if r == 'platform_user':
+        return PLATFORM_USER_TOOLS
     if r == 'instructor':
         return INSTRUCTOR_TOOLS
     if r == 'admin':

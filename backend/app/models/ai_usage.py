@@ -177,7 +177,7 @@ class AIAgentRun(db.Model):
     institution_id = db.Column(db.String(36), db.ForeignKey('institutions.id'),
                                nullable=False, index=True)
     user_id        = db.Column(db.String(36), db.ForeignKey('users.id'),
-                               nullable=False)
+                               nullable=False, index=True)
     prompt         = db.Column(db.Text)
     tool_calls     = db.Column(db.Text)   # JSON array of {tool, args, result}
     result         = db.Column(db.Text)   # final natural-language answer

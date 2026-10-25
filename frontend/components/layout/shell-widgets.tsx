@@ -46,7 +46,7 @@ export function ShellNotifications({
 }: {
   buttonClass?: string;
   dotClass?: string;
-  role: 'student' | 'instructor' | 'institution_admin' | 'platform_admin' | 'free_user';
+  role: 'student' | 'instructor' | 'institution_admin' | 'platform_admin' | 'platform_user';
 }) {
   const router = useRouter();
   const [open, setOpen] = useState(false);
@@ -126,20 +126,20 @@ export function ShellNotifications({
       if (role === 'student') return '/student/announcements';
       if (role === 'instructor') return '/instructor/announcements';
       if (role === 'institution_admin') return '/institution/announcements';
-      if (role === 'free_user') return '/practice/dashboard';
+      if (role === 'platform_user') return '/practice/dashboard';
       return '/admin/dashboard';
     }
     if (type.startsWith('session_') || type === 'session_reminder' || type === 'session_scheduled') {
       if (role === 'student') return '/student/live-lab';
       if (role === 'instructor') return '/instructor/sessions';
       if (role === 'institution_admin') return '/institution/sessions?tab=history';
-      if (role === 'free_user') return '/practice/dashboard';
+      if (role === 'platform_user') return '/practice/dashboard';
       return '/admin/monitoring';
     }
     if (role === 'student') return '/student/dashboard';
     if (role === 'instructor') return '/instructor/analytics';
     if (role === 'institution_admin') return '/institution/dashboard';
-    if (role === 'free_user') return '/practice/dashboard';
+    if (role === 'platform_user') return '/practice/dashboard';
     return '/admin/dashboard';
   };
 
