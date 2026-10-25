@@ -217,8 +217,17 @@ def update_exam(exam_id):
 @exam_bp.route('/exams/<exam_id>', methods=['DELETE'])
 @require_role('instructor', 'institution_admin')
 def delete_exam(exam_id):
-    """Delete an exam (cascades to questions + attempts)."""
+    """Delete an exam (cascades to questions + attempts, clears grade/proctor rows)."""
     exam = _exam_or_404(exam_id)
+
+    # questions/attempts cascade via the ORM relationship, but grades and
+    # proctor_events hold plain FKs to exams.id with no ON DELETE rule —
+    # remove those rows first or the commit fails with ForeignKeyViolation.
+    from app.models.grading import Grade
+    from app.models.proctor_event import ProctorEvent
+    Grade.query.filter_by(exam_id=exam.id).delete(synchronize_session=False)
+    ProctorEvent.query.filter_by(exam_id=exam.id).delete(synchronize_session=False)
+
     db.session.delete(exam)   # cascade='all, delete-orphan' handles children
     db.session.commit()
     return jsonify({'message': 'Exam deleted.', 'id': exam_id}), 200

@@ -17,7 +17,7 @@ class Grade(db.Model):
     student_id          = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
     # A Grade belongs to EITHER a lab Experiment or a standalone Exam.
     experiment_id       = db.Column(db.String(36), db.ForeignKey('experiments.id'), nullable=True)
-    exam_id             = db.Column(db.String(36), db.ForeignKey('exams.id'), nullable=True)
+    exam_id             = db.Column(db.String(36), db.ForeignKey('exams.id'), nullable=True, index=True)
     session_id          = db.Column(db.String(36), db.ForeignKey('lab_sessions.id'))
 
     auto_grade          = db.Column(db.Float)       # from code test cases

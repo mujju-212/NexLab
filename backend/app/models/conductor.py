@@ -69,8 +69,8 @@ class CheckpointProgress(db.Model):
 
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id      = db.Column(db.String(36), db.ForeignKey('lab_sessions.id'), nullable=False)
-    student_id      = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
-    checkpoint_id   = db.Column(db.String(36), db.ForeignKey('checkpoints.id'), nullable=False)
+    student_id      = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False, index=True)
+    checkpoint_id   = db.Column(db.String(36), db.ForeignKey('checkpoints.id'), nullable=False, index=True)
 
     # Status vocab (D-S1 Hybrid model):
     #   pending     — not started
@@ -225,8 +225,8 @@ class ChatMessage(db.Model):
 
     id          = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     session_id  = db.Column(db.String(36), db.ForeignKey('lab_sessions.id'), nullable=False)
-    from_id     = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
-    to_id       = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=True)  # NULL = broadcast
+    from_id     = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False, index=True)
+    to_id       = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=True, index=True)  # NULL = broadcast
     text        = db.Column(db.Text, nullable=False)
     at          = db.Column(db.DateTime, default=datetime.utcnow)
 

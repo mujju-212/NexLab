@@ -520,7 +520,7 @@
 .titleInput:focus { background: #fff; border-color: rgba(147,51,234,.35); box-shadow: 0 0 0 3px rgba(147,51,234,.1); }
 
 .typeTag {
-  font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700;
+  font-family: var(--font-mono); font-size: 10px; font-weight: 700;
   text-transform: uppercase; letter-spacing: .05em; color: #7c3aed;
   background: #f5f3ff; border: 1px solid rgba(124,58,237,0.2);
   border-radius: 6px; padding: 2px 8px; flex-shrink: 0;
@@ -635,7 +635,7 @@
 /* ── Split editor (markdown / html) ─────────────────────────────────────── */
 .split { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
 .splitPane { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
-.paneLabel { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; }
+.paneLabel { font-family: var(--font-mono); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; }
 .preview {
   border: 1px solid #ece7f5; border-radius: 10px; padding: 12px 14px;
   background: #fff; min-height: 120px; overflow: auto;
@@ -643,7 +643,7 @@
 }
 .preview :global(h1), .preview :global(h2), .preview :global(h3) { margin: .5em 0 .3em; font-weight: 700; color: #111827; }
 .preview :global(pre) { background: #201b2e; color: #c084fc; padding: 12px; border-radius: 8px; overflow-x: auto; font-size: 12.5px; }
-.preview :global(code) { font-family: 'JetBrains Mono', monospace; font-size: .9em; }
+.preview :global(code) { font-family: var(--font-mono); font-size: .9em; }
 .preview :global(a) { color: #7c3aed; text-decoration: underline; }
 .preview :global(img) { max-width: 100%; border-radius: 8px; }
 .preview :global(ul), .preview :global(ol) { padding-left: 1.4em; margin: .4em 0; }
@@ -651,7 +651,7 @@
 
 /* ── Code editor ────────────────────────────────────────────────────────── */
 .codeArea {
-  font-family: 'JetBrains Mono', monospace; font-size: 13px; line-height: 1.55;
+  font-family: var(--font-mono); font-size: 13px; line-height: 1.55;
   border: 1.5px solid #e5e7eb; border-radius: 10px; padding: 12px 14px;
   background: #fbfaff; color: #111827; outline: none; width: 100%;
   min-height: 120px; resize: vertical; white-space: pre; tab-size: 4;
@@ -666,7 +666,7 @@
 .runPre {
   margin: 0; padding: 10px 12px; font-size: 12.5px; line-height: 1.5;
   white-space: pre-wrap; word-break: break-word; max-height: 260px; overflow: auto;
-  background: #0f0b17; color: #e7e3f0; font-family: 'JetBrains Mono', monospace;
+  background: #0f0b17; color: #e7e3f0; font-family: var(--font-mono);
 }
 
 /* ── Media preview ──────────────────────────────────────────────────────── */
@@ -690,7 +690,7 @@
   padding: 12px; margin: 4px 0;
 }
 .paletteGroup { margin-bottom: 8px; }
-.paletteGroupLabel { font-family: 'JetBrains Mono', monospace; font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; margin: 2px 4px 6px; }
+.paletteGroupLabel { font-family: var(--font-mono); font-size: 10px; font-weight: 700; text-transform: uppercase; letter-spacing: .06em; color: #9ca3af; margin: 2px 4px 6px; }
 .paletteGrid { display: grid; grid-template-columns: repeat(3, minmax(0,1fr)); gap: 8px; }
 .paletteBtn {
   display: flex; align-items: flex-start; gap: 9px; text-align: left;
@@ -886,7 +886,7 @@
 }
 
 .chatBlockTag {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   color: #7c3aed;
@@ -911,7 +911,7 @@
 }
 
 .chatBlockPreviewCode {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   background: #0f172a;
   color: #38bdf8;
@@ -1033,7 +1033,7 @@
 }
 
 .quizCardNum {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
   color: #7c3aed;
@@ -1082,7 +1082,7 @@
 }
 
 .quizOptionLetter {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-weight: 700;
   width: 20px;
   height: 20px;

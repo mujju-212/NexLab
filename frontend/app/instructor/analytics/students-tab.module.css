@@ -753,7 +753,7 @@
 .studentRoll {
   font-size: 0.71rem;
   color: #94a3b8;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   margin-top: 1px;
 }
 
@@ -952,7 +952,7 @@
 .drawerStudentRoll {
   font-size: 0.75rem;
   color: #64748b;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .drawerTabs {

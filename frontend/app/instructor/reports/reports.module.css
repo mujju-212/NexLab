@@ -87,7 +87,7 @@
   display: flex;
   align-items: center;
   gap: 6px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 700;
   color: #475569;
@@ -421,7 +421,7 @@ input:checked + .slider:before {
 .subTh {
   background: #f1f5f9 !important;
   color: #64748b !important;
-  font-family: 'JetBrains Mono', monospace !important;
+  font-family: var(--font-mono);
   font-size: 10.5px !important;
   font-weight: 700 !important;
   text-align: center;
@@ -476,7 +476,7 @@ input:checked + .slider:before {
 }
 
 .studentRoll {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: #64748b;
   margin-top: 1px;
@@ -485,14 +485,14 @@ input:checked + .slider:before {
 /* Sub-column scores */
 .scoreCell {
   text-align: center;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   color: #475569;
 }
 
 .scoreTotalCell {
   text-align: center;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12.5px;
   font-weight: 800;
   color: #0f172a;
@@ -720,7 +720,7 @@ input:checked + .slider:before {
 }
 
 .reportTypeCode {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   font-weight: 800;
   color: #7c3aed;
@@ -870,7 +870,7 @@ input:checked + .slider:before {
 
 .dossierStatLabel {
   margin: 0 0 6px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 700;
   color: #64748b;
@@ -964,7 +964,7 @@ input:checked + .slider:before {
 }
 
 .attendanceKpiLabel {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 10.5px;
   font-weight: 700;
   color: #64748b;
@@ -1066,9 +1066,8 @@ input:checked + .slider:before {
 
 /* ── Print Media Query ────────────────────────────────────────────────────── */
 @media print {
-  :global(body) {
-    background: #ffffff !important;
-  }
+  /* body/nav/aside-level print styling lives in app/globals.css (module
+     files must stay locally-scoped for the CSS-modules purity check). */
   .filterBarCard,
   .tabCardsRow,
   .controlsBar,
@@ -1076,9 +1075,7 @@ input:checked + .slider:before {
   .bottomGrid,
   .queueCard,
   .howToUseBtn,
-  .headerActions,
-  :global(nav),
-  :global(aside) {
+  .headerActions {
     display: none !important;
   }
   .mainCard,

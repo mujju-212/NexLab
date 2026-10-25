@@ -762,9 +762,9 @@ export default function ConductorPage() {
                   const statusCls = row.focus_score === null ? styles.slateBadge : lowF ? styles.amberBadge : styles.greenBadge;
                   const allDone = cps.length > 0 && row.verified_checkpoints >= cps.length;
                   return (
-                    <tr key={row.student_id}
-                      onClick={() => setScreenViewId(row.student_id)}
-                      title={`View ${row.full_name}'s live screen`}
+                    <tr key={row.student_id}
+                      onClick={() => setScreenViewId(row.student_id)}
+                      title={`View ${row.full_name}'s live screen`}
                       style={{ cursor: 'pointer' }}>
                       <td style={{ color: '#9ca3af', fontSize: 12 }}>{i + 1}</td>
                       <td>
@@ -821,8 +821,8 @@ export default function ConductorPage() {
           </div>
 
           <p className={styles.sectionSub} style={{ marginTop: 14, fontSize: 12 }}>
-            No screens are shown by default. Click a student's row (or <strong>Screen</strong>) to watch that one
-            student live — screen sharing is compulsory at join, so nothing is asked of them mid-session.
+            No screens are shown by default. Click a student's row (or <strong>Screen</strong>) to watch that one
+            student live — screen sharing is compulsory at join, so nothing is asked of them mid-session.
             Screenshots keep recording every 30s in the background.
           </p>
         </div>

@@ -19,7 +19,7 @@ export default function InstructorLayout({ children }: { children: React.ReactNo
         platform_admin: '/admin/dashboard',
         institution_admin: '/institution/dashboard',
         student: '/student/dashboard',
-        free_user: '/practice/dashboard',
+        platform_user: '/practice/dashboard',
       };
       router.replace(routes[user?.role ?? ''] ?? '/login');
     }

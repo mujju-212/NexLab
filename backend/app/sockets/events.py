@@ -1003,7 +1003,7 @@ def handle_ai_harness_message(data):
     uid = user['user_id']
     iid = user.get('institution_id')
     role = user.get('role') or 'student'
-    mode = 'chat' if role in ('student', 'free_user') else ((data or {}).get('mode') or 'chat')
+    mode = 'chat' if role in ('student', 'platform_user') else ((data or {}).get('mode') or 'chat')
     session_id = (data or {}).get('session_id')
     page_context = (data or {}).get('page_context') if isinstance((data or {}).get('page_context'), dict) else {}
 

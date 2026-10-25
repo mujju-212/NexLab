@@ -12,6 +12,7 @@ import Image from 'next/image';
 import styles from './InstructorShell.module.css';
 import { ShellNotifications, ShellSearchBox, ShellProfileMenu, type SearchHit } from './shell-widgets';
 import AgentChatPanel from './AgentChatPanel';
+import { AppToaster } from '@/components/ui/toast';
 import { experienceService } from '@/services/experience.service';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
@@ -292,6 +293,7 @@ export default function InstructorShell({ activePage, children, title, subtitle,
         </main>
       </div>
 
+      <AppToaster />
       <AgentChatPanel roleOverride="instructor" pageContext={{ page_title: title || activePage }} />
     </div>
   );

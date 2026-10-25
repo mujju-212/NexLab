@@ -72,7 +72,7 @@
   overflow: hidden;
   align-items: center;
   gap: 4px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.09em;
@@ -296,7 +296,7 @@
   box-shadow: inset 0 0 0 1px rgba(124, 58, 237, 0.08);
 }
 .chipCount {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 10px;
   font-weight: 700;
   padding: 1px 5px;
@@ -316,7 +316,7 @@
   border-bottom: 1px solid #edf0f7;
   padding: 9px 12px;
   text-align: left;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -376,7 +376,7 @@
   letter-spacing: 0;
 }
 .weightTag {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 700;
   padding: 1px 5px;
@@ -390,7 +390,7 @@
   display: flex;
   align-items: center;
   gap: 5px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 650;
   color: #a3adbf;
@@ -484,7 +484,7 @@
 .distTick {
   flex: 1;
   text-align: center;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 650;
   color: #9aa4b6;
@@ -494,7 +494,7 @@
 .healthTable th {
   text-align: left;
   padding: 8px 16px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.07em;
@@ -511,7 +511,7 @@
   font-weight: 550;
 }
 .healthTable tr:last-child td { border-bottom: none; }
-.healthNum { font-family: 'JetBrains Mono', ui-monospace, monospace; font-size: 11.5px; font-weight: 650; color: #0f172a; text-align: right; }
+.healthNum { font-family: var(--font-mono); font-size: 11.5px; font-weight: 650; color: #0f172a; text-align: right; }
 .healthStatus { display: inline-flex; align-items: center; gap: 5px; font-size: 10.5px; font-weight: 750; padding: 2px 8px; border-radius: 99px; white-space: nowrap; }
 .statusOk { background: #ecfdf5; color: #047857; }
 .statusWarn { background: #fff7ed; color: #b45309; }
@@ -597,7 +597,7 @@
 }
 .assessMeta { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin-top: 5px; }
 .metaTag {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.04em;
@@ -612,7 +612,7 @@
 .rubricStrip { display: flex; align-items: flex-start; gap: 22px; flex-wrap: wrap; padding: 14px 18px 16px; border-top: 1px dashed #f1f3f9; }
 .rubricItem { display: flex; flex-direction: column; gap: 3px; min-width: 98px; }
 .rubricLabel {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9px; font-weight: 700; letter-spacing: 0.06em;
   text-transform: uppercase; color: #94a3b8;
 }
@@ -645,7 +645,7 @@
   grid-template-columns: 88px minmax(0, 1fr) 74px 52px;
   gap: 8px;
   padding: 0 2px 2px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -693,7 +693,7 @@
 
 .compName { font-size: 12.5px; font-weight: 650; color: #0f172a; display: flex; align-items: center; gap: 6px; }
 .compWeight {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 700;
   padding: 1px 5px;
@@ -722,7 +722,7 @@
   letter-spacing: 0.07em;
   text-transform: uppercase;
   color: #7c3aed;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
 }
 .finalValue {
   font-family: 'Geist', 'Inter', sans-serif;
@@ -1189,7 +1189,7 @@
 .studentTable th {
   background: #f8fafc;
   padding: 10px 12px;
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 9.5px;
   font-weight: 700;
   letter-spacing: 0.08em;
@@ -1249,7 +1249,7 @@
 }
 
 .rollNoText {
-  font-family: 'JetBrains Mono', ui-monospace, monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: #475569;
   font-weight: 600;
@@ -2160,7 +2160,7 @@
 .studentRoll {
   font-size: 11px;
   color: #94a3b8;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 /* Risk Badges */
