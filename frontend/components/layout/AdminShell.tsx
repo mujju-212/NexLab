@@ -3,7 +3,7 @@
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  ShieldCheck, LayoutDashboard, GraduationCap, Users,
+  ShieldCheck, LayoutDashboard, Users, BookMarked,
   Activity, BarChart3, FileText, Shield, Settings, LogOut,
   Bell, Search, ChevronRight, Menu, Building2
 } from 'lucide-react';
@@ -11,6 +11,7 @@ import Image from 'next/image';
 import styles from './AdminShell.module.css';
 import { ShellNotifications, ShellSearchBox, ShellProfileMenu, type SearchHit } from './shell-widgets';
 import AgentChatPanel from './AgentChatPanel';
+import { AppToaster } from '@/components/ui/toast';
 import { adminService } from '@/services/admin.service';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
@@ -18,13 +19,13 @@ import { useAuthStore } from '@/store/auth-store';
 const NAV_FAVORITES = [
   { id: 'Dashboard',       Icon: LayoutDashboard, route: '/admin/dashboard'      },
   { id: 'Institutions',    Icon: Building2,       route: '/admin/institutions'   },
-  { id: 'Academic Setup',  Icon: GraduationCap,   route: '/admin/academic'       },
   { id: 'User Management', Icon: Users,           route: '/admin/users'          },
+  { id: 'Content',         Icon: BookMarked,      route: '/admin/content'        },
+  { id: 'Platform Analytics', Icon: BarChart3,    route: '/admin/analytics'      },
 ];
 
 const NAV_MAIN = [
   { id: 'System Monitoring', Icon: Activity,  route: '/admin/monitoring' },
-  { id: 'Platform Analytics',Icon: BarChart3, route: '/admin/analytics'  },
   { id: 'Reports & Exports', Icon: FileText,  route: '/admin/reports'    },
   { id: 'Security',          Icon: Shield,    route: '/admin/security'   },
 ];
@@ -176,6 +177,7 @@ export default function AdminShell({ activePage, children, title, subtitle }: Ad
         </main>
       </div>
 
+      <AppToaster />
       <AgentChatPanel roleOverride="admin" pageContext={{ page_title: title || activePage }} />
     </div>
   );

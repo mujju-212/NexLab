@@ -244,11 +244,304 @@ export const adminService = {
     return data;
   },
 
+
   // ── Audit Logs ────────────────────────────────────────────────────────────────
+
 
   // GET /api/platform/audit-logs
   async getAuditLogs(params?: { institution_id?: string; days?: number; page?: number }) {
     const { data } = await apiClient.get<{ total: number; page: number; pages: number; logs: AuditLogEntry[] }>('/platform/audit-logs', { params });
     return data;
+  },
+};
+
+
+// ═══ Platform Admin — User Management + User-360 (Phase 1) ═══════════════════
+
+export interface AdminDirectoryUser {
+  id: string;
+  full_name: string;
+  email: string;
+  role: string;
+  institution_id: string | null;
+  institution_name: string | null;
+  account_type: 'institution' | 'direct';
+  status: 'active' | 'suspended' | 'pending_deletion' | string;
+  is_active: boolean;
+  must_change_password: boolean;
+  created_at: string | null;
+  last_login: string | null;
+}
+
+export interface AdminUser360 {
+  user: AdminDirectoryUser & {
+    suspension_reason?: string | null;
+    suspended_until?: string | null;
+    institution_name?: string | null;
+  };
+  stats: {
+    course_solves: number;
+    practice_submissions: number;
+    practice_accepted: number;
+    total_xp: number;
+    level: number | null;
+    level_name: string | null;
+    grades: number;
+    exam_attempts: number;
+  };
+}
+
+export interface AdminUserProgress {
+  xp: { total_xp: number; level: number; level_name: string; streak_days: number; problems_solved: number } | null;
+  rating: { rating: number | null; global_rank: number | null; easy_solved?: number; medium_solved?: number; hard_solved?: number } | null;
+  topic_strength: { topic: string; strength: number; total_solved: number; total_attempted: number }[];
+  courses: { courses: { id: string; title: string; completion_pct: number; xp_earned: number; cert_eligible: boolean }[]; enrolled_courses: number; completed_courses: number };
+  activity_summary: { total_submissions?: number; current_streak?: number; longest_streak?: number } | null;
+  heatmap: { date: string; count: number; level: number }[];
+}
+
+export interface AdminUserGrades {
+  grades: { id: string; final_grade: number | null; source_kind?: string; source_title?: string | null; graded_at?: string | null }[];
+  exam_attempts: { id: string; exam_id: string; status: string; score: number | null; submitted_at: string | null }[];
+  certificates: { course_id: string; certificate_id?: string; course_title?: string }[];
+}
+
+export interface AdminUserAttempts {
+  lab_attempts: { total: number; items: { id: string; experiment_title: string | null; compile_status: string | null; execution_time_ms: number | null; created_at: string | null }[] };
+  practice_submissions: { total: number; items: { id: string; problem_title: string | null; language: string; status: string; passed: number | null; total_cases: number | null; xp_earned: number | null; submitted_at: string | null }[] };
+}
+
+export interface AdminUserActivity {
+  by_user: { id: string; action: string; severity: string; detail: string | null; created_at: string }[];
+  about_user: { id: string; action: string; severity: string; detail: string | null; created_at: string }[];
+}
+
+export const adminUsersService = {
+  async listUsers(params: { q?: string; role?: string; institution_id?: string; status?: string; sort?: string; page?: number; per_page?: number }): Promise<{ total: number; page: number; pages: number; users: AdminDirectoryUser[] }> {
+    const { data } = await apiClient.get('/admin/users', { params });
+    return data;
+  },
+
+  async getUser360(userId: string): Promise<AdminUser360> {
+    const { data } = await apiClient.get(`/admin/users/${userId}`);
+    return data;
+  },
+
+  async getUserProgress(userId: string): Promise<AdminUserProgress> {
+    const { data } = await apiClient.get(`/admin/users/${userId}/progress`);
+    return data;
+  },
+
+  async getUserGrades(userId: string): Promise<AdminUserGrades> {
+    const { data } = await apiClient.get(`/admin/users/${userId}/grades`);
+    return data;
+  },
+
+  async getUserAttempts(userId: string, page = 1): Promise<AdminUserAttempts> {
+    const { data } = await apiClient.get(`/admin/users/${userId}/attempts`, { params: { page } });
+    return data;
+  },
+
+  async getUserActivity(userId: string): Promise<AdminUserActivity> {
+    const { data } = await apiClient.get(`/admin/users/${userId}/activity`);
+    return data;
+  },
+
+  async renameUser(userId: string, fullName: string): Promise<{ user: AdminDirectoryUser }> {
+    const { data } = await apiClient.patch(`/admin/users/${userId}`, { full_name: fullName });
+    return data;
+  },
+
+  async suspendUser(userId: string, reason: string, until?: string): Promise<{ user: AdminDirectoryUser }> {
+    const { data } = await apiClient.post(`/admin/users/${userId}/suspend`, { reason, until });
+    return data;
+  },
+
+  async activateUser(userId: string): Promise<{ user: AdminDirectoryUser }> {
+    const { data } = await apiClient.post(`/admin/users/${userId}/activate`, {});
+    return data;
+  },
+
+  async resetUserPassword(userId: string): Promise<{ temp_password: string; must_change_password: boolean }> {
+    const { data } = await apiClient.post(`/admin/users/${userId}/reset-password`, {});
+    return data;
+  },
+
+  async forceLogoutUser(userId: string): Promise<{ forced: boolean }> {
+    const { data } = await apiClient.post(`/admin/users/${userId}/force-logout`, {});
+    return data;
+  },
+};
+
+
+// ═══ Platform Admin — Institution Drill-down (Phase 2) ═══════════════════════
+
+export interface TenantAnalytics {
+  institution: { id: string; name: string; plan: string };
+  window_days: number;
+  people: { total_users: number; role_counts: Record<string, number>; active_users_30d: number; suspended_users: number };
+  sessions: { total: number; live: number; trend: { date: string; count: number }[] };
+  ai: { calls_in_window: number; trend: { date: string; count: number }[] };
+  executions: { runs_in_window: number; trend: { date: string; count: number }[] };
+  learning: { practice_solves_in_window: number; solves_trend: { date: string; count: number }[]; course_solves_total: number };
+}
+
+export const adminTenantService = {
+  async getInstitutionUsers(iid: string, params: { q?: string; role?: string; status?: string; page?: number; per_page?: number }): Promise<{ institution: { id: string; name: string }; total: number; page: number; pages: number; users: AdminDirectoryUser[] }> {
+    const { data } = await apiClient.get(`/admin/institutions/${iid}/users`, { params });
+    return data;
+  },
+
+  async getInstitutionAnalytics(iid: string, days = 30): Promise<TenantAnalytics> {
+    const { data } = await apiClient.get(`/admin/institutions/${iid}/analytics`, { params: { days } });
+    return data;
+  },
+};
+
+
+// ═══ Platform Admin — Content + Growth Analytics (Phase 3) ══════════════════
+
+export interface AdminPlatformCourse {
+  id: string; slug: string; title: string; description: string | null;
+  difficulty: string; language: string; tags: string[];
+  is_published: boolean; order_index: number;
+  exercise_count: number; solves_count: number; created_at: string | null;
+}
+
+export interface AdminPlatformExercise {
+  id: string; course_id: string; order_index: number; title: string;
+  description: string | null; exercise_type: string; difficulty: string;
+  xp_reward: number; tags: string[]; solves_count: number; is_published: boolean;
+  test_case_count: number; mcq_options: string[] | null;
+  starter_code: Record<string, string> | null; allowed_languages: string[] | null;
+}
+
+export interface AdminProblemBankRow {
+  id: string; slug: string; lc_id: string | null; title: string;
+  difficulty: string; nexlab_topic: string; is_active: boolean; acceptance: number | null;
+}
+
+export interface AdminFunnelStage { key: string; label: string; count: number; pct: number; }
+export interface AdminCohort { cohort: string; size: number; cells: { week: number; count: number; pct: number | null }[]; }
+
+export const adminContentService = {
+  async listCourses(): Promise<{ courses: AdminPlatformCourse[] }> {
+    const { data } = await apiClient.get('/admin/content/courses');
+    return data;
+  },
+  async createCourse(dto: { title: string; slug: string; description?: string; difficulty?: string; language?: string; is_published?: boolean }): Promise<{ course: AdminPlatformCourse }> {
+    const { data } = await apiClient.post('/admin/content/courses', dto);
+    return data;
+  },
+  async updateCourse(id: string, patch: Record<string, unknown>): Promise<{ course: AdminPlatformCourse }> {
+    const { data } = await apiClient.patch(`/admin/content/courses/${id}`, patch);
+    return data;
+  },
+  async deleteCourse(id: string): Promise<void> {
+    await apiClient.delete(`/admin/content/courses/${id}`);
+  },
+  async listExercises(courseId: string): Promise<{ exercises: AdminPlatformExercise[] }> {
+    const { data } = await apiClient.get(`/admin/content/courses/${courseId}/exercises`);
+    return data;
+  },
+  async createExercise(courseId: string, dto: Record<string, unknown>): Promise<{ exercise: AdminPlatformExercise }> {
+    const { data } = await apiClient.post(`/admin/content/courses/${courseId}/exercises`, dto);
+    return data;
+  },
+  async updateExercise(id: string, patch: Record<string, unknown>): Promise<{ exercise: AdminPlatformExercise }> {
+    const { data } = await apiClient.patch(`/admin/content/exercises/${id}`, patch);
+    return data;
+  },
+  async deleteExercise(id: string): Promise<void> {
+    await apiClient.delete(`/admin/content/exercises/${id}`);
+  },
+  async listProblems(filter: string, page = 1): Promise<{ filter: string; total: number; page: number; pages: number; summary: { no_test_cases: number; disabled: number; total: number }; problems: AdminProblemBankRow[] }> {
+    const { data } = await apiClient.get('/admin/content/problems', { params: { filter, page, per_page: 20 } });
+    return data;
+  },
+  async toggleProblem(id: string, isActive: boolean): Promise<void> {
+    await apiClient.patch(`/admin/content/problems/${id}`, { is_active: isActive });
+  },
+};
+
+export const adminGrowthService = {
+  async getFunnel(days = 60): Promise<{ window_days: number; stages: AdminFunnelStage[] }> {
+    const { data } = await apiClient.get('/admin/analytics/funnel', { params: { days } });
+    return data;
+  },
+  async getCohorts(weeks = 8): Promise<{ weeks: number; cohorts: AdminCohort[] }> {
+    const { data } = await apiClient.get('/admin/analytics/cohorts', { params: { weeks } });
+    return data;
+  },
+  async getPlatformUsers(days = 30): Promise<{
+    total: number; active: number; signups_in_window: number;
+    growth: { date: string; count: number }[]; dau: { date: string; count: number }[];
+    xp_distribution: Record<string, number>;
+    top_learners: { id: string; name: string; xp: number }[];
+  }> {
+    const { data } = await apiClient.get('/admin/analytics/platform-users', { params: { days } });
+    return data;
+  },
+  exportUrl(report: 'users' | 'activity'): string {
+    return `/api/admin/analytics/export?report=${report}`;
+  },
+};
+
+
+// ═══ Platform Admin — Governance (Phase 4) ══════════════════════════════════
+
+export interface ImpersonationInfo {
+  active: boolean; session_id: string; impersonator_id: string;
+  impersonator_name?: string; reason?: string; read_only: boolean;
+}
+
+export interface ImpersonationSessionRow {
+  id: string; admin_name?: string; target_name?: string; target_email?: string;
+  reason: string; started_at: string; ended_at: string | null; revoked: boolean; active: boolean;
+}
+
+export interface ExportJobRow {
+  id: string; user_id: string; kind: string; status: string;
+  created_at: string; expires_at: string;
+}
+
+export interface JobsMonitor {
+  scheduler_running: boolean;
+  jobs: { id: string; trigger: string; next_run: string | null }[];
+  metric_snapshots: { metric: string; last_day: string | null; last_computed: string | null }[];
+}
+
+export const adminGovernanceService = {
+  async impersonate(userId: string, reason: string): Promise<{ token: string; session_id: string; expires_in_minutes: number; read_only: boolean }> {
+    const { data } = await apiClient.post(`/admin/users/${userId}/impersonate`, { reason });
+    return data;
+  },
+
+  async endImpersonation(sessionId?: string): Promise<void> {
+    await apiClient.post('/admin/impersonation/end', sessionId ? { session_id: sessionId } : {});
+  },
+
+  async getImpersonationHistory(): Promise<{ sessions: ImpersonationSessionRow[] }> {
+    const { data } = await apiClient.get('/admin/impersonation/history');
+    return data;
+  },
+
+  async createExport(userId: string, kind: 'gdpr' = 'gdpr'): Promise<{ job: ExportJobRow }> {
+    const { data } = await apiClient.post(`/admin/users/${userId}/export`, { kind });
+    return data;
+  },
+
+  async listExports(): Promise<{ jobs: ExportJobRow[] }> {
+    const { data } = await apiClient.get('/admin/exports');
+    return data;
+  },
+
+  async getJobsMonitor(): Promise<JobsMonitor> {
+    const { data } = await apiClient.get('/admin/jobs');
+    return data;
+  },
+
+  auditExportUrl(days = 30): string {
+    return `/api/admin/governance/audit-logs/export?days=${days}`;
   },
 };
