@@ -36,6 +36,18 @@ type ExerciseForm = {
   mcq_options: string[]; mcq_answer: string; mcq_explanation: string;
   simulation_path: string; content_blocks: PlatformContentBlock[];
 };
+type ProblemForm = {
+  title: string; slug: string; lc_id: string; difficulty: string; nexlab_topic: string;
+  description: string; topics: string; is_active: boolean;
+  constraints: string; hints: string; examplesJson: string; starterCodeJson: string;
+  test_cases: { input_data: string; expected: string; is_sample: boolean }[];
+};
+const emptyProblemForm = (): ProblemForm => ({
+  title: '', slug: '', lc_id: '', difficulty: 'Easy', nexlab_topic: '', description: '',
+  topics: '', is_active: false, constraints: '', hints: '', examplesJson: '[]', starterCodeJson: '{}',
+  test_cases: [{ input_data: '', expected: '', is_sample: true }],
+});
+
 const emptyExerciseForm = (): ExerciseForm => ({
   title: '', exercise_type: 'coding', difficulty: 'easy', xp_reward: 10,
   description: '', hint_text: '', language: 'python', languages: ['python'], starter_code: '', starter_code_by_language: {},
@@ -73,6 +85,9 @@ export default function ContentPage() {
   const [pSummary, setPSummary] = useState<{ no_test_cases: number; disabled: number; total: number } | null>(null);
   const [problems, setProblems] = useState<AdminProblemBankRow[]>([]);
   const [pLoading, setPLoading] = useState(false);
+  const [showProblemForm, setShowProblemForm] = useState(false);
+  const [editingProblem, setEditingProblem] = useState<string | null>(null);
+  const [problemForm, setProblemForm] = useState<ProblemForm>(emptyProblemForm());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -222,6 +237,101 @@ export default function ContentPage() {
       setShowExForm(null);
       setEditingExercise(null);
     }, editingExercise ? 'Exercise saved.' : 'Exercise created as a draft. Complete and publish it when ready.');
+  };
+
+  const openProblemEditor = async (problem?: AdminProblemBankRow) => {
+    setError(null);
+    if (!problem) {
+      setEditingProblem(null);
+      setProblemForm(emptyProblemForm());
+      setShowProblemForm(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      const { problem: detail } = await adminContentService.getProblem(problem.id);
+      setEditingProblem(problem.id);
+      setProblemForm({
+        title: detail.title,
+        slug: detail.slug,
+        lc_id: detail.lc_id || '',
+        difficulty: detail.difficulty,
+        nexlab_topic: detail.nexlab_topic,
+        description: detail.description || '',
+        topics: (detail.topics || []).join(', '),
+        is_active: Boolean(detail.is_active),
+        constraints: (detail.constraints || []).join('\n'),
+        hints: (detail.hints || []).join('\n'),
+        examplesJson: JSON.stringify(detail.examples || [], null, 2),
+        starterCodeJson: JSON.stringify(detail.starter_code || {}, null, 2),
+        test_cases: (detail.test_cases || []).map((test) => ({
+          input_data: test.input_data || '', expected: test.expected || '', is_sample: Boolean(test.is_sample),
+        })),
+      });
+      setShowProblemForm(true);
+    } catch (error) {
+      setError((error as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Could not load problem details.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitProblem = async () => {
+    if (!problemForm.title.trim() || !problemForm.slug.trim() || !problemForm.nexlab_topic.trim() || !problemForm.description.trim()) {
+      setError('Title, slug, topic, and problem description are required.');
+      return;
+    }
+    if (problemForm.is_active && !problemForm.test_cases.length) {
+      setError('Add at least one test case before enabling this problem.');
+      return;
+    }
+    let examples: unknown;
+    let starterCode: unknown;
+    try {
+      examples = JSON.parse(problemForm.examplesJson);
+      starterCode = JSON.parse(problemForm.starterCodeJson);
+    } catch {
+      setError('Examples and starter code must be valid JSON.');
+      return;
+    }
+    if (!Array.isArray(examples) || !starterCode || typeof starterCode !== 'object' || Array.isArray(starterCode)) {
+      setError('Examples must be a JSON array and starter code must be a language-to-code JSON object.');
+      return;
+    }
+    const payload = {
+      title: problemForm.title.trim(),
+      slug: problemForm.slug.trim(),
+      lc_id: problemForm.lc_id.trim() || null,
+      difficulty: problemForm.difficulty,
+      nexlab_topic: problemForm.nexlab_topic.trim(),
+      description: problemForm.description.trim(),
+      topics: problemForm.topics.split(',').map((topic) => topic.trim()).filter(Boolean),
+      constraints: problemForm.constraints.split('\n').map((item) => item.trim()).filter(Boolean),
+      hints: problemForm.hints.split('\n').map((item) => item.trim()).filter(Boolean),
+      examples,
+      starter_code: starterCode,
+      is_active: problemForm.is_active,
+      test_cases: problemForm.test_cases,
+    };
+    setBusy(true);
+    setError(null);
+    try {
+      if (editingProblem) await adminContentService.updateProblem(editingProblem, payload);
+      else await adminContentService.createProblem(payload);
+      const res = await adminContentService.listProblems(pFilter, pPage);
+      setProblems(res.problems || []);
+      setPTotal(res.total);
+      setPPages(res.pages || 1);
+      setPSummary(res.summary);
+      setShowProblemForm(false);
+      setEditingProblem(null);
+      setNotice(editingProblem ? 'Problem and test cases saved.' : 'Problem created.');
+    } catch (error) {
+      setNotice(null);
+      setError((error as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Could not save this problem.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   const importSimulationHtml = async () => {
@@ -398,6 +508,10 @@ export default function ContentPage() {
       {/* ── problem bank ── */}
       {tab === 'problems' && (
         <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+            <p style={{ margin: 0, color: '#64748b', fontSize: 12.5 }}>Create and maintain standalone practice problems and their public and hidden test cases.</p>
+            <button className={styles.btnPrimary} onClick={() => void openProblemEditor()}><Plus size={14} /> Create problem</button>
+          </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
             {PROBLEM_FILTERS.map(f => (
               <button key={f.key} onClick={() => { setPFilter(f.key); setPPage(1); }}
@@ -436,7 +550,11 @@ export default function ContentPage() {
                       <td>
                         <span style={{ fontWeight: 700, fontSize: 12, color: p.is_active ? '#15803d' : '#b91c1c' }}>● {p.is_active ? 'live' : 'disabled'}</span>
                       </td>
-                      <td style={{ textAlign: 'right' }}>
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <button onClick={() => void openProblemEditor(p)} disabled={busy}
+                          style={{ border: '1px solid #e2e8f0', cursor: 'pointer', borderRadius: 8, padding: '6px 10px', background: '#fff', color: '#463f57', fontWeight: 700, fontSize: 12.5, marginRight: 6 }}>
+                          Edit
+                        </button>
                         <button onClick={() => act(async () => {
                           await adminContentService.toggleProblem(p.id, !p.is_active);
                           const res = await adminContentService.listProblems(pFilter, pPage);
@@ -460,6 +578,76 @@ export default function ContentPage() {
             </div>
           </div>
         </>
+      )}
+
+      {/* ── create/edit standalone practice problem ── */}
+      {showProblemForm && (
+        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget && !busy) { setShowProblemForm(false); setEditingProblem(null); } }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,10,30,.5)', display: 'grid', placeItems: 'center', zIndex: 85, padding: 16 }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="problem-editor-title" style={{ width: 'min(760px, 100%)', maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: 18, padding: 26, boxShadow: '0 30px 80px rgba(0,0,0,.25)' }}>
+            <h2 id="problem-editor-title" style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 800 }}>{editingProblem ? 'Edit practice problem' : 'Create practice problem'}</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
+              <div>
+                <label style={labelS} htmlFor="problem-title">Title</label>
+                <input id="problem-title" style={inputS} maxLength={300} value={problemForm.title} onChange={e => setProblemForm(f => ({ ...f, title: e.target.value }))} />
+              </div>
+              <div>
+                <label style={labelS} htmlFor="problem-slug">Slug (lowercase, hyphens)</label>
+                <input id="problem-slug" style={inputS} maxLength={120} value={problemForm.slug} onChange={e => setProblemForm(f => ({ ...f, slug: e.target.value }))} placeholder="two-sum" />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginTop: 10 }}>
+              <div>
+                <label style={labelS} htmlFor="problem-difficulty">Difficulty</label>
+                <select id="problem-difficulty" style={inputS} value={problemForm.difficulty} onChange={e => setProblemForm(f => ({ ...f, difficulty: e.target.value }))}>
+                  <option>Easy</option><option>Medium</option><option>Hard</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelS} htmlFor="problem-topic">Primary topic</label>
+                <input id="problem-topic" style={inputS} maxLength={60} value={problemForm.nexlab_topic} onChange={e => setProblemForm(f => ({ ...f, nexlab_topic: e.target.value }))} placeholder="Arrays" />
+              </div>
+              <div>
+                <label style={labelS} htmlFor="problem-lc-id">External problem ID (optional)</label>
+                <input id="problem-lc-id" style={inputS} maxLength={10} value={problemForm.lc_id} onChange={e => setProblemForm(f => ({ ...f, lc_id: e.target.value }))} />
+              </div>
+            </div>
+            <label style={{ ...labelS, marginTop: 12 }} htmlFor="problem-description">Problem statement (Markdown supported by learner view)</label>
+            <textarea id="problem-description" style={{ ...inputS, resize: 'vertical' }} rows={6} value={problemForm.description} onChange={e => setProblemForm(f => ({ ...f, description: e.target.value }))} />
+            <label style={{ ...labelS, marginTop: 10 }} htmlFor="problem-topics">Tags (comma-separated)</label>
+            <input id="problem-topics" style={inputS} value={problemForm.topics} onChange={e => setProblemForm(f => ({ ...f, topics: e.target.value }))} placeholder="arrays, hashing" />
+            <label style={{ ...labelS, marginTop: 10 }} htmlFor="problem-constraints">Constraints (one per line)</label>
+            <textarea id="problem-constraints" style={{ ...inputS, resize: 'vertical' }} rows={3} value={problemForm.constraints} onChange={e => setProblemForm(f => ({ ...f, constraints: e.target.value }))} />
+            <label style={{ ...labelS, marginTop: 10 }} htmlFor="problem-hints">Hints (one per line)</label>
+            <textarea id="problem-hints" style={{ ...inputS, resize: 'vertical' }} rows={3} value={problemForm.hints} onChange={e => setProblemForm(f => ({ ...f, hints: e.target.value }))} />
+            <label style={{ ...labelS, marginTop: 10 }} htmlFor="problem-examples">Examples JSON (array of example objects)</label>
+            <textarea id="problem-examples" style={{ ...inputS, resize: 'vertical', fontFamily: 'monospace' }} rows={5} value={problemForm.examplesJson} onChange={e => setProblemForm(f => ({ ...f, examplesJson: e.target.value }))} placeholder={'[{"input":"...","output":"...","explanation":"..."}]'} />
+            <label style={{ ...labelS, marginTop: 10 }} htmlFor="problem-starter-code">Starter code JSON (language-to-code map)</label>
+            <textarea id="problem-starter-code" style={{ ...inputS, resize: 'vertical', fontFamily: 'monospace' }} rows={5} value={problemForm.starterCodeJson} onChange={e => setProblemForm(f => ({ ...f, starterCodeJson: e.target.value }))} placeholder={'{"python":"def solve():\\n    pass"}'} />
+            <div style={{ marginTop: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                <label style={labelS}>Test cases ({problemForm.test_cases.length}; sample cases are learner-visible)</label>
+                <button type="button" className={styles.btnSecondary} onClick={() => setProblemForm(f => ({ ...f, test_cases: [...f.test_cases, { input_data: '', expected: '', is_sample: false }] }))}><Plus size={13} /> Add case</button>
+              </div>
+              {problemForm.test_cases.map((test, index) => (
+                <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: 8, alignItems: 'start', marginTop: 8 }}>
+                  <textarea aria-label={`Problem test case ${index + 1} input`} style={{ ...inputS, resize: 'vertical', fontFamily: 'monospace' }} rows={2} value={test.input_data} onChange={e => setProblemForm(f => ({ ...f, test_cases: f.test_cases.map((item, i) => i === index ? { ...item, input_data: e.target.value } : item) }))} placeholder="stdin" />
+                  <textarea aria-label={`Problem test case ${index + 1} expected output`} style={{ ...inputS, resize: 'vertical', fontFamily: 'monospace' }} rows={2} value={test.expected} onChange={e => setProblemForm(f => ({ ...f, test_cases: f.test_cases.map((item, i) => i === index ? { ...item, expected: e.target.value } : item) }))} placeholder="Expected output" />
+                  <label style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 11, whiteSpace: 'nowrap', paddingTop: 8 }}><input type="checkbox" checked={test.is_sample} onChange={e => setProblemForm(f => ({ ...f, test_cases: f.test_cases.map((item, i) => i === index ? { ...item, is_sample: e.target.checked } : item) }))} /> Sample</label>
+                  <button type="button" aria-label={`Remove problem test case ${index + 1}`} onClick={() => setProblemForm(f => ({ ...f, test_cases: f.test_cases.filter((_, i) => i !== index) }))} style={{ border: 0, background: 'transparent', color: '#b91c1c', cursor: 'pointer', paddingTop: 8 }}><X size={15} /></button>
+                </div>
+              ))}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, color: '#463f57', fontSize: 13, fontWeight: 700 }}>
+              <input type="checkbox" checked={problemForm.is_active} onChange={e => setProblemForm(f => ({ ...f, is_active: e.target.checked }))} /> Enable for learners after saving
+            </label>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+              <button type="button" className={styles.btnSecondary} disabled={busy} onClick={() => { setShowProblemForm(false); setEditingProblem(null); }}>Cancel</button>
+              <button type="button" className={styles.btnPrimary} disabled={busy || !problemForm.title.trim() || !problemForm.slug.trim() || !problemForm.nexlab_topic.trim() || !problemForm.description.trim()} onClick={() => void submitProblem()}>
+                {busy ? <Loader2 size={14} className="spin" /> : <Check size={14} />} {editingProblem ? 'Save problem' : 'Create problem'}
+              </button>
+            </div>
+          </section>
+        </div>
       )}
 
       {/* ── create course modal ── */}

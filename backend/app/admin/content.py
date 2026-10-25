@@ -653,20 +653,175 @@ def problem_bank_health():
     }), 200
 
 
+def _problem_payload_error(data, *, partial=False):
+    """Validate admin-authored problem fields and test cases before mutating records."""
+    if not isinstance(data, dict):
+        return 'Request body must be an object.', {}
+    normalized = {}
+    required = {'title', 'slug', 'difficulty', 'nexlab_topic', 'description'}
+    for field in required:
+        if not partial and field not in data:
+            return f'{field} is required.', {}
+    string_limits = {'title': 300, 'slug': 120, 'difficulty': 10, 'nexlab_topic': 60,
+                     'description': 100_000, 'lc_id': 10}
+    for field, limit in string_limits.items():
+        if field not in data:
+            continue
+        value = data[field]
+        if field == 'lc_id' and value is None:
+            normalized[field] = None
+            continue
+        if not isinstance(value, str) or len(value) > limit:
+            return f'{field} must be text up to {limit} characters.', {}
+        value = value.strip()
+        if field in required and not value:
+            return f'{field} cannot be empty.', {}
+        normalized[field] = value
+    if 'slug' in normalized:
+        import re
+        if not re.fullmatch(r'[a-z0-9]+(?:-[a-z0-9]+)*', normalized['slug']):
+            return 'slug must contain lowercase letters, numbers, and single hyphens.', {}
+    if 'difficulty' in normalized:
+        difficulty = normalized['difficulty'].lower()
+        if difficulty not in {'easy', 'medium', 'hard'}:
+            return 'difficulty must be Easy, Medium, or Hard.', {}
+        normalized['difficulty'] = difficulty.capitalize()
+    for field in ('topics', 'constraints', 'hints'):
+        if field not in data:
+            continue
+        value = data[field]
+        if not isinstance(value, list) or len(value) > 100 or not all(isinstance(x, str) and len(x) <= 500 for x in value):
+            return f'{field} must be an array of short text values.', {}
+        normalized[field] = [item.strip() for item in value if item.strip()]
+    if 'examples' in data:
+        examples = data['examples']
+        if not isinstance(examples, list) or len(examples) > 50 or not all(
+            isinstance(example, dict) and all(
+                key not in example or isinstance(example[key], str)
+                for key in ('input', 'output', 'explanation')
+            ) for example in examples
+        ):
+            return 'examples must be an array of input/output/explanation objects.', {}
+        normalized['examples'] = examples
+    if 'starter_code' in data:
+        starter_code = data['starter_code']
+        if not isinstance(starter_code, dict) or not all(
+            isinstance(language, str) and isinstance(code, str) and len(code) <= 50_000
+            for language, code in starter_code.items()
+        ):
+            return 'starter_code must map language names to code text.', {}
+        normalized['starter_code'] = starter_code
+    if 'test_cases' in data:
+        cases = data['test_cases']
+        if not isinstance(cases, list) or len(cases) > 200:
+            return 'test_cases must be an array of at most 200 cases.', {}
+        normalized_cases = []
+        for index, case in enumerate(cases, 1):
+            if not isinstance(case, dict):
+                return f'Test case {index} must be an object.', {}
+            input_data = case.get('input_data', case.get('input'))
+            expected = case.get('expected')
+            is_sample = case.get('is_sample', case.get('sample', False))
+            if not isinstance(input_data, str) or not isinstance(expected, str):
+                return f'Test case {index} needs text input and expected output.', {}
+            if len(input_data) > 100_000 or len(expected) > 100_000 or not isinstance(is_sample, bool):
+                return f'Test case {index} has invalid or oversized content.', {}
+            normalized_cases.append({'input_data': input_data, 'expected': expected, 'is_sample': is_sample})
+        normalized['test_cases'] = normalized_cases
+    if 'is_active' in data:
+        if not isinstance(data['is_active'], bool):
+            return 'is_active must be a boolean.', {}
+        normalized['is_active'] = data['is_active']
+    if 'lc_id' not in normalized and 'lc_id' in data:
+        if data['lc_id'] is not None:
+            return 'lc_id must be text or null.', {}
+        normalized['lc_id'] = None
+    if not partial and 'is_active' not in normalized:
+        normalized['is_active'] = False
+    if not partial and 'topics' not in normalized:
+        normalized['topics'] = []
+    if not partial and 'constraints' not in normalized:
+        normalized['constraints'] = []
+    if not partial and 'hints' not in normalized:
+        normalized['hints'] = []
+    if not partial and 'examples' not in normalized:
+        normalized['examples'] = []
+    if not partial and 'starter_code' not in normalized:
+        normalized['starter_code'] = {}
+    return None, normalized
+
+
+@admin_content_bp.route('/content/problems', methods=['POST'])
+@require_role('platform_admin')
+def create_problem():
+    data = request.get_json(silent=True)
+    error, values = _problem_payload_error(data)
+    if error:
+        return jsonify({'error': error}), 400
+    if Problem.query.filter_by(slug=values['slug']).first():
+        return jsonify({'error': 'A problem with this slug already exists.'}), 409
+    cases = values.pop('test_cases', [])
+    if values.get('is_active') and not cases:
+        return jsonify({'error': 'Add at least one test case before enabling this problem.'}), 400
+    problem = Problem(**values, source='custom')
+    db.session.add(problem)
+    db.session.flush()
+    for index, case in enumerate(cases):
+        db.session.add(PracticeTestCase(problem_id=problem.id, order_index=index, **case))
+    _audit('admin.content.problem_create', f'Created problem {problem.slug!r}', 'problem', problem.id, severity='medium')
+    db.session.commit()
+    return jsonify({'problem': _admin_problem_detail(problem)}), 201
+
+
+def _admin_problem_detail(problem):
+    result = problem.to_dict(include_description=True)
+    result.update({
+        'id': problem.id,
+        'is_active': bool(problem.is_active),
+        'lc_id': problem.lc_id,
+        'nexlab_topic': problem.nexlab_topic,
+        'test_cases': [case.to_dict() for case in problem.test_cases.order_by(PracticeTestCase.order_index.asc()).all()],
+    })
+    return result
+
+
+@admin_content_bp.route('/content/problems/<problem_id>', methods=['GET'])
+@require_role('platform_admin')
+def get_admin_problem(problem_id):
+    problem = Problem.query.get(problem_id)
+    if not problem:
+        return jsonify({'error': 'Problem not found.'}), 404
+    return jsonify({'problem': _admin_problem_detail(problem)}), 200
+
+
 @admin_content_bp.route('/content/problems/<problem_id>', methods=['PATCH'])
 @require_role('platform_admin')
 def toggle_problem(problem_id):
-    p = Problem.query.get(problem_id)
-    if not p:
+    problem = Problem.query.get(problem_id)
+    if not problem:
         return jsonify({'error': 'Problem not found.'}), 404
-    data = request.get_json(silent=True)
-    if not isinstance(data, dict) or 'is_active' not in data:
-        return jsonify({'error': 'is_active is required.'}), 400
-    if not isinstance(data['is_active'], bool):
-        return jsonify({'error': 'is_active must be a boolean.'}), 400
-    p.is_active = data['is_active']
-    _audit('admin.content.problem_toggle',
-           f'{"Enabled" if p.is_active else "Disabled"} problem {p.slug!r}',
-           'problem', p.id, severity='medium')
+    error, values = _problem_payload_error(request.get_json(silent=True), partial=True)
+    if error:
+        return jsonify({'error': error}), 400
+    slug = values.get('slug')
+    if slug and Problem.query.filter(Problem.slug == slug, Problem.id != problem.id).first():
+        return jsonify({'error': 'A problem with this slug already exists.'}), 409
+    new_cases = values.get('test_cases')
+    will_be_active = values.get('is_active', bool(problem.is_active))
+    current_case_count = problem.test_cases.count()
+    if will_be_active and not (len(new_cases) if new_cases is not None else current_case_count):
+        return jsonify({'error': 'Add at least one test case before enabling this problem.'}), 400
+    changed = []
+    for field in ('title', 'slug', 'lc_id', 'difficulty', 'nexlab_topic', 'description',
+                  'topics', 'constraints', 'hints', 'examples', 'starter_code', 'is_active'):
+        if field in values:
+            setattr(problem, field, values[field])
+            changed.append(field)
+    if new_cases is not None:
+        problem.test_cases.delete()
+        for index, case in enumerate(new_cases):
+            db.session.add(PracticeTestCase(problem_id=problem.id, order_index=index, **case))
+        changed.append('test_cases')
+    _audit('admin.content.problem_update', f'Updated problem {problem.slug!r}: {", ".join(changed) or "no fields"}', 'problem', problem.id, severity='medium')
     db.session.commit()
-    return jsonify({'problem': {'id': p.id, 'slug': p.slug, 'is_active': p.is_active}}), 200
+    return jsonify({'problem': _admin_problem_detail(problem)}), 200

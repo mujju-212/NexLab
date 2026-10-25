@@ -430,6 +430,16 @@ export interface AdminProblemBankRow {
   difficulty: string; nexlab_topic: string; is_active: boolean; acceptance: number | null;
 }
 
+export interface AdminProblemDetail extends AdminProblemBankRow {
+  description: string;
+  topics: string[];
+  constraints: string[];
+  hints: string[];
+  examples: { input?: string; output?: string; explanation?: string }[];
+  starter_code: Record<string, string>;
+  test_cases: { id: string; input_data: string; expected: string; is_sample: boolean }[];
+}
+
 export interface AdminFunnelStage { key: string; label: string; count: number; pct: number; }
 export interface AdminCohort { cohort: string; size: number; cells: { week: number; count: number; pct: number | null }[]; }
 
@@ -474,6 +484,18 @@ export const adminContentService = {
   },
   async listProblems(filter: string, page = 1): Promise<{ filter: string; total: number; page: number; pages: number; summary: { no_test_cases: number; disabled: number; total: number }; problems: AdminProblemBankRow[] }> {
     const { data } = await apiClient.get('/admin/content/problems', { params: { filter, page, per_page: 20 } });
+    return data;
+  },
+  async getProblem(id: string): Promise<{ problem: AdminProblemDetail }> {
+    const { data } = await apiClient.get(`/admin/content/problems/${id}`);
+    return data;
+  },
+  async createProblem(dto: Record<string, unknown>): Promise<{ problem: AdminProblemDetail }> {
+    const { data } = await apiClient.post('/admin/content/problems', dto);
+    return data;
+  },
+  async updateProblem(id: string, patch: Record<string, unknown>): Promise<{ problem: AdminProblemDetail }> {
+    const { data } = await apiClient.patch(`/admin/content/problems/${id}`, patch);
     return data;
   },
   async toggleProblem(id: string, isActive: boolean): Promise<void> {

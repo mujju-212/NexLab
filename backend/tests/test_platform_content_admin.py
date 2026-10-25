@@ -165,6 +165,49 @@ def test_lesson_studio_blocks_persist_render_and_import_bundled_html(admin_clien
     assert invalid.status_code == 400
 
 
+def test_problem_bank_admin_create_and_test_case_edit(admin_client):
+    slug = f"qa-problem-{uuid.uuid4().hex[:10]}"
+    payload = {
+        "title": "Temporary QA problem",
+        "slug": slug,
+        "difficulty": "medium",
+        "nexlab_topic": "QA",
+        "description": "Read a value and return it unchanged.",
+        "topics": ["strings", "testing"],
+        "test_cases": [
+            {"input_data": "hello", "expected": "hello", "is_sample": True},
+            {"input_data": "hidden", "expected": "hidden", "is_sample": False},
+        ],
+    }
+    created = admin_client.post("/api/admin/content/problems", json=payload)
+    assert created.status_code == 201, created.get_json()
+    problem_id = created.get_json()["problem"]["id"]
+    assert len(created.get_json()["problem"]["test_cases"]) == 2
+    assert created.get_json()["problem"]["is_active"] is False
+
+    details = admin_client.get(f"/api/admin/content/problems/{problem_id}")
+    assert details.status_code == 200
+    assert details.get_json()["problem"]["description"] == payload["description"]
+
+    edited = admin_client.patch(
+        f"/api/admin/content/problems/{problem_id}",
+        json={
+            "title": "Temporary QA problem edited",
+            "test_cases": [
+                {"input": "updated", "expected": "updated", "sample": True},
+                {"input": "secret", "expected": "secret", "sample": False},
+                {"input": "edge", "expected": "edge", "sample": False},
+            ],
+            "is_active": True,
+        },
+    )
+    assert edited.status_code == 200, edited.get_json()
+    assert edited.get_json()["problem"]["title"] == "Temporary QA problem edited"
+    assert len(edited.get_json()["problem"]["test_cases"]) == 3
+    assert edited.get_json()["problem"]["test_cases"][0]["is_sample"] is True
+    assert admin_client.post("/api/admin/content/problems", json={**payload, "slug": f"{slug}-empty", "test_cases": [], "is_active": True}).status_code == 400
+
+
 def test_update_field_validation_null_clearing_and_legacy_publish_guard(admin_client):
     course_id = _new_course(admin_client)
     created = admin_client.post(
