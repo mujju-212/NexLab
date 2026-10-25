@@ -10,7 +10,7 @@
   max-width: 1440px;
   margin: 0 auto;
   padding-bottom: 60px;
-  font-family: 'Manrope', -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+  font-family: var(--font-sans);
   color: #1e1b4b;
 }
 
@@ -61,7 +61,7 @@
 }
 
 .pageTitle {
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-display);
   font-size: 26px;
   font-weight: 700;
   color: #1e1b4b;
@@ -111,7 +111,7 @@
 }
 
 .stayInformedTitle {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 13.5px;
   font-weight: 700;
   color: #1e1b4b;
@@ -219,7 +219,7 @@
 }
 
 .cardTitle {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 16px;
   font-weight: 700;
   color: #1e1b4b;
@@ -406,7 +406,7 @@
 }
 
 .categoryTitle {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 14px;
   font-weight: 700;
   color: #1e1b4b;

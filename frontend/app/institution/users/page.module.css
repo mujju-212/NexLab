@@ -31,7 +31,7 @@
 }
 
 .heroTitle {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 26px;
   font-weight: 800;
   color: #1e1b4b;
@@ -108,7 +108,7 @@
   border: none;
   font-size: 13.5px;
   font-weight: 700;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   cursor: pointer;
   box-shadow: 0 4px 14px rgba(124, 58, 237, 0.28);
   transition: all 0.18s cubic-bezier(0.16, 1, 0.3, 1);
@@ -170,7 +170,7 @@
 }
 
 .kpiValue {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 24px;
   font-weight: 800;
   color: #111827;
@@ -469,7 +469,7 @@
   background: #fbfbfe;
   border-bottom: 1px solid #f1f5f9;
   text-align: left;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   white-space: nowrap;
 }
 
@@ -540,7 +540,7 @@
 .userRoll {
   font-size: 10.5px;
   color: #94a3b8;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   margin: 1px 0 0;
 }
 
@@ -753,7 +753,7 @@
 }
 
 .drawerUserName {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 16px;
   font-weight: 800;
   color: #1e1b4b;
@@ -835,7 +835,7 @@
 }
 
 .drawerSectionTitle {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 13.5px;
   font-weight: 700;
   color: #1e1b4b;
@@ -935,7 +935,7 @@
 }
 
 .metricChipValue {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 17px;
   font-weight: 800;
   line-height: 1;
@@ -1113,7 +1113,7 @@
 }
 
 .modalTitle {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 18px;
   font-weight: 800;
   color: #1e1b4b;
@@ -1154,7 +1154,7 @@
   font-size: 12px;
   font-weight: 700;
   color: #334155;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .formInput {
@@ -1339,3 +1339,51 @@
     align-items: stretch;
   }
 }
+
+/* ── Mobile (≤640px): app-style single-column layout ─────────────────────── */
+@media (max-width: 640px) {
+  .kpiGrid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px; }
+  .academicGrid, .userGrid { grid-template-columns: 1fr !important; }
+  .metricChipsGrid { grid-template-columns: repeat(2, 1fr) !important; }
+  /* Tables scroll horizontally inside their card instead of overflowing */
+  .tableContainer, .tableWrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tableContainer table, .tableWrapper table { min-width: 640px; }
+}
+
+/* ══ MOBILE DESIGN (≤640px): compact app-native KPI tiles ══ */
+@media (max-width: 640px) {
+  .kpiCard { padding: 13px 14px !important; border-radius: 16px !important; gap: 10px !important; }
+  .kpiIconWrap { width: 36px !important; height: 36px !important; border-radius: 11px !important; }
+  .kpiValue { font-size: 1.3rem !important; }
+  .kpiLabel { font-size: 10.5px !important; }
+  .kpiGrid { gap: 10px !important; }
+}
+
+/* ══ MOBILE (≤768px): designed card list replaces the wide table ══ */
+@media (min-width: 769px) {
+  .mobileUserList { display: none; }
+}
+@media (max-width: 768px) {
+  .tableWrap { display: none; }
+  .mobileUserList { display: flex; flex-direction: column; gap: 10px; min-height: 280px; }
+  .userCardMobile {
+    display: flex; align-items: center; gap: 11px;
+    padding: 12px 14px; border-radius: 16px;
+    background: #fff; border: 1px solid #eee9f6;
+    box-shadow: 0 2px 10px rgba(124, 58, 237, .05);
+    cursor: pointer; transition: border-color .15s, background .15s;
+  }
+  .userCardMobile:active { background: #faf8ff; }
+  .userCardMobileSelected { border-color: #c4b5fd; background: #faf8ff; }
+  .userCardInfo { flex: 1; min-width: 0; }
+  .userCardInfo .userName { font-size: 13.5px; font-weight: 700; color: #201b2e; margin: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .userCardInfo .userEmail { font-size: 11px; color: #8b8494; margin: 2px 0 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .userCardMeta { display: flex; align-items: center; gap: 6px; margin-top: 6px; }
+  .userCardRight { display: flex; align-items: center; gap: 6px; flex-shrink: 0; }
+  .userCardProfileBtn {
+    width: 32px; height: 32px; border-radius: 10px;
+    border: 1px solid #e9e4f2; background: #fff; color: #7c3aed;
+    display: flex; align-items: center; justify-content: center; cursor: pointer;
+  }
+}
+

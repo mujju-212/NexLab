@@ -4,6 +4,7 @@ import React, { Suspense, useState, useEffect, useTransition, useMemo } from 're
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { toast } from '@/components/ui/toast';
 import {
   institutionService,
   type RiskOverviewReport,
@@ -136,12 +137,7 @@ function AnalyticsContent() {
   const [exportMenuOpen, setExportMenuOpen] = useState(false);
   const [comparePeriod, setComparePeriod] = useState<boolean>(searchParams.get('compare') === 'true');
   const [howItWorksOpen, setHowItWorksOpen] = useState(false);
-  const [toastMsg, setToastMsg] = useState<string | null>(null);
-
-  const showToast = (msg: string) => {
-    setToastMsg(msg);
-    setTimeout(() => setToastMsg(null), 3500);
-  };
+  const showToast = (msg: string) => toast.info(msg);
 
   // Switch tab and sync with URL
   const setTab = (t: Tab) => {
@@ -344,30 +340,6 @@ function AnalyticsContent() {
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 18, paddingBottom: 40 }}>
       {/* Toast Alert */}
-      {toastMsg && (
-        <div
-          style={{
-            position: 'fixed',
-            bottom: 24,
-            right: 24,
-            zIndex: 9999,
-            background: '#111827',
-            color: '#ffffff',
-            padding: '12px 20px',
-            borderRadius: 10,
-            fontSize: '0.85rem',
-            fontWeight: 600,
-            boxShadow: '0 8px 30px rgba(0,0,0,0.2)',
-            display: 'flex',
-            alignItems: 'center',
-            gap: 8,
-          }}
-        >
-          <Sparkles size={16} style={{ color: '#a855f7' }} />
-          <span>{toastMsg}</span>
-        </div>
-      )}
-
       {/* Page Title & Action Bar matching UI screenshot */}
       <div
         style={{
@@ -1312,7 +1284,9 @@ function AnalyticsContent() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               {/* Row 1: 5 Top KPI Cards with Sparkline Wave Graphs */}
               <div
-                style={{
+                className={styles.instructorKpiRow}
+          style={{
+
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fit, minmax(200px, 1fr))',
                   gap: 16,
@@ -1392,6 +1366,7 @@ function AnalyticsContent() {
 
               {/* Row 2: Academic Performance vs Campus Mean & Risk Distribution */}
               <div
+                className={styles.collapseCompareRow}
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'minmax(0, 1.45fr) minmax(0, 1fr)',
@@ -1410,6 +1385,7 @@ function AnalyticsContent() {
 
               {/* Row 3: Risk Trend Over Time, Campus Peak Hours Activity, Learning Outcomes Mastery */}
               <div
+                className={styles.collapseCompareRow}
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'minmax(0, 1.35fr) minmax(0, 1.15fr) minmax(0, 0.95fr)',
@@ -1446,7 +1422,9 @@ function AnalyticsContent() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               {/* Row 1: 3 KPI Summary Cards with Soft Wave Sparklines */}
               <div
-                style={{
+                className={styles.instructorKpiRow}
+          style={{
+
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))',
                   gap: 16,
@@ -1507,6 +1485,7 @@ function AnalyticsContent() {
 
               {/* Row 2: 2 Interactive Visualizations (Trend Area Chart + Distribution Donut) */}
               <div
+                className={styles.collapseCompareRow}
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'minmax(0, 1.5fr) minmax(0, 1.2fr)',
@@ -1567,7 +1546,9 @@ function AnalyticsContent() {
             <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
               {/* Row 1: Four Top KPI Cards with Sparklines */}
               <div
-                style={{
+                className={styles.instructorKpiRow}
+          style={{
+
                   display: 'grid',
                   gridTemplateColumns: 'repeat(auto-fit, minmax(220px, 1fr))',
                   gap: 16,
@@ -1658,6 +1639,7 @@ function AnalyticsContent() {
 
               {/* Row 2: Section Performance vs Campus Mean & Distribution Donut */}
               <div
+                className={styles.collapseCompareRow}
                 style={{
                   display: 'grid',
                   gridTemplateColumns: 'minmax(0, 1.85fr) minmax(0, 1fr)',

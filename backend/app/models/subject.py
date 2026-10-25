@@ -13,7 +13,7 @@ class Subject(db.Model):
     name            = db.Column(db.Text, nullable=False)
     code            = db.Column(db.String(20))               # e.g. "CS3401"
     description     = db.Column(db.Text)
-    icon            = db.Column(db.String(50), default='datastruct')
+    icon            = db.Column(db.Text, default='datastruct')  # preset name OR Cloudinary URL
     color           = db.Column(db.String(30), default='#7c3aed')
     department_id   = db.Column(db.String(36), db.ForeignKey('departments.id'))
     subject_type    = db.Column(db.String(30), default='Theory')  # Theory, Practical, Lab, Elective

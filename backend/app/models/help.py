@@ -48,7 +48,7 @@ class SupportTicket(db.Model):
     id              = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     ticket_number   = db.Column(db.String(50), unique=True, nullable=False, index=True)
     institution_id  = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False, index=True)
-    user_id         = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
+    user_id         = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False, index=True)
     subject         = db.Column(db.String(255), nullable=False)
     category        = db.Column(db.String(50), default='general')  # technical | billing | academic | general
     priority        = db.Column(db.String(20), default='medium')   # low | medium | high | urgent

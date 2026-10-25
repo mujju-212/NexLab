@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   X,
@@ -39,6 +40,7 @@ export function Student360Drawer({
   onClose,
   onLogIntervention,
 }: Student360DrawerProps) {
+  const router = useRouter();
   const queryClient = useQueryClient();
   const [activeTab, setActiveTab] = useState<'overview' | 'trajectory' | 'integrity' | 'interventions'>('overview');
 
@@ -244,9 +246,32 @@ export function Student360Drawer({
             </div>
           </div>
 
-          <button
-            type="button"
-            onClick={onClose}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <button
+              type="button"
+              title="Open full profile page"
+              onClick={() => {
+                onClose();
+                router.push(`/institution/students/${studentId}`);
+              }}
+              style={{
+                border: 'none',
+                background: '#f3e8ff',
+                color: '#7c3aed',
+                width: 32,
+                height: 32,
+                borderRadius: 8,
+                cursor: 'pointer',
+                display: 'flex',
+                alignItems: 'center',
+                justifyContent: 'center',
+              }}
+            >
+              <ExternalLink size={15} />
+            </button>
+            <button
+              type="button"
+              onClick={onClose}
             style={{
               border: 'none',
               background: '#f3f4f6',
@@ -260,8 +285,9 @@ export function Student360Drawer({
               justifyContent: 'center',
             }}
           >
-            <X size={18} />
-          </button>
+              <X size={18} />
+            </button>
+          </div>
         </div>
 
         {/* Drawer Sub-Tabs */}

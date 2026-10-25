@@ -418,7 +418,9 @@ def compute_student_funnel(
             'days_in_stage': days_in_st,
             'last_activity': act_date,
             'risk_reason': reason,
-            'risk_score': r_score,
+            # risk_score can be None for students without enough data — keep the
+            # sort below numeric-only.
+            'risk_score': float(r_score or 0.0),
             'risk_band': r_band,
         })
 

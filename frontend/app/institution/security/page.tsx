@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import { useQuery } from '@tanstack/react-query';
 import {
   ShieldCheck, AlertTriangle, Users, CheckCircle2, Lock,
-  Download, Settings, TrendingUp, Sparkles, ChevronRight
+  Download, TrendingUp, ChevronRight
 } from 'lucide-react';
 import InstitutionShell from '@/components/layout/InstitutionShell';
 import styles from '../ai-usage/ai-usage.module.css';
@@ -14,11 +14,8 @@ import {
   type AISecurityOverviewResponse
 } from '@/services/institution.service';
 
-type SecurityTab = 'overview' | 'access' | 'privacy' | 'compliance' | 'logs' | 'settings';
-
 export default function SecurityCompliancePage() {
   const router = useRouter();
-  const [activeTab, setActiveTab] = useState<SecurityTab>('overview');
   const [toast, setToast] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
@@ -51,7 +48,7 @@ export default function SecurityCompliancePage() {
     >
       {toast && (
         <div className={styles.toast}>
-          <Sparkles size={16} /> {toast}
+          <ShieldCheck size={16} /> {toast}
         </div>
       )}
 
@@ -73,29 +70,11 @@ export default function SecurityCompliancePage() {
               <Download size={14} />
               <span>Download Compliance Report</span>
             </button>
-            <button className={styles.exportBtn} onClick={() => showToast('Security policies enforced globally.')}>
-              <Settings size={14} />
-              <span>Security Settings</span>
-            </button>
           </div>
         </div>
 
-        {/* ══ SUB-NAVIGATION TABS ══ */}
-        <div className={styles.navPillBar}>
-          {(['overview', 'access', 'privacy', 'compliance', 'logs', 'settings'] as const).map(tab => (
-            <button
-              key={tab}
-              className={`${styles.navPill} ${activeTab === tab ? styles.navPillActive : ''}`}
-              onClick={() => setActiveTab(tab)}
-              style={{ textTransform: 'capitalize' }}
-            >
-              {tab === 'access' ? 'Access Control' :
-               tab === 'privacy' ? 'Data & Privacy' :
-               tab === 'logs' ? 'Activity Logs' :
-               tab === 'settings' ? 'Security Settings' : tab}
-            </button>
-          ))}
-        </div>
+        {/* Single-section page: the former Access/Privacy/Compliance/Logs/Settings
+            pills had no content behind them — removed instead of showing empty tabs. */}
 
         {/* ══ 4 SECURITY KPIS ══ */}
         {securityData && (
@@ -110,7 +89,7 @@ export default function SecurityCompliancePage() {
                 </div>
                 <div className={styles.kpiValue}>{securityData.kpis.security_score.value}</div>
                 <div className={`${styles.kpiBadge} ${styles.kpiBadgeUp}`}>
-                  <TrendingUp size={12} /> {securityData.kpis.security_score.change || '+4 vs. last month'}
+                  <TrendingUp size={12} /> {securityData.kpis.security_score.change}
                 </div>
               </div>
 
@@ -134,7 +113,7 @@ export default function SecurityCompliancePage() {
                 </div>
                 <div className={styles.kpiValue}>{securityData.kpis.security_alerts.value}</div>
                 <div className={`${styles.kpiBadge} ${styles.kpiBadgeDanger}`}>
-                  {securityData.kpis.security_alerts.sub || '1 critical, 2 medium'}
+                  {securityData.kpis.security_alerts.sub}
                 </div>
               </div>
 
@@ -210,12 +189,12 @@ export default function SecurityCompliancePage() {
                 </div>
 
                 <div className={styles.quickActionsList}>
-                  <div className={styles.quickActionItem} onClick={() => showToast('2FA enforced for all user accounts!')}>
+                  <div className={styles.quickActionItem} onClick={() => router.push('/institution/profile')}>
                     <div className={styles.quickActionLeft}>
                       <div className={styles.quickActionIcon}><Lock size={16} /></div>
                       <div>
-                        <div className={styles.quickActionTitle}>Enforce 2FA for All Users</div>
-                        <div className={styles.quickActionSubtitle}>Require multi-factor auth</div>
+                        <div className={styles.quickActionTitle}>Two-Factor Authentication</div>
+                        <div className={styles.quickActionSubtitle}>Manage MFA on your admin account</div>
                       </div>
                     </div>
                     <ChevronRight size={14} color="#94a3b8" />
@@ -303,7 +282,7 @@ export default function SecurityCompliancePage() {
                 <div className={styles.card}>
                   <div className={styles.cardHeader}>
                     <h3 className={styles.cardTitle}>Compliance Frameworks</h3>
-                    <button className={styles.cardAction} onClick={() => showToast('All compliance frameworks are active.')}>
+                    <button className={styles.cardAction} onClick={() => router.push('/institution/ai-usage?tab=safety')}>
                       Manage
                     </button>
                   </div>
@@ -329,7 +308,7 @@ export default function SecurityCompliancePage() {
                 <div className={styles.card}>
                   <div className={styles.cardHeader}>
                     <h3 className={styles.cardTitle}>Data Retention</h3>
-                    <button className={styles.cardAction} onClick={() => showToast('Data retention policies loaded.')}>
+                    <button className={styles.cardAction} onClick={() => router.push('/institution/ai-usage?tab=safety')}>
                       Configure
                     </button>
                   </div>

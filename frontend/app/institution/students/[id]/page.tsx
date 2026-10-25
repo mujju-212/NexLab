@@ -89,7 +89,7 @@ export default function Student360Page() {
             style={{ marginBottom: 4 }}
           >
             <ArrowLeft size={14} />
-            <span>Back to Analytics</span>
+            <span>Go back</span>
           </button>
         </div>
 

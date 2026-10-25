@@ -296,7 +296,7 @@ export function CurriculumRollupTable({
         </div>
 
         {/* Right Actions: Search, Filter, Export */}
-        <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, flexWrap: 'wrap' }}>
           {/* Search Bar */}
           <div
             style={{
@@ -307,7 +307,8 @@ export function CurriculumRollupTable({
               borderRadius: 8,
               border: '1px solid #e2e8f0',
               background: '#ffffff',
-              width: 240,
+              flex: '1 1 200px',
+              maxWidth: 280,
             }}
           >
             <Search size={14} style={{ color: '#94a3b8' }} />

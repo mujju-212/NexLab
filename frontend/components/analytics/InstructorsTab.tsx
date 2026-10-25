@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo, useEffect } from 'react';
+import styles from './analytics.module.css';
 import {
   BarChart,
   Bar,
@@ -331,6 +332,7 @@ export default function InstructorsTab({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* ── 1. STAT KPI CARDS (TOP ROW OF 5) ── */}
       <div
+        className={styles.instructorKpiRow}
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(5, minmax(0, 1fr))',
@@ -804,6 +806,7 @@ export default function InstructorsTab({
 
       {/* ── 2. MIDDLE ROW: BENCHMARK BAR CHART (LEFT) & DISTRIBUTION DONUT (RIGHT) ── */}
       <div
+        className={styles.collapseCompareRow}
         style={{
           display: 'grid',
           gridTemplateColumns: 'minmax(0, 1.6fr) minmax(0, 1fr)',
@@ -2097,7 +2100,7 @@ export default function InstructorsTab({
 
             {/* Modal Body: Metrics Grid */}
             <div style={{ padding: 24, display: 'flex', flexDirection: 'column', gap: 20 }}>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+              <div className={styles.instructorKpiRow} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
                 <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #f1f5f9' }}>
                   <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Avg Grade</div>
                   <div style={{ fontSize: '1.35rem', fontWeight: 800, color: '#7c3aed', marginTop: 2 }}>
@@ -2123,7 +2126,7 @@ export default function InstructorsTab({
                 </div>
               </div>
 
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
+              <div className={styles.instructorKpiRow} style={{ display: 'grid', gridTemplateColumns: 'repeat(3, 1fr)', gap: 12 }}>
                 <div style={{ background: '#f8fafc', padding: '12px 14px', borderRadius: 10, border: '1px solid #f1f5f9' }}>
                   <div style={{ fontSize: '0.72rem', color: '#64748b', fontWeight: 600 }}>Sections</div>
                   <div style={{ fontSize: '1.25rem', fontWeight: 700, color: '#0f172a', marginTop: 2 }}>

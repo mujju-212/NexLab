@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { toast } from '@/components/ui/toast';
 import { institutionService } from '@/services/institution.service';
 import {
   Megaphone, Send, Clock, Eye, Users, FileText, CheckCircle2,
@@ -113,7 +114,6 @@ export default function AnnouncementsPage() {
   const [statusFilter, setStatusFilter] = useState<'all' | 'sent' | 'scheduled' | 'draft'>('all');
   const [loading, setLoading] = useState(false);
   const [sending, setSending] = useState(false);
-  const [toast, setToast] = useState<string | null>(null);
 
   // Preview Role Toggle
   const [previewRole, setPreviewRole] = useState<'student' | 'instructor'>('student');
@@ -123,10 +123,7 @@ export default function AnnouncementsPage() {
   const [showAnalyticsModal, setShowAnalyticsModal] = useState(false);
   const [showSettingsModal, setShowSettingsModal] = useState(false);
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3500);
-  };
+  const showToast = (msg: string) => toast.info(msg);
 
   // Load Data — through the react-query cache. Mutations call these with
   // fresh=true so the cached copy is dropped first; simple revisits render
@@ -390,19 +387,6 @@ export default function AnnouncementsPage() {
 
   return (
     <InstitutionShell activePage="Announcements">
-      {toast && (
-        <div style={{
-          position: 'fixed', bottom: 24, right: 24, zIndex: 1100,
-          background: '#1a1528', color: '#fff', padding: '12px 22px',
-          borderRadius: 12, fontSize: 13.5, fontWeight: 600,
-          boxShadow: '0 10px 25px -5px rgba(0,0,0,0.3)',
-          display: 'flex', alignItems: 'center', gap: 8
-        }}>
-          <Sparkles size={16} color="#c084fc" />
-          {toast}
-        </div>
-      )}
-
       <div className={styles.pageContainer}>
         {/* ── Top Header Banner ── */}
         <div className={styles.topHeader}>

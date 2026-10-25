@@ -1,6 +1,6 @@
 """
 Universal notifications API — works for every role (student, instructor,
-institution_admin, platform_admin, free_user). The shells' bell buttons poll
+institution_admin, platform_admin, platform_user). The shells' bell buttons poll
 this; on open, everything is marked read.
 
 GET  /api/notifications              → {notifications: [...], unread: n}

@@ -26,12 +26,12 @@ class ProctorEvent(db.Model):
     institution_id = db.Column(db.String(36), nullable=False, index=True)
     # An event belongs to EITHER a live session OR a timed exam attempt.
     session_id     = db.Column(db.String(36), db.ForeignKey('lab_sessions.id'),
-                               nullable=True)
+                               nullable=True, index=True)
     exam_id        = db.Column(db.String(36), db.ForeignKey('exams.id'),
                                nullable=True)
     attempt_id     = db.Column(db.String(36), nullable=True)
     student_id     = db.Column(db.String(36), db.ForeignKey('users.id'),
-                               nullable=False)
+                               nullable=False, index=True)
     event_type     = db.Column(db.String(40), nullable=False)  # tab_switch / fullscreen_exit / …
     payload        = db.Column(db.JSON, nullable=True)         # extra context (count, action, …)
     severity       = db.Column(db.String(10), nullable=True)   # 'high' | 'medium' | 'low'

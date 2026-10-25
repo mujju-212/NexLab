@@ -1245,3 +1245,57 @@
 
 
 
+
+/* ── Mobile (≤640px): app-style single-column layout ─────────────────────── */
+@media (max-width: 640px) {
+  .kpiGrid, .riskKpiGrid, .funnelKpiGrid, .aiUsageKpiGrid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px; }
+  .twoColGrid, .threeColChartsGrid, .funnelThreeColGrid, .aiUsageMiddleGrid, .aiUsageBottomGrid { grid-template-columns: 1fr !important; }
+  .tableContainer, .tableWrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
+  .tableContainer table, .tableWrapper table { min-width: 680px; }
+}
+
+/* Inline-styled comparison rows (grid-template-columns set inline in the page)
+   must still collapse on phones — !important class rule beats inline styles. */
+@media (max-width: 640px) {
+  .collapseCompareRow { grid-template-columns: 1fr !important; }
+}
+@media (max-width: 640px) {
+  .instructorKpiRow { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
+}
+
+/* ══ MOBILE (≤768px): the analytics filter bar becomes a swipeable strip ══ */
+@media (max-width: 768px) {
+  .analyticsFilterBar {
+    display: block !important;
+    padding: 10px 12px !important;
+  }
+  .analyticsFilterBar > div:first-child {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+    scroll-snap-type: x proximity;
+    scrollbar-width: none;
+    padding-bottom: 2px;
+  }
+  .analyticsFilterBar > div:first-child::-webkit-scrollbar { display: none; }
+  /* Each labeled filter keeps its natural width and swipes, never compresses */
+  .analyticsFilterBar > div:first-child > div:has(> label) {
+    flex: 0 0 auto !important;
+    min-width: 148px;
+    scroll-snap-align: start;
+  }
+}
+@media (max-width: 640px) {
+  /* auto-fit minmax(460px) rows force 460px cells onto phones — stack instead */
+  .mobileFullStack { grid-template-columns: minmax(0, 1fr) !important; }
+}
+@media (max-width: 640px) {
+  /* KPI tiles: compact two-up cards instead of fat full-width blocks */
+  .instructorKpiRow > div {
+    padding: 12px 13px !important;
+    border-radius: 14px !important;
+  }
+}
+@media (max-width: 640px) {
+  /* Odd-count KPI rows: last card spans full width instead of leaving a hole */
+  .instructorKpiRow > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}

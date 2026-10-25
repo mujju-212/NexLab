@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useMemo } from 'react';
+import styles from './analytics.module.css';
 import {
   Users,
   Target,
@@ -314,6 +315,7 @@ export default function EngagementSignalsTab({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* ── 1. TOP STAT KPI CARDS (Grid of 4) ── */}
       <div
+        className={styles.instructorKpiRow}
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(4, minmax(0, 1fr))',
@@ -683,6 +685,7 @@ export default function EngagementSignalsTab({
 
       {/* ── 2. MIDDLE ROW (3 Visualizations) ── */}
       <div
+        className={styles.collapseCompareRow}
         style={{
           display: 'grid',
           gridTemplateColumns: 'minmax(320px, 1.15fr) minmax(280px, 0.95fr) minmax(320px, 1fr)',

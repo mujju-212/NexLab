@@ -669,11 +669,29 @@ def init_ai_routes(bp: Blueprint):
         return jsonify({'message': f'Updated quotas for {count} users successfully.'}), 200
 
     # ── 5. Feature Controls ─────────────────────────────────────────────────────
+    # Default AI feature catalog seeded on first load so the Features tab shows
+    # the platform's real capabilities instead of an empty state. Models are the
+    # production Groq pool entries (see ai_usage.PRICE_MAP).
+    DEFAULT_AI_FEATURES = [
+        {'feature_id': 'hint',           'name': 'AI Hints',           'category': 'Learning Support',  'description': 'Multi-level hints inside live labs.',                'default_model': 'llama-3.1-8b-instant',     'rate_limit_per_hour': 120, 'available_roles': '["Student"]'},
+        {'feature_id': 'chat',           'name': 'AI Chat Assistant',  'category': 'Learning Support',  'description': 'General lab Q&A assistant for students.',            'default_model': 'llama-3.3-70b-versatile',  'rate_limit_per_hour': 60,  'available_roles': '["Student", "Instructor"]'},
+        {'feature_id': 'code_assist',    'name': 'Code Assist',        'category': 'Learning Support',  'description': 'Code explanation and error help.',                   'default_model': 'llama-3.3-70b-versatile',  'rate_limit_per_hour': 80,  'available_roles': '["Student"]'},
+        {'feature_id': 'viva_generate',  'name': 'Viva Generation',    'category': 'Assessment',        'description': 'Auto-generate viva question sets per experiment.',   'default_model': 'llama-3.3-70b-versatile',  'rate_limit_per_hour': 40,  'available_roles': '["Instructor"]'},
+        {'feature_id': 'viva_evaluate',  'name': 'Viva Evaluation',    'category': 'Assessment',        'description': 'AI scoring of student viva answers.',                'default_model': 'openai/gpt-oss-120b',      'rate_limit_per_hour': 60,  'available_roles': '["Instructor"]'},
+        {'feature_id': 'agent',          'name': 'Agent Mode',         'category': 'Productivity',      'description': 'Agentic multi-tool harness for admins/instructors.', 'default_model': 'openai/gpt-oss-120b',      'rate_limit_per_hour': 30,  'available_roles': '["Instructor", "TA", "Institution Admin"]'},
+    ]
+
     @bp.route('/ai/features', methods=['GET'])
     @require_role('institution_admin')
     def get_ai_features():
         iid = g.institution_id
         features = AIFeatureConfig.query.filter_by(institution_id=iid).order_by(AIFeatureConfig.created_at).all()
+
+        if not features:
+            for spec in DEFAULT_AI_FEATURES:
+                db.session.add(AIFeatureConfig(institution_id=iid, **spec))
+            db.session.commit()
+            features = AIFeatureConfig.query.filter_by(institution_id=iid).order_by(AIFeatureConfig.created_at).all()
 
         total = len(features)
         enabled_count = sum(1 for f in features if f.enabled)
@@ -777,17 +795,36 @@ def init_ai_routes(bp: Blueprint):
         ).count()
         elevated_cnt = User.query.filter(User.institution_id == iid, User.role.in_(['instructor', 'institution_admin'])).count()
 
-        # Login locations
+        # Login locations — real aggregation from user profiles (no fabrication;
+        # empty when no user has a location set).
+        from collections import Counter
+
+        from sqlalchemy import func as sa_func
+
+        loc_rows = db.session.query(User.location, sa_func.count(User.id)).filter(
+            User.institution_id == iid, User.is_active == True,  # noqa: E712
+            User.location.isnot(None), User.location != '',
+        ).group_by(User.location).all()
+        loc_counter = Counter({str(loc).strip(): cnt for loc, cnt in loc_rows})
+        total_loc = sum(loc_counter.values()) or 1
+        palette = ['#7c3aed', '#8b5cf6', '#a78bfa', '#c4b5fd']
         locations = [
-            {'country': 'India', 'percent': 100, 'users': active_users_cnt, 'color': '#7c3aed'},
+            {'country': loc, 'percent': round(cnt * 100.0 / total_loc), 'users': cnt,
+             'color': palette[i % len(palette)]}
+            for i, (loc, cnt) in enumerate(loc_counter.most_common(4))
         ]
+
+        stored_score = getattr(comp, 'security_score', None)
+        score_val = int(stored_score) if stored_score is not None else max(60, 100 - alerts_cnt * 5)
+        compliance_raw = (comp.compliance_status or 'unassessed').replace('_', ' ').title()
+        last_assessed = comp.last_assessed or now.strftime('%d %b %Y')
 
         return jsonify({
             'kpis': {
-                'security_score': {'value': '98/100' if alerts_cnt == 0 else f"{max(60, 100 - alerts_cnt * 5)}/100", 'change': 'Monitored'},
+                'security_score': {'value': f"{score_val}/100", 'change': 'Monitored'},
                 'active_users': {'value': str(active_users_cnt), 'sub': f"{elevated_cnt} with elevated access"},
                 'security_alerts': {'value': str(alerts_cnt), 'sub': 'Security incidents recorded'},
-                'compliance_status': {'value': 'Compliant', 'sub': f"Last assessed: {now.strftime('%d %b %Y')}"},
+                'compliance_status': {'value': compliance_raw, 'sub': f"Last assessed: {last_assessed}"},
             },
             'trend': trend,
             'locations': locations,

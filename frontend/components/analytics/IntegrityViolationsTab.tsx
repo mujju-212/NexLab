@@ -1,5 +1,6 @@
 'use client';
 
+import styles from './analytics.module.css';
 import React, { useState, useMemo, useEffect } from 'react';
 import {
   ShieldAlert,
@@ -291,7 +292,9 @@ export function IntegrityViolationsTab({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
       {/* ── ROW 1: 4 KPI CARDS MATCHING SCREENSHOT ── */}
       <div
-        style={{
+        className={styles.instructorKpiRow}
+          style={{
+
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
           gap: 16,
@@ -576,6 +579,7 @@ export function IntegrityViolationsTab({
 
       {/* ── ROW 2: 3 CHARTS IN 3 COLUMNS MATCHING SCREENSHOT ── */}
       <div
+        className={styles.mobileFullStack}
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(320px, 1fr))',

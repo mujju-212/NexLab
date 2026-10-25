@@ -55,6 +55,8 @@ export function OutcomeDistributionDonut({
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
+          gap: 8,
           marginBottom: 16,
         }}
       >
@@ -161,6 +163,7 @@ export function OutcomeDistributionDonut({
           alignItems: 'center',
           gap: 14,
           marginTop: 6,
+          flexWrap: 'wrap',
         }}
       >
         {/* Donut with Center Text */}

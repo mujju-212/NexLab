@@ -1003,41 +1003,110 @@ def session_history():
     canc_all = sum(1 for s in all_history if s.status == 'cancelled')
     resched_all = sum(1 for s in all_history if s.status == 'rescheduled')
 
-    success_rate = round((comp_all / total_all * 100), 1) if total_all > 0 else 87.5
+    success_rate = round((comp_all / total_all * 100), 1) if total_all > 0 else 0.0
 
-    # Subject breakdown matching reference metrics
-    by_subject = [
-        {'name': 'Data Structures', 'count': 28, 'color': '#7c3aed'},
-        {'name': 'Python Programming', 'count': 24, 'color': '#0284c7'},
-        {'name': 'Database Systems', 'count': 20, 'color': '#16a34a'},
-        {'name': 'Computer Networks', 'count': 18, 'color': '#2563eb'},
-        {'name': 'OOP Concepts', 'count': 16, 'color': '#f59e0b'},
-        {'name': 'Others', 'count': 22, 'color': '#94a3b8'},
-    ]
+    # ── Real statistics, computed from the institution's history sessions ──
+    from app.models.academic import SectionSubject, SectionStudent
+    from app.models.subject import Subject
+    from app.models.session import SessionAttendance
+
+    session_ids = [s.id for s in all_history]
+
+    # Subject breakdown (top 5 + Others) via section_subject → subject
+    by_subject = []
+    if session_ids:
+        subj_rows = (
+            db.session.query(LabSession.id, Subject.name)
+            .join(SectionSubject, LabSession.section_subject_id == SectionSubject.id)
+            .join(Subject, SectionSubject.subject_id == Subject.id)
+            .filter(LabSession.id.in_(session_ids))
+            .all()
+        )
+        subj_count = defaultdict(int)
+        for _sid, sname in subj_rows:
+            subj_count[sname] += 1
+        palette = ['#7c3aed', '#0284c7', '#16a34a', '#2563eb', '#f59e0b', '#94a3b8']
+        top_subjects = sorted(subj_count.items(), key=lambda kv: kv[1], reverse=True)
+        by_subject = [
+            {'name': name, 'count': cnt, 'color': palette[i % len(palette)]}
+            for i, (name, cnt) in enumerate(top_subjects[:5])
+        ]
+        others_count = sum(c for _, c in top_subjects[5:])
+        if others_count:
+            by_subject.append({'name': 'Others', 'count': others_count, 'color': palette[5]})
 
     by_status = [
-        {'status': 'Completed', 'count': comp_all or 112, 'color': '#16a34a'},
-        {'status': 'Cancelled', 'count': canc_all or 8, 'color': '#ef4444'},
-        {'status': 'Rescheduled', 'count': resched_all or 8, 'color': '#3b82f6'},
+        {'status': 'Completed', 'count': comp_all, 'color': '#16a34a'},
+        {'status': 'Cancelled', 'count': canc_all, 'color': '#ef4444'},
+        {'status': 'Rescheduled', 'count': resched_all, 'color': '#3b82f6'},
     ]
 
-    attendance_trend = [
-        {'label': '1 Sep', 'rate': 80},
-        {'label': '8 Sep', 'rate': 83},
-        {'label': '15 Sep', 'rate': 78},
-        {'label': '22 Sep', 'rate': 85},
-        {'label': '30 Sep', 'rate': 84},
-    ]
+    # Per-session attendance rate = students who joined / section enrollment
+    att_rate_by_session = {}
+    if session_ids:
+        att_rows = (
+            db.session.query(SessionAttendance.session_id, func.count(SessionAttendance.student_id))
+            .filter(SessionAttendance.session_id.in_(session_ids),
+                    SessionAttendance.joined_at.isnot(None))
+            .group_by(SessionAttendance.session_id).all()
+        )
+        attended_by_session = {r[0]: r[1] for r in att_rows}
+
+        ss_rows = (
+            db.session.query(LabSession.id, SectionSubject.section_id)
+            .join(SectionSubject, LabSession.section_subject_id == SectionSubject.id)
+            .filter(LabSession.id.in_(session_ids))
+            .all()
+        )
+        session_section = {sid: sec for sid, sec in ss_rows}
+        distinct_sections = list(set(session_section.values()))
+        enroll_rows = (
+            db.session.query(SectionStudent.section_id, func.count(SectionStudent.student_id))
+            .filter(SectionStudent.section_id.in_(distinct_sections))
+            .group_by(SectionStudent.section_id).all()
+        ) if distinct_sections else []
+        enrolled_by_section = {r[0]: r[1] for r in enroll_rows}
+
+        for sid in session_ids:
+            enrolled = enrolled_by_section.get(session_section.get(sid), 0)
+            if enrolled:
+                att_rate_by_session[sid] = min(100.0, attended_by_session.get(sid, 0) / enrolled * 100.0)
+
+    valid_rates = list(att_rate_by_session.values())
+    avg_attendance = round(sum(valid_rates) / len(valid_rates)) if valid_rates else 0
+
+    # Weekly attendance trend over the data's own date range (max 6 buckets)
+    attendance_trend = []
+    dated = sorted([s for s in all_history if s.scheduled_at], key=lambda s: s.scheduled_at)
+    if dated:
+        d_min, d_max = dated[0].scheduled_at, dated[-1].scheduled_at
+        span_days = max(1, (d_max - d_min).days)
+        buckets = min(6, max(2, span_days // 7 + 1))
+        bucket_days = span_days / buckets
+        sums = [0.0] * buckets
+        counts = [0] * buckets
+        for s in dated:
+            idx = min(buckets - 1, int((s.scheduled_at - d_min).days / bucket_days))
+            rate = att_rate_by_session.get(s.id)
+            if rate is not None:
+                sums[idx] += rate
+                counts[idx] += 1
+        for i in range(buckets):
+            lbl = (d_min + timedelta(days=int(i * bucket_days))).strftime('%d %b')
+            attendance_trend.append({
+                'label': lbl,
+                'rate': round(sums[i] / counts[i]) if counts[i] else 0,
+            })
 
     stats = {
-        'total_sessions': total_all or 128,
-        'completed': comp_all or 112,
-        'cancelled': canc_all or 8,
-        'rescheduled': resched_all or 8,
+        'total_sessions': total_all,
+        'completed': comp_all,
+        'cancelled': canc_all,
+        'rescheduled': resched_all,
         'success_rate': success_rate,
-        'cancelled_percent': round((canc_all / total_all * 100), 1) if total_all > 0 else 6.2,
-        'rescheduled_percent': round((resched_all / total_all * 100), 1) if total_all > 0 else 6.2,
-        'avg_attendance': 82,
+        'cancelled_percent': round((canc_all / total_all * 100), 1) if total_all > 0 else 0.0,
+        'rescheduled_percent': round((resched_all / total_all * 100), 1) if total_all > 0 else 0.0,
+        'avg_attendance': avg_attendance,
         'by_subject': by_subject,
         'by_status': by_status,
         'attendance_trend': attendance_trend,

@@ -30,7 +30,7 @@ class RecurringPlan(db.Model):
     end_date                 = db.Column(db.Date, nullable=False)       # e.g. 2026-12-15
     
     room                     = db.Column(db.String(100), default='Lab 1 (Main Block)')
-    instructor_id            = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=True)
+    instructor_id            = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=True, index=True)
     
     status                   = db.Column(db.String(20), default='active') # 'active' | 'draft' | 'paused'
     sessions_generated_count = db.Column(db.Integer, default=0)

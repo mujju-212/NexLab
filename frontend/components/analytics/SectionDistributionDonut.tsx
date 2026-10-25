@@ -116,8 +116,10 @@ export function SectionDistributionDonut({ distribution }: SectionDistributionDo
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'space-between',
+          flexWrap: 'wrap',
           gap: 16,
-          height: 260,
+          height: 'auto',
+          minHeight: 260,
         }}
       >
         {/* Donut Chart with Centered Count */}

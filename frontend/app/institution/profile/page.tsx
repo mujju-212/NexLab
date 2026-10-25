@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { toast } from '@/components/ui/toast';
 import { useAuthStore } from '@/store/auth-store';
 import { authService } from '@/services/auth.service';
 import {
@@ -110,13 +111,10 @@ export default function ProfilePage() {
   const [showDeleteModal, setShowDeleteModal] = useState(false);
   const [showPublicModal, setShowPublicModal] = useState(false);
   const [showFaqModal, setShowFaqModal] = useState(false);
-  const [toast, setToast] = useState<{ message: string; type?: 'success' | 'error' } | null>(null);
 
   // Toast notification helper
-  const showToast = (message: string, type: 'success' | 'error' = 'success') => {
-    setToast({ message, type });
-    setTimeout(() => setToast(null), 3500);
-  };
+  const showToast = (message: string, type: 'success' | 'error' = 'success') =>
+    type === 'error' ? toast.error(message) : toast.success(message);
 
   // Load profile data from backend — through the react-query cache (shared
   // with the settings page's 'auth/me'). Revisiting renders from cache.
@@ -240,7 +238,7 @@ export default function ProfilePage() {
     : 'IA';
 
   return (
-    <InstitutionShell activePage="Profile & Settings">
+    <InstitutionShell activePage="Profile">
       <div className={styles.pageContainer}>
         {/* ── Breadcrumb Navigation ────────────────────────────────────────────── */}
         <div className={styles.breadcrumbRow}>
@@ -1050,16 +1048,6 @@ export default function ProfilePage() {
         )}
 
         {/* ── Toast Notification ─────────────────────────────────────────────────── */}
-        {toast && (
-          <div className={styles.toastNotice}>
-            {toast.type === 'error' ? (
-              <AlertCircle size={18} color="#f87171" />
-            ) : (
-              <Check size={18} color="#4ade80" />
-            )}
-            <span>{toast.message}</span>
-          </div>
-        )}
       </div>
     </InstitutionShell>
   );

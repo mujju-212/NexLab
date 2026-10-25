@@ -39,6 +39,7 @@ import {
 } from 'lucide-react';
 import styles from '../dashboard/page.module.css';
 import liveStyles from './sessions.module.css';
+import { toast } from '@/components/ui/toast';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -557,8 +558,7 @@ function SessionsPageContent() {
   }[]>([]);
 
   // Toast
-  const [toast, setToast] = useState<string | null>(null);
-  const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 4000); };
+  const toast3 = (msg: string) => { toast.info(msg); };
 
   // Edit modal for upcoming
   const [editTarget, setEditTarget] = useState<SessionEnriched | null>(null);
@@ -1916,19 +1916,6 @@ function SessionsPageContent() {
     <InstitutionShell activePage="Sessions" activeSubPage={tab} activeSubPageLabel={activeSubPageLabel}>
 
       {/* Toast Notification */}
-      {toast && (
-        <div style={{
-          position: 'fixed', bottom: 24, right: 24, zIndex: 1200,
-          background: '#0f172a', color: '#fff', padding: '12px 20px',
-          borderRadius: 12, fontSize: 13.5, fontWeight: 600,
-          boxShadow: '0 10px 30px rgba(0,0,0,0.22)',
-          display: 'flex', alignItems: 'center', gap: 8,
-        }}>
-          <CheckCircle size={16} color="#22c55e" />
-          {toast}
-        </div>
-      )}
-
       {/* Edit modal */}
       {editTarget && (
         <EditModal
@@ -5875,64 +5862,11 @@ function SessionsPageContent() {
                   </div>
                 </div>
 
-                {/* SVG Line Graph */}
-                <div className={liveStyles.historySvgLineWrap}>
-                  <svg viewBox="0 0 460 120" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
-                    <defs>
-                      <linearGradient id="purpleGradientArea" x1="0" y1="0" x2="0" y2="1">
-                        <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.25" />
-                        <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.0" />
-                      </linearGradient>
-                    </defs>
-
-                    {/* Horizontal Grid lines */}
-                    {[
-                      { y: 15, label: '100%' },
-                      { y: 38, label: '75%' },
-                      { y: 62, label: '50%' },
-                      { y: 85, label: '25%' },
-                      { y: 108, label: '0%' },
-                    ].map(grid => (
-                      <g key={grid.label}>
-                        <text x="0" y={grid.y + 3} fill="#94a3b8" fontSize="9" fontWeight="600">
-                          {grid.label}
-                        </text>
-                        <line x1="38" y1={grid.y} x2="450" y2={grid.y} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
-                      </g>
-                    ))}
-
-                    {/* Area under curve */}
-                    <path
-                      d="M 60 34 C 110 34, 130 31, 160 31 C 210 31, 230 36, 260 36 C 310 36, 330 29, 360 29 C 410 29, 430 30, 440 30 L 440 108 L 60 108 Z"
-                      fill="url(#purpleGradientArea)"
-                    />
-
-                    {/* Smooth curve line */}
-                    <path
-                      d="M 60 34 C 110 34, 130 31, 160 31 C 210 31, 230 36, 260 36 C 310 36, 330 29, 360 29 C 410 29, 430 30, 440 30"
-                      fill="none"
-                      stroke="#8b5cf6"
-                      strokeWidth="2.5"
-                      strokeLinecap="round"
-                    />
-
-                    {/* 5 Points on curve */}
-                    {[
-                      { x: 60, y: 34, label: '1 Sep', pct: '80%' },
-                      { x: 160, y: 31, label: '8 Sep', pct: '83%' },
-                      { x: 260, y: 36, label: '15 Sep', pct: '78%' },
-                      { x: 360, y: 29, label: '22 Sep', pct: '85%' },
-                      { x: 440, y: 30, label: '30 Sep', pct: '84%' },
-                    ].map(pt => (
-                      <g key={pt.label}>
-                        <circle cx={pt.x} cy={pt.y} r="4.5" fill="#ffffff" stroke="#7c3aed" strokeWidth="2.5" />
-                        <text x={pt.x} y="122" textAnchor="middle" fill="#94a3b8" fontSize="9.5" fontWeight="600">
-                          {pt.label}
-                        </text>
-                      </g>
-                    ))}
-                  </svg>
-                </div>
+                {/* Interactive SVG Line Graph — real attendance trend */}
+                <HistoryAttendanceChart
+                  trend={historyStats.attendance_trend || []}
+                  avg={historyStats.avg_attendance}
+                />
               </div>
 
               {/* Card 2: Sessions by Subject Donut */}
@@ -5943,43 +5877,11 @@ function SessionsPageContent() {
                   </div>
                 </div>
 
-                <div className={liveStyles.historyDonutRow}>
-                  {/* SVG Donut */}
-                  <div className={liveStyles.historyDonutSvgBox}>
-                    <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
-                      <circle cx="50" cy="50" r="38" fill="none" stroke="#f1f5f9" strokeWidth="12" />
-                      {/* DS: 28 (21.8%) */}
-                      <circle cx="50" cy="50" r="38" fill="none" stroke="#7c3aed" strokeWidth="12" strokeDasharray="52 186.7" strokeDashoffset="0" />
-                      {/* Py: 24 (18.7%) */}
-                      <circle cx="50" cy="50" r="38" fill="none" stroke="#0284c7" strokeWidth="12" strokeDasharray="44.7 194" strokeDashoffset="-52" />
-                      {/* DB: 20 (15.6%) */}
-                      <circle cx="50" cy="50" r="38" fill="none" stroke="#16a34a" strokeWidth="12" strokeDasharray="37.3 201.4" strokeDashoffset="-96.7" />
-                      {/* CN: 18 (14%) */}
-                      <circle cx="50" cy="50" r="38" fill="none" stroke="#2563eb" strokeWidth="12" strokeDasharray="33.5 205.2" strokeDashoffset="-134" />
-                      {/* OOP: 16 (12.5%) */}
-                      <circle cx="50" cy="50" r="38" fill="none" stroke="#f59e0b" strokeWidth="12" strokeDasharray="29.8 208.9" strokeDashoffset="-167.5" />
-                      {/* Others: 22 (17.2%) */}
-                      <circle cx="50" cy="50" r="38" fill="none" stroke="#94a3b8" strokeWidth="12" strokeDasharray="41.1 197.6" strokeDashoffset="-197.3" />
-                    </svg>
-                    <div className={liveStyles.historyDonutCenterText}>
-                      <div className={liveStyles.historyDonutCenterNumber}>{historyStats.total_sessions}</div>
-                      <div className={liveStyles.historyDonutCenterLabel}>Sessions</div>
-                    </div>
-                  </div>
-
-                  {/* Legend List */}
-                  <div className={liveStyles.historyLegendList}>
-                    {historyStats.by_subject.map((subj: { name: string; count: number; color: string }) => (
-                      <div key={subj.name} className={liveStyles.historyLegendItem}>
-                        <div className={liveStyles.historyLegendDotName}>
-                          <span className={liveStyles.historyLegendDot} style={{ background: subj.color }} />
-                          <span className={liveStyles.historyLegendName}>{subj.name}</span>
-                        </div>
-                        <span className={liveStyles.historyLegendVal}>{subj.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <HistoryDonut
+                  data={(historyStats.by_subject || []).map((s: { name: string; count: number; color: string }) => ({ name: s.name, value: s.count, color: s.color }))}
+                  centerValue={historyStats.total_sessions}
+                  centerLabel="Sessions"
+                />
               </div>
 
               {/* Card 3: Session Status Donut */}
@@ -5990,39 +5892,13 @@ function SessionsPageContent() {
                   </div>
                 </div>
 
-                <div className={liveStyles.historyDonutRow}>
-                  {/* SVG Donut */}
-                  <div className={liveStyles.historyDonutSvgBox}>
-                    <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
-                      <circle cx="50" cy="50" r="38" fill="none" stroke="#f1f5f9" strokeWidth="12" />
-                      {/* Completed: 112 (87.5%) */}
-                      <circle cx="50" cy="50" r="38" fill="none" stroke="#16a34a" strokeWidth="12" strokeDasharray="208.9 29.8" strokeDashoffset="0" />
-                      {/* Cancelled: 8 (6.25%) */}
-                      <circle cx="50" cy="50" r="38" fill="none" stroke="#ef4444" strokeWidth="12" strokeDasharray="14.9 223.8" strokeDashoffset="-208.9" />
-                      {/* Rescheduled: 8 (6.25%) */}
-                      <circle cx="50" cy="50" r="38" fill="none" stroke="#3b82f6" strokeWidth="12" strokeDasharray="14.9 223.8" strokeDashoffset="-223.8" />
-                    </svg>
-                    <div className={liveStyles.historyDonutCenterText}>
-                      <div className={liveStyles.historyDonutCenterNumber}>{historyStats.total_sessions}</div>
-                      <div className={liveStyles.historyDonutCenterLabel}>Sessions</div>
-                    </div>
-                  </div>
-
-                  {/* Legend List */}
-                  <div className={liveStyles.historyLegendList}>
-                    {historyStats.by_status.map((st: { status: string; count: number; color: string }) => (
-                      <div key={st.status} className={liveStyles.historyLegendItem}>
-                        <div className={liveStyles.historyLegendDotName}>
-                          <span className={liveStyles.historyLegendDot} style={{ background: st.color }} />
-                          <span className={liveStyles.historyLegendName}>{st.status}</span>
-                        </div>
-                        <span className={liveStyles.historyLegendVal}>{st.count}</span>
-                      </div>
-                    ))}
-                  </div>
-                </div>
+                <HistoryDonut
+                  data={(historyStats.by_status || []).map((st: { status: string; count: number; color: string }) => ({ name: st.status, value: st.count, color: st.color }))}
+                  centerValue={historyStats.total_sessions}
+                  centerLabel="Sessions"
+                />
               </div>
-            </div>
+              </div>
 
             {/* 5 Filters Row */}
             <div className={liveStyles.historyFiltersRow}>
@@ -7396,6 +7272,161 @@ function SessionsPageContent() {
       )}
 
     </InstitutionShell>
+  );
+}
+
+
+/* == Interactive history charts - real data from /sessions/history stats == */
+
+function HistoryAttendanceChart({ trend, avg }: {
+  trend: { label: string; rate: number }[];
+  avg: number;
+}) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const W = 460, H = 130, PAD_L = 38, PAD_R = 20, TOP = 15, BOT = 108;
+  const pts = (trend || []).map((p, i) => ({
+    x: (trend || []).length === 1
+      ? (PAD_L + W - PAD_R) / 2
+      : PAD_L + (i / Math.max(1, (trend || []).length - 1)) * (W - PAD_L - PAD_R),
+    y: BOT - (Math.max(0, Math.min(100, p.rate)) / 100) * (BOT - TOP),
+    label: p.label,
+    rate: p.rate,
+  }));
+  const linePath = pts.map((p, i) => `${i === 0 ? 'M' : 'L'} ${p.x.toFixed(1)} ${p.y.toFixed(1)}`).join(' ');
+  const areaPath = pts.length > 1 ? `${linePath} L ${pts[pts.length - 1].x.toFixed(1)} ${BOT} L ${pts[0].x.toFixed(1)} ${BOT} Z` : '';
+  const hp = hovered != null ? pts[hovered] : null;
+
+  return (
+    <div className={liveStyles.historySvgLineWrap} style={{ position: 'relative' }}>
+      <svg viewBox="0 0 460 130" style={{ width: '100%', height: '100%', overflow: 'visible' }}>
+        <defs>
+          <linearGradient id="purpleGradientArea" x1="0" y1="0" x2="0" y2="1">
+            <stop offset="0%" stopColor="#8b5cf6" stopOpacity="0.25" />
+            <stop offset="100%" stopColor="#8b5cf6" stopOpacity="0.0" />
+          </linearGradient>
+        </defs>
+
+        {[
+          { y: 15, label: '100%' },
+          { y: 38, label: '75%' },
+          { y: 62, label: '50%' },
+          { y: 85, label: '25%' },
+          { y: 108, label: '0%' },
+        ].map(grid => (
+          <g key={grid.label}>
+            <text x="0" y={grid.y + 3} fill="#94a3b8" fontSize="9" fontWeight="600">
+              {grid.label}
+            </text>
+            <line x1="38" y1={grid.y} x2={W - PAD_R} y2={grid.y} stroke="#f1f5f9" strokeWidth="1" strokeDasharray="3 3" />
+          </g>
+        ))}
+
+        {pts.length > 1 && <path d={areaPath} fill="url(#purpleGradientArea)" />}
+        {pts.length > 1 && (
+          <path d={linePath} fill="none" stroke="#8b5cf6" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+        )}
+
+        {pts.map((pt, i) => (
+          <g key={`${pt.label}-${i}`}
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+            style={{ cursor: 'pointer' }}
+          >
+            <circle cx={pt.x} cy={pt.y} r={hovered === i ? 6 : 4.5} fill="#ffffff" stroke="#7c3aed" strokeWidth="2.5" />
+            <text x={pt.x} y="122" textAnchor="middle" fill={hovered === i ? '#6d28d9' : '#94a3b8'} fontSize="9.5" fontWeight="600">
+              {pt.label}
+            </text>
+            <title>{`${pt.label}: ${pt.rate}% attendance`}</title>
+          </g>
+        ))}
+      </svg>
+
+      {hp && (
+        <div style={{
+          position: 'absolute',
+          left: `${(hp.x / W) * 100}%`,
+          top: `${(hp.y / H) * 100}%`,
+          transform: 'translate(-50%, -140%)',
+          background: '#1e1b2e', color: '#fff', borderRadius: 8,
+          padding: '6px 10px', fontSize: 11, fontWeight: 700,
+          pointerEvents: 'none', whiteSpace: 'nowrap',
+          boxShadow: '0 8px 20px rgba(0,0,0,.25)',
+          zIndex: 30,
+        }}>
+          {hp.label} · {hp.rate}% attendance
+        </div>
+      )}
+      {avg != null && (
+        <div style={{ position: 'absolute', top: 0, right: 0, fontSize: 10, fontWeight: 700, color: '#9891a6' }}>
+          avg {avg}%
+        </div>
+      )}
+    </div>
+  );
+}
+
+function HistoryDonut({ data, centerValue, centerLabel }: {
+  data: { name: string; value: number; color: string }[];
+  centerValue: number | string;
+  centerLabel: string;
+}) {
+  const [hovered, setHovered] = useState<number | null>(null);
+  const total = (data || []).reduce((s, d) => s + (d.value || 0), 0);
+  const R = 38, C = 2 * Math.PI * R;
+  let acc = 0;
+  const segs = (data || []).map(d => {
+    const frac = total > 0 ? d.value / total : 0;
+    const seg = { ...d, dash: frac * C, off: acc };
+    acc += frac * C;
+    return seg;
+  });
+  const hd = hovered != null ? segs[hovered] : null;
+
+  return (
+    <div className={liveStyles.historyDonutRow}>
+      <div className={liveStyles.historyDonutSvgBox}>
+        <svg viewBox="0 0 100 100" style={{ width: '100%', height: '100%', transform: 'rotate(-90deg)' }}>
+          <circle cx="50" cy="50" r="38" fill="none" stroke="#f1f5f9" strokeWidth="12" />
+          {segs.map((s, i) => (
+            <circle
+              key={s.name}
+              cx="50" cy="50" r="38" fill="none"
+              stroke={s.color}
+              strokeWidth={hovered === i ? 15 : 12}
+              strokeDasharray={`${s.dash} ${C - s.dash}`}
+              strokeDashoffset={-s.off}
+              onMouseEnter={() => setHovered(i)}
+              onMouseLeave={() => setHovered(null)}
+              style={{ cursor: 'pointer', transition: 'stroke-width .15s ease, opacity .15s ease', opacity: hovered == null || hovered === i ? 1 : 0.35 }}
+            >
+              <title>{`${s.name}: ${s.value}`}</title>
+            </circle>
+          ))}
+        </svg>
+        <div className={liveStyles.historyDonutCenterText}>
+          <div className={liveStyles.historyDonutCenterNumber}>{hd ? hd.value : centerValue}</div>
+          <div className={liveStyles.historyDonutCenterLabel}>{hd ? hd.name : centerLabel}</div>
+        </div>
+      </div>
+
+      <div className={liveStyles.historyLegendList}>
+        {segs.map((s, i) => (
+          <div
+            key={s.name}
+            className={liveStyles.historyLegendItem}
+            onMouseEnter={() => setHovered(i)}
+            onMouseLeave={() => setHovered(null)}
+            style={{ cursor: 'pointer', opacity: hovered == null || hovered === i ? 1 : 0.5, transition: 'opacity .15s ease' }}
+          >
+            <div className={liveStyles.historyLegendDotName}>
+              <span className={liveStyles.historyLegendDot} style={{ background: s.color }} />
+              <span className={liveStyles.historyLegendName}>{s.name}</span>
+            </div>
+            <span className={liveStyles.historyLegendVal}>{s.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
   );
 }
 

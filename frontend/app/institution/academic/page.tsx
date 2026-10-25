@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { toast } from '@/components/ui/toast';
 import {
   institutionService,
   type AcademicYear,
@@ -73,12 +74,9 @@ function AcademicPageContent() {
   const [totalStudentsCount, setTotalStudentsCount] = useState<number>(0);
   const [loading, setLoading] = useState(true);
   const [studentsLoading, setStudentsLoading] = useState(false);
-  const [toast, setToast] = useState<{ msg: string; type: 'success' | 'error' } | null>(null);
 
-  const showToast = (msg: string, type: 'success' | 'error' = 'success') => {
-    setToast({ msg, type });
-    setTimeout(() => setToast(null), 3500);
-  };
+  const showToast = (msg: string, type: 'success' | 'error' = 'success') =>
+    type === 'error' ? toast.error(msg) : toast.success(msg);
 
   // Load everything in 1 consolidated round-trip, through the shared
   // react-query cache: navigating back to this page renders from cache
@@ -874,19 +872,6 @@ function AcademicPageContent() {
       <div className={styles.container}>
 
         {/* Global Toast */}
-        {toast && (
-          <div style={{
-            position: 'fixed', top: 24, right: 24, zIndex: 9999,
-            background: toast.type === 'success' ? '#10b981' : '#ef4444',
-            color: '#fff', padding: '12px 20px', borderRadius: 12,
-            boxShadow: '0 6px 20px rgba(0,0,0,0.15)', display: 'flex',
-            alignItems: 'center', gap: 10, fontSize: 13.5, fontWeight: 700,
-            animation: 'fadeIn 0.2s ease-out'
-          }}>
-            {toast.type === 'success' ? <CheckCircle2 size={18} /> : <AlertCircle size={18} />}
-            <span>{toast.msg}</span>
-          </div>
-        )}
 
         {/* ═══════════════════════════════════════════════════════════════════════
             VIEW 1: ACADEMIC YEARS & BATCHES
@@ -2413,7 +2398,7 @@ function AcademicPageContent() {
                   </table>
                 </div>
 
-                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+                <div className={styles.enrollActionBar} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
                   <span style={{ fontSize: 12, color: '#64748b' }}>
                     <strong>{selectedForEnrollment.length}</strong> students selected
                   </span>
@@ -2441,11 +2426,11 @@ function AcademicPageContent() {
                 </div>
 
                 {/* Target Scope Toggle */}
-                <div style={{ display: 'flex', gap: 6, marginBottom: 14, padding: 3, background: '#f1f5f9', borderRadius: 8 }}>
+                <div className={styles.scopeToggleRow} style={{ display: 'flex', gap: 6, marginBottom: 14, padding: 3, background: '#f1f5f9', borderRadius: 8 }}>
                   <button
                     type="button"
                     style={{
-                      flex: 1, padding: '7px 10px', fontSize: 11.5, fontWeight: 700, borderRadius: 6, border: 'none', cursor: 'pointer',
+                      flex: '1 1 auto', padding: '7px 10px', fontSize: 11.5, fontWeight: 700, borderRadius: 6, border: 'none', cursor: 'pointer', whiteSpace: 'normal', lineHeight: 1.3,
                       background: assignScope === 'single' ? '#ffffff' : 'transparent',
                       color: assignScope === 'single' ? '#1e1b4b' : '#64748b',
                       boxShadow: assignScope === 'single' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',
@@ -2457,7 +2442,7 @@ function AcademicPageContent() {
                   <button
                     type="button"
                     style={{
-                      flex: 1, padding: '7px 10px', fontSize: 11.5, fontWeight: 700, borderRadius: 6, border: 'none', cursor: 'pointer',
+                      flex: '1 1 auto', padding: '7px 10px', fontSize: 11.5, fontWeight: 700, borderRadius: 6, border: 'none', cursor: 'pointer', whiteSpace: 'normal', lineHeight: 1.3,
                       background: assignScope === 'batch' ? '#ffffff' : 'transparent',
                       color: assignScope === 'batch' ? '#6d28d9' : '#64748b',
                       boxShadow: assignScope === 'batch' ? '0 1px 3px rgba(0,0,0,0.08)' : 'none',

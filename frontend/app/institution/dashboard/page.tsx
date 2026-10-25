@@ -304,7 +304,7 @@ export default function InstitutionDashboardPage() {
               </div>
               <button
                 className={styles.viewAllLink}
-                onClick={() => router.push('/institution/settings')}
+                onClick={() => router.push('/institution/audit-log')}
               >
                 View All <ChevronRight size={13} />
               </button>
@@ -382,7 +382,7 @@ export default function InstitutionDashboardPage() {
           </div>
         </div>
 
-        {/* ── BOTTOM STRIP: Pro Plan Banner + Storage & Usage ── */}
+        {/* ── BOTTOM STRIP: Plan Banner + Storage & Usage (only when the API reports storage) ── */}
         <div className={styles.bottomStrip}>
           <div className={styles.planBanner}>
             <div className={styles.planLeft}>
@@ -390,7 +390,7 @@ export default function InstitutionDashboardPage() {
                 <Rocket size={20} />
               </div>
               <div>
-                <h4 className={styles.planTitle}>You&apos;re on the Pro Plan</h4>
+                <h4 className={styles.planTitle}>{data?.plan ? `${data.plan} Plan` : 'Your Plan'}</h4>
                 <p className={styles.planSubtitle}>
                   Manage your institution, track growth, and unlock more possibilities with NexLab.
                 </p>
@@ -398,12 +398,13 @@ export default function InstitutionDashboardPage() {
             </div>
             <button
               className={styles.planButton}
-              onClick={() => router.push('/institution/settings?tab=plan')}
+              onClick={() => router.push('/institution/billing')}
             >
               Manage Plan <ArrowRight size={14} />
             </button>
           </div>
 
+          {data?.storage_usage && (
           <div className={styles.storageCard}>
             <div className={styles.storageLeft}>
               <div className={styles.storageIcon}>
@@ -412,26 +413,27 @@ export default function InstitutionDashboardPage() {
               <div className={styles.storageInfo}>
                 <div className={styles.storageTitleRow}>
                   <h4 className={styles.storageTitle}>Storage &amp; Usage</h4>
-                  <span className={styles.storagePercent}>{data?.storage_usage?.percent ?? 25}%</span>
+                  <span className={styles.storagePercent}>{data.storage_usage.percent}%</span>
                 </div>
                 <div className={styles.storageBar}>
                   <div
                     className={styles.storageFill}
-                    style={{ width: `${data?.storage_usage?.percent ?? 25}%` }}
+                    style={{ width: `${data.storage_usage.percent}%` }}
                   />
                 </div>
                 <p className={styles.storageText}>
-                  {data?.storage_usage?.used_gb ?? 12.5} GB of {data?.storage_usage?.total_gb ?? 50} GB used
+                  {data.storage_usage.used_gb} GB of {data.storage_usage.total_gb} GB used
                 </p>
               </div>
             </div>
             <button
               className={styles.storageManageBtn}
-              onClick={() => router.push('/institution/settings?tab=plan')}
+              onClick={() => router.push('/institution/billing')}
             >
               Manage
             </button>
           </div>
+          )}
         </div>
       </div>
     </InstitutionShell>

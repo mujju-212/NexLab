@@ -93,6 +93,7 @@ export function FilterBar({
 
   return (
     <div
+      className={styles.analyticsFilterBar}
       style={{
         background: '#ffffff',
         border: '1px solid #e2e8f0',

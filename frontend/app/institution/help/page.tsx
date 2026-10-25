@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { toast } from '@/components/ui/toast';
 import {
   institutionService,
   type HelpTopicItem,
@@ -157,14 +158,9 @@ export default function HelpFaqPage() {
   const [activeResource, setActiveResource] = useState<HelpfulResourceItem | null>(null);
 
   // Toast Notice State
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
   const faqSectionRef = useRef<HTMLDivElement>(null);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3800);
-  };
+  const showToast = (msg: string) => toast.info(msg);
 
   // Fetch help overview from backend API — through the react-query cache,
   // keyed by category+query: coming back to a previously-viewed filter is
@@ -363,7 +359,7 @@ export default function HelpFaqPage() {
   };
 
   return (
-    <InstitutionShell activePage="Institution Settings">
+    <InstitutionShell activePage="Help & FAQ">
       <div className={styles.pageContainer}>
         {/* ── Breadcrumbs ───────────────────────────────────────────────────────── */}
         <div className={styles.breadcrumbRow}>
@@ -1212,12 +1208,6 @@ export default function HelpFaqPage() {
         )}
 
         {/* ── Toast Notification Notice ────────────────────────────────────────── */}
-        {toastMessage && (
-          <div className={styles.toastNotice}>
-            <CheckCircle2 size={16} color="#4ade80" />
-            <span>{toastMessage}</span>
-          </div>
-        )}
       </div>
     </InstitutionShell>
   );

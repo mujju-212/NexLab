@@ -1,5 +1,6 @@
 'use client';
 
+import styles from './analytics.module.css';
 import React, { useState, useMemo } from 'react';
 import {
   AreaChart,
@@ -344,7 +345,9 @@ export default function AttendanceMatrixTab({
     <div style={{ display: 'flex', flexDirection: 'column', gap: 20, width: '100%' }}>
       {/* ── TOP 4 KPI CARDS ─────────────────────────────────────────────────── */}
       <div
-        style={{
+        className={styles.instructorKpiRow}
+          style={{
+
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(260px, 1fr))',
           gap: 16,
@@ -710,6 +713,7 @@ export default function AttendanceMatrixTab({
 
       {/* ── MIDDLE ROW: TREND & DEPARTMENT BARS (50% / 50%) ─────────────────── */}
       <div
+        className={styles.mobileFullStack}
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
@@ -1073,6 +1077,7 @@ export default function AttendanceMatrixTab({
 
       {/* ── BOTTOM ROW: HEATMAP & LOW ATTENDANCE TABLE (50% / 50%) ─────────── */}
       <div
+        className={styles.mobileFullStack}
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',

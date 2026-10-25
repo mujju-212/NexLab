@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { toast } from '@/components/ui/toast';
 import {
   institutionService,
   type InstitutionUser,
@@ -119,7 +120,6 @@ export default function UsersPage() {
   const [newRole, setNewRole] = useState<'student' | 'instructor' | 'institution_admin'>('student');
   const [deleteConfirmUser, setDeleteConfirmUser] = useState<InstitutionUser | null>(null);
   const [openActionMenuId, setOpenActionMenuId] = useState<string | null>(null);
-  const [toast, setToast] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
 
   const fileRef = useRef<HTMLInputElement>(null);
@@ -132,7 +132,7 @@ export default function UsersPage() {
     password: '',
     roll_number: '',
     phone: '',
-    location: 'Bengaluru, Karnataka',
+    location: '',
     staff_id: '',
     department_id: '',
     section_id: '',
@@ -154,10 +154,7 @@ export default function UsersPage() {
     semester: 3,
   });
 
-  const showToast = (msg: string) => {
-    setToast(msg);
-    setTimeout(() => setToast(null), 3500);
-  };
+  const showToast = (msg: string) => toast.info(msg);
 
   // ── 1. Users list — server-side filtering + pagination, react-query cached ─
   // Debounce the search box so typing doesn't fire one request per keystroke.
@@ -373,7 +370,7 @@ export default function UsersPage() {
       full_name: u.full_name || '',
       email: u.email || '',
       phone: u.phone || '',
-      location: u.location || 'Bengaluru, Karnataka',
+      location: u.location || '',
       roll_number: u.roll_number || '',
       staff_id: u.staff_id || '',
       department_id: u.department_id || '',
@@ -417,7 +414,7 @@ export default function UsersPage() {
       setShowAddModal(false);
       setForm({
         full_name: '', email: '', role: 'student', password: '', roll_number: '', phone: '',
-        location: 'Bengaluru, Karnataka', staff_id: '', department_id: '', section_id: '',
+        location: '', staff_id: '', department_id: '', section_id: '',
         year_of_study: 2, semester: 3,
       });
       refreshUsers();
@@ -497,19 +494,6 @@ export default function UsersPage() {
         )}
 
         {/* ── Toast Notification ──────────────────────────────────────────── */}
-        {toast && (
-          <div style={{
-            position: 'fixed', bottom: 24, right: 24, zIndex: 999,
-            background: '#1e1b4b', color: '#ffffff', padding: '12px 20px',
-            borderRadius: 14, fontSize: 13.5, fontWeight: 600,
-            boxShadow: '0 8px 30px rgba(0,0,0,0.25)', display: 'flex',
-            alignItems: 'center', gap: 10, animation: 'slideDown 0.2s ease',
-          }}>
-            <CheckCircle size={16} style={{ color: '#10b981', flexShrink: 0 }} />
-            <span>{toast}</span>
-          </div>
-        )}
-
         {/* ── 1. Hero Banner matching Reference Image ───────────────────────── */}
         <div className={styles.heroBanner}>
           <div className={styles.heroContent}>
@@ -1019,6 +1003,67 @@ export default function UsersPage() {
                   </table>
                 </div>
 
+                {/* ══ MOBILE USER CARDS — designed list; the wide table is hidden on
+                    phones (≤768px). Tap a card for the actions drawer; the arrow
+                    opens the full profile page. ══ */}
+                <div className={styles.mobileUserList}>
+                  {loading ? (
+                    <p style={{ padding: 36, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>Loading institution users…</p>
+                  ) : filteredUsers.length === 0 ? (
+                    <p style={{ padding: 36, textAlign: 'center', color: '#94a3b8', fontSize: 13 }}>No users matched your filter criteria.</p>
+                  ) : (
+                    pagedUsers.map(u => {
+                      const isChecked = selectedIds.includes(u.id);
+                      const avatarBg = getAvatarColor(u.full_name);
+                      const initials = getInitials(u.full_name);
+                      const statusStr = u.status || (u.is_active ? 'active' : 'inactive');
+                      return (
+                        <div
+                          key={u.id}
+                          className={`${styles.userCardMobile} ${isChecked ? styles.userCardMobileSelected : ''}`}
+                          onClick={() => setSelectedUser(u)}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={e => toggleSelect(u.id, e as any)}
+                            onClick={e => e.stopPropagation()}
+                            style={{ accentColor: '#7c3aed', cursor: 'pointer', flexShrink: 0 }}
+                          />
+                          <div className={styles.avatarCircle} style={{ background: avatarBg, flexShrink: 0 }}>
+                            {initials}
+                          </div>
+                          <div className={styles.userCardInfo}>
+                            <p className={styles.userName}>{u.full_name}</p>
+                            <p className={styles.userEmail}>{u.roll_number || u.staff_id || u.email}</p>
+                            <div className={styles.userCardMeta}>
+                              {u.role === 'student' ? (
+                                <span className={styles.roleBadgeStudent}>Student</span>
+                              ) : (
+                                <span className={styles.roleBadgeInstructor}>Instructor</span>
+                              )}
+                              <span className={statusStr === 'active' ? styles.statusBadgeActive : styles.statusBadgeInactive}>
+                                {statusStr}
+                              </span>
+                            </div>
+                          </div>
+                          <button
+                            type="button"
+                            className={styles.userCardProfileBtn}
+                            aria-label={`Open ${u.full_name} profile`}
+                            onClick={e => {
+                              e.stopPropagation();
+                              router.push(`/institution/users/${u.id}`);
+                            }}
+                          >
+                            <ChevronRight size={16} />
+                          </button>
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+
                 {/* Table Pagination Bar */}
                 {filteredUsers.length > 0 && (
                   <div className={styles.paginationRow}>
@@ -1262,8 +1307,8 @@ export default function UsersPage() {
                 </button>
               </div>
 
-              {/* Profile Details Grid */}
-              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
+              {/* Profile Details Grid — stacks on phones */}
+              <div className="usersDrawerStack" style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14, marginBottom: 20 }}>
                 {/* Contact Card */}
                 <div style={{
                   padding: 16, borderRadius: 14, background: '#f8fafc',
@@ -1284,7 +1329,7 @@ export default function UsersPage() {
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
                     <MapPin size={14} style={{ color: '#7c3aed', flexShrink: 0 }} />
-                    <span style={{ color: '#475569' }}>{selectedUser.location || 'Bengaluru, Karnataka'}</span>
+                    <span style={{ color: '#475569' }}>{selectedUser.location || 'Not provided'}</span>
                   </div>
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, fontSize: 12.5 }}>
                     <Calendar size={14} style={{ color: '#7c3aed', flexShrink: 0 }} />
@@ -1549,7 +1594,7 @@ export default function UsersPage() {
                       <label className={styles.formLabel}>Location / City</label>
                       <input
                         className={styles.formInput}
-                        placeholder="e.g. Bengaluru, Karnataka"
+                        placeholder="Location (optional)"
                         value={(form as any).location || ''}
                         onChange={e => setForm({ ...form, location: e.target.value } as any)}
                       />
@@ -1692,7 +1737,7 @@ export default function UsersPage() {
                         className={styles.formInput}
                         value={editForm.location}
                         onChange={e => setEditForm({ ...editForm, location: e.target.value })}
-                        placeholder="e.g. Bengaluru, Karnataka"
+                        placeholder="Location (optional)"
                       />
                     </div>
                   </div>

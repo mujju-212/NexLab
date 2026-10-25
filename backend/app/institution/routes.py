@@ -1291,7 +1291,21 @@ def subjects():
             res.append(sd)
         return jsonify({'subjects': res}), 200
 
-    data = request.get_json() or {}
+    if request.content_type and 'multipart/form-data' in request.content_type:
+        data = request.form.to_dict()
+    else:
+        data = request.get_json(silent=True) or {}
+    # Custom icon: multipart file overrides any URL/preset
+    icon_upload = request.files.get('icon_file') if request.files else None
+    if icon_upload and icon_upload.filename:
+        try:
+            from app.services.storage_helper import upload_icon_file
+            data['icon'] = upload_icon_file(icon_upload, f'institutions/{g.institution_id}/subjects')
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+    elif data.get('icon_url'):
+        data['icon'] = data['icon_url']
+
     subject = Subject(
         institution_id=g.institution_id,
         name=data['name'],
@@ -1321,7 +1335,19 @@ def subjects():
 @require_role('institution_admin')
 def update_subject(subject_id):
     subject = Subject.query.filter_by(id=subject_id, institution_id=g.institution_id).first_or_404()
-    data = request.get_json() or {}
+    if request.content_type and 'multipart/form-data' in request.content_type:
+        data = request.form.to_dict()
+    else:
+        data = request.get_json(silent=True) or {}
+    icon_upload = request.files.get('icon_file') if request.files else None
+    if icon_upload and icon_upload.filename:
+        try:
+            from app.services.storage_helper import upload_icon_file
+            data['icon'] = upload_icon_file(icon_upload, f'institutions/{g.institution_id}/subjects')
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+    elif data.get('icon_url'):
+        data['icon'] = data['icon_url']
     changed = []
     for field in ('name', 'code', 'description', 'icon', 'color', 'department_id', 'subject_type', 'is_active', 'env_profile_id', 'total_marks'):
         if field in data:
@@ -2015,12 +2041,34 @@ def institution_dashboard():
         "system_status": system_status,
         "recent_activity": recent_activity,
         "upcoming_sessions": upcoming_sessions,
-        "storage_usage": {
-            "used_gb": 12.5,
-            "total_gb": 50.0,
-            "percent": 25,
-        }
+        "storage_usage": _institution_storage_usage(inst),
     }), 200
+
+
+def _institution_storage_usage(inst):
+    """Real on-disk usage of the institution file area (uploads/) against the
+    plan's storage quota. Quotas are platform-defined constants per tier."""
+    import os
+
+    plan_quotas = {'free': 5.0, 'starter': 25.0, 'pro': 50.0, 'enterprise': 500.0}
+    total_gb = plan_quotas.get((inst.plan or 'free').lower(), 50.0)
+    used_bytes = 0
+    uploads_root = os.path.join(
+        os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
+        'uploads',
+    )
+    for root, _, files in os.walk(uploads_root):
+        for f in files:
+            try:
+                used_bytes += os.path.getsize(os.path.join(root, f))
+            except OSError:
+                pass
+    used_gb = round(used_bytes / (1024 ** 3), 2)
+    return {
+        "used_gb": used_gb,
+        "total_gb": total_gb,
+        "percent": min(100, round((used_gb / total_gb) * 100)) if total_gb else 0,
+    }
 
 
 
@@ -3241,7 +3289,8 @@ def risk_overview():
         for ds in d_students:
             band = ds['risk']['risk_band']
             d_bands[band] = d_bands.get(band, 0) + 1
-            d_risk_sum += ds['risk']['risk_score']
+            # risk_score can be None for students without enough data
+            d_risk_sum += float(ds['risk'].get('risk_score') or 0.0)
         
         d_avg_risk = round(d_risk_sum / d_total, 1) if d_total else 0.0
         by_department.append({
@@ -3321,11 +3370,12 @@ def risk_overview():
             'risk_score': r['risk_score'],
             'risk_band': r['risk_band'],
             'primary_reason': r['primary_reason'],
-            'mastery': round(float(comps.get('mastery', 0.0)), 1),
-            'grade_avg': round(float(comps.get('grade', 0.0)), 1),
-            'attendance': round(float(comps.get('attendance', 0.0)), 1),
-            'engagement': round(float(comps.get('focus', 0.0)), 1),
-            'consistency': round(float(comps.get('consistency', 0.0)), 1),
+            # Component values may be None when a student lacks data
+            'mastery': round(float(comps.get('mastery') or 0.0), 1),
+            'grade_avg': round(float(comps.get('grade') or 0.0), 1),
+            'attendance': round(float(comps.get('attendance') or 0.0), 1),
+            'engagement': round(float(comps.get('focus') or 0.0), 1),
+            'consistency': round(float(comps.get('consistency') or 0.0), 1),
             'last_active': last_active,
             'trend_arrow': r.get('trend_arrow', 'stable'),
             'components': comps,
@@ -4686,12 +4736,13 @@ def student_360_profile(student_id):
             'title': exp.title if exp else 'Assessment',
             'type': getattr(exp, 'assignment_type', 'experiment') if exp else 'experiment',
             'final_grade': float(g_row.final_grade or 0.0),
-            'max_marks': float(exp.total_marks if exp and exp.total_marks else 100),
+            # Experiments grade on grade_scale (default 100) — total_marks lives on subjects.
+            'max_marks': float(exp.grade_scale if exp and exp.grade_scale else 100),
             'auto_grade': float(g_row.auto_grade or 0.0) if g_row.auto_grade is not None else None,
             'manual_grade': float(g_row.manual_grade or 0.0) if g_row.manual_grade is not None else None,
-            'viva_score': float(g_row.viva_score or 0.0) if g_row.viva_score is not None else None,
-            'quality_score': float(g_row.quality_score or 0.0) if g_row.quality_score is not None else None,
-            'hint_penalty': float(g_row.hint_penalty or 0.0) if g_row.hint_penalty is not None else None,
+            'viva_score': float(g_row.viva_grade or 0.0) if g_row.viva_grade is not None else None,
+            'quality_score': float(g_row.code_quality_grade or 0.0) if g_row.code_quality_grade is not None else None,
+            'hint_penalty': float(g_row.hint_deduction or 0.0) if g_row.hint_deduction is not None else None,
             'is_passing': bool(g_row.final_grade and g_row.final_grade >= 40),
             'graded_at': g_row.created_at.isoformat() if g_row.created_at else None,
         }
@@ -4750,11 +4801,12 @@ def student_360_profile(student_id):
     trend_series = [
         {
             'date': sn.snapshot_date.isoformat(),
-            'risk_score': round(float(sn.risk_score or 0.0), 1),
-            'grade_avg': round(float(sn.grade_avg or 0.0), 1),
-            'mastery_avg': round(float(sn.mastery_avg or 0.0), 1),
-            'attendance_rate': round(float(sn.attendance_rate or 0.0), 1),
-            'focus_avg': round(float(sn.focus_avg or 0.0), 1),
+            # Metrics live in the snapshot's JSON bag (see StudentMetricSnapshot.metrics).
+            'risk_score': round(float(((sn.metrics or {}).get('risk') or {}).get('risk_score', 0.0) or 0.0), 1),
+            'grade_avg': round(float((sn.metrics or {}).get('grade_avg', 0.0) or 0.0), 1),
+            'mastery_avg': round(float((sn.metrics or {}).get('mastery_avg', 0.0) or 0.0), 1),
+            'attendance_rate': round(float((sn.metrics or {}).get('attendance_rate', 0.0) or 0.0), 1),
+            'focus_avg': round(float((sn.metrics or {}).get('focus_avg', 0.0) or 0.0), 1),
         }
         for sn in snapshots
     ]
@@ -4784,8 +4836,8 @@ def student_360_profile(student_id):
     )
     platform_rank = len(higher_platform_cnt) + 1
 
-    # Completion calculation
-    total_experiments = Experiment.query.filter_by(institution_id=iid, is_active=True).count()
+    # Completion calculation — Experiment uses is_published, not is_active.
+    total_experiments = Experiment.query.filter_by(institution_id=iid, is_published=True).count()
     completed_experiments = len(grades_data)
     completion_pct = round((completed_experiments / total_experiments * 100), 1) if total_experiments > 0 else 0.0
 
@@ -6173,12 +6225,12 @@ def get_billing_overview():
         'price': plan_price,
         'currency': '₹',
         'billing_cycle': getattr(inst, 'billing_cycle', None) or 'monthly',
-        'next_billing_date': getattr(inst, 'next_billing_date', None) or '10 Oct 2026',
+        'next_billing_date': getattr(inst, 'next_billing_date', None),
         'auto_renewal': bool(getattr(inst, 'auto_renewal', True)),
     }
 
     usage_metrics = {
-        'resets_on': getattr(inst, 'next_billing_date', None) or '10 Oct 2026',
+        'resets_on': getattr(inst, 'next_billing_date', None),
         'students': {
             'used': students_count,
             'limit': student_cap,

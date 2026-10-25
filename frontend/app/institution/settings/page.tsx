@@ -4,6 +4,7 @@ import { useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { toast } from '@/components/ui/toast';
 import { useAuthStore } from '@/store/auth-store';
 import { apiClient } from '@/services/api-client';
 import { institutionService, AI_FEATURES, type PlanUsage, type AIPolicy, type AIUsageSummary } from '@/services/institution.service';
@@ -70,7 +71,6 @@ export default function SettingsPage() {
   const queryClient = useQueryClient();
   const { user, setUser } = useAuthStore();
   const [tab, setTab] = useState<Tab>('plan');
-  const [toast, setToast] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
   const [notifSaving, setNotifSaving] = useState(false);
   const [openFaq, setOpenFaq] = useState<number | null>(null);
@@ -124,7 +124,7 @@ export default function SettingsPage() {
   const [aiSaving, setAiSaving] = useState(false);
   const [aiDirty, setAiDirty] = useState(false);
 
-  const toast3 = (msg: string) => { setToast(msg); setTimeout(() => setToast(null), 3000); };
+  const toast3 = (msg: string) => { toast.info(msg); };
 
   // Load current profile (incl. phone), notification prefs, and plan usage on
   // mount — cached: revisiting settings renders instantly. AI-tab data comes
@@ -280,13 +280,7 @@ export default function SettingsPage() {
   const initials = user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? 'IA';
 
   return (
-    <InstitutionShell activePage="Settings" title="Settings" subtitle="Manage your account, notifications, and institution preferences.">
-      {toast && (
-        <div style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 300, background: '#201b2e', color: '#fff', padding: '12px 20px', borderRadius: 12, fontSize: 14, fontWeight: 600, boxShadow: '0 8px 24px rgba(0,0,0,0.18)', display: 'flex', alignItems: 'center', gap: 8 }}>
-          <Check size={14} /> {toast}
-        </div>
-      )}
-
+    <InstitutionShell activePage="Institution Settings" title="Settings" subtitle="Manage your account, notifications, and institution preferences.">
       {/* Tab navigation */}
       <div style={{ display: 'flex', gap: 4, marginBottom: 28, background: 'rgba(255,255,255,0.5)', borderRadius: 14, padding: 4, border: '1px solid rgba(255,255,255,0.8)', width: 'fit-content' }}>
         {TABS.map(t => (
@@ -529,7 +523,9 @@ export default function SettingsPage() {
                       </li>
                     ))}
                   </ul>
-                  <button style={{
+                  <button
+                    onClick={() => (plan.name === 'Enterprise' ? router.push('/institution/help') : router.push('/institution/billing'))}
+                    style={{
                     width: '100%', padding: '10px 0', borderRadius: 10, border: plan.highlight ? '1.5px solid rgba(255,255,255,0.4)' : '1.5px solid #9333ea',
                     background: plan.highlight ? 'rgba(255,255,255,0.15)' : 'transparent',
                     color: plan.highlight ? '#fff' : '#9333ea', cursor: 'pointer',

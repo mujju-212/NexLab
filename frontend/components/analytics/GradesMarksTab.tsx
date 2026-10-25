@@ -1,5 +1,6 @@
 'use client';
 
+import styles from './analytics.module.css';
 import React, { useState, useMemo } from 'react';
 import {
   BarChart,
@@ -760,7 +761,9 @@ export default function GradesMarksTab({
 
       {/* ── 4 KPI Stat Cards Grid matching image ── */}
       <div
-        style={{
+        className={styles.instructorKpiRow}
+          style={{
+
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(240px, 1fr))',
           gap: 16,
@@ -1083,6 +1086,7 @@ export default function GradesMarksTab({
 
       {/* ── Middle Row: Two Charts Side by Side (50% / 50%) matching image ── */}
       <div
+        className={styles.mobileFullStack}
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',
@@ -1443,6 +1447,7 @@ export default function GradesMarksTab({
 
       {/* ── Bottom Row: Two Tables Side by Side (50% / 50%) matching image ── */}
       <div
+        className={styles.mobileFullStack}
         style={{
           display: 'grid',
           gridTemplateColumns: 'repeat(auto-fit, minmax(460px, 1fr))',

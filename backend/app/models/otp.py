@@ -14,7 +14,7 @@ class EmailOTP(db.Model):
     One-time email verification codes.
 
     Used ONLY for self-service account creation:
-      - purpose='individual_register'  -> POST /auth/register (free_user)
+      - purpose='individual_register'  -> POST /auth/register (platform_user)
       - purpose='institution_register' -> POST /auth/register (institution_admin + new Institution)
 
     NOT used for accounts created by an institution/platform admin

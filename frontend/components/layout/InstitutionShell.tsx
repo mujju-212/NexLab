@@ -8,12 +8,13 @@ import {
   BarChart3, Megaphone, ShieldCheck, Settings,
   Bell, ChevronRight, ChevronDown, LogOut, Menu, Search, User,
   Layers, Clock, Calendar, ClipboardList, CreditCard, Crown,
-  Cpu, HelpCircle
+  Cpu, HelpCircle, MoreHorizontal, X
 } from 'lucide-react';
 import styles from './InstitutionShell.module.css';
 import PasswordGate from './PasswordGate';
 import AgentChatPanel from './AgentChatPanel';
 import { ShellNotifications, ShellProfileMenu } from './shell-widgets';
+import { AppToaster } from '@/components/ui/toast';
 import { authService } from '@/services/auth.service';
 import { institutionService, type GlobalSearchHit } from '@/services/institution.service';
 import { useAuthStore } from '@/store/auth-store';
@@ -75,6 +76,16 @@ const NAV_ACCOUNT = [
   { id: 'Logout',   Icon: LogOut, route: '/login', isLogout: true },
 ];
 
+/* Mobile bottom tab bar — the five destinations an admin needs one tap away.
+   Everything else lives in the "More" sheet, which mirrors the full sidebar. */
+const BOTTOM_TABS = [
+  { id: 'Dashboard', label: 'Home',      Icon: LayoutDashboard, route: '/institution/dashboard' },
+  { id: 'Users',     label: 'Users',     Icon: Users,           route: '/institution/users' },
+  { id: 'Sessions',  label: 'Sessions',  Icon: Calendar,        route: '/institution/sessions?tab=live' },
+  { id: 'Analytics', label: 'Insights',  Icon: BarChart3,       route: '/institution/analytics?tab=overview' },
+  { id: 'More',      label: 'More',      Icon: MoreHorizontal,  route: '' },
+];
+
 interface InstitutionShellProps {
   activePage: string;
   activeSubPage?: string;
@@ -91,6 +102,7 @@ export default function InstitutionShell({
   const { user, clearAuth, setUser } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [moreOpen, setMoreOpen] = useState(false);
   const [academicOpen, setAcademicOpen] = useState(activePage === 'Academic');
   const [sessionsOpen, setSessionsOpen] = useState(activePage === 'Sessions');
   const [analyticsOpen, setAnalyticsOpen] = useState(activePage === 'Analytics');
@@ -150,6 +162,7 @@ export default function InstitutionShell({
 
   const go = useCallback(async (id: string, route: string) => {
     setMobileOpen(false);
+    setMoreOpen(false);
     if (id === 'Logout') {
       await authService.logout();
       clearAuth();
@@ -181,6 +194,70 @@ export default function InstitutionShell({
     else if (hit.type === 'section') router.push('/institution/academic?tab=sections');
     else router.push('/institution/sessions?tab=history');
   }, [router]);
+
+  // Global search field — rendered in the desktop header and in the mobile
+  // app bar. State is shared, so both stay in sync.
+  const renderGlobalSearch = () => (
+    <div className={styles.searchBar} style={{ ...(searchFocused ? { borderColor: '#7c3aed', boxShadow: '0 0 0 3px rgba(124,58,237,0.1)' } : {}), position: 'relative' }}>
+      <Search size={14} strokeWidth={2} className={styles.searchIcon} />
+      <input type="text" placeholder="Search students, instructors, batches, subjects..." value={searchQuery}
+        onChange={e => setSearchQuery(e.target.value)}
+        onKeyDown={e => {
+          if (e.key === 'Escape') { setSearchQuery(''); setSearchHits([]); }
+          if (e.key === 'Enter' && searchQuery.trim()) {
+            router.push(`/institution/users?search=${encodeURIComponent(searchQuery.trim())}`);
+            setSearchQuery(''); setSearchHits([]);
+          }
+        }}
+        onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)}
+        style={{ border:'none', outline:'none', background:'transparent', fontSize:13, color:'#1e293b', fontFamily:"'Manrope',sans-serif", width:'100%', padding:0 }} />
+      <kbd className={styles.searchKbd} style={{ fontSize: 10 }}>Ctrl K</kbd>
+
+      {/* Live results dropdown */}
+      {searchFocused && searchQuery.trim().length >= 2 && (
+        <div style={{
+          position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 120,
+          background: '#fff', borderRadius: 12, border: '1px solid #ede9fe',
+          boxShadow: '0 14px 38px -10px rgba(30,20,60,.25)', overflow: 'hidden',
+          maxHeight: 320, overflowY: 'auto',
+        }}>
+          {searchHits.length === 0 ? (
+            <p style={{ margin: 0, padding: '12px 14px', fontSize: 12.5, color: '#9891a6' }}>
+              No matches — press ↵ to search the full user list.
+            </p>
+          ) : searchHits.map(hit => (
+            <button key={`${hit.type}-${hit.id}`}
+              onMouseDown={e => { e.preventDefault(); goSearchHit(hit); }}
+              style={{
+                display: 'flex', alignItems: 'center', gap: 10, width: '100%',
+                padding: '10px 14px', background: 'none', border: 'none',
+                borderBottom: '1px solid #f5f3ff', cursor: 'pointer', textAlign: 'left',
+              }}>
+              <span style={{
+                width: 26, height: 26, borderRadius: 8, flexShrink: 0,
+                display: 'flex', alignItems: 'center', justifyContent: 'center',
+                background: 'rgba(147,51,234,0.09)', color: '#7c3aed',
+              }}>
+                {SEARCH_ICONS[hit.type] ?? <Search size={13} />}
+              </span>
+              <span style={{ flex: 1, minWidth: 0 }}>
+                <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#201b2e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {hit.label}
+                </span>
+                <span style={{ display: 'block', fontSize: 11, color: '#9891a6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                  {hit.sub_label || hit.type}
+                </span>
+              </span>
+              <span style={{ fontSize: 10.5, fontWeight: 700, color: '#7c3aed', textTransform: 'capitalize' }}>{hit.type}</span>
+            </button>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+
+  // Compact title for the mobile app bar (sub-page label wins over the section).
+  const mobileBarTitle = activeSubPageLabel || activePage;
 
   // Admin-issued temp password → block the entire shell until replaced.
   if (user?.must_change_password) {
@@ -454,7 +531,7 @@ export default function InstitutionShell({
           </nav>
 
           {!collapsed && (
-            <div className={styles.promoBanner} style={{ marginTop: 'auto', cursor: 'pointer' }} onClick={() => router.push('/institution/settings?tab=plan')}>
+            <div className={styles.promoBanner} style={{ marginTop: 'auto', cursor: 'pointer' }} onClick={() => router.push('/institution/billing')}>
               <div className={styles.promoIcon} style={{ background: '#fef3c7', color: '#f59e0b' }}>
                 <Crown size={16} />
               </div>
@@ -468,7 +545,31 @@ export default function InstitutionShell({
         </aside>
 
         {/* ══ MAIN ══ */}
-        <main className={styles.content}>
+        <main className={styles.content} data-portal="institution">
+          {/* ══ MOBILE APP BAR — designed for phones; hidden on desktop ══ */}
+          <div className={styles.mobileAppBar}>
+            <button className={styles.mobileBarBtn} onClick={() => setMobileOpen(true)} aria-label="Open menu">
+              <Menu size={20} strokeWidth={2.1} />
+            </button>
+            <span className={styles.mobileBarTitle}>{mobileBarTitle}</span>
+            <div className={styles.mobileBarActions}>
+              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} role="institution_admin" />
+              <ShellProfileMenu
+                name={user?.full_name ?? institutionDisplayName}
+                email={user?.email}
+                initials={user?.full_name?.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase() ?? institutionInitials}
+                roleLabel="Institution Admin"
+                profileHref="/institution/profile"
+                settingsHref="/institution/settings"
+                buttonClass={styles.profileChip}
+                avatarClass={styles.avatarLg}
+                avatarStyle={{ background: '#7c3aed', width: 32, height: 32, fontSize: 12 }}
+                onSignOut={() => go('Logout', '/login')}
+              />
+            </div>
+          </div>
+          <div className={styles.mobileSearchRow}>{renderGlobalSearch()}</div>
+
           <div className={styles.contentHeader}>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               <button className={styles.mobileMenuBtn} onClick={() => setMobileOpen(true)}>
@@ -504,62 +605,7 @@ export default function InstitutionShell({
               </div>
             </div>
             <div className={styles.headerRight}>
-              <div className={styles.searchBar} style={{ ...(searchFocused ? { borderColor: '#7c3aed', boxShadow: '0 0 0 3px rgba(124,58,237,0.1)' } : {}), position: 'relative', width: 340 }}>
-                <Search size={14} strokeWidth={2} className={styles.searchIcon} />
-                <input type="text" placeholder="Search students, instructors, batches, subjects..." value={searchQuery}
-                  onChange={e => setSearchQuery(e.target.value)}
-                  onKeyDown={e => {
-                    if (e.key === 'Escape') { setSearchQuery(''); setSearchHits([]); }
-                    if (e.key === 'Enter' && searchQuery.trim()) {
-                      router.push(`/institution/users?search=${encodeURIComponent(searchQuery.trim())}`);
-                      setSearchQuery(''); setSearchHits([]);
-                    }
-                  }}
-                  onFocus={() => setSearchFocused(true)} onBlur={() => setSearchFocused(false)}
-                  style={{ border:'none', outline:'none', background:'transparent', fontSize:13, color:'#1e293b', fontFamily:"'Manrope',sans-serif", width:'100%', padding:0 }} />
-                <kbd className={styles.searchKbd} style={{ fontSize: 10 }}>Ctrl K</kbd>
-
-                {/* Live results dropdown */}
-                {searchFocused && searchQuery.trim().length >= 2 && (
-                  <div style={{
-                    position: 'absolute', top: 'calc(100% + 8px)', left: 0, right: 0, zIndex: 120,
-                    background: '#fff', borderRadius: 12, border: '1px solid #ede9fe',
-                    boxShadow: '0 14px 38px -10px rgba(30,20,60,.25)', overflow: 'hidden',
-                    maxHeight: 320, overflowY: 'auto',
-                  }}>
-                    {searchHits.length === 0 ? (
-                      <p style={{ margin: 0, padding: '12px 14px', fontSize: 12.5, color: '#9891a6' }}>
-                        No matches — press ↵ to search the full user list.
-                      </p>
-                    ) : searchHits.map(hit => (
-                      <button key={`${hit.type}-${hit.id}`}
-                        onMouseDown={e => { e.preventDefault(); goSearchHit(hit); }}
-                        style={{
-                          display: 'flex', alignItems: 'center', gap: 10, width: '100%',
-                          padding: '10px 14px', background: 'none', border: 'none',
-                          borderBottom: '1px solid #f5f3ff', cursor: 'pointer', textAlign: 'left',
-                        }}>
-                        <span style={{
-                          width: 26, height: 26, borderRadius: 8, flexShrink: 0,
-                          display: 'flex', alignItems: 'center', justifyContent: 'center',
-                          background: 'rgba(147,51,234,0.09)', color: '#7c3aed',
-                        }}>
-                          {SEARCH_ICONS[hit.type] ?? <Search size={13} />}
-                        </span>
-                        <span style={{ flex: 1, minWidth: 0 }}>
-                          <span style={{ display: 'block', fontSize: 13, fontWeight: 600, color: '#201b2e', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {hit.label}
-                          </span>
-                          <span style={{ display: 'block', fontSize: 11, color: '#9891a6', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
-                            {hit.sub_label || hit.type}
-                          </span>
-                        </span>
-                        <span style={{ fontSize: 10.5, fontWeight: 700, color: '#7c3aed', textTransform: 'capitalize' }}>{hit.type}</span>
-                      </button>
-                    ))}
-                  </div>
-                )}
-              </div>
+              {renderGlobalSearch()}
               <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} role="institution_admin" />
               <ShellProfileMenu
                 name={user?.full_name ?? institutionDisplayName}
@@ -586,6 +632,82 @@ export default function InstitutionShell({
         </main>
       </div>
 
+      {/* ══ MOBILE BOTTOM TAB BAR (app-style; hidden on desktop) ══ */}
+      <nav className={styles.bottomTabBar} aria-label="Primary">
+        {BOTTOM_TABS.map(({ id, label, Icon, route }) => {
+          const active = id !== 'More' && activePage === id;
+          return (
+            <button
+              key={id}
+              className={`${styles.bottomTab} ${active ? styles.bottomTabActive : ''}`}
+              onClick={() => (id === 'More' ? setMoreOpen(true) : go(id, route))}
+            >
+              <Icon size={20} strokeWidth={active ? 2.3 : 1.9} />
+              <span>{label}</span>
+            </button>
+          );
+        })}
+      </nav>
+
+      {/* ══ MOBILE "MORE" SHEET — mirrors the full sidebar ══ */}
+      {moreOpen && (
+        <>
+          <div className={styles.sheetBackdrop} onClick={() => setMoreOpen(false)} />
+          <div className={styles.moreSheet} role="dialog" aria-label="All sections">
+            <div className={styles.moreSheetHeader}>
+              <div>
+                <p className={styles.moreSheetTitle}>{institutionDisplayName}</p>
+                <p className={styles.moreSheetRole}>Admin Portal</p>
+              </div>
+              <button className={styles.moreSheetClose} onClick={() => setMoreOpen(false)} aria-label="Close menu">
+                <X size={18} />
+              </button>
+            </div>
+
+            <div className={styles.moreSheetBody}>
+              <p className={styles.moreSheetGroup}>Academic</p>
+              {ACADEMIC_SUBNAV.map(sub => (
+                <button key={sub.id} className={`${styles.moreSheetItem} ${activePage === 'Academic' && activeSubPage === sub.id ? styles.moreSheetItemActive : ''}`} onClick={() => go(sub.id, sub.route)}>
+                  <GraduationCap size={16} className={styles.moreSheetIcon} />
+                  {sub.label}
+                </button>
+              ))}
+
+              <p className={styles.moreSheetGroup}>Sessions</p>
+              {SESSIONS_SUBNAV.map(sub => (
+                <button key={sub.id} className={`${styles.moreSheetItem} ${activePage === 'Sessions' && activeSubPage === sub.id ? styles.moreSheetItemActive : ''}`} onClick={() => go(sub.id, sub.route)}>
+                  <Calendar size={16} className={styles.moreSheetIcon} />
+                  {sub.label}
+                </button>
+              ))}
+
+              <p className={styles.moreSheetGroup}>Analytics</p>
+              {ANALYTICS_SUBNAV.map(sub => (
+                <button key={sub.id} className={`${styles.moreSheetItem} ${activePage === 'Analytics' && activeSubPage === sub.id ? styles.moreSheetItemActive : ''}`} onClick={() => go(sub.id, sub.route)}>
+                  <BarChart3 size={16} className={styles.moreSheetIcon} />
+                  {sub.label}
+                </button>
+              ))}
+
+              <p className={styles.moreSheetGroup}>Institution</p>
+              {[...NAV_MAIN.filter(n => !['Dashboard', 'Users', 'Academic', 'Sessions', 'Analytics'].includes(n.id)),
+                ...NAV_MANAGEMENT,
+                ...NAV_AI_TOOLS,
+                ...NAV_ACCOUNT].map(item => {
+                const isLogout = 'isLogout' in item && item.isLogout;
+                return (
+                  <button key={item.id} className={`${styles.moreSheetItem} ${item.id === activePage ? styles.moreSheetItemActive : ''} ${isLogout ? styles.moreSheetItemLogout : ''}`} onClick={() => go(item.id, item.route)}>
+                    <item.Icon size={16} className={styles.moreSheetIcon} />
+                    {item.id}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+        </>
+      )}
+
+      <AppToaster />
       <AgentChatPanel />
     </div>
   );

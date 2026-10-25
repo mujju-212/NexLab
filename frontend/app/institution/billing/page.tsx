@@ -4,6 +4,7 @@ import React, { useEffect, useState, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { toast } from '@/components/ui/toast';
 import { useAuthStore } from '@/store/auth-store';
 import {
   institutionService,
@@ -54,34 +55,33 @@ export default function BillingPage() {
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<SubTab>('overview');
   const [billingCycle, setBillingCycle] = useState<'monthly' | 'yearly'>('monthly');
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
 
   // Data from backend
   const [plan, setPlan] = useState<BillingPlanInfo>({
-    id: 'pro',
-    name: 'NexLab Pro',
-    description: 'For growing institutions that need more capacity and priority support.',
-    status: 'active',
-    price: 4999,
+    id: '',
+    name: '',
+    description: '',
+    status: '',
+    price: 0,
     currency: '₹',
     billing_cycle: 'monthly',
-    next_billing_date: '10 Oct 2026',
+    next_billing_date: '',
     auto_renewal: true,
   });
 
   const [usage, setUsage] = useState<PlanUsageBreakdown>({
-    resets_on: '10 Oct 2026',
-    students: { used: 248, limit: 500, percent: 50 },
-    instructors: { used: 6, limit: 50, percent: 12 },
-    subjects: { used: 15, limit: 100, percent: 15 },
+    resets_on: '',
+    students: { used: 0, limit: 0, percent: 0 },
+    instructors: { used: 0, limit: 0, percent: 0 },
+    subjects: { used: 0, limit: 0, percent: 0 },
   });
 
   const [billingInfo, setBillingInfo] = useState<BillingContactInfo>({
     institution_name: user?.institution_name || 'Institution',
     billing_email: user?.email || '',
     contact_person: user?.full_name || 'Institution Admin',
-    phone: user?.phone || '+91 98765 43210',
-    address: 'Bengaluru, Karnataka, India',
+    phone: '',
+    address: '',
   });
 
   const [paymentMethods, setPaymentMethods] = useState<PaymentMethodItem[]>([]);
@@ -117,10 +117,7 @@ export default function BillingPage() {
   const invoicesSectionRef = useRef<HTMLDivElement>(null);
   const paymentMethodsSectionRef = useRef<HTMLDivElement>(null);
 
-  const showToast = (msg: string) => {
-    setToastMessage(msg);
-    setTimeout(() => setToastMessage(null), 3500);
-  };
+  const showToast = (msg: string) => toast.info(msg);
 
   // Load billing data from backend — through the react-query cache. The
   // mutation handlers below call loadBillingData(true) after a write, which
@@ -281,20 +278,36 @@ export default function BillingPage() {
     }
   };
 
-  // Contact Sales Submit
-  const handleSendContact = (e: React.FormEvent) => {
+  // Contact Sales Submit — creates a REAL support ticket (billing category)
+  const handleSendContact = async (e: React.FormEvent) => {
     e.preventDefault();
     setSendingContact(true);
-    setTimeout(() => {
-      setSendingContact(false);
+    try {
+      await institutionService.createSupportTicket({
+        subject: 'Enterprise plan inquiry',
+        category: 'billing',
+        message: contactMsg || 'Our institution is interested in the Enterprise plan. Please contact us.',
+        priority: 'high',
+      });
       setShowContactModal(false);
       setContactMsg('');
-      showToast('Sales team notified! An executive will contact you shortly.');
-    }, 700);
+      showToast('Inquiry submitted — the sales team will contact you via support tickets.');
+    } catch (err: any) {
+      console.error('Contact sales failed:', err);
+      showToast(err?.response?.data?.error || 'Could not submit your inquiry. Please try again.');
+    } finally {
+      setSendingContact(false);
+    }
   };
 
   return (
     <InstitutionShell activePage="Billing & Plan">
+      {(loading && !plan.id) && (
+        <div style={{ padding: 72, textAlign: 'center', color: '#9891a6', fontWeight: 600, fontSize: 14 }}>
+          Loading billing overview…
+        </div>
+      )}
+      {(!loading || plan.id) && (
       <div className={styles.pageContainer}>
         {/* ── Breadcrumbs ───────────────────────────────────────────────────────── */}
         <div className={styles.breadcrumbRow}>
@@ -1298,13 +1311,8 @@ export default function BillingPage() {
         )}
 
         {/* ── Toast Alert ───────────────────────────────────────────────────── */}
-        {toastMessage && (
-          <div className={styles.toastNotice}>
-            <CheckCircle2 size={16} color="#34d399" />
-            <span>{toastMessage}</span>
-          </div>
-        )}
       </div>
+      )}
     </InstitutionShell>
   );
 }
