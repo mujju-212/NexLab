@@ -2,8 +2,8 @@
 
 import React, { useState, useEffect } from 'react';
 import { X, Copy, Check, Globe, Lock, Share2, Sparkles, ExternalLink } from 'lucide-react';
-import { freeService } from '@/services/free.service';
-import styles from './free-analytics.module.css';
+import { platformUserService } from '@/services/platform-user.service';
+import styles from './platform-analytics.module.css';
 
 interface ShowcaseModalProps {
   isOpen: boolean;
@@ -60,7 +60,7 @@ export const ShowcaseModal: React.FC<ShowcaseModalProps> = ({
   const handleToggle = async (checked: boolean) => {
     setLoading(true);
     try {
-      const res = await freeService.toggleShowcase(checked);
+      const res = await platformUserService.toggleShowcase(checked);
       setIsPublic(res.profile_public);
       if (res.profile_slug) {
         setSlug(res.profile_slug);

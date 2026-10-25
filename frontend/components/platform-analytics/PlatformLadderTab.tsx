@@ -19,18 +19,18 @@ import {
   ChevronRight,
   ChevronDown,
 } from 'lucide-react';
-import { freeService } from '@/services/free.service';
+import { platformUserService } from '@/services/platform-user.service';
 import type {
-  FreePlatformStanding,
-  FreeDifficultyMix,
-  FreeUnlocksData,
-} from '@/services/free.service';
-import styles from './free-analytics.module.css';
+  PlatformStanding,
+  PlatformDifficultyMix,
+  PlatformUnlocksData,
+} from '@/services/platform-user.service';
+import styles from './platform-analytics.module.css';
 
-interface FreeLadderTabProps {
-  standing: FreePlatformStanding;
-  difficultyMix?: FreeDifficultyMix;
-  unlocks?: FreeUnlocksData;
+interface PlatformLadderTabProps {
+  standing: PlatformStanding;
+  difficultyMix?: PlatformDifficultyMix;
+  unlocks?: PlatformUnlocksData;
   onOpenShare?: () => void;
 }
 
@@ -47,7 +47,7 @@ const TOPICS_LIST = [
   'Stack',
 ];
 
-export const FreeLadderTab: React.FC<FreeLadderTabProps> = ({
+export const PlatformLadderTab: React.FC<PlatformLadderTabProps> = ({
   standing,
   difficultyMix,
   unlocks,
@@ -63,7 +63,7 @@ export const FreeLadderTab: React.FC<FreeLadderTabProps> = ({
   const { data: boardData, isLoading: boardLoading } = useQuery({
     queryKey: ['free-leaderboard', scope, topic, period],
     queryFn: () =>
-      freeService.getPlatformLeaderboard({
+      platformUserService.getPlatformLeaderboard({
         scope,
         scope_id: scope === 'topic' ? topic : undefined,
         period,
@@ -133,9 +133,9 @@ export const FreeLadderTab: React.FC<FreeLadderTabProps> = ({
   const cohortSize = boardData?.cohort_size ?? 0;
 
   // Unlocks calculations from real DB props
-  const medUnlocked = unlocks?.medium_unlocked ?? (easySolved >= 10 || rating >= 300);
-  const hardUnlocked = unlocks?.hard_unlocked ?? (mediumSolved >= 20 || rating >= 1500);
-  const contestsUnlocked = unlocks?.contests_unlocked ?? (level >= 5 || rating >= 1200);
+  const medUnlocked = Boolean(unlocks?.medium_unlocked);
+  const hardUnlocked = Boolean(unlocks?.hard_unlocked);
+  const contestsUnlocked = Boolean(unlocks?.contests_unlocked);
 
   const medProgressPct = Math.min(100, Math.round((Math.min(10, easySolved) / 10) * 100));
   const hardProgressPct = Math.min(100, Math.round((Math.min(20, mediumSolved) / 20) * 100));
@@ -1064,4 +1064,4 @@ export const FreeLadderTab: React.FC<FreeLadderTabProps> = ({
   );
 };
 
-export default FreeLadderTab;
+export default PlatformLadderTab;

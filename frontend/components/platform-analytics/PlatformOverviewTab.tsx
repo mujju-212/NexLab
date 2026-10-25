@@ -7,14 +7,14 @@ import {
   ChevronRight, Lock, Zap, FileText, ChevronDown, Sparkles
 } from 'lucide-react';
 import type {
-  FreeAnalyticsOverview,
-  FreeRecommendation,
-} from '@/services/free.service';
-import styles from './free-analytics.module.css';
+  PlatformAnalyticsOverview,
+  PlatformRecommendation,
+} from '@/services/platform-user.service';
+import styles from './platform-analytics.module.css';
 
-interface FreeOverviewTabProps {
-  overview: FreeAnalyticsOverview;
-  recommendations?: FreeRecommendation[];
+interface PlatformOverviewTabProps {
+  overview: PlatformAnalyticsOverview;
+  recommendations?: PlatformRecommendation[];
   onNavigateTab: (tab: string) => void;
   onOpenShare?: () => void;
 }
@@ -382,7 +382,7 @@ function TopicProficiencyRadarSVG({
   );
 }
 
-export const FreeOverviewTab: React.FC<FreeOverviewTabProps> = ({
+export const PlatformOverviewTab: React.FC<PlatformOverviewTabProps> = ({
   overview,
   recommendations = [],
   onNavigateTab,
@@ -466,7 +466,7 @@ export const FreeOverviewTab: React.FC<FreeOverviewTabProps> = ({
   const gateTitle = nextUnlockInfo?.target || (unlocks?.medium_unlocked ? 'Hard Difficulty Problems' : 'Medium Difficulty Problems');
   const gateRequirement = nextUnlockInfo?.requirement || (unlocks?.medium_unlocked ? 'Solve 20 Medium problems OR attain 1500+ Platform Rating' : 'Solve 10 Easy problems OR attain 300+ Platform Rating');
   const gateCurrent = nextUnlockInfo?.current || (unlocks?.medium_unlocked ? `${medSolved}/20 medium solved` : `${easySolved}/10 easy solved`);
-  const gateProgressPct = Math.round(nextUnlockInfo?.progress_pct ?? (unlocks?.medium_unlocked ? Math.min(100, (medSolved / 20) * 100) : Math.min(100, (easySolved / 10) * 100)));
+  const gateProgressPct = nextUnlockInfo?.progress_pct != null ? Math.round(nextUnlockInfo.progress_pct) : null;
 
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: '22px' }}>
@@ -815,7 +815,7 @@ export const FreeOverviewTab: React.FC<FreeOverviewTabProps> = ({
             <div className={styles.gateProgressBar}>
               <div
                 className={styles.gateProgressFill}
-                style={{ width: `${Math.min(100, Math.max(5, gateProgressPct))}%` }}
+                style={{ width: `${gateProgressPct != null ? Math.min(100, Math.max(5, gateProgressPct)) : 5}%` }}
               />
             </div>
 
@@ -925,4 +925,4 @@ export const FreeOverviewTab: React.FC<FreeOverviewTabProps> = ({
   );
 };
 
-export default FreeOverviewTab;
+export default PlatformOverviewTab;

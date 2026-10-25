@@ -1,6 +1,6 @@
 import { apiClient } from './api-client';
 
-export interface FreeCourse {
+export interface PlatformCourse {
   id: string;
   slug: string;
   title: string;
@@ -15,7 +15,7 @@ export interface FreeCourse {
   order_index: number;
 }
 
-export interface FreeExercise {
+export interface PlatformExercise {
   id: string;
   course_id: string;
   order_index: number;
@@ -40,7 +40,7 @@ export interface FreeExercise {
   action_label?: string;
 }
 
-export interface FreeCourseLeaderboardItem {
+export interface PlatformCourseLeaderboardItem {
   rank: number;
   user_id: string;
   name: string;
@@ -118,122 +118,122 @@ export interface Progress {
   records: Array<{ exercise_id: string; course_id: string; status: string; best_score: number; xp_earned: number }>;
 }
 
-export const freeService = {
+export const platformUserService = {
   // Public — no auth needed
   async listCourses(params?: { difficulty?: string; language?: string; tag?: string }) {
-    const { data } = await apiClient.get<{ courses: FreeCourse[] }>('/free/courses', { params });
+    const { data } = await apiClient.get<{ courses: PlatformCourse[] }>('/platform-user/courses', { params });
     return data.courses;
   },
 
   async getCourse(courseId: string): Promise<{
-    course: FreeCourse & { estimated_hours?: string; topic_count?: number };
-    exercises: FreeExercise[];
+    course: PlatformCourse & { estimated_hours?: string; topic_count?: number };
+    exercises: PlatformExercise[];
     user_progress?: CourseUserProgress;
     topics_summary?: TopicSummaryItem[];
   }> {
-    const { data } = await apiClient.get(`/free/courses/${courseId}`);
+    const { data } = await apiClient.get(`/platform-user/courses/${courseId}`);
     return data;
   },
 
-  async getExercise(exerciseId: string): Promise<FreeExercise> {
-    const { data } = await apiClient.get<{ exercise: FreeExercise }>(`/free/exercises/${exerciseId}`);
+  async getExercise(exerciseId: string): Promise<PlatformExercise> {
+    const { data } = await apiClient.get<{ exercise: PlatformExercise }>(`/platform-user/exercises/${exerciseId}`);
     return data.exercise;
   },
 
   // Auth required
   async runCode(exerciseId: string, code: string, language: string): Promise<RunResult> {
-    const { data } = await apiClient.post<RunResult>(`/free/exercises/${exerciseId}/run`, { code, language });
+    const { data } = await apiClient.post<RunResult>(`/platform-user/exercises/${exerciseId}/run`, { code, language });
     return data;
   },
 
   async submitCode(exerciseId: string, code: string, language: string): Promise<SubmitResult> {
-    const { data } = await apiClient.post<SubmitResult>(`/free/exercises/${exerciseId}/submit`, { code, language });
+    const { data } = await apiClient.post<SubmitResult>(`/platform-user/exercises/${exerciseId}/submit`, { code, language });
     return data;
   },
 
   async submitMcq(exerciseId: string, answer: string): Promise<McqSubmitResult> {
-    const { data } = await apiClient.post<McqSubmitResult>(`/free/exercises/${exerciseId}/answer`, { answer });
+    const { data } = await apiClient.post<McqSubmitResult>(`/platform-user/exercises/${exerciseId}/answer`, { answer });
     return data;
   },
 
   async completeSimulation(exerciseId: string): Promise<CompletionResult> {
-    const { data } = await apiClient.post<CompletionResult>(`/free/exercises/${exerciseId}/complete`);
+    const { data } = await apiClient.post<CompletionResult>(`/platform-user/exercises/${exerciseId}/complete`);
     return data;
   },
 
   async getProgress(): Promise<Progress> {
-    const { data } = await apiClient.get<Progress>('/free/progress');
+    const { data } = await apiClient.get<Progress>('/platform-user/progress');
     return data;
   },
 
   async getCourseProgress(courseId: string) {
-    const { data } = await apiClient.get(`/free/progress/${courseId}`);
+    const { data } = await apiClient.get(`/platform-user/progress/${courseId}`);
     return data;
   },
 
-  async getLeaderboard(courseId: string): Promise<{ leaderboard: FreeCourseLeaderboardItem[] }> {
-    const { data } = await apiClient.get<{ leaderboard: FreeCourseLeaderboardItem[] }>(`/free/leaderboard/${courseId}`);
+  async getLeaderboard(courseId: string): Promise<{ leaderboard: PlatformCourseLeaderboardItem[] }> {
+    const { data } = await apiClient.get<{ leaderboard: PlatformCourseLeaderboardItem[] }>(`/platform-user/leaderboard/${courseId}`);
     return data;
   },
 
   // ── Free Analytics Redesign (Track 2 Unified Platform) ───────────────────
-  async getFreeOverview(): Promise<FreeAnalyticsOverview> {
-    const { data } = await apiClient.get<FreeAnalyticsOverview>('/free/analytics/overview');
+  async getPlatformOverview(): Promise<PlatformAnalyticsOverview> {
+    const { data } = await apiClient.get<PlatformAnalyticsOverview>('/platform-user/analytics/overview');
     return data;
   },
 
-  async getStanding(): Promise<FreePlatformStanding> {
-    const { data } = await apiClient.get<FreePlatformStanding>('/free/analytics/standing');
+  async getStanding(): Promise<PlatformStanding> {
+    const { data } = await apiClient.get<PlatformStanding>('/platform-user/analytics/standing');
     return data;
   },
 
-  async getActivity(days: number = 365): Promise<FreeActivityData> {
-    const { data } = await apiClient.get<FreeActivityData>('/free/analytics/activity', { params: { days } });
+  async getActivity(days: number = 365): Promise<PlatformActivityData> {
+    const { data } = await apiClient.get<PlatformActivityData>('/platform-user/analytics/activity', { params: { days } });
     return data;
   },
 
-  async getAccuracy(): Promise<FreeAccuracyData> {
-    const { data } = await apiClient.get<FreeAccuracyData>('/free/analytics/accuracy');
+  async getAccuracy(): Promise<PlatformAccuracyData> {
+    const { data } = await apiClient.get<PlatformAccuracyData>('/platform-user/analytics/accuracy');
     return data;
   },
 
-  async getCoursesAnalytics(): Promise<FreeCoursesAnalytics> {
-    const { data } = await apiClient.get<FreeCoursesAnalytics>('/free/analytics/courses');
+  async getCoursesAnalytics(): Promise<PlatformCoursesAnalytics> {
+    const { data } = await apiClient.get<PlatformCoursesAnalytics>('/platform-user/analytics/courses');
     return data;
   },
 
-  async getTopicStrength(): Promise<{ topic_strength: FreeTopicMasteryItem[] }> {
-    const { data } = await apiClient.get<{ topic_strength: FreeTopicMasteryItem[] }>('/free/analytics/topic-strength');
+  async getTopicStrength(): Promise<{ topic_strength: PlatformTopicMasteryItem[] }> {
+    const { data } = await apiClient.get<{ topic_strength: PlatformTopicMasteryItem[] }>('/platform-user/analytics/topic-strength');
     return data;
   },
 
-  async getUnlocks(): Promise<FreeUnlocksData> {
-    const { data } = await apiClient.get<FreeUnlocksData>('/free/analytics/unlocks');
+  async getUnlocks(): Promise<PlatformUnlocksData> {
+    const { data } = await apiClient.get<PlatformUnlocksData>('/platform-user/analytics/unlocks');
     return data;
   },
 
-  async getPlatformLeaderboard(params?: { scope?: string; scope_id?: string; period?: string; limit?: number }): Promise<FreeLeaderboardResponse> {
-    const { data } = await apiClient.get<FreeLeaderboardResponse>('/free/analytics/leaderboard', { params });
+  async getPlatformLeaderboard(params?: { scope?: string; scope_id?: string; period?: string; limit?: number }): Promise<PlatformLeaderboardResponse> {
+    const { data } = await apiClient.get<PlatformLeaderboardResponse>('/platform-user/analytics/leaderboard', { params });
     return data;
   },
 
-  async getRecommendations(limit: number = 5): Promise<{ recommendations: FreeRecommendation[] }> {
-    const { data } = await apiClient.get<{ recommendations: FreeRecommendation[] }>('/free/analytics/recommendations', { params: { limit } });
+  async getRecommendations(limit: number = 5): Promise<{ recommendations: PlatformRecommendation[] }> {
+    const { data } = await apiClient.get<{ recommendations: PlatformRecommendation[] }>('/platform-user/analytics/recommendations', { params: { limit } });
     return data;
   },
 
-  async getShowcase(slug: string): Promise<FreeShowcaseData> {
-    const { data } = await apiClient.get<FreeShowcaseData>(`/free/analytics/showcase/${slug}`);
+  async getShowcase(slug: string): Promise<PlatformShowcaseData> {
+    const { data } = await apiClient.get<PlatformShowcaseData>(`/platform-user/analytics/showcase/${slug}`);
     return data;
   },
 
   async getMyShowcase(): Promise<{ profile_public: boolean; profile_slug: string | null; share_url: string | null }> {
-    const { data } = await apiClient.get<{ profile_public: boolean; profile_slug: string | null; share_url: string | null }>('/free/analytics/showcase/me');
+    const { data } = await apiClient.get<{ profile_public: boolean; profile_slug: string | null; share_url: string | null }>('/platform-user/analytics/showcase/me');
     return data;
   },
 
   async toggleShowcase(profile_public: boolean): Promise<{ profile_public: boolean; profile_slug: string | null; share_url: string | null }> {
-    const { data } = await apiClient.patch<{ profile_public: boolean; profile_slug: string | null; share_url: string | null }>('/free/analytics/showcase', { profile_public });
+    const { data } = await apiClient.patch<{ profile_public: boolean; profile_slug: string | null; share_url: string | null }>('/platform-user/analytics/showcase', { profile_public });
     return data;
   },
 
@@ -257,14 +257,14 @@ export const freeService = {
     }>;
     total: number;
   }> {
-    const { data } = await apiClient.get('/free/analytics/submissions', { params: { limit } });
+    const { data } = await apiClient.get('/platform-user/analytics/submissions', { params: { limit } });
     return data;
   },
 };
 
 // ── Types for Free User Analytics ──────────────────────────────────────────
 
-export interface FreeBadgeItem {
+export interface PlatformBadgeItem {
   badge_id: string;
   icon: string;
   title: string;
@@ -272,7 +272,7 @@ export interface FreeBadgeItem {
   earned_at: string | null;
 }
 
-export interface FreePlatformStanding {
+export interface PlatformStanding {
   student_id: string;
   student_name?: string;
   accuracy?: number;
@@ -289,10 +289,10 @@ export interface FreePlatformStanding {
   medium_solved: number;
   hard_solved: number;
   streak_days: number;
-  badges: FreeBadgeItem[];
+  badges: PlatformBadgeItem[];
 }
 
-export interface FreeDifficultyMix {
+export interface PlatformDifficultyMix {
   easy: number;
   medium: number;
   hard: number;
@@ -301,7 +301,7 @@ export interface FreeDifficultyMix {
   acceptance_rate: number;
 }
 
-export interface FreeTopicMasteryItem {
+export interface PlatformTopicMasteryItem {
   topic: string;
   strength: number;
   band: 'Mastered' | 'Proficient' | 'Learning' | 'Needs Practice';
@@ -315,7 +315,7 @@ export interface FreeTopicMasteryItem {
   accuracy_pct: number;
 }
 
-export interface FreeUnlocksData {
+export interface PlatformUnlocksData {
   unlocked_tiers: string[];
   medium_unlocked: boolean;
   hard_unlocked: boolean;
@@ -334,7 +334,7 @@ export interface FreeUnlocksData {
   };
 }
 
-export interface FreeActivityData {
+export interface PlatformActivityData {
   heatmap: Array<{
     date: string;
     count: number;
@@ -360,13 +360,13 @@ export interface FreeActivityData {
   }>;
 }
 
-export interface FreeAccuracyData {
+export interface PlatformAccuracyData {
   acceptance_rate: number;
   first_try_rate: number;
   avg_attempts: number;
   total_attempts: number;
   total_solved: number;
-  difficulty_mix: FreeDifficultyMix;
+  difficulty_mix: PlatformDifficultyMix;
   personal_bests: {
     longest_streak_days: number;
     fastest_solve_ms: number | null;
@@ -385,7 +385,7 @@ export interface FreeAccuracyData {
   };
 }
 
-export interface FreeCourseItem {
+export interface PlatformCourseItem {
   id: string;
   slug: string;
   title: string;
@@ -405,7 +405,7 @@ export interface FreeCourseItem {
   completed_at: string | null;
 }
 
-export interface FreeCoursesAnalytics {
+export interface PlatformCoursesAnalytics {
   total_courses: number;
   enrolled_courses: number;
   enrolled_this_month?: number;
@@ -426,16 +426,16 @@ export interface FreeCoursesAnalytics {
     download_url?: string;
     type?: string;
   }>;
-  courses: FreeCourseItem[];
+  courses: PlatformCourseItem[];
 }
 
-export interface FreeAnalyticsOverview {
-  standing: FreePlatformStanding;
-  difficulty_mix: FreeDifficultyMix;
-  topic_strength: FreeTopicMasteryItem[];
-  unlocks: FreeUnlocksData;
-  activity: FreeActivityData;
-  courses: FreeCourseItem[];
+export interface PlatformAnalyticsOverview {
+  standing: PlatformStanding;
+  difficulty_mix: PlatformDifficultyMix;
+  topic_strength: PlatformTopicMasteryItem[];
+  unlocks: PlatformUnlocksData;
+  activity: PlatformActivityData;
+  courses: PlatformCourseItem[];
   course_summary: {
     enrolled_courses: number;
     completed_courses: number;
@@ -452,7 +452,7 @@ export interface FreeAnalyticsOverview {
   highlights: string[];
 }
 
-export interface FreeLeaderboardResponse {
+export interface PlatformLeaderboardResponse {
   scope: string;
   period: string;
   cohort_size: number;
@@ -484,7 +484,7 @@ export interface FreeLeaderboardResponse {
   } | null;
 }
 
-export interface FreeRecommendation {
+export interface PlatformRecommendation {
   id: string;
   slug: string;
   title: string;
@@ -494,7 +494,7 @@ export interface FreeRecommendation {
   reason: string;
 }
 
-export interface FreeShowcaseData {
+export interface PlatformShowcaseData {
   slug: string;
   display_name: string;
   standing: {
@@ -509,8 +509,8 @@ export interface FreeShowcaseData {
     medium_solved: number;
     hard_solved: number;
   };
-  badges: FreeBadgeItem[];
-  top_topics: FreeTopicMasteryItem[];
+  badges: PlatformBadgeItem[];
+  top_topics: PlatformTopicMasteryItem[];
   recent_solves: Array<{
     title: string;
     difficulty: string;

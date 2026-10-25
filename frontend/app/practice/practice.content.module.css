@@ -16,7 +16,7 @@
 .heroCard {
   background: linear-gradient(135deg, rgba(255, 255, 255, 0.85) 0%, rgba(246, 244, 254, 0.9) 100%);
   border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 24px;
+  border-radius: var(--radius-xl);
   padding: 30px 36px 32px;
   display: flex;
   align-items: center;
@@ -42,7 +42,7 @@
   font-weight: 800;
   color: #1e1b4b;
   letter-spacing: -0.025em;
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-display);
   line-height: 1.2;
 }
 
@@ -84,11 +84,11 @@
 .pillChip strong {
   color: #1e1b4b;
   font-weight: 700;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .pillIconPurple {
-  color: #7c3aed;
+  color: var(--primary);
   flex-shrink: 0;
 }
 
@@ -130,7 +130,7 @@
 }
 
 .searchBox:focus-within {
-  border-color: #7c3aed;
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
 }
 
@@ -146,7 +146,7 @@
   outline: none;
   font-size: 13.5px;
   color: #1e1b4b;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .searchInput::placeholder {
@@ -174,7 +174,7 @@
   color: #475569;
   cursor: pointer;
   transition: all 0.18s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   white-space: nowrap;
 }
 
@@ -184,7 +184,7 @@
 }
 
 .levelBtnActive {
-  background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%) !important;
+  background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%) !important;
   color: #ffffff !important;
   font-weight: 700;
   box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
@@ -210,7 +210,7 @@
   gap: 8px;
   background: #ffffff;
   border: 1.5px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 8px 14px 8px 12px;
   font-size: 13px;
   font-weight: 600;
@@ -231,7 +231,7 @@
 }
 
 .selectIcon {
-  color: #7c3aed;
+  color: var(--primary);
   flex-shrink: 0;
 }
 
@@ -247,7 +247,7 @@
 }
 
 .selectLabel {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   white-space: nowrap;
 }
 
@@ -262,18 +262,18 @@
   font-size: 13px;
   color: #94a3b8;
   font-weight: 600;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .resetBtn {
   border: none;
   background: transparent;
-  color: #7c3aed;
+  color: var(--primary);
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   text-decoration: underline;
   margin-left: 6px;
 }
@@ -332,7 +332,7 @@
 .courseLogoBox {
   width: 42px;
   height: 42px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -344,7 +344,7 @@
   font-weight: 700;
   padding: 3px 10px;
   border-radius: 999px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   letter-spacing: 0.02em;
   text-transform: capitalize;
 }
@@ -369,7 +369,7 @@
   font-size: 17.5px;
   font-weight: 700;
   color: #1e1b4b;
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-display);
   line-height: 1.3;
 }
 
@@ -407,11 +407,11 @@
 .tagPill {
   font-size: 11px;
   font-weight: 600;
-  color: #7c3aed;
+  color: var(--primary);
   background: #ede9fe;
   border-radius: 999px;
   padding: 2.5px 9px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .cardFooter {
@@ -452,9 +452,9 @@
   gap: 4px;
   font-size: 12.5px;
   font-weight: 700;
-  color: #7c3aed;
+  color: var(--primary);
   transition: all 0.15s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -484,7 +484,7 @@
 
 .progressFill {
   height: 100%;
-  background: linear-gradient(90deg, #7c3aed, #a855f7);
+  background: linear-gradient(90deg, var(--primary), #a855f7);
   border-radius: 999px;
   transition: width 0.4s ease;
 }
@@ -492,8 +492,8 @@
 .progressText {
   font-size: 11px;
   font-weight: 700;
-  color: #7c3aed;
-  font-family: 'Space Grotesk', sans-serif;
+  color: var(--primary);
+  font-family: var(--font-display);
   white-space: nowrap;
 }
 
@@ -519,7 +519,7 @@
 
 .spinAnimation {
   animation: spin 0.85s linear infinite;
-  color: #7c3aed;
+  color: var(--primary);
 }
 
 @keyframes spin {
@@ -543,7 +543,7 @@
   font-weight: 700;
   color: #1e1b4b;
   margin: 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .emptySubtitle {
@@ -555,7 +555,7 @@
 
 .clearFilterBtn {
   margin-top: 8px;
-  background: linear-gradient(135deg, #7c3aed, #6366f1);
+  background: linear-gradient(135deg, var(--primary), #6366f1);
   color: #ffffff;
   border: none;
   border-radius: 10px;
@@ -565,7 +565,7 @@
   cursor: pointer;
   box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
   transition: all 0.18s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .clearFilterBtn:hover {

@@ -47,7 +47,7 @@
   width: 88px;
   height: 88px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+  background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
   color: #ffffff;
   font-size: 28px;
   font-weight: 700;
@@ -74,7 +74,7 @@
   height: 28px;
   border-radius: 50%;
   background: #ffffff;
-  color: #7c3aed;
+  color: var(--primary);
   border: 1.5px solid #ede9fe;
   display: flex;
   align-items: center;
@@ -129,7 +129,7 @@
   border-radius: 999px;
   background: #faf5ff;
   border: 1px solid #e9d5ff;
-  color: #7c3aed;
+  color: var(--primary);
   font-size: 11.5px;
   font-weight: 600;
 }
@@ -302,7 +302,7 @@
 .statIconBox {
   width: 48px;
   height: 48px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -353,7 +353,7 @@
   display: inline-flex;
   align-items: center;
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background: #dcfce7;
   color: #15803d;
   font-size: 11px;
@@ -427,7 +427,7 @@
 .sectionCard {
   background: #ffffff;
   border: 1px solid #ede9fe;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   padding: 22px 24px;
   box-shadow: 0 2px 10px rgba(0, 0, 0, 0.02);
   display: flex;
@@ -456,7 +456,7 @@
   height: 36px;
   border-radius: 10px;
   background: #faf5ff;
-  color: #7c3aed;
+  color: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -482,7 +482,7 @@
 
 .cardSelect {
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   border: 1px solid #e5e7eb;
   background: #ffffff;
   font-size: 12.5px;
@@ -505,7 +505,7 @@
   border: none;
   cursor: pointer;
   padding: 4px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   transition: background-color 0.15s ease;
   flex-shrink: 0;
 }
@@ -653,7 +653,7 @@
 .heatLvl0 { background: #f3f4f6; }
 .heatLvl1 { background: #ddd6fe; }
 .heatLvl2 { background: #a78bfa; }
-.heatLvl3 { background: #7c3aed; }
+.heatLvl3 { background: var(--primary); }
 .heatLvl4 { background: #4c1d95; }
 
 .heatmapFooter {
@@ -744,7 +744,7 @@
 .diffPill {
   display: inline-block;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   font-size: 11px;
   font-weight: 700;
 }
@@ -783,7 +783,7 @@
   display: flex;
   flex-direction: column;
   border: 1px solid #f3f4f6;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   overflow: hidden;
 }
 
@@ -818,9 +818,9 @@
    ══════════════════════════════════════════════════════════════════════════════ */
 
 .standingHero {
-  background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%);
+  background: linear-gradient(135deg, #4f46e5 0%, var(--primary) 100%);
   color: #ffffff;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   padding: 24px 28px;
   display: flex;
   align-items: center;
@@ -897,7 +897,7 @@
 
 .badgeEarnedDate {
   font-size: 10.5px;
-  color: #7c3aed;
+  color: var(--primary);
   font-weight: 600;
 }
 
@@ -912,7 +912,7 @@
 .certCard {
   background: #fafafa;
   border: 1px solid #e5e7eb;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 16px;
   display: flex;
   align-items: center;
@@ -924,7 +924,7 @@
   align-items: center;
   gap: 6px;
   padding: 6px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: #6366f1;
   color: #ffffff;
   border: none;
@@ -1067,7 +1067,7 @@
   inset: 0;
   background-color: #e5e7eb;
   transition: 0.2s;
-  border-radius: 24px;
+  border-radius: var(--radius-xl);
 }
 
 .slider:before {
@@ -1207,7 +1207,7 @@
   color: #9ca3af;
   cursor: pointer;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
 }
 
 .modalCloseBtn:hover {
@@ -1218,7 +1218,7 @@
 /* Alert Message */
 .alertBox {
   padding: 10px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 13px;
   display: flex;
   align-items: center;

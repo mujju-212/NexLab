@@ -3,7 +3,7 @@
 .stage {
   position: relative; min-height: 100vh;
   background: linear-gradient(150deg,#ffffff 0%,#f4f5f7 45%,#eef0f3 75%,#ffffff 100%);
-  overflow: clip; padding: 32px; font-family: 'Manrope', sans-serif;
+  overflow: clip; padding: 32px; font-family: var(--font-sans);
 }
 .blob { position: absolute; border-radius: 50%; filter: blur(80px); pointer-events: none; }
 .blob1 { width: 560px; height: 560px; top: -240px; left: 260px; background: radial-gradient(circle at 30% 30%,#ffffff,#e2e5eb 70%); opacity: .9; }
@@ -66,7 +66,7 @@
 }
 
 /* ── Nav items ───────────────────────────────────────────────────────────── */
-.collapseBtn { width: 30px; height: 30px; border: 1px solid transparent; background: transparent; color: #8a8296; border-radius: 8px; cursor: pointer; display: flex; align-items: center; justify-content: center; }
+.collapseBtn { width: 30px; height: 30px; border: 1px solid transparent; background: transparent; color: #8a8296; border-radius: var(--radius-sm); cursor: pointer; display: flex; align-items: center; justify-content: center; }
 .collapseBtn:hover { background: rgba(255,255,255,.55); color: #201b2e; }
 
 .navLabel { display: block; font-size: 11px; font-weight: 700; letter-spacing: .07em; text-transform: uppercase; color: #a79fbb; margin: 16px 12px 7px; }
@@ -85,7 +85,7 @@
 .navItemActive .navIcon { color: #9333ea; }
 .navItemActive::before {
   content: ""; position: absolute; left: -2px; top: 8px; bottom: 8px; width: 3px;
-  border-radius: 3px; background: linear-gradient(180deg,#7c3aed,#d6409f);
+  border-radius: 3px; background: linear-gradient(180deg,var(--primary),#d6409f);
 }
 .navItemLogout:hover { background: rgba(255,225,225,.6); color: #c62828; }
 .navItemLogout:hover svg { color: #c62828; }
@@ -95,7 +95,7 @@
 .promoBanner:hover { background: linear-gradient(135deg,rgba(238,242,255,1),rgba(243,232,255,1)); border-color: rgba(147,51,234,.4); transform: translateY(-1px); }
 .promoIcon { width: 32px; height: 32px; border-radius: 9px; background: rgba(255,255,255,.8); display: flex; align-items: center; justify-content: center; color: #eab308; flex-shrink: 0; box-shadow: 0 2px 6px rgba(0,0,0,.04); }
 .promoText { flex: 1; }
-.promoTitle { margin: 0 0 2px; font-size: 13px; font-weight: 700; color: #4338ca; font-family: 'Space Grotesk', sans-serif; }
+.promoTitle { margin: 0 0 2px; font-size: 13px; font-weight: 700; color: #4338ca; font-family: var(--font-display); }
 .promoLink { font-size: 11px; color: #64748b; font-weight: 500; display: block; line-height: 1.35; }
 .promoArrow { color: #818cf8; flex-shrink: 0; transition: transform .15s ease; }
 .promoBanner:hover .promoArrow { transform: translateX(2px); color: #6366f1; }
@@ -114,26 +114,26 @@
 }
 .contentHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 26px; }
 .breadcrumb { font-size: 14px; color: #9891a6; font-weight: 600; }
-.breadcrumb strong { color: #201b2e; font-weight: 700; font-family: 'Space Grotesk', sans-serif; }
+.breadcrumb strong { color: #201b2e; font-weight: 700; font-family: var(--font-display); }
 .sep { margin: 0 6px; }
 
 .headerRight { display: flex; align-items: center; gap: 10px; }
-.searchBar { display: flex; align-items: center; gap: 9px; background: rgba(255,255,255,.55); border: 1px solid rgba(255,255,255,.55); border-radius: 12px; padding: 9px 14px; width: 220px; color: #9891a6; font-size: 13.5px; font-weight: 600; }
+.searchBar { display: flex; align-items: center; gap: 9px; background: rgba(255,255,255,.55); border: 1px solid rgba(255,255,255,.55); border-radius: var(--radius-md); padding: 9px 14px; width: 220px; color: #9891a6; font-size: 13.5px; font-weight: 600; }
 .searchIcon { width: 15px; height: 15px; color: #9891a6; flex-shrink: 0; }
-.searchKbd { margin-left: auto; font-size: 11px; background: rgba(255,255,255,.8); border: 1px solid rgba(255,255,255,.55); border-radius: 6px; padding: 1px 6px; color: #9891a6; font-family: inherit; }
+.searchKbd { margin-left: auto; font-size: 11px; background: rgba(255,255,255,.8); border: 1px solid rgba(255,255,255,.55); border-radius: var(--radius-xs); padding: 1px 6px; color: #9891a6; font-family: inherit; }
 
-.iconBtn { width: 38px; height: 38px; border-radius: 12px; border: 1px solid rgba(255,255,255,.55); background: rgba(255,255,255,.55); color: #57506a; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; }
+.iconBtn { width: 38px; height: 38px; border-radius: var(--radius-md); border: 1px solid rgba(255,255,255,.55); background: rgba(255,255,255,.55); color: #57506a; display: flex; align-items: center; justify-content: center; cursor: pointer; position: relative; }
 .iconBtn:hover { background: rgba(255,255,255,.8); }
 .notifDot { position: absolute; top: 8px; right: 8px; width: 7px; height: 7px; border-radius: 50%; background: #f2994a; border: 1.5px solid #fff; }
 
 .profileChip { display: flex; align-items: center; gap: 8px; padding: 6px 12px 6px 6px; border: 1px solid rgba(255,255,255,.55); background: rgba(255,255,255,.55); border-radius: 999px; cursor: pointer; }
 .profileChip:hover { background: rgba(255,255,255,.8); }
-.profileChip span { font-size: 13.5px; font-weight: 600; color: #201b2e; font-family: 'Space Grotesk', sans-serif; }
-.avatarLg { width: 26px; height: 26px; border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff; display: flex; align-items: center; justify-content: center; font-family: 'Space Grotesk', sans-serif; flex-shrink: 0; }
+.profileChip span { font-size: 13.5px; font-weight: 600; color: #201b2e; font-family: var(--font-display); }
+.avatarLg { width: 26px; height: 26px; border-radius: 50%; font-size: 11px; font-weight: 700; color: #fff; display: flex; align-items: center; justify-content: center; font-family: var(--font-display); flex-shrink: 0; }
 
 /* ── Page hero ───────────────────────────────────────────────────────────── */
 .pageHero { margin-bottom: 28px; }
-.pageTitle { margin: 0 0 6px; font-size: 24px; font-weight: 700; color: #201b2e; letter-spacing: -.01em; font-family: 'Space Grotesk', sans-serif; }
+.pageTitle { margin: 0 0 6px; font-size: 24px; font-weight: 700; color: #201b2e; letter-spacing: -.01em; font-family: var(--font-display); }
 .pageSubtitle { margin: 0; font-size: 14px; color: #9891a6; font-weight: 500; }
 
 .icon { width: 17px; height: 17px; flex-shrink: 0; }

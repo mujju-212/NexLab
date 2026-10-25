@@ -1,14 +1,15 @@
 import { useState, useEffect, useRef } from 'react';
-import { useRouter } from 'next/navigation';
+import { useRouter, usePathname } from 'next/navigation';
 import {
   LayoutDashboard, GraduationCap, Terminal, TrendingUp,
-  User, LogOut, Bell, Search, Sparkles,
+  User, LogOut, LogIn, Bell, Search, Sparkles,
   ChevronRight, Menu, Library, Zap, Flame, BookMarked
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './IndividualShell.module.css';
 import { ShellNotifications, ShellSearchBox, type SearchHit } from './shell-widgets';
 import AgentChatPanel from './AgentChatPanel';
+import ImpersonationBanner from '../shared/ImpersonationBanner';
 import { practiceExtraService } from '@/services/practice-extra.service';
 import { authService } from '@/services/auth.service';
 import { useAuthStore } from '@/store/auth-store';
@@ -37,6 +38,7 @@ interface IndividualShellProps {
 
 export default function IndividualShell({ activePage, children, title, subtitle, breadcrumbs }: IndividualShellProps) {
   const router = useRouter();
+  const pathname = usePathname();
   const { user, clearAuth } = useAuthStore();
   const [collapsed, setCollapsed] = useState(false);
   const [drawerOpen, setDrawerOpen] = useState(false);
@@ -72,6 +74,7 @@ export default function IndividualShell({ activePage, children, title, subtitle,
 
   return (
     <div className={styles.stage}>
+      <ImpersonationBanner />
       <div className={`${styles.blob} ${styles.blob1}`} />
       <div className={`${styles.blob} ${styles.blob2}`} />
       <div className={`${styles.blob} ${styles.blob3}`} />
@@ -82,7 +85,7 @@ export default function IndividualShell({ activePage, children, title, subtitle,
         {/* ══ SIDEBAR ══ */}
         <aside className={`${styles.sidebar} ${collapsed ? styles.sidebarCollapsed : ''} ${drawerOpen ? styles.sidebarDrawerOpen : ''}`}>
           <div className={styles.sidebarTop}>
-            <div className={styles.logo} onClick={() => router.push('/practice/dashboard')}>
+            <div className={styles.logo} onClick={() => router.push(user ? '/practice/dashboard' : '/practice')}>
               <Image src="/logo.png" alt="NexLab" width={collapsed ? 54 : 105} height={collapsed ? 36 : 70} style={{ objectFit: 'contain' }} priority />
             </div>
             <button className={styles.collapseBtn} onClick={() => setCollapsed(p => !p)} title="Collapse">
@@ -120,16 +123,23 @@ export default function IndividualShell({ activePage, children, title, subtitle,
           {/* ── Fixed footer: Sign Out + promo ── */}
           <div className={styles.sidebarFooter}>
             <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-              <li className={navCls('Logout', true)} title="Sign Out" onClick={() => go('Logout', '/login')}>
-                <LogOut size={17} strokeWidth={1.9} className={styles.navIcon} />
-                <span className={styles.label}>Sign Out</span>
-              </li>
+              {user ? (
+                <li className={navCls('Logout', true)} title="Sign Out" onClick={() => go('Logout', '/login')}>
+                  <LogOut size={17} strokeWidth={1.9} className={styles.navIcon} />
+                  <span className={styles.label}>Sign Out</span>
+                </li>
+              ) : (
+                <li className={navCls('Logout', true)} title="Sign In" onClick={() => router.push('/login')}>
+                  <LogIn size={17} strokeWidth={1.9} className={styles.navIcon} />
+                  <span className={styles.label}>Sign In</span>
+                </li>
+              )}
             </ul>
             <div className={styles.promoBanner} onClick={() => router.push('/practice')}>
               <div className={styles.promoIcon}><Sparkles size={16} strokeWidth={1.9} /></div>
               <div className={styles.promoText}>
-                <p className={styles.promoTitle}>Free &amp; Open</p>
-                <span className={styles.promoLink}>Explore 589+ problems, courses and more</span>
+                <p className={styles.promoTitle}>Explore NexLab</p>
+                <span className={styles.promoLink}>Explore the full problem library, courses and more</span>
               </div>
               <ChevronRight size={14} className={styles.promoArrow} />
             </div>
@@ -177,7 +187,7 @@ export default function IndividualShell({ activePage, children, title, subtitle,
                 fetcher={(q) => practiceExtraService.searchProblems(q)}
                 onSelect={(hit: SearchHit) => router.push(hit.link ?? '/practice/library')}
               />
-              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} role="free_user" />
+              <ShellNotifications buttonClass={styles.iconBtn} dotClass={styles.notifDot} role="platform_user" />
               <div className={styles.profileChip} onClick={() => router.push('/practice/profile')}>
                 <div className={styles.avatarLg} style={{ background: '#9333ea' }} suppressHydrationWarning>
                   {initials}
@@ -198,7 +208,9 @@ export default function IndividualShell({ activePage, children, title, subtitle,
         </main>
       </div>
 
-      <AgentChatPanel roleOverride="free_user" pageContext={{ page_title: title || activePage }} />
+      {pathname?.startsWith('/practice/playground') ? null : (
+          <AgentChatPanel roleOverride="platform_user" pageContext={{ page_title: title || activePage }} />
+        )}
     </div>
   );
 }

@@ -16,16 +16,16 @@ import {
 } from 'lucide-react';
 import IndividualShell from '@/components/layout/IndividualShell';
 import {
-  FreeOverviewTab,
-  FreeLadderTab,
-  FreeSkillsTab,
-  FreeActivityTab,
-  FreeCoursesTab,
+  PlatformOverviewTab,
+  PlatformLadderTab,
+  PlatformSkillsTab,
+  PlatformActivityTab,
+  PlatformCoursesTab,
   ShowcaseModal,
-} from '@/components/free-analytics';
-import { freeService } from '@/services/free.service';
+} from '@/components/platform-analytics';
+import { platformUserService } from '@/services/platform-user.service';
 import { useAuthStore } from '@/store/auth-store';
-import styles from '@/components/free-analytics/free-analytics.module.css';
+import styles from '@/components/platform-analytics/platform-analytics.module.css';
 
 import Cookies from 'js-cookie';
 import { authService } from '@/services/auth.service';
@@ -93,22 +93,22 @@ function ProgressPageContent() {
     error: overviewError,
     refetch,
   } = useQuery({
-    queryKey: ['free-analytics-overview'],
-    queryFn: () => freeService.getFreeOverview(),
+    queryKey: ['platform-analytics-overview'],
+    queryFn: () => platformUserService.getPlatformOverview(),
     enabled: !!user,
   });
 
   // 2. Targeted Recommendations
   const { data: recsData } = useQuery({
-    queryKey: ['free-analytics-recommendations'],
-    queryFn: () => freeService.getRecommendations(5),
+    queryKey: ['platform-analytics-recommendations'],
+    queryFn: () => platformUserService.getRecommendations(5),
     enabled: !!user,
   });
 
   // 3. User's Showcase Settings
   const { data: showcaseMe } = useQuery({
-    queryKey: ['free-analytics-showcase-me'],
-    queryFn: () => freeService.getMyShowcase(),
+    queryKey: ['platform-analytics-showcase-me'],
+    queryFn: () => platformUserService.getMyShowcase(),
     enabled: !!user,
   });
 
@@ -131,7 +131,7 @@ function ProgressPageContent() {
   }
 
   return (
-    <IndividualShell activePage="My Growth">
+    <IndividualShell activePage="progress">
       <div className={styles.container}>
         
         {/* ══ TOP HERO HEADER (Only on non-courses tabs) ══ */}
@@ -179,8 +179,8 @@ function ProgressPageContent() {
           <div className={styles.userProfilePillHeader}>
             <div className={styles.userAvatarSm}>FL</div>
             <div className={styles.userNameBlock}>
-              <span className={styles.userFullNameText}>{user?.full_name || 'Free Learner'}</span>
-              <span className={styles.userHandleText}>@free</span>
+              <span className={styles.userFullNameText}>{user?.full_name || 'Platform Learner'}</span>
+              <span className={styles.userHandleText}>@{(user?.full_name || "learner").toLowerCase().replace(/\s+/g, "")}</span>
             </div>
             <button
               onClick={() => setShowcaseOpen(true)}
@@ -245,7 +245,7 @@ function ProgressPageContent() {
           <>
             {/* ══ 1. Overview Tab (Redesigned matching mockup) ══ */}
             {activeTab === 'overview' && (
-              <FreeOverviewTab
+              <PlatformOverviewTab
                 overview={overview}
                 recommendations={recsData?.recommendations}
                 onNavigateTab={handleTabChange}
@@ -255,7 +255,7 @@ function ProgressPageContent() {
 
             {/* ══ 2. Ladder & Ranks Tab ══ */}
             {activeTab === 'ladder' && (
-              <FreeLadderTab
+              <PlatformLadderTab
                 standing={overview.standing}
                 difficultyMix={overview.difficulty_mix}
                 unlocks={overview.unlocks}
@@ -265,7 +265,7 @@ function ProgressPageContent() {
 
             {/* ══ 3. Skills & Topics Tab ══ */}
             {activeTab === 'skills' && (
-              <FreeSkillsTab
+              <PlatformSkillsTab
                 topicStrength={overview.topic_strength}
                 recommendations={recsData?.recommendations}
               />
@@ -273,12 +273,12 @@ function ProgressPageContent() {
 
             {/* ══ 4. Activity & Trends Tab ══ */}
             {activeTab === 'activity' && (
-              <FreeActivityTab activity={overview.activity} />
+              <PlatformActivityTab activity={overview.activity} />
             )}
 
             {/* ══ 5. Courses & Certs Tab ══ */}
             {activeTab === 'courses' && (
-              <FreeCoursesTab
+              <PlatformCoursesTab
                 initialCourses={overview.courses}
                 onOpenShare={() => setShowcaseOpen(true)}
               />
@@ -293,7 +293,7 @@ function ProgressPageContent() {
             onClose={() => setShowcaseOpen(false)}
             initialPublic={showcaseMe?.profile_public ?? false}
             initialSlug={showcaseMe?.profile_slug ?? null}
-            userName={user?.full_name || 'Free Learner'}
+            userName={user?.full_name || 'Platform Learner'}
             rating={Math.round(overview.standing.rating ?? 0)}
             level={overview.standing.level ?? 1}
             levelName={overview.standing.level_name ?? 'Newcomer'}

@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import IndividualShell from '@/components/layout/IndividualShell';
 import { useAuthStore } from '@/store/auth-store';
 import { authService } from '@/services/auth.service';
-import { freeService, type FreeAnalyticsOverview } from '@/services/free.service';
+import { platformUserService, type PlatformAnalyticsOverview } from '@/services/platform-user.service';
 import { practiceExtraService } from '@/services/practice-extra.service';
 import styles from './profile.module.css';
 import {
@@ -28,7 +28,10 @@ export default function ProfilePage() {
   const [activeTab, setActiveTab] = useState<TabKey>('Overview');
 
   // Overview / Backend Data
-  const [analytics, setAnalytics] = useState<FreeAnalyticsOverview | null>(null);
+  const [analytics, setAnalytics] = useState<PlatformAnalyticsOverview | null>(null);
+  const [courseCertificates, setCourseCertificates] = useState<
+    { course_id: string; course_title?: string; title?: string; certificate_id?: string; completed_at?: string; download_url?: string }[]
+  >([]);
   const [submissions, setSubmissions] = useState<Array<{
     id: string;
     problem_id: string;
@@ -117,7 +120,7 @@ export default function ProfilePage() {
   useEffect(() => {
     if (user) {
       setEditName(user.full_name || '');
-      setEditBio(user.bio || 'Passionate about problem solving and learning DSA. On a journey to become better every day! 🚀');
+      setEditBio(user.bio || '');
       setEditPhone(user.phone || '');
       setEditLocation(user.location || 'Global');
       setTwoFactorEnabled(Boolean(user.two_factor_enabled));
@@ -130,10 +133,11 @@ export default function ProfilePage() {
     setLoading(true);
 
     Promise.all([
-      freeService.getFreeOverview().catch(() => null),
-      freeService.getSubmissions(20).catch(() => ({ submissions: [], total: 0 })),
-      freeService.getMyShowcase().catch(() => null)
-    ]).then(([overviewData, subsData, showcaseData]) => {
+      platformUserService.getPlatformOverview().catch(() => null),
+      platformUserService.getSubmissions(20).catch(() => ({ submissions: [], total: 0 })),
+      platformUserService.getMyShowcase().catch(() => null),
+      platformUserService.getCoursesAnalytics().catch(() => null),
+    ]).then(([overviewData, subsData, showcaseData, coursesData]) => {
       if (overviewData) {
         setAnalytics(overviewData);
       }
@@ -142,6 +146,9 @@ export default function ProfilePage() {
       }
       if (showcaseData) {
         setShowcase(showcaseData);
+      }
+      if (coursesData) {
+        setCourseCertificates(coursesData.certificates || []);
       }
     }).finally(() => {
       setLoading(false);
@@ -246,33 +253,27 @@ export default function ProfilePage() {
 
   // Format initials
   const initials = useMemo(() => {
-    if (!user?.full_name) return 'FL';
+    if (!user?.full_name) return '?';
     const parts = user.full_name.trim().split(/\s+/);
     if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
     return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
   }, [user]);
 
-  // Derived or fallback stats matching UI and real telemetry
-  const totalXp = analytics?.standing?.total_xp ?? 1289;
-  const problemsSolved = analytics?.standing?.problems_solved ?? 68;
+  // Real telemetry only — zero until the API answers. No invented numbers.
+  const totalXp = analytics?.standing?.total_xp ?? 0;
+  const problemsSolved = analytics?.standing?.problems_solved ?? 0;
   const problemsAttempted = analytics?.difficulty_mix?.total_attempted ? Math.max(0, analytics.difficulty_mix.total_attempted - problemsSolved) : 0;
-  const totalSubmissions = analytics?.activity?.summary?.total_submissions ?? 68;
+  const totalSubmissions = analytics?.activity?.summary?.total_submissions ?? 0;
 
-  const easySolved = analytics?.difficulty_mix?.easy ?? 11;
-  const easyTotal = 16;
-  const easyPct = Math.round((easySolved / easyTotal) * 100);
-
-  const medSolved = analytics?.difficulty_mix?.medium ?? 30;
-  const medTotal = 72;
-  const medPct = Math.round((medSolved / medTotal) * 100);
-
-  const hardSolved = analytics?.difficulty_mix?.hard ?? 2;
-  const hardTotal = 16;
-  const hardPct = Math.round((hardSolved / hardTotal) * 100);
+  const easySolved = analytics?.difficulty_mix?.easy ?? 0;
+  const medSolved = analytics?.difficulty_mix?.medium ?? 0;
+  const hardSolved = analytics?.difficulty_mix?.hard ?? 0;
+  const solvedTotal = easySolved + medSolved + hardSolved;
+  const shareOfSolved = (n: number) => (solvedTotal > 0 ? Math.round((n / solvedTotal) * 100) : 0);
 
   const acceptanceRate = analytics?.difficulty_mix?.acceptance_rate
     ? Math.min(100, Math.round(analytics.difficulty_mix.acceptance_rate))
-    : 24;
+    : 0;
 
   // Format relative time helper
   const formatTimeAgo = (dateStr: string) => {
@@ -289,25 +290,33 @@ export default function ProfilePage() {
     return past.toLocaleDateString();
   };
 
-  // Fallback sample recent activity if submissions list is empty
-  const defaultRecentActivity = [
-    { title: 'Two Sum', slug: 'two-sum', difficulty: 'Easy', status: 'Solved', is_solved: true, timeAgo: '2 hours ago' },
-    { title: 'Valid Parentheses', slug: 'valid-parentheses', difficulty: 'Easy', status: 'Solved', is_solved: true, timeAgo: '5 hours ago' },
-    { title: 'Merge Two Sorted Lists', slug: 'merge-two-sorted-lists', difficulty: 'Medium', status: 'Attempted', is_solved: false, timeAgo: '1 day ago' },
-    { title: 'Binary Tree Inorder Traversal', slug: 'binary-tree-inorder-traversal', difficulty: 'Medium', status: 'Solved', is_solved: true, timeAgo: '2 days ago' },
-    { title: 'Maximum Subarray', slug: 'maximum-subarray', difficulty: 'Medium', status: 'Solved', is_solved: true, timeAgo: '2 days ago' },
-  ];
+  const recentList = submissions.slice(0, 5).map(s => ({
+    title: s.title,
+    slug: s.slug,
+    difficulty: s.difficulty,
+    status: s.is_solved ? 'Solved' : 'Attempted',
+    is_solved: s.is_solved,
+    timeAgo: formatTimeAgo(s.submitted_at),
+  }));
 
-  const recentList = submissions.length > 0
-    ? submissions.slice(0, 5).map(s => ({
-        title: s.title,
-        slug: s.slug,
-        difficulty: s.difficulty,
-        status: s.is_solved ? 'Solved' : 'Attempted',
-        is_solved: s.is_solved,
-        timeAgo: formatTimeAgo(s.submitted_at),
-      }))
-    : defaultRecentActivity;
+  // Badge DEFINITIONS (display catalog) — earned state comes only from the API.
+  const BADGE_DEFS = [
+    { id: 'first_solve', icon: '🌱', title: 'First Steps', desc: 'Solve your first problem' },
+    { id: 'streak_7', icon: '🔥', title: 'Week Warrior', desc: 'Maintain a 7-day streak' },
+    { id: 'streak_30', icon: '🔥', title: 'Month Master', desc: 'Maintain a 30-day streak' },
+    { id: 'easy_10', icon: '✅', title: 'Easy Mode', desc: 'Solve 10 Easy problems' },
+    { id: 'medium_10', icon: '⚡', title: 'Rising Star', desc: 'Solve 10 Medium problems' },
+    { id: 'hard_5', icon: '💎', title: 'Diamond Coder', desc: 'Solve 5 Hard problems' },
+    { id: 'centurion', icon: '💯', title: 'Centurion', desc: 'Solve 100 problems' },
+    { id: 'speed_demon', icon: '⚡', title: 'Speed Demon', desc: 'Accepted under 5 minutes' },
+  ];
+  const earnedBadges = analytics?.standing?.badges || [];
+  type EarnedBadge = { badge_id: string; earned_at?: string | null };
+  const earnedList: EarnedBadge[] = earnedBadges;
+  const earnedBadgeIds = earnedList.map((b) => b.badge_id);
+  const earnedBadgeDates: Record<string, string | null | undefined> = Object.fromEntries(
+    earnedList.map((b) => [b.badge_id, b.earned_at ?? undefined]),
+  );
 
   // 52-week heatmap grid generator (from real analytics.activity.heatmap or fallback)
   const heatmapWeeks = useMemo(() => {
@@ -398,42 +407,48 @@ export default function ProfilePage() {
 
             <div className={styles.heroMeta}>
               <div className={styles.heroNameRow}>
-                <h1 className={styles.heroName}>{user.full_name || 'Free Learner'}</h1>
+                <h1 className={styles.heroName}>{user.full_name || 'Platform Learner'}</h1>
               </div>
 
               <div className={styles.handleBadgeRow}>
                 <span className={styles.username}>
-                  @{user.email ? user.email.split('@')[0] : 'free'}
+                  @{user.email ? user.email.split('@')[0] : 'learner'}
                 </span>
                 <span className={styles.roleBadge}>
                   <Sparkles size={12} />
-                  {user.role === 'free_user' ? 'Free User' : (user.role || 'Member')}
+                  {user.role === 'platform_user' ? 'Platform User' : (user.role || 'Member')}
                 </span>
               </div>
 
-              <p className={styles.heroBio}>
-                {user.bio || 'Passionate about problem solving and learning DSA. On a journey to become better every day! 🚀'}
-              </p>
+              {user.bio ? (
+                <p className={styles.heroBio}>{user.bio}</p>
+              ) : null}
 
               <div className={styles.metaRow}>
                 <div className={styles.metaItem}>
                   <Calendar size={13} />
-                  <span>Joined Oct 2026</span>
+                  <span>
+                    {user.created_at
+                      ? `Joined ${new Date(user.created_at).toLocaleDateString(undefined, { month: 'short', year: 'numeric' })}`
+                      : 'Platform member'}
+                  </span>
                 </div>
                 <div className={styles.metaItem}>
                   <Globe size={13} />
                   <span>{user.location || 'Global'}</span>
                 </div>
-                <a
-                  href="https://nexlab.io"
-                  target="_blank"
-                  rel="noreferrer"
-                  className={styles.metaLink}
-                  title="Visit Website"
-                >
-                  <LinkIcon size={13} />
-                  <span>https://nexlab.io</span>
-                </a>
+                {(user as unknown as { website?: string }).website ? (
+                  <a
+                    href={(user as unknown as { website: string }).website}
+                    target="_blank"
+                    rel="noreferrer"
+                    className={styles.metaLink}
+                    title="Visit Website"
+                  >
+                    <LinkIcon size={13} />
+                    <span>{(user as unknown as { website: string }).website}</span>
+                  </a>
+                ) : null}
               </div>
             </div>
           </div>
@@ -475,7 +490,6 @@ export default function ProfilePage() {
             <div className={styles.statInfo}>
               <div className={styles.statTopRow}>
                 <span className={styles.statValue}>{totalXp.toLocaleString()}</span>
-                <span className={styles.statDelta}>↑ +12%</span>
               </div>
               <span className={styles.statLabel}>Total XP</span>
             </div>
@@ -489,7 +503,6 @@ export default function ProfilePage() {
             <div className={styles.statInfo}>
               <div className={styles.statTopRow}>
                 <span className={styles.statValue}>{problemsSolved}</span>
-                <span className={styles.statDelta}>↑ +8%</span>
               </div>
               <span className={styles.statLabel}>Problems Solved</span>
             </div>
@@ -516,7 +529,6 @@ export default function ProfilePage() {
             <div className={styles.statInfo}>
               <div className={styles.statTopRow}>
                 <span className={styles.statValue}>{totalSubmissions}</span>
-                <span className={styles.statDelta}>↑ +15%</span>
               </div>
               <span className={styles.statLabel}>Total Submissions</span>
             </div>
@@ -570,9 +582,9 @@ export default function ProfilePage() {
                 </div>
 
                 <div className={styles.radialGaugesRow}>
-                  {renderCircleGauge(easyPct, '#10b981', 'Easy', `${easySolved} / ${easyTotal} solved`)}
-                  {renderCircleGauge(medPct, '#f59e0b', 'Medium', `${medSolved} / ${medTotal} solved`)}
-                  {renderCircleGauge(hardPct, '#ef4444', 'Hard', `${hardSolved} / ${hardTotal} solved`)}
+                  {renderCircleGauge(shareOfSolved(easySolved), '#10b981', 'Easy', `${easySolved} solved`)}
+                  {renderCircleGauge(shareOfSolved(medSolved), '#f59e0b', 'Medium', `${medSolved} solved`)}
+                  {renderCircleGauge(shareOfSolved(hardSolved), '#ef4444', 'Hard', `${hardSolved} solved`)}
                   {renderCircleGauge(acceptanceRate, '#6366f1', 'Acceptance Rate', `${totalSubmissions} submissions`)}
                 </div>
               </div>
@@ -681,6 +693,11 @@ export default function ProfilePage() {
                 </div>
 
                 <div className={styles.activityList}>
+                  {recentList.length === 0 && (
+                    <p style={{ margin: 0, padding: '18px 4px', fontSize: 13, color: '#9ca3af', textAlign: 'center' }}>
+                      No submissions yet — solve your first problem to start your history.
+                    </p>
+                  )}
                   {recentList.map((item, idx) => (
                     <div key={idx} className={styles.activityRow}>
                       <div className={styles.activityRowLeft}>
@@ -739,7 +756,7 @@ export default function ProfilePage() {
                       <Mail size={15} />
                       <span>Full Name</span>
                     </div>
-                    <span className={styles.infoRowValue}>{user.full_name || 'Free Learner'}</span>
+                    <span className={styles.infoRowValue}>{user.full_name || 'Platform Learner'}</span>
                   </div>
 
                   <div className={styles.infoRow}>
@@ -747,7 +764,7 @@ export default function ProfilePage() {
                       <Mail size={15} />
                       <span>Email Address</span>
                     </div>
-                    <span className={styles.infoRowValue}>{user.email || 'free@nexlab.io'}</span>
+                    <span className={styles.infoRowValue}>{user.email || '—'}</span>
                   </div>
 
                   <div className={styles.infoRow}>
@@ -755,7 +772,7 @@ export default function ProfilePage() {
                       <User size={15} />
                       <span>Username</span>
                     </div>
-                    <span className={styles.infoRowValue}>@{user.email ? user.email.split('@')[0] : 'free'}</span>
+                    <span className={styles.infoRowValue}>@{user.email ? user.email.split('@')[0] : 'learner'}</span>
                   </div>
 
                   <div className={styles.infoRow}>
@@ -765,7 +782,7 @@ export default function ProfilePage() {
                     </div>
                     <span className={styles.roleBadge}>
                       <Sparkles size={11} />
-                      {user.role === 'free_user' ? 'Free User' : (user.role || 'Member')}
+                      {user.role === 'platform_user' ? 'Platform User' : (user.role || 'Member')}
                     </span>
                   </div>
 
@@ -774,7 +791,11 @@ export default function ProfilePage() {
                       <Calendar size={15} />
                       <span>Member Since</span>
                     </div>
-                    <span className={styles.infoRowValue}>October 2026</span>
+                    <span className={styles.infoRowValue}>
+                      {user.created_at
+                        ? new Date(user.created_at).toLocaleDateString(undefined, { month: 'long', year: 'numeric' })
+                        : '—'}
+                    </span>
                   </div>
 
                   <div className={styles.infoRow}>
@@ -806,7 +827,7 @@ export default function ProfilePage() {
               <div className={styles.standingHeroStats}>
                 <div className={styles.standingStatItem}>
                   <h4>Rating</h4>
-                  <p>{analytics?.standing?.rating ? Math.round(analytics.standing.rating) : 1735}</p>
+                  <p>{analytics?.standing?.rating ? Math.round(analytics.standing.rating) : '—'}</p>
                 </div>
                 <div className={styles.standingStatItem}>
                   <h4>Level</h4>
@@ -836,7 +857,7 @@ export default function ProfilePage() {
                 <label className={styles.switch}>
                   <input
                     type="checkbox"
-                    checked={showcase?.profile_public ?? true}
+                    checked={showcase?.profile_public ?? false}
                     onChange={async (e) => {
                       const on = e.target.checked;
                       try {
@@ -851,7 +872,7 @@ export default function ProfilePage() {
 
               <div style={{ display: 'flex', alignItems: 'center', gap: 10, background: '#f8fafc', padding: '12px 16px', borderRadius: 10 }}>
                 <code style={{ fontSize: 13, color: '#334155', flex: 1 }}>
-                  {typeof window !== 'undefined' ? window.location.origin : 'https://nexlab.io'}/u/{showcase?.profile_slug || 'free-learner'}
+                  {typeof window !== 'undefined' ? window.location.origin : 'https://nexlab.io'}/u/{showcase?.profile_slug || 'platform-learner'}
                 </code>
                 <button
                   type="button"
@@ -876,36 +897,31 @@ export default function ProfilePage() {
                   </div>
                 </div>
                 <span className={styles.roleBadge}>
-                  {analytics?.standing?.badges?.length || 3} of 8 Unlocked
+                  {earnedBadgeIds.length} of {BADGE_DEFS.length} Unlocked
                 </span>
               </div>
 
               <div className={styles.badgesGrid}>
-                {[
-                  { id: 'first_solve', icon: '🚀', title: 'First Solve', desc: 'Solved your first algorithmic practice problem', unlocked: true, date: 'Oct 02, 2026' },
-                  { id: 'speed_demon', icon: '⚡', title: 'Speed Demon', desc: 'Executed a problem solution under 100ms runtime', unlocked: true, date: 'Oct 08, 2026' },
-                  { id: 'beginner_path', icon: '🌱', title: 'Beginner Path', desc: 'Completed basic data structures and two-pointer sets', unlocked: true, date: 'Oct 12, 2026' },
-                  { id: 'streak_master', icon: '🔥', title: 'Streak Master', desc: 'Maintained a consecutive 7-day coding streak', unlocked: true, date: 'Oct 15, 2026' },
-                  { id: 'algo_knight', icon: '⚔️', title: 'Algorithm Knight', desc: 'Successfully solved 50+ total algorithmic problems', unlocked: true, date: 'Oct 16, 2026' },
-                  { id: 'clean_code', icon: '✨', title: 'Flawless Execution', desc: 'Accepted on the very first try with 100% test pass', unlocked: false, date: 'Locked' },
-                  { id: 'tree_whisperer', icon: '🌲', title: 'Tree Whisperer', desc: 'Master all binary tree traversals and BST algorithms', unlocked: false, date: 'Locked' },
-                  { id: 'dynamic_mind', icon: '🧩', title: 'DP Architect', desc: 'Solve 10 Medium or Hard Dynamic Programming problems', unlocked: false, date: 'Locked' },
-                ].map((b) => (
-                  <div
-                    key={b.id}
-                    className={styles.badgeCard}
-                    style={{ opacity: b.unlocked ? 1 : 0.6, background: b.unlocked ? '#ffffff' : '#fafafa' }}
-                  >
-                    <div className={styles.badgeIconBox}>{b.icon}</div>
-                    <div>
-                      <h4 className={styles.badgeTitle}>{b.title}</h4>
-                      <p className={styles.badgeDesc}>{b.desc}</p>
-                      <span className={styles.badgeEarnedDate} style={{ color: b.unlocked ? '#7c3aed' : '#9ca3af' }}>
-                        {b.date}
-                      </span>
+                {BADGE_DEFS.map((b) => {
+                  const earned = earnedBadgeIds.includes(b.id);
+                  const earnedAt = earnedBadgeDates[b.id];
+                  return (
+                    <div
+                      key={b.id}
+                      className={styles.badgeCard}
+                      style={{ opacity: earned ? 1 : 0.6, background: earned ? '#ffffff' : '#fafafa' }}
+                    >
+                      <div className={styles.badgeIconBox}>{b.icon}</div>
+                      <div>
+                        <h4 className={styles.badgeTitle}>{b.title}</h4>
+                        <p className={styles.badgeDesc}>{b.desc}</p>
+                        <span className={styles.badgeEarnedDate} style={{ color: earned ? '#7c3aed' : '#9ca3af' }}>
+                          {earned ? (earnedAt ? new Date(earnedAt).toLocaleDateString() : 'Earned') : 'Locked'}
+                        </span>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             </div>
 
@@ -922,21 +938,26 @@ export default function ProfilePage() {
               </div>
 
               <div className={styles.certList}>
-                {[
-                  { id: 'cert-1', title: 'SQL Foundations', date: 'Oct 15, 2026', certId: 'NEX-SQL-FOUNDATI-1DD5818F' },
-                  { id: 'cert-2', title: 'C++ Essentials', date: 'Oct 14, 2026', certId: 'NEX-CPP-ESSENTIA-1DD5818F' },
-                  { id: 'cert-3', title: 'Artificial Intelligence Basics', date: 'Oct 14, 2026', certId: 'NEX-ARTIFICIAL-I-1DD5818F' },
-                ].map((c) => (
-                  <div key={c.id} className={styles.certCard}>
+                {courseCertificates.length === 0 && (
+                  <p style={{ margin: 0, padding: '18px 4px', fontSize: 13, color: '#9ca3af', textAlign: 'center' }}>
+                    No certificates yet — complete a course to earn your first verified certificate.
+                  </p>
+                )}
+                {courseCertificates.map((c) => (
+                  <div key={c.certificate_id || c.course_id} className={styles.certCard}>
                     <div>
-                      <h4 style={{ margin: '0 0 3px', fontSize: 14, fontWeight: 700 }}>{c.title}</h4>
-                      <p style={{ margin: '0 0 4px', fontSize: 11.5, color: '#6b7280' }}>Completed {c.date}</p>
-                      <code style={{ fontSize: 10.5, color: '#7c3aed' }}>{c.certId}</code>
+                      <h4 style={{ margin: '0 0 3px', fontSize: 14, fontWeight: 700 }}>
+                        {c.course_title || c.title || 'Course Certificate'}
+                      </h4>
+                      <p style={{ margin: '0 0 4px', fontSize: 11.5, color: '#6b7280' }}>
+                        {c.completed_at ? `Completed ${new Date(c.completed_at).toLocaleDateString()}` : 'Completed'}
+                      </p>
+                      {c.certificate_id && <code style={{ fontSize: 10.5, color: '#7c3aed' }}>{c.certificate_id}</code>}
                     </div>
                     <button
                       type="button"
                       className={styles.certDownloadBtn}
-                      onClick={() => alert(`Certificate downloaded: ${c.certId}`)}
+                      onClick={() => window.open(c.download_url || `/api/platform-user/courses/${c.course_id}/certificate`, '_blank')}
                     >
                       <Download size={13} /> PDF
                     </button>
@@ -1160,7 +1181,7 @@ export default function ProfilePage() {
 
             {prefSavedToast && (
               <div className={`${styles.alertBox} ${styles.alertSuccess}`}>
-                <CheckCircle2 size={16} /> Preferences updated successfully!
+                <CheckCircle2 size={16} /> Preferences saved on this device.
               </div>
             )}
 
@@ -1168,11 +1189,16 @@ export default function ProfilePage() {
               type="button"
               className={styles.saveBtn}
               onClick={() => {
+                try {
+                  localStorage.setItem('nexlab_prefs', JSON.stringify({
+                    daily_notif: prefDailyNotif,
+                  }));
+                } catch { /* storage unavailable */ }
                 setPrefSavedToast(true);
                 setTimeout(() => setPrefSavedToast(false), 2500);
               }}
             >
-              <Save size={15} /> Save Preferences
+              <Save size={15} /> Save Preferences (this device)
             </button>
           </div>
         )}
@@ -1310,8 +1336,8 @@ export default function ProfilePage() {
                 </div>
                 <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '10px 14px', background: '#f8fafc', borderRadius: 10 }}>
                   <div>
-                    <h4 style={{ margin: '0 0 2px', fontSize: 13.5, fontWeight: 700 }}>Chrome on Windows 11</h4>
-                    <p style={{ margin: 0, fontSize: 11.5, color: '#6b7280' }}>127.0.0.1 · Active Now</p>
+                    <h4 style={{ margin: '0 0 2px', fontSize: 13.5, fontWeight: 700 }}>This device</h4>
+                    <p style={{ margin: 0, fontSize: 11.5, color: '#6b7280' }}>Current session · Active Now</p>
                   </div>
                   <span className={styles.statDelta} style={{ background: '#dcfce7', color: '#16a34a' }}>
                     Current Device
@@ -1351,7 +1377,7 @@ export default function ProfilePage() {
         {activeTab === 'Billing' && (
           <div style={{ display: 'flex', flexDirection: 'column', gap: 20 }}>
             <div className={styles.billingGrid}>
-              {/* Current Free Plan */}
+              {/* Current Plan */}
               <div className={`${styles.sectionCard} ${styles.planCardCurrent}`}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
                   <span className={styles.roleBadge} style={{ background: '#6366f1', color: '#ffffff', border: 'none' }}>
@@ -1359,11 +1385,11 @@ export default function ProfilePage() {
                   </span>
                   <span style={{ fontSize: 12, color: '#6b7280' }}>Free Forever</span>
                 </div>
-                <h3 style={{ fontSize: 22, fontWeight: 800, margin: '12px 0 0', color: '#111827' }}>NexLab Free Tier</h3>
+                <h3 style={{ fontSize: 22, fontWeight: 800, margin: '12px 0 0', color: '#111827' }}>NexLab Platform Tier</h3>
                 <div className={styles.planPrice}>$0 <span style={{ fontSize: 14, fontWeight: 500, color: '#6b7280' }}>/ month</span></div>
 
                 <ul className={styles.planFeatures}>
-                  <li><Check size={16} color="#16a34a" /> Access to 580+ core algorithmic problems</li>
+                  <li><Check size={16} color="#16a34a" /> Access to the curated algorithmic problem library</li>
                   <li><Check size={16} color="#16a34a" /> 10 Daily AI debugging calls</li>
                   <li><Check size={16} color="#16a34a" /> Public achievement profile &amp; showcase URL</li>
                   <li><Check size={16} color="#16a34a" /> Standard curated study plans &amp; daily streak</li>
@@ -1409,10 +1435,11 @@ export default function ProfilePage() {
                 <button
                   type="button"
                   className={styles.saveBtn}
-                  style={{ width: '100%', justifyContent: 'center', marginTop: 'auto' }}
-                  onClick={() => alert('NexLab Pro checkout simulated! Thanks for your interest.')}
+                  disabled
+                  title="Online checkout is coming soon."
+                  style={{ width: '100%', justifyContent: 'center', marginTop: 'auto', opacity: 0.7, cursor: 'not-allowed' }}
                 >
-                  <Sparkles size={16} /> Upgrade to Pro ($12/mo)
+                  <Sparkles size={16} /> Upgrade to Pro — Coming Soon
                 </button>
               </div>
             </div>
@@ -1442,22 +1469,8 @@ export default function ProfilePage() {
                   </thead>
                   <tbody>
                     <tr>
-                      <td>Oct 01, 2026</td>
-                      <td>NexLab Free Community Tier Membership</td>
-                      <td style={{ fontWeight: 700 }}>$0.00</td>
-                      <td>
-                        <span className={styles.statDelta} style={{ background: '#dcfce7', color: '#16a34a' }}>
-                          Active
-                        </span>
-                      </td>
-                      <td>
-                        <button
-                          type="button"
-                          className={styles.cardActionLink}
-                          onClick={() => alert('Receipt downloaded.')}
-                        >
-                          <Download size={13} /> Receipt
-                        </button>
+                      <td colSpan={5} style={{ textAlign: 'center', color: '#9ca3af', padding: '18px 8px', fontSize: 13 }}>
+                        No invoices yet — your account is on the free Platform tier.
                       </td>
                     </tr>
                   </tbody>

@@ -4,13 +4,13 @@ import React, { useState } from 'react';
 import { Flame, Share2, Sparkles, TrendingUp, Trophy, Zap, CheckCircle2 } from 'lucide-react';
 import { LevelRing } from '@/components/student-analytics/LevelRing';
 import { ShowcaseModal } from './ShowcaseModal';
-import type { FreePlatformStanding, FreeDifficultyMix, FreeUnlocksData } from '@/services/free.service';
-import styles from './free-analytics.module.css';
+import type { PlatformStanding, PlatformDifficultyMix, PlatformUnlocksData } from '@/services/platform-user.service';
+import styles from './platform-analytics.module.css';
 
 interface RankHeroProps {
-  standing: FreePlatformStanding;
-  difficultyMix?: FreeDifficultyMix;
-  unlocks?: FreeUnlocksData;
+  standing: PlatformStanding;
+  difficultyMix?: PlatformDifficultyMix;
+  unlocks?: PlatformUnlocksData;
   userName?: string;
   initialPublic?: boolean;
   profileSlug?: string | null;

@@ -1,6 +1,6 @@
 /* ══════════════════════════════════════════════════════════════════════════════
    Free User Analytics (Growth Profile) — CSS Module
-   Theme Tokens: Purple (#7c3aed, #9333ea), Amber (#f59e0b), Emerald (#10b981)
+   Theme Tokens: Purple (var(--primary), #9333ea), Amber (#f59e0b), Emerald (#10b981)
 ══════════════════════════════════════════════════════════════════════════════ */
 
 .container {
@@ -31,7 +31,7 @@
   left: 0;
   right: 0;
   height: 4px;
-  background: linear-gradient(90deg, #7c3aed, #f59e0b, #10b981);
+  background: linear-gradient(90deg, var(--primary), #f59e0b, #10b981);
 }
 
 .heroTopRow {
@@ -52,7 +52,7 @@
   width: 48px;
   height: 48px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7c3aed, #9333ea);
+  background: linear-gradient(135deg, var(--primary), #9333ea);
   color: #fff;
   display: flex;
   align-items: center;
@@ -101,7 +101,7 @@
   gap: 0.4rem;
   background: #f5f3ff;
   border: 1px solid rgba(124, 58, 237, 0.2);
-  color: #7c3aed;
+  color: var(--primary);
   padding: 0.45rem 0.95rem;
   border-radius: 0.65rem;
   font-size: 0.825rem;
@@ -207,7 +207,7 @@
 
 .unlockPct {
   font-weight: 700;
-  color: #7c3aed;
+  color: var(--primary);
 }
 
 .unlockProgressBar {
@@ -220,7 +220,7 @@
 
 .unlockProgressFill {
   height: 100%;
-  background: linear-gradient(90deg, #7c3aed, #9333ea);
+  background: linear-gradient(90deg, var(--primary), #9333ea);
   border-radius: 9999px;
   transition: width 0.6s cubic-bezier(0.4, 0, 0.2, 1);
 }
@@ -263,7 +263,7 @@
 }
 
 .tabBtnActive {
-  color: #7c3aed;
+  color: var(--primary);
   background: #fff;
   font-weight: 700;
   box-shadow: 0 2px 8px rgba(124, 58, 237, 0.12);
@@ -337,7 +337,7 @@
   height: 36px;
   border-radius: 50%;
   background: #ede9fe;
-  color: #7c3aed;
+  color: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -419,7 +419,7 @@
 .recActionBtn {
   font-size: 0.775rem;
   font-weight: 700;
-  color: #7c3aed;
+  color: var(--primary);
   background: transparent;
   border: none;
   cursor: pointer;
@@ -463,7 +463,7 @@
 .cellLevel0 { background: #f1f5f9; }
 .cellLevel1 { background: #ddd6fe; }
 .cellLevel2 { background: #a78bfa; }
-.cellLevel3 { background: #7c3aed; }
+.cellLevel3 { background: var(--primary); }
 .cellLevel4 { background: #4c1d95; }
 
 .heatmapLegend {
@@ -575,7 +575,7 @@
   align-items: center;
   justify-content: center;
   gap: 0.4rem;
-  background: linear-gradient(95deg, #7c3aed, #9333ea);
+  background: linear-gradient(95deg, var(--primary), #9333ea);
   color: #fff;
   padding: 0.6rem 1rem;
   border-radius: 0.625rem;
@@ -663,13 +663,13 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #7c3aed;
+  color: var(--primary);
   box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
   flex-shrink: 0;
 }
 
 .pageTitle {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 27px;
   font-weight: 800;
   color: #1e1b4b;
@@ -700,14 +700,14 @@
   gap: 7px;
   background: #ffffff;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 9px 18px;
   font-size: 13px;
   font-weight: 600;
   color: #475569;
   cursor: pointer;
   transition: all 0.16s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .tabPillBtn:hover {
@@ -717,7 +717,7 @@
 }
 
 .tabPillBtnActive {
-  background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%) !important;
+  background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%) !important;
   color: #ffffff !important;
   font-weight: 700;
   border-color: transparent !important;
@@ -771,7 +771,7 @@
   font-weight: 900;
   color: #0f172a;
   line-height: 1.05;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   letter-spacing: -0.02em;
 }
 
@@ -817,7 +817,7 @@
   font-weight: 800;
   color: #0f172a;
   margin: 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .levelXpSub {
@@ -837,7 +837,7 @@
 
 .levelProgressFill {
   height: 100%;
-  background: linear-gradient(90deg, #7c3aed, #9333ea);
+  background: linear-gradient(90deg, var(--primary), #9333ea);
   border-radius: 999px;
   transition: width 0.4s ease;
 }
@@ -886,7 +886,7 @@
   font-size: 16.5px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .statNumLabel {
@@ -912,7 +912,7 @@
   font-size: 12.5px;
   font-weight: 700;
   color: #1e1b4b;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .diffInitialBadge {
@@ -977,7 +977,7 @@
   font-size: 12.8px;
   font-weight: 700;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   line-height: 1.25;
 }
 
@@ -995,7 +995,7 @@
 }
 
 .highlightCardInteractive:hover .highlightChevron {
-  color: #7c3aed;
+  color: var(--primary);
   transform: translateX(2px);
 }
 
@@ -1037,7 +1037,7 @@
   height: 34px;
   border-radius: 10px;
   background: #f5f3ff;
-  color: #7c3aed;
+  color: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1056,7 +1056,7 @@
   font-weight: 600;
   color: #475569;
   cursor: pointer;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .radarBody {
@@ -1085,7 +1085,7 @@
   font-weight: 700;
   color: #0f172a;
   margin: 0 0 4px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .legendItemRow {
@@ -1112,7 +1112,7 @@
 .legendScoreVal {
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .radarFooterRow {
@@ -1131,10 +1131,10 @@
   border: none;
   font-size: 12.5px;
   font-weight: 700;
-  color: #7c3aed;
+  color: var(--primary);
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .radarFooterLink:hover {
@@ -1167,7 +1167,7 @@
   gap: 12px;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 10px 14px;
   transition: all 0.15s ease;
 }
@@ -1192,8 +1192,8 @@
   font-size: 11px;
   font-weight: 700;
   padding: 2.5px 8px;
-  border-radius: 6px;
-  font-family: 'Space Grotesk', sans-serif;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-display);
 }
 
 .problemTitleBlock {
@@ -1205,7 +1205,7 @@
   font-size: 13.5px;
   font-weight: 700;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   line-height: 1.2;
 }
 
@@ -1219,7 +1219,7 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: #7c3aed;
+  background: var(--primary);
   color: #ffffff;
   border: none;
   border-radius: 9px;
@@ -1228,7 +1228,7 @@
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   box-shadow: 0 2px 8px rgba(124, 58, 237, 0.2);
 }
 
@@ -1266,7 +1266,7 @@
 .gateLockIconBox {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: #fef3c7;
   color: #d97706;
   display: flex;
@@ -1279,7 +1279,7 @@
   font-size: 12.5px;
   font-weight: 700;
   color: #92400e;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   margin: 0;
 }
 
@@ -1293,14 +1293,14 @@
 .viewLadderBtn {
   background: #ffffff;
   border: 1px solid #fcd34d;
-  color: #7c3aed;
-  border-radius: 8px;
+  color: var(--primary);
+  border-radius: var(--radius-sm);
   padding: 5px 12px;
   font-size: 11.5px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   white-space: nowrap;
 }
 
@@ -1317,7 +1317,7 @@
 
 .gateProgressFill {
   height: 100%;
-  background: linear-gradient(90deg, #7c3aed, #9333ea);
+  background: linear-gradient(90deg, var(--primary), #9333ea);
   border-radius: 999px;
   transition: width 0.4s ease;
 }
@@ -1328,7 +1328,7 @@
   font-size: 11px;
   font-weight: 700;
   color: #92400e;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 /* ── 4. Bottom Enrolled Courses & Certifications ── */
@@ -1371,13 +1371,13 @@
 .allCoursesLink {
   font-size: 12.5px;
   font-weight: 700;
-  color: #7c3aed;
+  color: var(--primary);
   display: inline-flex;
   align-items: center;
   gap: 4px;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .allCoursesLink:hover {
@@ -1437,7 +1437,7 @@
   font-size: 14px;
   font-weight: 700;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   line-height: 1.25;
   margin: 0 0 2px;
 }
@@ -1469,16 +1469,16 @@
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  background: #7c3aed;
+  background: var(--primary);
   color: #ffffff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 6px 12px;
   font-size: 11.5px;
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .courseContinueBtn:hover {
@@ -1513,7 +1513,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #7c3aed;
+  color: var(--primary);
   box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
   flex-shrink: 0;
 }
@@ -1535,7 +1535,7 @@
   display: inline-flex;
   align-items: center;
   gap: 7px;
-  background: #7c3aed;
+  background: var(--primary);
   color: #ffffff;
   border: none;
   border-radius: 10px;
@@ -1545,7 +1545,7 @@
   cursor: pointer;
   box-shadow: 0 4px 14px rgba(124, 58, 237, 0.28);
   transition: all 0.16s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   white-space: nowrap;
   position: relative;
   z-index: 10;
@@ -1563,14 +1563,14 @@
   color: #3b82f6;
   background: #eff6ff;
   border: 1px solid #bfdbfe;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 3px 8px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .jumpStandingsBtn:hover {
@@ -1581,12 +1581,12 @@
 .practiceXpLink {
   background: none;
   border: none;
-  color: #7c3aed;
+  color: var(--primary);
   font-size: 11px;
   font-weight: 700;
   cursor: pointer;
   padding: 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   transition: color 0.15s ease;
 }
 
@@ -1631,7 +1631,7 @@
   font-weight: 800;
   color: #0f172a;
   margin: 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .ladderDropdownBtn {
@@ -1640,13 +1640,13 @@
   color: #64748b;
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 3px 8px;
   display: inline-flex;
   align-items: center;
   gap: 4px;
   cursor: pointer;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .ladderCardBodyFlex {
@@ -1660,7 +1660,7 @@
   font-size: 34px;
   font-weight: 900;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   line-height: 1.1;
   letter-spacing: -0.02em;
 }
@@ -1698,7 +1698,7 @@
 }
 
 .rankRibbonBadge {
-  background: #7c3aed;
+  background: var(--primary);
   color: #ffffff;
   font-size: 10.5px;
   font-weight: 800;
@@ -1707,7 +1707,7 @@
   margin-top: -8px;
   z-index: 2;
   box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   letter-spacing: 0.02em;
 }
 
@@ -1741,7 +1741,7 @@
   font-size: 12px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .levelRingPct {
@@ -1763,7 +1763,7 @@
   font-size: 14px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .levelSub {
@@ -1782,14 +1782,14 @@
 
 .levelFill {
   height: 100%;
-  background: linear-gradient(90deg, #7c3aed, #9333ea);
+  background: linear-gradient(90deg, var(--primary), #9333ea);
   border-radius: 999px;
   transition: width 0.3s ease;
 }
 
 .levelFooter {
   font-size: 11px;
-  color: #7c3aed;
+  color: var(--primary);
   font-weight: 700;
   margin-top: 2px;
 }
@@ -1811,7 +1811,7 @@
 .keyStatIconBox {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1827,7 +1827,7 @@
   font-size: 15px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   line-height: 1.1;
 }
 
@@ -1852,7 +1852,7 @@
   gap: 6px;
   font-size: 12px;
   font-weight: 800;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .diffTag {
@@ -1918,7 +1918,7 @@
   font-weight: 800;
   color: #0f172a;
   margin: 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   line-height: 1.2;
 }
 
@@ -1932,12 +1932,12 @@
 .viewAllBadgesLink {
   font-size: 12px;
   font-weight: 700;
-  color: #7c3aed;
+  color: var(--primary);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .viewAllBadgesLink:hover {
@@ -1994,7 +1994,7 @@
   width: 26px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .diffBarTrack {
@@ -2024,7 +2024,7 @@
   gap: 10px;
   font-size: 11px;
   font-weight: 700;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .legendDotEasy { color: #10b981; }
@@ -2070,7 +2070,7 @@
   align-items: center;
   gap: 5px;
   cursor: pointer;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .nextTierAlertPill:hover {
@@ -2111,7 +2111,7 @@
   font-size: 13px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   display: flex;
   align-items: center;
   gap: 6px;
@@ -2124,7 +2124,7 @@
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 999px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .tierBadgeGated {
@@ -2134,7 +2134,7 @@
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 999px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .tierDesc {
@@ -2184,7 +2184,7 @@
   background: #ffffff;
   border: 1px solid #cbd5e1;
   color: #0f172a;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 6px 12px;
   font-size: 11.5px;
   font-weight: 700;
@@ -2194,7 +2194,7 @@
   gap: 5px;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   text-decoration: none;
 }
 
@@ -2207,7 +2207,7 @@
 .tierActionBtnPurple {
   background: #f5f3ff;
   border-color: #ddd6fe;
-  color: #7c3aed;
+  color: var(--primary);
 }
 
 .tierActionBtnPurple:hover {
@@ -2264,17 +2264,17 @@
   border: none;
   background: transparent;
   padding: 5px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   font-size: 12px;
   font-weight: 600;
   color: #64748b;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .pillOptionActive {
-  background: #7c3aed !important;
+  background: var(--primary) !important;
   color: #ffffff !important;
   font-weight: 700;
   box-shadow: 0 2px 6px rgba(124, 58, 237, 0.25);
@@ -2299,7 +2299,7 @@
   font-weight: 700;
   color: #64748b;
   border-bottom: 1px solid #f1f5f9;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .tdCell {
@@ -2323,7 +2323,7 @@
   width: 28px;
   height: 28px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7c3aed, #9333ea);
+  background: linear-gradient(135deg, var(--primary), #9333ea);
   color: #ffffff;
   display: flex;
   align-items: center;
@@ -2336,7 +2336,7 @@
 .rankMedalPill {
   font-weight: 800;
   font-size: 12.5px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 /* Responsive Breakpoints for Ladder */
@@ -2390,7 +2390,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  color: #7c3aed;
+  color: var(--primary);
   box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
   flex-shrink: 0;
 }
@@ -2412,7 +2412,7 @@
   display: flex;
   flex-direction: column;
   gap: 2px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .targetBadgeWord {
@@ -2482,7 +2482,7 @@
   height: 32px;
   border-radius: 10px;
   background: #ede9fe;
-  color: #7c3aed;
+  color: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2495,7 +2495,7 @@
   font-size: 13.5px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   margin: 0;
 }
 
@@ -2513,7 +2513,7 @@
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 999px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   flex-shrink: 0;
 }
 
@@ -2524,7 +2524,7 @@
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 999px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   flex-shrink: 0;
 }
 
@@ -2545,7 +2545,7 @@
 
 .reinforceFill {
   height: 100%;
-  background: linear-gradient(90deg, #7c3aed, #a855f7);
+  background: linear-gradient(90deg, var(--primary), #a855f7);
   border-radius: 999px;
 }
 
@@ -2555,7 +2555,7 @@
   color: #64748b;
   min-width: 26px;
   text-align: right;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .reinforceBottom {
@@ -2574,27 +2574,27 @@
   font-size: 11px;
   color: #64748b;
   font-weight: 600;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .reinforceBtn {
   font-size: 11.5px;
   font-weight: 700;
-  color: #7c3aed;
+  color: var(--primary);
   background: #f5f3ff;
   border: 1px solid rgba(196, 181, 253, 0.4);
   padding: 4px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   transition: all 0.15s ease;
 }
 
 .reinforceBtn:hover {
-  background: #7c3aed;
+  background: var(--primary);
   color: #ffffff;
 }
 
@@ -2651,7 +2651,7 @@
 }
 
 .matrixSearchInput:focus {
-  border-color: #7c3aed;
+  border-color: var(--primary);
   background: #ffffff;
 }
 
@@ -2665,7 +2665,7 @@
   background: #ffffff;
   outline: none;
   cursor: pointer;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .matrixTable {
@@ -2680,7 +2680,7 @@
   font-weight: 700;
   color: #64748b;
   border-bottom: 1px solid #f1f5f9;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   letter-spacing: 0.03em;
 }
 
@@ -2705,7 +2705,7 @@
   font-size: 11.5px;
   font-weight: 800;
   flex-shrink: 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .topicNameCell {
@@ -2714,7 +2714,7 @@
   gap: 9px;
   font-weight: 700;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .masteryBarWrap {
@@ -2741,7 +2741,7 @@
   font-weight: 800;
   color: #0f172a;
   min-width: 20px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 /* ── Right Column: Overall Skill Profile, Weak Topics, Recommendation ── */
@@ -2765,7 +2765,7 @@
   gap: 12px;
   font-size: 11px;
   font-weight: 700;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .radarSvgWrap {
@@ -2803,7 +2803,7 @@
   font-weight: 800;
   color: #94a3b8;
   width: 14px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .weakTopicLeft {
@@ -2816,7 +2816,7 @@
 .weakScore {
   font-size: 13px;
   font-weight: 800;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   min-width: 24px;
   text-align: right;
 }
@@ -2824,21 +2824,21 @@
 .weakPracticeBtn {
   font-size: 11px;
   font-weight: 700;
-  color: #7c3aed;
+  color: var(--primary);
   background: #f5f3ff;
   border: 1px solid rgba(196, 181, 253, 0.5);
   padding: 3px 9px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 3px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   transition: all 0.15s ease;
 }
 
 .weakPracticeBtn:hover {
-  background: #7c3aed;
+  background: var(--primary);
   color: #ffffff;
 }
 
@@ -2865,7 +2865,7 @@
   height: 32px;
   border-radius: 10px;
   background: #ede9fe;
-  color: #7c3aed;
+  color: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -2883,7 +2883,7 @@
   font-size: 12.5px;
   font-weight: 800;
   color: #4c1d95;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   margin: 0;
 }
 
@@ -2900,7 +2900,7 @@
   font-weight: 800;
   color: #0f172a;
   margin: 0;
-  font-family: 'Space Grotesk', -apple-system, BlinkMacSystemFont, sans-serif;
+  font-family: var(--font-display);
 }
 
 .cardSubtitle {
@@ -2923,28 +2923,28 @@
   font-weight: 700;
   padding: 2px 8px;
   border-radius: 999px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   flex-shrink: 0;
 }
 
 .reinforceSolveBtn {
   font-size: 11.5px;
   font-weight: 700;
-  color: #7c3aed;
+  color: var(--primary);
   background: #f5f3ff;
   border: 1px solid rgba(196, 181, 253, 0.4);
   padding: 5px 12px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 4px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   transition: all 0.15s ease;
 }
 
 .reinforceSolveBtn:hover {
-  background: #7c3aed;
+  background: var(--primary);
   color: #ffffff;
   transform: translateY(-1px);
 }
@@ -2952,21 +2952,21 @@
 .solveNowBtn {
   font-size: 12px;
   font-weight: 700;
-  color: #7c3aed;
+  color: var(--primary);
   background: #f5f3ff;
   border: 1px solid rgba(196, 181, 253, 0.4);
   padding: 6px 14px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   cursor: pointer;
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   transition: all 0.15s ease;
 }
 
 .solveNowBtn:hover {
-  background: #7c3aed;
+  background: var(--primary);
   color: #ffffff;
 }
 
@@ -3026,7 +3026,7 @@
 }
 
 .skillsSearchInput:focus {
-  border-color: #7c3aed;
+  border-color: var(--primary);
   background: #ffffff;
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.08);
 }
@@ -3086,7 +3086,7 @@
   font-size: 12px;
   font-weight: 800;
   flex-shrink: 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .topicCardName {
@@ -3094,7 +3094,7 @@
   font-weight: 800;
   color: #0f172a;
   margin: 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .topicCardCategory {
@@ -3112,7 +3112,7 @@
 .topicScoreNumber {
   font-size: 14px;
   font-weight: 800;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .topicMasteryTrack {
@@ -3135,7 +3135,7 @@
   justify-content: space-between;
   font-size: 11.5px;
   color: #64748b;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   padding-top: 8px;
   border-top: 1px solid #f1f5f9;
 }
@@ -3215,7 +3215,7 @@
 .activityTopCard {
   background: #ffffff;
   border: 1px solid rgba(226, 232, 240, 0.9);
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   padding: 18px 20px;
   display: flex;
   justify-content: space-between;
@@ -3250,7 +3250,7 @@
   font-size: 22px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   line-height: 1.1;
 }
 
@@ -3319,7 +3319,7 @@
   border: 1px solid #e2e8f0;
   padding: 3px 6px;
   border-radius: 10px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 12px;
   font-weight: 700;
   color: #334155;
@@ -3334,7 +3334,7 @@
   justify-content: center;
   color: #64748b;
   padding: 3px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   transition: all 0.15s ease;
 }
 
@@ -3370,7 +3370,7 @@
   font-size: 26px;
   font-weight: 900;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   line-height: 1.1;
 }
 
@@ -3401,10 +3401,10 @@
   background: #0f172a;
   color: #ffffff;
   font-size: 11px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-weight: 600;
   padding: 6px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   pointer-events: none;
   z-index: 50;
   white-space: nowrap;
@@ -3441,7 +3441,7 @@
 .heatmapMilestoneIcon {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3458,14 +3458,14 @@
   font-size: 13px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   margin: 1px 0;
 }
 
 .heatmapMilestoneSub {
   font-size: 10.5px;
   font-weight: 700;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 /* ── Bottom Grid: Velocity Chart + Precision/Records ── */
@@ -3498,7 +3498,7 @@
   gap: 22px;
   font-size: 11.5px;
   font-weight: 700;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   margin-top: 10px;
 }
 
@@ -3513,7 +3513,7 @@
 .velocitySummaryBox {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 12px 14px;
   display: flex;
   align-items: center;
@@ -3523,7 +3523,7 @@
 .velocitySummaryIcon {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3549,7 +3549,7 @@
 .precisionItem {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 12px 10px;
   text-align: left;
   display: flex;
@@ -3561,7 +3561,7 @@
   font-size: 17px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   line-height: 1.1;
 }
 
@@ -3597,7 +3597,7 @@
 .recordItemBox {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 12px 10px;
   display: flex;
   flex-direction: column;
@@ -3623,7 +3623,7 @@
   font-size: 14px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .recordSub {
@@ -3709,7 +3709,7 @@
   width: 32px;
   height: 32px;
   border-radius: 50%;
-  background: linear-gradient(135deg, #7c3aed, #9333ea);
+  background: linear-gradient(135deg, var(--primary), #9333ea);
   color: #ffffff;
   display: flex;
   align-items: center;
@@ -3717,7 +3717,7 @@
   font-size: 11.5px;
   font-weight: 800;
   flex-shrink: 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .userNameBlock {
@@ -3729,7 +3729,7 @@
   font-size: 12.5px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   line-height: 1.2;
 }
 
@@ -3745,27 +3745,27 @@
   gap: 5px;
   background: #ffffff;
   border: 1px solid #ddd6fe;
-  color: #7c3aed;
+  color: var(--primary);
   font-size: 11.5px;
   font-weight: 700;
   padding: 5px 11px;
   border-radius: 9px;
   cursor: pointer;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   transition: all 0.16s ease;
   white-space: nowrap;
 }
 
 .shareProfileBtnHeader:hover {
   background: #f5f3ff;
-  border-color: #7c3aed;
+  border-color: var(--primary);
 }
 
 /* ── 1. Hero Card: Courses & Certificates ── */
 .coursesHeroCard {
   background: linear-gradient(135deg, #ffffff 0%, #faf8ff 55%, #f4edff 100%);
   border: 1.5px solid #ede9fe;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   padding: 22px 28px;
   display: flex;
   align-items: center;
@@ -3800,7 +3800,7 @@
   height: 48px;
   border-radius: 14px;
   background: #ede9fe;
-  color: #7c3aed;
+  color: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -3814,7 +3814,7 @@
   color: #0f172a;
   letter-spacing: -0.02em;
   margin: 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .coursesHeroSubtitle {
@@ -3888,7 +3888,7 @@
   font-weight: 800;
   color: #0f172a;
   line-height: 1.1;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   letter-spacing: -0.02em;
 }
 
@@ -3956,13 +3956,13 @@
   background: #f8fafc;
   color: #0f172a;
   outline: none;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   transition: all 0.15s ease;
 }
 
 .coursesSearchInput:focus {
   background: #ffffff;
-  border-color: #7c3aed;
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
 }
 
@@ -3983,7 +3983,7 @@
   color: #334155;
   cursor: pointer;
   outline: none;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   transition: border-color 0.15s ease;
 }
 
@@ -3992,7 +3992,7 @@
 }
 
 .matrixSelect:focus {
-  border-color: #7c3aed;
+  border-color: var(--primary);
 }
 
 .pillsGroup {
@@ -4014,7 +4014,7 @@
   border-radius: 9px;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   white-space: nowrap;
 }
 
@@ -4023,7 +4023,7 @@
 }
 
 .pillOptionActive {
-  background: #7c3aed !important;
+  background: var(--primary) !important;
   color: #ffffff !important;
   font-weight: 700;
   box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
@@ -4055,7 +4055,7 @@
   border-radius: 10px;
   background: #f5f3ff;
   border: 1px solid #ddd6fe;
-  color: #7c3aed;
+  color: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4068,7 +4068,7 @@
   color: #0f172a;
   letter-spacing: -0.01em;
   margin: 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .catalogSectionSubtitle {
@@ -4134,7 +4134,7 @@
   font-weight: 700;
   padding: 2.5px 8.5px;
   border-radius: 999px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   letter-spacing: 0.01em;
 }
 
@@ -4155,7 +4155,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   transition: all 0.15s ease;
 }
 
@@ -4191,16 +4191,16 @@
   color: #334155;
   background: transparent;
   border: none;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   cursor: pointer;
   text-align: left;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   transition: all 0.12s ease;
 }
 
 .cardDropdownItem:hover {
   background: #f8fafc;
-  color: #7c3aed;
+  color: var(--primary);
 }
 
 /* ── Title & Circular Ring Row ── */
@@ -4216,7 +4216,7 @@
   font-size: 15px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   margin: 0;
   line-height: 1.28;
   letter-spacing: -0.01em;
@@ -4239,7 +4239,7 @@
   font-size: 9.5px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .enrolledDescText {
@@ -4269,7 +4269,7 @@
   border: 1px solid #f1f5f9;
   padding: 1.5px 7px;
   border-radius: 5px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 /* ── Progress Info & Track ── */
@@ -4300,7 +4300,7 @@
   font-size: 11.5px;
   font-weight: 600;
   color: #64748b;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .enrolledXpSpan {
@@ -4321,7 +4321,7 @@
 
 .enrolledStartBtn {
   flex: 1;
-  background: linear-gradient(135deg, #6d28d9 0%, #7c3aed 100%);
+  background: linear-gradient(135deg, #6d28d9 0%, var(--primary) 100%);
   color: #ffffff;
   border: none;
   border-radius: 10px;
@@ -4333,7 +4333,7 @@
   align-items: center;
   justify-content: center;
   gap: 6px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   transition: all 0.16s ease;
   box-shadow: 0 2px 8px rgba(109, 40, 217, 0.25);
 }
@@ -4350,7 +4350,7 @@
   border-radius: 10px;
   background: #ffffff;
   border: 1.5px solid #e2e8f0;
-  color: #7c3aed;
+  color: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -4367,8 +4367,8 @@
 
 .enrolledBookmarkActive {
   background: #f5f3ff !important;
-  border-color: #7c3aed !important;
-  color: #7c3aed !important;
+  border-color: var(--primary) !important;
+  color: var(--primary) !important;
 }
 
 /* ── Certificate Preview Modal ── */
@@ -4437,7 +4437,7 @@
   font-weight: 800;
   color: #0f172a;
   margin: 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .certModalSub {
@@ -4449,7 +4449,7 @@
 .certCourseBadge {
   background: #f5f3ff;
   border: 1.5px solid #ddd6fe;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 14px 20px;
   margin-bottom: 20px;
 }
@@ -4458,7 +4458,7 @@
   font-size: 1.15rem;
   font-weight: 800;
   color: #6d28d9;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   margin: 0;
 }
 
@@ -4478,7 +4478,7 @@
 }
 
 .certPrimaryBtn {
-  background: #7c3aed;
+  background: var(--primary);
   color: #ffffff;
   padding: 10px 20px;
   border-radius: 10px;
@@ -4489,7 +4489,7 @@
   display: inline-flex;
   align-items: center;
   gap: 6px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   transition: all 0.15s ease;
 }
 
@@ -4507,7 +4507,7 @@
   font-weight: 600;
   font-size: 13px;
   cursor: pointer;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   transition: all 0.15s ease;
 }
 

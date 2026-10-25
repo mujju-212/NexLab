@@ -21,11 +21,11 @@ import {
   Download,
 } from 'lucide-react';
 import {
-  freeService,
-  type FreeCoursesAnalytics,
-  type FreeCourseItem,
-} from '@/services/free.service';
-import styles from './free-analytics.module.css';
+  platformUserService,
+  type PlatformCoursesAnalytics,
+  type PlatformCourseItem,
+} from '@/services/platform-user.service';
+import styles from './platform-analytics.module.css';
 
 /**
  * Clean course titles and remove any stray inter-character em-dashes or replacement characters
@@ -42,12 +42,12 @@ export const formatDisplayTitle = (raw: string): string => {
   return raw.replace(/[\ufffd\uFFFD]/g, '-').trim();
 };
 
-interface FreeCoursesTabProps {
-  initialCourses?: FreeCourseItem[];
+interface PlatformCoursesTabProps {
+  initialCourses?: PlatformCourseItem[];
   onOpenShare?: () => void;
 }
 
-export const FreeCoursesTab: React.FC<FreeCoursesTabProps> = ({
+export const PlatformCoursesTab: React.FC<PlatformCoursesTabProps> = ({
   initialCourses,
   onOpenShare,
 }) => {
@@ -61,7 +61,7 @@ export const FreeCoursesTab: React.FC<FreeCoursesTabProps> = ({
   const [activeMenuId, setActiveMenuId] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [viewingCert, setViewingCert] = useState<{
-    certId: string;
+    certId: string | null;
     courseTitle: string;
     courseId?: string;
     completedAt?: string;
@@ -111,14 +111,14 @@ export const FreeCoursesTab: React.FC<FreeCoursesTabProps> = ({
   }, []);
 
   // Query Courses Analytics from real platform API
-  const { data: coursesData, isLoading } = useQuery<FreeCoursesAnalytics>({
+  const { data: coursesData, isLoading } = useQuery<PlatformCoursesAnalytics>({
     queryKey: ['free-courses-analytics'],
-    queryFn: () => freeService.getCoursesAnalytics(),
+    queryFn: () => platformUserService.getCoursesAnalytics(),
     staleTime: 30 * 1000,
   });
 
   // Real Database Courses
-  const allCourses: FreeCourseItem[] = useMemo(() => {
+  const allCourses: PlatformCourseItem[] = useMemo(() => {
     const list = coursesData?.courses ?? initialCourses ?? [];
     return list.map((c) => ({
       ...c,
@@ -128,7 +128,7 @@ export const FreeCoursesTab: React.FC<FreeCoursesTabProps> = ({
 
   // Real Metrics from Database
   const totalEnrolled = coursesData?.enrolled_courses ?? allCourses.length;
-  const enrolledThisMonth = coursesData?.enrolled_this_month ?? 2;
+  const enrolledThisMonth = coursesData?.enrolled_this_month;
   const completedCourses = coursesData?.completed_courses ?? 0;
   const completedPct = coursesData?.completed_pct ?? (allCourses.length > 0 ? Math.round((completedCourses / allCourses.length) * 100) : 0);
   const totalSolved = coursesData?.total_exercises_solved ?? 0;
@@ -190,16 +190,16 @@ export const FreeCoursesTab: React.FC<FreeCoursesTabProps> = ({
     showToast('Course link copied to clipboard!');
   };
 
-  const handleViewCert = (course: FreeCourseItem, e: React.MouseEvent) => {
+  const handleViewCert = (course: PlatformCourseItem, e: React.MouseEvent) => {
     e.stopPropagation();
     setActiveMenuId(null);
     const cert = (coursesData?.certificates || []).find((ct) => ct.course_id === course.id);
     setViewingCert({
-      certId: cert?.certificate_id || `NEX-${course.slug.toUpperCase()}-VERIFIED`,
+      certId: cert?.certificate_id || null,
       courseTitle: course.title,
       courseId: course.id,
-      completedAt: cert?.completed_at || course.completed_at || 'Recently Completed',
-      downloadUrl: cert?.download_url || `/api/free/courses/${course.id}/certificate`,
+      completedAt: cert?.completed_at || course.completed_at || undefined,
+      downloadUrl: cert?.download_url || `/api/platform-user/courses/${course.id}/certificate`,
     });
   };
 
@@ -509,7 +509,7 @@ export const FreeCoursesTab: React.FC<FreeCoursesTabProps> = ({
             <div className={styles.courseStatVal}>{totalEnrolled}</div>
             <div className={styles.courseStatLbl}>Enrolled Courses</div>
             <div className={`${styles.courseStatSub} ${styles.courseStatGreen}`}>
-              +{enrolledThisMonth} this month
+              {enrolledThisMonth != null ? `+${enrolledThisMonth} this month` : ''}
             </div>
           </div>
         </div>
@@ -614,7 +614,7 @@ export const FreeCoursesTab: React.FC<FreeCoursesTabProps> = ({
                   <button
                     type="button"
                     onClick={() => {
-                      const dlUrl = cert.download_url || `/api/free/courses/${cert.course_id}/certificate`;
+                      const dlUrl = cert.download_url || `/api/platform-user/courses/${cert.course_id}/certificate`;
                       window.open(dlUrl, '_blank');
                     }}
                     style={{
@@ -969,7 +969,7 @@ export const FreeCoursesTab: React.FC<FreeCoursesTabProps> = ({
                           {course.solved_count ?? 0} / {course.exercise_count ?? 0} lessons
                         </span>
                         <span className={styles.enrolledXpSpan}>
-                          <Zap size={11} fill="#d97706" /> +{course.xp_earned ?? (pct > 0 ? (course.solved_count ?? 0) * 10 : 0)} XP
+                          <Zap size={11} fill="#d97706" /> +{course.xp_earned ?? 0} XP
                         </span>
                       </div>
                     </div>
@@ -1080,7 +1080,7 @@ export const FreeCoursesTab: React.FC<FreeCoursesTabProps> = ({
                 type="button"
                 className={styles.certPrimaryBtn}
                 onClick={() => {
-                  const url = viewingCert.downloadUrl || `/api/free/courses/${viewingCert.courseId}/certificate`;
+                  const url = viewingCert.downloadUrl || `/api/platform-user/courses/${viewingCert.courseId}/certificate`;
                   window.open(url, '_blank');
                 }}
                 style={{ background: '#7c3aed', color: '#ffffff', display: 'flex', alignItems: 'center', gap: '6px' }}
@@ -1114,4 +1114,4 @@ export const FreeCoursesTab: React.FC<FreeCoursesTabProps> = ({
   );
 };
 
-export default FreeCoursesTab;
+export default PlatformCoursesTab;

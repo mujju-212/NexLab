@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import IndividualShell from '@/components/layout/IndividualShell';
-import { freeService, type FreeCourse, type Progress, type FreeAnalyticsOverview } from '@/services/free.service';
+import { platformUserService, type PlatformCourse, type Progress, type PlatformAnalyticsOverview } from '@/services/platform-user.service';
 import { practiceExtraService, type RecommendedProblem } from '@/services/practice-extra.service';
 import { useAuthStore } from '@/store/auth-store';
 import { apiClient } from '@/services/api-client';
@@ -38,73 +38,7 @@ interface QuestXPData {
   problems_solved: number;
 }
 
-const DEFAULT_RECOMMENDED: RecommendedProblem[] = [
-  {
-    id: 'p-two-sum',
-    slug: 'two-sum',
-    title: 'Two Sum',
-    difficulty: 'Easy',
-    nexlab_topic: 'Hash Table',
-    topics: ['Array', 'Hash Table'],
-    description: 'Find two numbers that add up to a target value.',
-    acceptance: 0.92,
-    acceptance_pct: 92,
-    solves_display: '1.2M solves',
-    reason: 'warm-up',
-  },
-  {
-    id: 'p-palindrome-number',
-    slug: 'palindrome-number',
-    title: 'Palindrome Number',
-    difficulty: 'Easy',
-    nexlab_topic: 'Math',
-    topics: ['Math', 'String'],
-    description: 'Check if a number reads the same backwards.',
-    acceptance: 0.89,
-    acceptance_pct: 89,
-    solves_display: '948K solves',
-    reason: 'warm-up',
-  },
-  {
-    id: 'p-roman-to-integer',
-    slug: 'roman-to-integer',
-    title: 'Roman to Integer',
-    difficulty: 'Easy',
-    nexlab_topic: 'Hash Table',
-    topics: ['Hash Table', 'Math'],
-    description: 'Convert a Roman numeral to an integer.',
-    acceptance: 0.87,
-    acceptance_pct: 87,
-    solves_display: '781K solves',
-    reason: 'warm-up',
-  },
-  {
-    id: 'p-longest-common-prefix',
-    slug: 'longest-common-prefix',
-    title: 'Longest Common Prefix',
-    difficulty: 'Easy',
-    nexlab_topic: 'Trie',
-    topics: ['Trie', 'String'],
-    description: 'Find the longest common prefix string among an array of strings.',
-    acceptance: 0.85,
-    acceptance_pct: 85,
-    solves_display: '642K solves',
-    reason: 'warm-up',
-  },
-  {
-    id: 'p-valid-parentheses',
-    slug: 'valid-parentheses',
-    title: 'Valid Parentheses',
-    difficulty: 'Easy',
-    nexlab_topic: 'Stack',
-    topics: ['Stack', 'String'],
-    description: 'Determine if the input string has valid parentheses.',
-    acceptance: 0.90,
-    acceptance_pct: 90,
-    solves_display: '1.1M solves',
-    reason: 'warm-up',
-  },
-];
+const DEFAULT_RECOMMENDED: RecommendedProblem[] = [];
 
 import Cookies from 'js-cookie';
 import { authService } from '@/services/auth.service';
@@ -115,10 +49,10 @@ export default function IndividualDashboardPage() {
   const [mounted, setMounted] = useState(false);
 
   const [progress, setProgress] = useState<Progress | null>(null);
-  const [courses, setCourses] = useState<FreeCourse[]>([]);
+  const [courses, setCourses] = useState<PlatformCourse[]>([]);
   const [recs, setRecs] = useState<RecommendedProblem[]>(DEFAULT_RECOMMENDED);
   const [questXP, setQuestXP] = useState<QuestXPData | null>(null);
-  const [overview, setOverview] = useState<FreeAnalyticsOverview | null>(null);
+  const [overview, setOverview] = useState<PlatformAnalyticsOverview | null>(null);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -127,7 +61,7 @@ export default function IndividualDashboardPage() {
 
   const isReady = mounted && (hasHydrated || typeof window !== 'undefined');
 
-  // Guard: only free_user (logged-in) may see the dashboard
+  // Guard: only platform_user (logged-in) may see the dashboard
   useEffect(() => {
     if (!isReady) return;
 
@@ -149,36 +83,25 @@ export default function IndividualDashboardPage() {
     if (!user) return;
 
     Promise.all([
-      freeService.getProgress().catch(() => null),
-      freeService.listCourses().catch(() => []),
+      platformUserService.getProgress().catch(() => null),
+      platformUserService.listCourses().catch(() => []),
       practiceExtraService.recommended().catch(() => ({ recommendations: [] })),
       apiClient.get('/practice/quest/stats').catch(() => ({ data: { xp: null } })),
-      freeService.getFreeOverview().catch(() => null),
+      platformUserService.getPlatformOverview().catch(() => null),
     ])
       .then(([prog, courseList, recsRes, questRes, ovRes]) => {
         if (prog) setProgress(prog);
         if (courseList) setCourses(courseList);
 
-        const fetchedRecs = recsRes?.recommendations || [];
-        if (fetchedRecs.length > 0) {
-          // Merge with defaults to ensure all 5 slots have full metadata
-          const merged: RecommendedProblem[] = fetchedRecs.map((r, i) => {
-            const def = DEFAULT_RECOMMENDED[i % DEFAULT_RECOMMENDED.length];
-            return {
-              ...def,
-              ...r,
-              topics: (r.topics && r.topics.length > 0) ? r.topics : (def.topics || [r.nexlab_topic]),
-              description: r.description || def.description || `Practice challenge in ${r.nexlab_topic}.`,
-              solves_display: r.solves_display || def.solves_display || '850K solves',
-              acceptance_pct: r.acceptance_pct || Math.round(Number(r.acceptance || 0.88) * (Number(r.acceptance) <= 1 ? 100 : 1)),
-            };
-          });
-          // Pad to 5 if fewer were returned
-          while (merged.length < 5) {
-            merged.push(DEFAULT_RECOMMENDED[merged.length]);
-          }
-          setRecs(merged.slice(0, 5));
-        }
+        // Real recommendations only — no synthetic padding or invented stats.
+        const fetchedRecs: RecommendedProblem[] = (recsRes?.recommendations || []).map((r) => ({
+          ...r,
+          topics: (r.topics && r.topics.length > 0) ? r.topics : (r.nexlab_topic ? [r.nexlab_topic] : []),
+          description: r.description || `Practice challenge in ${r.nexlab_topic || 'this topic'}.`,
+          acceptance_pct: r.acceptance_pct
+            || (r.acceptance != null ? Math.round(Number(r.acceptance) * (Number(r.acceptance) <= 1 ? 100 : 1)) : undefined),
+        }));
+        setRecs(fetchedRecs.slice(0, 5));
 
         if (questRes?.data?.xp) {
           setQuestXP(questRes.data.xp);
@@ -192,7 +115,7 @@ export default function IndividualDashboardPage() {
 
   if (!isAuthenticated || !user) return null;
 
-  const firstName = user.full_name?.split(' ')[0] || 'Free';
+  const firstName = user.full_name?.split(' ')[0] || 'Learner';
   const totalXp = questXP?.total_xp ?? progress?.total_xp ?? 0;
   const totalSolved = questXP?.problems_solved ?? progress?.total_solved ?? 0;
   const byCourse = progress?.by_course ?? {};
@@ -210,9 +133,6 @@ export default function IndividualDashboardPage() {
   const xpInLevel = totalXp % nextLevelXp;
   const levelProgressPct = Math.min(100, Math.round((xpInLevel / Math.max(nextLevelXp, 1)) * 100));
 
-  // Problems solved percentage out of 589 catalog problems
-  const pctOfLibrary = Math.min(100, Math.round((totalSolved / 589) * 100));
-
   // Courses overall completion percentage
   const totalCourseExercises = courses.reduce((acc, c) => acc + (c.exercise_count || 0), 0);
   const totalExercisesSolved = Object.values(byCourse).reduce((acc, c) => acc + (c.solved || 0), 0);
@@ -222,24 +142,24 @@ export default function IndividualDashboardPage() {
 
   // Topic mastery counts for Learning Progress Card
   const topicMasteryList = overview?.topic_strength || [];
-  const findTopicSolved = (name: string, fallbackTarget: number) => {
+  // Real mastery only: pct is the API's strength score, total is real attempts.
+  const findTopicSolved = (name: string) => {
     const found = topicMasteryList.find((t) => t.topic.toLowerCase().includes(name.toLowerCase()));
-    const solved = found ? found.total_solved : 0;
     return {
-      solved,
-      total: fallbackTarget,
-      pct: Math.min(100, Math.round((solved / fallbackTarget) * 100)),
+      solved: found ? found.total_solved : 0,
+      total: found ? found.total_attempted : 0,
+      pct: found ? Math.min(100, Math.round(found.strength)) : 0,
     };
   };
 
-  const arraysProgress = findTopicSolved('Array', 80);
-  const stringProgress = findTopicSolved('String', 60);
-  const dpProgress = findTopicSolved('Dynamic Programming', 70);
-  const treesProgress = findTopicSolved('Tree', 60);
+  const arraysProgress = findTopicSolved('Array');
+  const stringProgress = findTopicSolved('String');
+  const dpProgress = findTopicSolved('Dynamic Programming');
+  const treesProgress = findTopicSolved('Tree');
 
   // Top 4 and 5th problem
   const top4Recs = recs.slice(0, 4);
-  const fifthProblem = recs[4] || DEFAULT_RECOMMENDED[4];
+  const fifthProblem = recs[4];
 
   // Recent activity: use actual submissions or friendly onboarding timeline
   const recentRecords = (progress?.records ?? []).slice(0, 3);
@@ -402,7 +322,7 @@ export default function IndividualDashboardPage() {
                 <div className={styles.trophyBox}>🏆</div>
                 <div>
                   <div className={styles.bannerLabel}>PRACTICE LIBRARY</div>
-                  <h2 className={styles.bannerHeading}>589+ Curated Coding Challenges</h2>
+                  <h2 className={styles.bannerHeading}>Curated Coding Challenges</h2>
                   <p className={styles.bannerSub}>
                     Arrays · Trees · DP · Graphs · SQL · and more — with XP, streaks &amp; study plans
                   </p>
@@ -437,14 +357,6 @@ export default function IndividualDashboardPage() {
                     </div>
                     <span className={styles.statTitle}>Total XP</span>
                   </div>
-                  {/* Lavender vertical sparkline */}
-                  <div className={styles.sparkline}>
-                    <div className={styles.sparkBar} style={{ height: '8px', background: '#e9d5ff' }} />
-                    <div className={styles.sparkBar} style={{ height: '14px', background: '#d8b4fe' }} />
-                    <div className={styles.sparkBar} style={{ height: '18px', background: '#c084fc' }} />
-                    <div className={styles.sparkBar} style={{ height: '24px', background: '#a855f7' }} />
-                    <div className={styles.sparkBar} style={{ height: '28px', background: '#7c3aed' }} />
-                  </div>
                 </div>
 
                 <div className={styles.statMid}>
@@ -470,26 +382,13 @@ export default function IndividualDashboardPage() {
                     </div>
                     <span className={styles.statTitle}>Problems Solved</span>
                   </div>
-                  {/* Mint green vertical sparkline */}
-                  <div className={styles.sparkline}>
-                    <div className={styles.sparkBar} style={{ height: '10px', background: '#a7f3d0' }} />
-                    <div className={styles.sparkBar} style={{ height: '14px', background: '#6ee7b7' }} />
-                    <div className={styles.sparkBar} style={{ height: '12px', background: '#34d399' }} />
-                    <div className={styles.sparkBar} style={{ height: '18px', background: '#10b981' }} />
-                    <div className={styles.sparkBar} style={{ height: '16px', background: '#059669' }} />
-                    <div className={styles.sparkBar} style={{ height: '22px', background: '#047857' }} />
-                    <div className={styles.sparkBar} style={{ height: '28px', background: '#10b981' }} />
-                  </div>
                 </div>
 
                 <div className={styles.statMid}>
                   <span className={styles.statBigValue}>{totalSolved}</span>
                   <div className={styles.statMetaRight}>
-                    <span style={{ fontSize: '11px', fontWeight: 800, color: '#059669' }}>
-                      {pctOfLibrary}%
-                    </span>
                     <span style={{ fontSize: '10px', color: '#64748b', fontWeight: 600 }}>
-                      of 589 problems
+                      across the whole library
                     </span>
                   </div>
                 </div>
@@ -506,23 +405,13 @@ export default function IndividualDashboardPage() {
                     </div>
                     <span className={styles.statTitle}>Courses in progress</span>
                   </div>
-                  {/* Purple vertical sparkline */}
-                  <div className={styles.sparkline}>
-                    <div className={styles.sparkBar} style={{ height: '12px', background: '#ede9fe' }} />
-                    <div className={styles.sparkBar} style={{ height: '16px', background: '#ddd6fe' }} />
-                    <div className={styles.sparkBar} style={{ height: '20px', background: '#c4b5fd' }} />
-                    <div className={styles.sparkBar} style={{ height: '18px', background: '#a78bfa' }} />
-                    <div className={styles.sparkBar} style={{ height: '24px', background: '#8b5cf6' }} />
-                    <div className={styles.sparkBar} style={{ height: '28px', background: '#7c3aed' }} />
-                    <div className={styles.sparkBar} style={{ height: '32px', background: '#6d28d9' }} />
-                  </div>
                 </div>
 
                 <div className={styles.statMid}>
                   <span className={styles.statBigValue}>{coursesInProgress}</span>
                   <div className={styles.statMetaRight}>
                     <span style={{ fontSize: '11px', fontWeight: 700, color: '#334155' }}>
-                      {courses.length || 10} courses available
+                      {courses.length} courses available
                     </span>
                     <span style={{ fontSize: '10px', color: '#7c3aed', fontWeight: 700 }}>
                       {courseCompletionPct}% completion
@@ -530,7 +419,7 @@ export default function IndividualDashboardPage() {
                   </div>
                 </div>
 
-                <p className={styles.statSubtext}>{courses.length || 10} courses available</p>
+                <p className={styles.statSubtext}>{courses.length} courses available</p>
               </div>
             </div>
 
@@ -595,12 +484,16 @@ export default function IndividualDashboardPage() {
 
                       <div className={styles.cardFooter}>
                         <div className={styles.cardStats}>
-                          <span className={styles.statItem}>
-                            <ThumbsUp size={11} style={{ verticalAlign: 'middle' }} /> {prob.acceptance_pct ?? 90}%
-                          </span>
-                          <span className={styles.statItem}>
-                            <Users size={11} style={{ verticalAlign: 'middle' }} /> {prob.solves_display ?? '1.0M solves'}
-                          </span>
+                          {prob.acceptance_pct != null && (
+                            <span className={styles.statItem}>
+                              <ThumbsUp size={11} style={{ verticalAlign: 'middle' }} /> {prob.acceptance_pct}%
+                            </span>
+                          )}
+                          {prob.solves_display && (
+                            <span className={styles.statItem}>
+                              <Users size={11} style={{ verticalAlign: 'middle' }} /> {prob.solves_display}
+                            </span>
+                          )}
                         </div>
 
                         <button className={styles.circleArrowBtn} title="Solve problem">
@@ -617,6 +510,7 @@ export default function IndividualDashboardPage() {
             <div className={styles.bottomRowGrid}>
               {/* Card 5: Standalone Problem Card */}
               <div className={styles.bottomProblemCol}>
+                {fifthProblem && (
                 <div
                   className={styles.problemCard}
                   onClick={() => router.push(`/practice/library/${fifthProblem.slug}`)}
@@ -658,12 +552,16 @@ export default function IndividualDashboardPage() {
 
                   <div className={styles.cardFooter}>
                     <div className={styles.cardStats}>
-                      <span className={styles.statItem}>
-                        <ThumbsUp size={11} /> {fifthProblem.acceptance_pct ?? 90}%
-                      </span>
-                      <span className={styles.statItem}>
-                        <Users size={11} /> {fifthProblem.solves_display ?? '1.1M solves'}
-                      </span>
+                      {fifthProblem.acceptance_pct != null && (
+                        <span className={styles.statItem}>
+                          <ThumbsUp size={11} /> {fifthProblem.acceptance_pct}%
+                        </span>
+                      )}
+                      {fifthProblem.solves_display && (
+                        <span className={styles.statItem}>
+                          <Users size={11} /> {fifthProblem.solves_display}
+                        </span>
+                      )}
                     </div>
 
                     <button className={styles.circleArrowBtn} title="Solve problem">
@@ -671,6 +569,7 @@ export default function IndividualDashboardPage() {
                     </button>
                   </div>
                 </div>
+                )}
               </div>
 
               {/* Panel 2: Learning Progress */}
@@ -785,45 +684,18 @@ export default function IndividualDashboardPage() {
                       );
                     })
                   ) : (
-                    <>
-                      {/* Timeline Item 1 */}
-                      <div className={styles.timelineItem}>
-                        <div className={styles.timelineConnector} />
-                        <div className={styles.timelineIconBox} style={{ background: '#eff6ff', color: '#3b82f6' }}>
-                          <User size={14} />
-                        </div>
-                        <div className={styles.timelineContent}>
-                          <p className={styles.timelineTitle}>Joined NexLab</p>
-                          <p className={styles.timelineDesc}>Welcome to your learning journey!</p>
-                        </div>
-                        <span className={styles.timelineTime}>2h ago</span>
-                      </div>
-
-                      {/* Timeline Item 2 */}
-                      <div className={styles.timelineItem}>
-                        <div className={styles.timelineConnector} />
-                        <div className={styles.timelineIconBox} style={{ background: '#f5f3ff', color: '#7c3aed' }}>
-                          <BookOpen size={14} />
-                        </div>
-                        <div className={styles.timelineContent}>
-                          <p className={styles.timelineTitle}>Explored Practice Library</p>
-                          <p className={styles.timelineDesc}>Viewed problem set</p>
-                        </div>
-                        <span className={styles.timelineTime}>2h ago</span>
-                      </div>
-
-                      {/* Timeline Item 3 */}
-                      <div className={styles.timelineItem}>
-                        <div className={styles.timelineIconBox} style={{ background: '#f0fdf4', color: '#10b981' }}>
-                          <Terminal size={14} />
-                        </div>
-                        <div className={styles.timelineContent}>
-                          <p className={styles.timelineTitle}>Opened Playground</p>
-                          <p className={styles.timelineDesc}>Started a coding session</p>
-                        </div>
-                        <span className={styles.timelineTime}>3h ago</span>
-                      </div>
-                    </>
+                    <div style={{ padding: '22px 8px', textAlign: 'center' }}>
+                      <p style={{ margin: 0, fontSize: 13, color: '#9ca3af' }}>
+                        No activity yet — solve your first problem to start your journey.
+                      </p>
+                      <button
+                        className={styles.sectionLink}
+                        style={{ marginTop: 10 }}
+                        onClick={() => router.push('/practice/library')}
+                      >
+                        Browse Problems →
+                      </button>
+                    </div>
                   )}
                 </div>
               </div>

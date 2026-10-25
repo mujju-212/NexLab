@@ -2,8 +2,9 @@
 
 import { useState, useEffect, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
+import { useAuthStore } from '@/store/auth-store';
 import IndividualShell from '@/components/layout/IndividualShell';
-import { freeService, type FreeCourse, type Progress } from '@/services/free.service';
+import { platformUserService, type PlatformCourse, type Progress } from '@/services/platform-user.service';
 import styles from './practice.content.module.css';
 import {
   BookOpen, Code2, Trophy, Search, RefreshCw, ChevronRight,
@@ -362,8 +363,9 @@ function HeroDeskArtwork() {
 
 export default function PracticePage() {
   const router = useRouter();
+  const { user } = useAuthStore();
 
-  const [courses, setCourses] = useState<FreeCourse[]>([]);
+  const [courses, setCourses] = useState<PlatformCourse[]>([]);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -376,8 +378,8 @@ export default function PracticePage() {
 
   useEffect(() => {
     Promise.all([
-      freeService.listCourses(),
-      freeService.getProgress().catch(() => null),
+      platformUserService.listCourses(),
+      platformUserService.getProgress().catch(() => null),
     ])
       .then(([coursesData, progressData]) => {
         setCourses(coursesData);
@@ -682,7 +684,7 @@ export default function PracticePage() {
                 <div
                   key={course.id}
                   className={styles.courseCard}
-                  onClick={() => router.push(`/practice/${course.slug || course.id}`)}
+                  onClick={() => router.push(user ? `/practice/${course.slug || course.id}` : `/login?next=${encodeURIComponent(`/practice/${course.slug || course.id}`)}`)}
                 >
                   {/* Top Header Row */}
                   <div className={styles.cardTopRow}>
@@ -730,7 +732,7 @@ export default function PracticePage() {
                       className={styles.viewCourseLink}
                       onClick={(e) => {
                         e.stopPropagation();
-                        router.push(`/practice/${course.slug || course.id}`);
+                        router.push(user ? `/practice/${course.slug || course.id}` : `/login?next=${encodeURIComponent(`/practice/${course.slug || course.id}`)}`);
                       }}
                     >
                       View course <ChevronRight size={14} />

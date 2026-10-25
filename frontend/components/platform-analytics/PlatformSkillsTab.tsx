@@ -12,15 +12,15 @@ import {
   TrendingDown,
   AlertCircle,
 } from 'lucide-react';
-import type { FreeTopicMasteryItem, FreeRecommendation } from '@/services/free.service';
-import styles from './free-analytics.module.css';
+import type { PlatformTopicMasteryItem, PlatformRecommendation } from '@/services/platform-user.service';
+import styles from './platform-analytics.module.css';
 
-interface FreeSkillsTabProps {
-  topicStrength?: FreeTopicMasteryItem[];
-  recommendations?: FreeRecommendation[];
+interface PlatformSkillsTabProps {
+  topicStrength?: PlatformTopicMasteryItem[];
+  recommendations?: PlatformRecommendation[];
 }
 
-export const FreeSkillsTab: React.FC<FreeSkillsTabProps> = ({
+export const PlatformSkillsTab: React.FC<PlatformSkillsTabProps> = ({
   topicStrength = [],
   recommendations = [],
 }) => {
@@ -243,7 +243,7 @@ export const FreeSkillsTab: React.FC<FreeSkillsTabProps> = ({
                 ? styles.reinforceBadgeMed
                 : styles.reinforceBadgeEasy;
 
-              const acc = Math.round((prob.acceptance || 0.6) * 100);
+              const acc = prob.acceptance != null ? Math.round(prob.acceptance * 100) : null;
 
               return (
                 <div
@@ -269,7 +269,7 @@ export const FreeSkillsTab: React.FC<FreeSkillsTabProps> = ({
                     <div className={styles.reinforceMeta}>
                       <span>{prob.topic}</span>
                       <span>·</span>
-                      <span>{acc}% acceptance</span>
+                      <span>{acc != null ? `${acc}%` : '—'} acceptance</span>
                     </div>
 
                     <button
@@ -563,4 +563,4 @@ export const FreeSkillsTab: React.FC<FreeSkillsTabProps> = ({
   );
 };
 
-export default FreeSkillsTab;
+export default PlatformSkillsTab;

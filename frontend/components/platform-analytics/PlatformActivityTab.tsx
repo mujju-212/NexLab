@@ -16,17 +16,17 @@ import {
   TrendingUp,
   BarChart2,
 } from 'lucide-react';
-import { freeService, type FreeActivityData, type FreeAccuracyData } from '@/services/free.service';
-import styles from './free-analytics.module.css';
+import { platformUserService, type PlatformActivityData, type PlatformAccuracyData } from '@/services/platform-user.service';
+import styles from './platform-analytics.module.css';
 
-interface FreeActivityTabProps {
-  activity?: FreeActivityData;
+interface PlatformActivityTabProps {
+  activity?: PlatformActivityData;
 }
 
 const MONTH_NAMES = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
 const DAY_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
 
-export const FreeActivityTab: React.FC<FreeActivityTabProps> = ({ activity: initialActivity }) => {
+export const PlatformActivityTab: React.FC<PlatformActivityTabProps> = ({ activity: initialActivity }) => {
   const currentYear = new Date().getFullYear();
   const [metricView, setMetricView] = useState<'cumulative' | 'daily'>('cumulative');
   const [selectedYear, setSelectedYear] = useState<number>(currentYear);
@@ -53,7 +53,7 @@ export const FreeActivityTab: React.FC<FreeActivityTabProps> = ({ activity: init
   // Query Activity data if not provided via props
   const { data: fetchedActivity } = useQuery({
     queryKey: ['free-activity', selectedYear],
-    queryFn: () => freeService.getActivity(365),
+    queryFn: () => platformUserService.getActivity(365),
     enabled: !initialActivity,
     staleTime: 60 * 1000,
   });
@@ -61,9 +61,9 @@ export const FreeActivityTab: React.FC<FreeActivityTabProps> = ({ activity: init
   const activity = initialActivity || fetchedActivity;
 
   // Query Accuracy & Personal Bests from real database
-  const { data: accuracyData } = useQuery<FreeAccuracyData>({
+  const { data: accuracyData } = useQuery<PlatformAccuracyData>({
     queryKey: ['free-accuracy'],
-    queryFn: () => freeService.getAccuracy(),
+    queryFn: () => platformUserService.getAccuracy(),
     staleTime: 60 * 1000,
   });
 
@@ -1079,4 +1079,4 @@ export const FreeActivityTab: React.FC<FreeActivityTabProps> = ({ activity: init
   );
 };
 
-export default FreeActivityTab;
+export default PlatformActivityTab;
