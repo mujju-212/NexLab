@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   ShieldCheck, LayoutDashboard, Users, BookMarked,
   Activity, BarChart3, FileText, Shield, Settings, LogOut,
-  ChevronRight, Menu, Building2, BookOpen, ClipboardList, Boxes
+  ChevronRight, Menu, Building2, BookOpen, ClipboardList, Boxes, Megaphone, UserRoundCog
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './AdminShell.module.css';
@@ -31,6 +31,8 @@ const NAV_MAIN = [
   { id: 'Academic Setup',    Icon: BookOpen,      route: '/admin/academic'    },
   { id: 'Assignments',       Icon: ClipboardList, route: '/admin/assignments' },
   { id: 'Environment Profiles', Icon: Boxes,       route: '/admin/environments' },
+  { id: 'Platform Announcements', Icon: Megaphone, route: '/admin/announcements' },
+  { id: 'Access Approvals', Icon: UserRoundCog, route: '/admin/approvals' },
 ];
 
 interface AdminShellProps {

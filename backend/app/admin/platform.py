@@ -223,7 +223,7 @@ def _onboarding_checklist(iid):
         text("SELECT COUNT(*) FROM experiments WHERE institution_id=:iid"), {'iid': iid}
     ).scalar()
     env_count = db.session.execute(
-        text("SELECT COUNT(*) FROM environment_profiles WHERE institution_id=:iid"), {'iid': iid}
+        text("SELECT COUNT(*) FROM environment_profiles WHERE institution_id=:iid AND build_status='active'"), {'iid': iid}
     ).scalar()
     return {
         'institution_created': True,

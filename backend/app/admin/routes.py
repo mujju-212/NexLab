@@ -113,25 +113,52 @@ def create_institution():
 @require_role('platform_admin')
 def update_institution(institution_id):
     institution = Institution.query.get_or_404(institution_id)
-    data = request.get_json(silent=True) or {}
-    changed = []
-    for field in ('name', 'plan', 'is_active', 'email_domain'):
-        if field not in data:
-            continue
-        value = data[field]
-        if field == 'plan' and value not in ('free', 'pro', 'enterprise'):
-            return jsonify({'error': 'plan must be free, pro, or enterprise.'}), 400
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not data:
+        return jsonify({'error': 'Request body must be a non-empty object.'}), 400
+    allowed = {'name', 'contact_email', 'email_domain', 'address', 'phone', 'website'}
+    unknown = sorted(set(data) - allowed)
+    if unknown:
+        return jsonify({'error': f'Unsupported fields: {", ".join(unknown)}'}), 400
+
+    updates = {}
+    for field, value in data.items():
+        if field in ('name', 'contact_email', 'email_domain', 'address', 'phone', 'website'):
+            if not isinstance(value, str):
+                return jsonify({'error': f'{field} must be text.'}), 400
+            value = value.strip()
         if field == 'name':
-            value = str(value).strip()
-            if not value:
-                return jsonify({'error': 'name cannot be empty.'}), 400
-        if getattr(institution, field) != value:
-            setattr(institution, field, value)
-            changed.append(field)
+            if not value or len(value) > 200:
+                return jsonify({'error': 'name is required and must be at most 200 characters.'}), 400
+        elif field == 'contact_email':
+            if value and (len(value) > 320 or not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', value)):
+                return jsonify({'error': 'contact_email must be a valid email address or blank.'}), 400
+            value = value or None
+        elif field == 'email_domain':
+            if value and (len(value) > 253 or not re.fullmatch(r'(?=.{1,253}$)(?:[A-Za-z0-9](?:[A-Za-z0-9-]{0,61}[A-Za-z0-9])?\.)+[A-Za-z]{2,63}', value)):
+                return jsonify({'error': 'email_domain must be a valid domain name or blank.'}), 400
+            value = value.lower() or None
+        elif field == 'address':
+            if len(value) > 1000:
+                return jsonify({'error': 'address must be at most 1000 characters.'}), 400
+            value = value or None
+        elif field == 'phone':
+            if len(value) > 50:
+                return jsonify({'error': 'phone must be at most 50 characters.'}), 400
+            value = value or None
+        elif field == 'website':
+            if value and (len(value) > 500 or not re.fullmatch(r'https?://[^\s]+', value, flags=re.IGNORECASE)):
+                return jsonify({'error': 'website must be an http or https URL, or blank.'}), 400
+            value = value or None
+        updates[field] = value
+
+    changed = [field for field, value in updates.items() if getattr(institution, field) != value]
+    for field in changed:
+        setattr(institution, field, updates[field])
     if not changed:
         return jsonify({'institution': institution.to_dict(), 'updated': False}), 200
-    _audit_platform('admin.institution.update', 'institution', institution.id,
-                    f'Updated {institution.code}: {", ".join(changed)}', 'medium')
+    _audit_platform('admin.institution.profile_update', 'institution', institution.id,
+                    f'Updated institution profile fields: {", ".join(changed)}', 'medium')
     db.session.commit()
     return jsonify({'institution': institution.to_dict(), 'updated': True}), 200
 
@@ -395,41 +422,77 @@ def reject_environment(env_id):
 
 # ── Platform-Wide Announcements ────────────────────────────────────────────────
 
+@admin_bp.route('/announcements/preview', methods=['GET'])
+@require_role('platform_admin')
+def platform_announcement_preview():
+    active_admins = User.query.filter_by(role='institution_admin', is_active=True).count()
+    return jsonify({'recipient_count': active_admins}), 200
+
+
+@admin_bp.route('/announcements', methods=['GET'])
+@require_role('platform_admin')
+def platform_announcement_history():
+    import json
+    logs = AuditLog.query.filter_by(action='admin.platform.announcement').order_by(
+        AuditLog.created_at.desc()
+    ).limit(100).all()
+    history = []
+    for log in logs:
+        try:
+            details = json.loads(log.detail or '{}')
+        except (TypeError, ValueError):
+            details = {}
+        history.append({
+            'id': log.id,
+            'title': details.get('title', ''),
+            'message': details.get('message', ''),
+            'sent_to': details.get('sent_to', 0),
+            'actor_id': log.actor_id,
+            'created_at': log.created_at.isoformat() if log.created_at else None,
+        })
+    return jsonify({'announcements': history}), 200
+
+
 @admin_bp.route('/announcements', methods=['POST'])
 @require_role('platform_admin')
 def platform_announcement():
-    """
-    Broadcast to ALL institution admins across ALL institutions.
-    Body: { title, message }
-    """
-    from app.models.feedback import Notification
-    data    = request.get_json()
-    title   = data.get('title', '')
-    message = data.get('message', '')
-
-    if not title or not message:
-        return jsonify({'error': 'title and message required'}), 400
+    """Send a validated platform announcement to active institution admins."""
+    import json
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Request body must be an object.'}), 400
+    title = data.get('title')
+    message = data.get('message')
+    expected = data.get('expected_recipients')
+    if not isinstance(title, str) or not title.strip() or len(title.strip()) > 160:
+        return jsonify({'error': 'title is required and must be at most 160 characters.'}), 400
+    if not isinstance(message, str) or not message.strip() or len(message.strip()) > 5000:
+        return jsonify({'error': 'message is required and must be at most 5000 characters.'}), 400
+    if type(expected) is not int or expected < 0:
+        return jsonify({'error': 'expected_recipients must be a non-negative integer from the preview.'}), 400
 
     admins = User.query.filter_by(role='institution_admin', is_active=True).all()
+    if len(admins) != expected:
+        return jsonify({
+            'error': 'The recipient count changed since preview. Refresh and confirm the current recipient count.',
+            'recipient_count': len(admins),
+        }), 409
+
+    from app.models.feedback import Notification
+    clean_title = title.strip()
+    clean_message = message.strip()
     for admin in admins:
         db.session.add(Notification(
-            user_id=admin.id,
-            type='announcement',
-            title=title,
-            message=message,
+            user_id=admin.id, type='announcement', title=clean_title, message=clean_message,
         ))
-
-    # SocketIO broadcast to all connected institution admins
-    from app.extensions import socketio
-    socketio.emit('platform_announcement', {
-        'title': title,
-        'message': message,
-        'from': 'NexLab Platform',
-        'timestamp': datetime.utcnow().isoformat(),
-    })
-
+    db.session.add(AuditLog(
+        institution_id=None, actor_id=g.user_id, action='admin.platform.announcement',
+        target_type='platform_announcement', target_id=None,
+        detail=json.dumps({'title': clean_title, 'message': clean_message, 'sent_to': len(admins)}),
+        module='Platform Administration', severity='medium', ip_address=request.remote_addr or '',
+    ))
     db.session.commit()
-    return jsonify({'sent_to': len(admins)}), 201
+    return jsonify({'sent_to': len(admins), 'title': clean_title, 'message': 'Platform announcement sent.'}), 201
 
 
 # ── Platform Stats Snapshot ────────────────────────────────────────────────────

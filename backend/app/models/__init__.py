@@ -3,6 +3,7 @@ SQLAlchemy Models — import all here so Flask-Migrate sees them
 """
 from app.models.user import User
 from app.models.institution import Institution, PlatformConfig
+from app.models.platform_admin import PlatformUserChangeRequest
 from app.models.academic import (
     AcademicYear, Batch, Department, Section, SectionStudent, SectionSubject, AuditLog,
 )
@@ -54,7 +55,7 @@ from app.models.analytics_snapshot import StudentMetricSnapshot, InstitutionDail
 from app.models.analytics_rank import RankSnapshot
 
 __all__ = [
-    'User', 'Institution', 'PlatformConfig',
+    'User', 'Institution', 'PlatformConfig', 'PlatformUserChangeRequest',
     'AcademicYear', 'Batch', 'Department', 'Section', 'SectionStudent', 'SectionSubject', 'AuditLog',
     'Subject', 'EnvironmentProfile',
     'Experiment', 'TestCase', 'ContentModule', 'QuizQuestion', 'ContentPage', 'ContentProgress',

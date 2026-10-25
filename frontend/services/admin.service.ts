@@ -13,6 +13,9 @@ export interface Institution {
   is_active: boolean;
   contact_email: string;
   address: string | null;
+  phone?: string | null;
+  website?: string | null;
+  institution_type?: string | null;
   onboarded_at: string;
   onboarding_status: 'pending' | 'active' | 'suspended';
   plan_updated_at: string | null;
@@ -92,7 +95,7 @@ export const adminService = {
   },
 
   // PATCH /api/admin/institutions/<id>
-  async updateInstitution(id: string, payload: Partial<Pick<Institution, 'name' | 'plan' | 'is_active' | 'email_domain'>>): Promise<Institution> {
+  async updateInstitution(id: string, payload: Partial<Pick<Institution, 'name' | 'contact_email' | 'email_domain' | 'address' | 'phone' | 'website'>>): Promise<Institution> {
     const { data } = await apiClient.patch<{ institution: Institution }>(`/admin/institutions/${id}`, payload);
     return data.institution;
   },
@@ -182,6 +185,34 @@ export const adminService = {
   },
   async rejectEnvironment(id: string) {
     const { data } = await apiClient.post(`/admin/environments/${id}/reject`);
+    return data;
+  },
+  async getAnnouncementPreview(): Promise<{ recipient_count: number }> {
+    const { data } = await apiClient.get('/admin/announcements/preview');
+    return data;
+  },
+  async sendPlatformAnnouncement(payload: { title: string; message: string; expected_recipients: number }) {
+    const { data } = await apiClient.post('/admin/announcements', payload);
+    return data;
+  },
+  async getPlatformAnnouncements(): Promise<{ announcements: Array<{ id: string; title: string; message: string; sent_to: number; actor_id: string | null; created_at: string | null }> }> {
+    const { data } = await apiClient.get('/admin/announcements');
+    return data;
+  },
+  async getUserChangeRequests(status = 'pending') {
+    const { data } = await apiClient.get('/admin/user-change-requests', { params: { status } });
+    return data;
+  },
+  async createUserChangeRequest(payload: { user_id: string; to_role: string; to_institution_id: string; reason: string }) {
+    const { data } = await apiClient.post('/admin/user-change-requests', payload);
+    return data;
+  },
+  async approveUserChangeRequest(id: string, review_note = '') {
+    const { data } = await apiClient.post(`/admin/user-change-requests/${id}/approve`, { review_note });
+    return data;
+  },
+  async rejectUserChangeRequest(id: string, review_note = '') {
+    const { data } = await apiClient.post(`/admin/user-change-requests/${id}/reject`, { review_note });
     return data;
   },
 

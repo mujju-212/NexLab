@@ -11,6 +11,8 @@ from app.models.user import User
 from app.models.institution import Institution, PlatformConfig
 from app.models.academic import AuditLog
 from app.models.subject import EnvironmentProfile
+from app.models.feedback import Notification
+from app.models.platform_admin import PlatformUserChangeRequest
 from app.exec_engine.availability import execution_is_enabled
 
 
@@ -416,3 +418,195 @@ def test_institution_billing_persists_validates_audits_and_honors_zero(admin_cli
             AuditLog.action.in_(["admin.billing.plan_update", "admin.billing.groq_limit"]),
         ).all()
         assert {item.action for item in actions} == {"admin.billing.plan_update", "admin.billing.groq_limit"}
+
+
+def test_institution_profile_update_validates_atomically_and_audits(admin_client):
+    with admin_client.application.app_context():
+        institution = Institution(
+            id=str(uuid.uuid4()), name="Temporary profile QA", code=f"PQA{uuid.uuid4().hex[:6]}",
+            contact_email="admin@example.invalid", email_domain="example.invalid",
+        )
+        db.session.add(institution)
+        db.session.commit()
+        institution_id = institution.id
+
+    invalid = admin_client.patch(
+        f"/api/admin/institutions/{institution_id}",
+        json={"name": "Must not partially save", "email_domain": "https://bad-domain"},
+    )
+    assert invalid.status_code == 400
+    with admin_client.application.app_context():
+        unchanged = db.session.get(Institution, institution_id)
+        assert unchanged.name == "Temporary profile QA"
+
+    updated = admin_client.patch(
+        f"/api/admin/institutions/{institution_id}",
+        json={
+            "name": "Renamed profile QA", "contact_email": "ops@example.edu",
+            "email_domain": "EXAMPLE.EDU", "address": "10 Test Road", "website": "https://example.edu",
+        },
+    )
+    assert updated.status_code == 200, updated.get_json()
+    current = updated.get_json()["institution"]
+    assert current["name"] == "Renamed profile QA"
+    assert current["contact_email"] == "ops@example.edu"
+    assert current["email_domain"] == "example.edu"
+    assert current["address"] == "10 Test Road"
+    assert admin_client.patch(f"/api/admin/institutions/{institution_id}", json={"plan": "enterprise"}).status_code == 400
+
+    with admin_client.application.app_context():
+        log = AuditLog.query.filter_by(
+            action="admin.institution.profile_update", target_id=institution_id
+        ).first()
+        assert log is not None
+
+
+def test_platform_announcement_requires_recipient_confirmation_and_writes_history(admin_client):
+    with admin_client.application.app_context():
+        institution = Institution(
+            id=str(uuid.uuid4()), name="Temporary announcement QA", code=f"AQA{uuid.uuid4().hex[:6]}",
+        )
+        db.session.add(institution)
+        db.session.flush()
+        recipient = User(
+            id=str(uuid.uuid4()), email=f"notice-{uuid.uuid4().hex[:8]}@example.invalid",
+            password_hash="test-only", full_name="Temporary Institution Admin",
+            role="institution_admin", institution_id=institution.id, is_active=True,
+        )
+        db.session.add(recipient)
+        db.session.commit()
+        recipient_id = recipient.id
+
+    preview = admin_client.get("/api/admin/announcements/preview")
+    assert preview.status_code == 200
+    count = preview.get_json()["recipient_count"]
+    assert count >= 1
+    mismatch = admin_client.post("/api/admin/announcements", json={
+        "title": "Platform QA notice", "message": "This should not send yet.",
+        "expected_recipients": count - 1,
+    })
+    assert mismatch.status_code == 409
+    assert mismatch.get_json()["recipient_count"] == count
+    assert admin_client.post("/api/admin/announcements", json={
+        "title": "Bad title", "message": "message", "expected_recipients": True,
+    }).status_code == 400
+
+    sent = admin_client.post("/api/admin/announcements", json={
+        "title": "Platform QA notice", "message": "A temporary test notice.",
+        "expected_recipients": count,
+    })
+    assert sent.status_code == 201, sent.get_json()
+    assert sent.get_json()["sent_to"] == count
+    history = admin_client.get("/api/admin/announcements").get_json()["announcements"]
+    assert any(row["title"] == "Platform QA notice" and row["sent_to"] == count for row in history)
+    with admin_client.application.app_context():
+        assert Notification.query.filter_by(user_id=recipient_id, title="Platform QA notice").count() == 1
+        log = AuditLog.query.filter_by(action="admin.platform.announcement").first()
+        assert log is not None
+
+
+def test_user_role_and_tenant_change_requires_distinct_platform_admins(admin_client):
+    with admin_client.application.app_context():
+        source = Institution(id=str(uuid.uuid4()), name="Source QA", code=f"SQA{uuid.uuid4().hex[:6]}")
+        destination = Institution(id=str(uuid.uuid4()), name="Destination QA", code=f"DQA{uuid.uuid4().hex[:6]}")
+        db.session.add_all([source, destination])
+        db.session.flush()
+        target = User(
+            id=str(uuid.uuid4()), email=f"move-{uuid.uuid4().hex[:8]}@example.invalid",
+            password_hash="test-only", full_name="Temporary Move Target", role="student",
+            institution_id=source.id, is_active=True,
+        )
+        reviewer = User(
+            id=str(uuid.uuid4()), email=f"reviewer-{uuid.uuid4().hex[:8]}@example.invalid",
+            password_hash="test-only", full_name="Independent Reviewer", role="platform_admin",
+            institution_id=None,
+        )
+        db.session.add_all([target, reviewer])
+        db.session.commit()
+        target_id, destination_id, reviewer_id = target.id, destination.id, reviewer.id
+
+    created = admin_client.post("/api/admin/user-change-requests", json={
+        "user_id": target_id, "to_role": "instructor", "to_institution_id": destination_id,
+        "reason": "Move the teaching account to the verified partner tenant.",
+    })
+    assert created.status_code == 201, created.get_json()
+    request_id = created.get_json()["request"]["id"]
+    assert admin_client.post(f"/api/admin/user-change-requests/{request_id}/approve", json={}).status_code == 403
+    assert admin_client.post("/api/admin/user-change-requests", json={
+        "user_id": target_id, "to_role": "platform_admin", "to_institution_id": destination_id,
+        "reason": "Attempt to grant a platform role in a normal move.",
+    }).status_code == 400
+    assert admin_client.post("/api/admin/user-change-requests", json={
+        "user_id": target_id, "to_role": "instructor", "to_institution_id": destination_id,
+        "reason": "Duplicate pending request.",
+    }).status_code == 409
+
+    app = admin_client.application
+    reviewer_client = app.test_client()
+    with app.app_context():
+        reviewer_token = create_access_token(
+            identity=reviewer_id,
+            additional_claims={"role": "platform_admin", "institution_id": None,
+                              "must_change_password": False, "iat_f": time.time()},
+        )
+    reviewer_client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {reviewer_token}"
+    approved = reviewer_client.post(f"/api/admin/user-change-requests/{request_id}/approve", json={"review_note": "Reviewed against the ticket."})
+    assert approved.status_code == 200, approved.get_json()
+    assert approved.get_json()["request"]["status"] == "approved"
+    assert reviewer_client.post(f"/api/admin/user-change-requests/{request_id}/approve", json={}).status_code == 409
+
+    with app.app_context():
+        moved = db.session.get(User, target_id)
+        assert moved.role == "instructor"
+        assert moved.institution_id == destination_id
+        assert moved.force_logout_at is not None
+        assert AuditLog.query.filter_by(action="admin.user.change_request.create", target_id=target_id).count() == 1
+        assert AuditLog.query.filter_by(action="admin.user.change_request.approve", target_id=target_id).count() == 1
+        assert PlatformUserChangeRequest.query.filter_by(id=request_id, status="approved").count() == 1
+
+
+def test_environment_request_flow_is_tenant_scoped_and_assignment_is_retired(admin_client):
+    with admin_client.application.app_context():
+        institution = Institution(
+            id=str(uuid.uuid4()), name="Temporary environment tenant", code=f"ENV{uuid.uuid4().hex[:6]}",
+        )
+        db.session.add(institution)
+        db.session.flush()
+        tenant_admin = User(
+            id=str(uuid.uuid4()), email=f"env-{uuid.uuid4().hex[:8]}@example.invalid",
+            password_hash="test-only", full_name="Temporary Environment Admin",
+            role="institution_admin", institution_id=institution.id, is_active=True,
+        )
+        db.session.add(tenant_admin)
+        db.session.commit()
+        tenant_id, tenant_admin_id = institution.id, tenant_admin.id
+
+    tenant_client = admin_client.application.test_client()
+    with admin_client.application.app_context():
+        token = create_access_token(
+            identity=tenant_admin_id,
+            additional_claims={"role": "institution_admin", "institution_id": tenant_id,
+                              "must_change_password": False, "iat_f": time.time()},
+        )
+    tenant_client.environ_base["HTTP_AUTHORIZATION"] = f"Bearer {token}"
+    request_response = tenant_client.post("/api/institution/environments", json={
+        "name": "python-science", "display_name": "Python Science",
+        "docker_image": "registry.example.invalid/labs/python-science:v2",
+        "pip_packages": ["numpy==1.26.4", "pandas"], "apt_packages": ["libpq-dev"],
+    })
+    assert request_response.status_code == 201, request_response.get_json()
+    profile_id = request_response.get_json()["profile"]["id"]
+    assert "will not build or activate" in request_response.get_json()["message"]
+    assert tenant_client.get("/api/institution/environments").get_json()["runtime_supported"] is False
+    assert tenant_client.post("/api/institution/environments", json={
+        "name": "python-science", "display_name": "Duplicate", "docker_image": "repo/image:tag",
+    }).status_code == 409
+
+    retired = tenant_client.post("/api/institution/subjects", json={"env_profile_id": profile_id})
+    assert retired.status_code == 409, retired.get_json()
+
+    approved = admin_client.post(f"/api/admin/environments/{profile_id}/approve")
+    assert approved.status_code == 200, approved.get_json()
+    assert approved.get_json()["profile"]["build_status"] == "approved"
+    assert "no image build was initiated" in approved.get_json()["message"]
+    assert tenant_client.get("/api/institution/environments").get_json()["runtime_supported"] is False

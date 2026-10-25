@@ -13,7 +13,7 @@ import {
 } from '@/services/admin.service';
 import styles from '../../users/page.module.css';
 
-type Tab = 'overview' | 'users' | 'usage' | 'billing' | 'onboarding' | 'danger';
+type Tab = 'overview' | 'profile' | 'users' | 'usage' | 'billing' | 'onboarding' | 'danger';
 type OnboardingStatus = {
   institution_id: string;
   name: string;
@@ -34,6 +34,7 @@ type BillingDetails = {
 };
 const TABS: { key: Tab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
+  { key: 'profile', label: 'Profile' },
   { key: 'users', label: 'Users' },
   { key: 'usage', label: 'Usage' },
   { key: 'billing', label: 'Billing' },
@@ -53,6 +54,7 @@ export default function InstitutionDetailPage() {
   const router = useRouter();
 
   const [detail, setDetail] = useState<{ institution: Record<string, unknown> & { name?: string; plan?: string; is_active?: boolean }; stats: Record<string, number> } | null>(null);
+  const [profileForm, setProfileForm] = useState({ name: '', contact_email: '', email_domain: '', address: '', phone: '', website: '' });
   const [analytics, setAnalytics] = useState<TenantAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -96,6 +98,19 @@ export default function InstitutionDetailPage() {
   }, [id]);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    const institution = detail?.institution;
+    if (!institution) return;
+    setProfileForm({
+      name: String(institution.name || ''),
+      contact_email: String(institution.contact_email || ''),
+      email_domain: String(institution.email_domain || ''),
+      address: String(institution.address || ''),
+      phone: String(institution.phone || ''),
+      website: String(institution.website || ''),
+    });
+  }, [detail]);
 
   useEffect(() => {
     if (tab !== 'users') return;
@@ -142,6 +157,18 @@ export default function InstitutionDetailPage() {
     } finally {
       setBusy(false);
     }
+  };
+
+  const saveProfile = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await adminService.updateInstitution(id, profileForm);
+      await load();
+      setNotice('Institution profile saved.');
+    } catch (e) {
+      setNotice((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Could not save institution profile.');
+    } finally { setBusy(false); }
   };
 
   const refreshBilling = async () => {
@@ -276,6 +303,37 @@ export default function InstitutionDetailPage() {
           <button key={t.key} className={`${styles.tab} ${tab === t.key ? styles.tabActive : ''}`} onClick={() => setTab(t.key)}>{t.label}</button>
         ))}
       </div>
+
+      {/* ── Institution profile ── */}
+      {tab === 'profile' && (
+        <section style={{ background: 'rgba(255,255,255,.55)', border: '1px solid rgba(255,255,255,.75)', borderRadius: 18, padding: 24, maxWidth: 760 }}>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>Institution profile</h2>
+          <p style={{ margin: '6px 0 18px', color: '#716b80', fontSize: 13 }}>Edit contact and identity details. Plan and activation controls remain in their dedicated workflows.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 14 }}>
+            <label style={fieldLabel}>Institution name
+              <input value={profileForm.name} maxLength={200} onChange={e => setProfileForm(f => ({ ...f, name: e.target.value }))} style={fieldInput} />
+            </label>
+            <label style={fieldLabel}>Contact email
+              <input type="email" value={profileForm.contact_email} onChange={e => setProfileForm(f => ({ ...f, contact_email: e.target.value }))} placeholder="contact@example.edu" style={fieldInput} />
+            </label>
+            <label style={fieldLabel}>Allowed email domain
+              <input value={profileForm.email_domain} onChange={e => setProfileForm(f => ({ ...f, email_domain: e.target.value }))} placeholder="example.edu" style={fieldInput} />
+            </label>
+            <label style={fieldLabel}>Phone
+              <input value={profileForm.phone} maxLength={50} onChange={e => setProfileForm(f => ({ ...f, phone: e.target.value }))} style={fieldInput} />
+            </label>
+            <label style={fieldLabel}>Website
+              <input type="url" value={profileForm.website} maxLength={500} onChange={e => setProfileForm(f => ({ ...f, website: e.target.value }))} placeholder="https://example.edu" style={fieldInput} />
+            </label>
+            <label style={{ ...fieldLabel, gridColumn: '1 / -1' }}>Address
+              <textarea value={profileForm.address} maxLength={1000} rows={3} onChange={e => setProfileForm(f => ({ ...f, address: e.target.value }))} style={{ ...fieldInput, resize: 'vertical' }} />
+            </label>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
+            <button type="button" className={styles.btnPrimary} disabled={busy} onClick={() => void saveProfile()}>{busy ? <Loader2 size={14} className="spin" /> : <Check size={14} />} Save profile</button>
+          </div>
+        </section>
+      )}
 
       {/* ── Overview ── */}
       {tab === 'overview' && (

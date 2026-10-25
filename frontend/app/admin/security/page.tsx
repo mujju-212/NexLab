@@ -138,6 +138,10 @@ export default function SecurityPage() {
 
       {/* ── Roles ─────────────────────────────────────────────────────── */}
       {tab === 'roles' && (
+        <>
+        <p role="note" style={{ padding: '10px 13px', margin: '0 0 14px', borderRadius: 10, background: '#f4f1ff', color: '#5b3cc4', fontSize: 12.5 }}>
+          Reference only: this matrix describes the current role model. It does not edit permissions or authorize access changes.
+        </p>
         <div className={styles.roleGrid}>
           {ROLES.map(r => (
             <div key={r.role} className={styles.roleCard}>
@@ -160,6 +164,7 @@ export default function SecurityPage() {
             </div>
           ))}
         </div>
+        </>
       )}
 
       {/* ── Audit Logs ────────────────────────────────────────────────── */}

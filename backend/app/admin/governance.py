@@ -23,8 +23,12 @@ from app.extensions import db
 from app.models.academic import AuditLog
 from app.models.governance import ImpersonationSession, DataExportJob
 from app.models.user import User
+from app.models.institution import Institution
+from app.models.platform_admin import PlatformUserChangeRequest
 
 admin_governance_bp = Blueprint('admin_governance', __name__)
+
+_MANAGED_ROLES = {'institution_admin', 'instructor', 'student'}
 
 IMPERSONATION_MINUTES = 30
 EXPORT_EXPIRY_DAYS = 7
@@ -80,6 +84,152 @@ def _audit(action, detail, target_type, target_id, severity='medium'):
         module='Platform Governance', severity=severity,
         ip_address=request.headers.get('X-Forwarded-For', request.remote_addr or ''),
     ))
+
+
+# ══ Two-person user role / institution changes ════════════════════════════
+
+def _change_request_payload(item):
+    user = User.query.get(item.user_id)
+    requester = User.query.get(item.requested_by)
+    reviewer = User.query.get(item.approved_by) if item.approved_by else None
+    from_inst = Institution.query.get(item.from_institution_id) if item.from_institution_id else None
+    to_inst = Institution.query.get(item.to_institution_id) if item.to_institution_id else None
+    return {
+        **item.to_dict(),
+        'user_name': user.full_name if user else None,
+        'user_email': user.email if user else None,
+        'requester_name': requester.full_name if requester else None,
+        'reviewer_name': reviewer.full_name if reviewer else None,
+        'from_institution_name': from_inst.name if from_inst else None,
+        'to_institution_name': to_inst.name if to_inst else None,
+    }
+
+
+@admin_governance_bp.route('/user-change-requests', methods=['GET'])
+@require_role('platform_admin')
+def list_user_change_requests():
+    status = request.args.get('status', 'pending')
+    query = PlatformUserChangeRequest.query
+    if status != 'all':
+        if status not in {'pending', 'approved', 'rejected'}:
+            return jsonify({'error': 'status must be pending, approved, rejected, or all.'}), 400
+        query = query.filter_by(status=status)
+    rows = query.order_by(PlatformUserChangeRequest.created_at.desc()).limit(200).all()
+    return jsonify({'requests': [_change_request_payload(row) for row in rows]}), 200
+
+
+@admin_governance_bp.route('/user-change-requests', methods=['POST'])
+@require_role('platform_admin')
+def create_user_change_request():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Request body must be an object.'}), 400
+    user_id = data.get('user_id')
+    to_role = data.get('to_role')
+    to_iid = data.get('to_institution_id')
+    reason = data.get('reason')
+    if not isinstance(user_id, str) or not user_id:
+        return jsonify({'error': 'user_id is required.'}), 400
+    if to_role not in _MANAGED_ROLES:
+        return jsonify({'error': 'to_role must be institution_admin, instructor, or student. Platform-admin grants are excluded.'}), 400
+    if not isinstance(reason, str) or not 20 <= len(reason.strip()) <= 1000:
+        return jsonify({'error': 'reason must be between 20 and 1000 characters.'}), 400
+    target = User.query.get(user_id)
+    if not target:
+        return jsonify({'error': 'Target user not found.'}), 404
+    if target.id == g.user_id:
+        return jsonify({'error': 'You cannot request a role or institution change for yourself.'}), 400
+    if target.role == 'platform_admin':
+        return jsonify({'error': 'Platform-admin accounts cannot be changed through this workflow.'}), 403
+    if not target.is_active:
+        return jsonify({'error': 'Reactivate the user before requesting a role or institution move.'}), 409
+    if not isinstance(to_iid, str) or not to_iid:
+        return jsonify({'error': 'A destination institution is required for managed tenant roles.'}), 400
+    institution = Institution.query.get(to_iid)
+    if not institution:
+        return jsonify({'error': 'Destination institution not found.'}), 404
+    if not institution.is_active:
+        return jsonify({'error': 'Destination institution must be active.'}), 409
+    if target.role == to_role and target.institution_id == to_iid:
+        return jsonify({'error': 'The requested role and institution already match the user.'}), 400
+    pending = PlatformUserChangeRequest.query.filter_by(user_id=target.id, status='pending').first()
+    if pending:
+        return jsonify({'error': 'This user already has a pending role/institution change request.', 'request_id': pending.id}), 409
+
+    change = PlatformUserChangeRequest(
+        user_id=target.id, requested_by=g.user_id,
+        from_role=target.role, from_institution_id=target.institution_id,
+        to_role=to_role, to_institution_id=to_iid, reason=reason.strip(), status='pending',
+    )
+    db.session.add(change)
+    db.session.flush()
+    _audit('admin.user.change_request.create',
+           f'Request {change.id}: {target.email} {target.role}/{target.institution_id} -> {to_role}/{to_iid}. Reason: {change.reason}',
+           'user', target.id, severity='high')
+    db.session.commit()
+    return jsonify({'request': _change_request_payload(change)}), 201
+
+
+def _decide_user_change(change_id, decision):
+    change = PlatformUserChangeRequest.query.get_or_404(change_id)
+    if change.status != 'pending':
+        return jsonify({'error': f'Request is already {change.status}.'}), 409
+    if change.requested_by == g.user_id:
+        return jsonify({'error': 'A different platform admin must review this request.'}), 403
+    data = request.get_json(silent=True) or {}
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Request body must be an object.'}), 400
+    note = data.get('review_note', '')
+    if not isinstance(note, str) or len(note.strip()) > 1000:
+        return jsonify({'error': 'review_note must be text up to 1000 characters.'}), 400
+
+    target = User.query.get(change.user_id)
+    if not target:
+        return jsonify({'error': 'Target user no longer exists.'}), 409
+    if target.role != change.from_role or target.institution_id != change.from_institution_id:
+        return jsonify({'error': 'The target user changed since this request was submitted. Reject and create a new request.'}), 409
+
+    destination = None
+    if decision == 'approved':
+        destination = Institution.query.get(change.to_institution_id)
+        if not destination or not destination.is_active:
+            return jsonify({'error': 'Destination institution is missing or inactive.'}), 409
+
+    change.status = decision
+    change.approved_by = g.user_id
+    change.review_note = note.strip() or None
+    change.decided_at = datetime.utcnow()
+    if decision == 'approved':
+        old_department_id = target.department_id
+        target.role = change.to_role
+        target.institution_id = change.to_institution_id
+        if change.from_institution_id != change.to_institution_id:
+            # Department IDs are institution-scoped; retaining the old FK would
+            # leave the new tenant with a cross-tenant department assignment.
+            target.department_id = None
+        target.force_logout_at = datetime.utcnow()
+        department_note = ' Cleared old tenant department assignment.' if old_department_id and target.department_id is None else ''
+        _audit('admin.user.change_request.approve',
+               f'Approved request {change.id}: {target.email} now {target.role} at institution {target.institution_id}.{department_note}',
+               'user', target.id, severity='high')
+    else:
+        _audit('admin.user.change_request.reject',
+               f'Rejected request {change.id} for {target.email}. Note: {note.strip() or "none"}',
+               'user', target.id, severity='high')
+    db.session.commit()
+    return jsonify({'request': _change_request_payload(change), 'message': f'Request {decision}.'}), 200
+
+
+@admin_governance_bp.route('/user-change-requests/<request_id>/approve', methods=['POST'])
+@require_role('platform_admin')
+def approve_user_change_request(request_id):
+    return _decide_user_change(request_id, 'approved')
+
+
+@admin_governance_bp.route('/user-change-requests/<request_id>/reject', methods=['POST'])
+@require_role('platform_admin')
+def reject_user_change_request(request_id):
+    return _decide_user_change(request_id, 'rejected')
 
 
 # ══ Impersonation ══════════════════════════════════════════════════════════
