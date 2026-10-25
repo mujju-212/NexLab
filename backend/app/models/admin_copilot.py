@@ -2,7 +2,7 @@
 Unified AI Harness & Copilot Models:
 - AdminChatSession (aliased as AIConversation): Threaded multi-role conversation sessions
   with rolling compact_memory and live page_context across all 5 roles
-  (student, free_user, instructor, institution_admin, admin).
+  (student, platform_user, instructor, institution_admin, admin).
 - AdminChatMessage (aliased as AIMessage): Individual messages with tool_calls,
   pending_action confirmation payloads, RAG sources, generated_doc metadata,
   and socratic_filtered audit flag.
@@ -29,7 +29,7 @@ class AdminChatSession(db.Model):
     id             = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
     institution_id = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=True, index=True)
     user_id        = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False, index=True)
-    role_scope     = db.Column(db.String(30), default='institution_admin', index=True)  # student | free_user | instructor | institution_admin | admin
+    role_scope     = db.Column(db.String(30), default='institution_admin', index=True)  # student | platform_user | instructor | institution_admin | admin
     title          = db.Column(db.String(255), default='New Conversation')
     mode           = db.Column(db.String(20), default='chat')  # 'chat' | 'agent'
     is_pinned      = db.Column(db.Boolean, default=False)
