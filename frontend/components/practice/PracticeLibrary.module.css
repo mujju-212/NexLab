@@ -1181,3 +1181,135 @@
     display: none;
   }
 }
+
+/* ── App-frame container queries (student app column) ───────────────────── */
+/* The student shell's content column is an inline-size container named
+   "student-app"; on desktop it is ~736px wide even though the viewport is
+   large, so these collapse the dense desktop layouts app-natively. */
+
+@container student-app (max-width: 900px) {
+  .headerTitle {
+    font-size: 1.4rem;
+  }
+  .dailyBanner {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .dailyArtOverlay {
+    display: none;
+  }
+  .dailyRight {
+    justify-content: flex-start;
+  }
+  .plansGrid5 {
+    grid-template-columns: repeat(auto-fill, minmax(230px, 1fr));
+  }
+  .topicsGrid30 {
+    grid-template-columns: repeat(auto-fill, minmax(240px, 1fr));
+  }
+  .filterBar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+  .searchBox {
+    min-width: 0;
+  }
+  .filterSelect,
+  .resetBtn {
+    flex: 1 1 40%;
+  }
+  .sortSelect {
+    margin-left: 0;
+    flex: 1 1 100%;
+  }
+}
+
+@container student-app (max-width: 620px) {
+  .plansGrid5 {
+    grid-template-columns: 1fr;
+  }
+  .topicsGrid30 {
+    grid-template-columns: 1fr;
+  }
+
+  /* Problems table → app-list card rows */
+  .problemsTable {
+    display: block;
+    border-collapse: separate;
+  }
+  .problemsTable thead {
+    display: none;
+  }
+  .problemsTable tbody {
+    display: block;
+  }
+  .problemsTable tbody tr {
+    display: grid;
+    grid-template-columns: auto 1fr;
+    gap: 8px 10px;
+    padding: 15px 16px 13px;
+    border-bottom: 1px solid #f1f5f9;
+  }
+  .problemsTable tbody tr:last-child {
+    border-bottom: 0;
+  }
+  .problemsTable td {
+    display: block;
+    padding: 0;
+    border: 0;
+    width: auto !important;
+    min-width: 0;
+  }
+  .problemsTable td[colspan] {
+    grid-column: 1 / -1;
+  }
+  .colNum {
+    display: none;
+  }
+  .colTitle {
+    grid-column: 1 / -1;
+    min-width: 0;
+  }
+  .probTitleWrap {
+    flex-wrap: wrap;
+  }
+  .colDiff {
+    grid-column: 1;
+    justify-self: start;
+  }
+  .colTopics {
+    grid-column: 2;
+    min-width: 0;
+  }
+  .colAccept {
+    display: none;
+  }
+  .colSolved {
+    grid-column: 1 / -1;
+    width: auto;
+  }
+  .colActions {
+    grid-column: 1 / -1;
+    text-align: left;
+  }
+  .actionsFlex {
+    justify-content: flex-start;
+    width: 100%;
+  }
+  .actionsFlex > *:first-child {
+    margin-right: auto;
+  }
+  .paginationRow {
+    flex-direction: column;
+    gap: 10px;
+    align-items: center;
+    padding: 12px 16px;
+    text-align: center;
+  }
+  .toastNotice {
+    left: 16px;
+    right: 16px;
+    bottom: calc(var(--v-tabbar-h, 64px) + 20px);
+    text-align: center;
+  }
+}

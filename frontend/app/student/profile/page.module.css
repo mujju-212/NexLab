@@ -110,7 +110,12 @@
 
 /* ══ Responsive ═════════════════════════════════════════════════════════ */
 @media (max-width: 900px) {
-  .layout { grid-template-columns: 1fr; }
+  /* minmax(0,1fr): the collapsed track must shrink below content min-content
+     (long emails / roll numbers), never widen past the viewport. */
+  .layout { grid-template-columns: minmax(0, 1fr); }
+  .layout > * { min-width: 0; }
+  .leftCol, .rightCol { min-width: 0; }
+  .avatarCard, .formCard, .subjectsCard { min-width: 0; overflow-wrap: anywhere; }
 }
 @media (max-width: 768px) {
   .formCard, .subjectsCard { padding: 20px 16px; }
