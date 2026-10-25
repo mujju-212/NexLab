@@ -84,6 +84,7 @@ export default function StudyPlanDetailPage({
   const [downloadingCert, setDownloadingCert] = useState(false);
   const [loading, setLoading] = useState(true);
   const [certificateReady, setCertificateReady] = useState(false);
+  const [toast, setToast] = useState<{ msg: string; kind: 'error' | 'success' } | null>(null);
 
   // Filters & Search
   const [searchQuery, setSearchQuery] = useState('');
@@ -147,6 +148,7 @@ export default function StudyPlanDetailPage({
       setProgress({ solved_slugs: [], completed_at: null });
     } catch (e) {
       console.error('Failed to enroll in study plan:', e);
+      setToast({ msg: 'Could not enroll — please try again.', kind: 'error' });
     } finally {
       setEnrolling(false);
     }
@@ -637,6 +639,18 @@ export default function StudyPlanDetailPage({
           })
         )}
       </div>
+      {toast && (
+        <div
+          onClick={() => setToast(null)}
+          style={{ position: 'fixed', bottom: 24, right: 24, zIndex: 90, cursor: 'pointer',
+                   background: toast.kind === 'error' ? '#fee2e2' : '#dcfce7',
+                   color: toast.kind === 'error' ? '#b91c1c' : '#15803d',
+                   padding: '10px 16px', borderRadius: 10, fontSize: 13, fontWeight: 600,
+                   boxShadow: '0 8px 24px rgba(0,0,0,0.12)' }}
+        >
+          {toast.msg}
+        </div>
+      )}
     </div>
   );
 }

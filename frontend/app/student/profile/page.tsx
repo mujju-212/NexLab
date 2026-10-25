@@ -5,7 +5,7 @@ import StudentShell from '@/components/layout/StudentShell';
 import { useAuthStore } from '@/store/auth-store';
 import { studentService } from '@/services/student.service';
 import { authService } from '@/services/auth.service';
-import { freeService, type FreeAnalyticsOverview } from '@/services/free.service';
+import { platformUserService, type PlatformAnalyticsOverview } from '@/services/platform-user.service';
 import type { StudentDashboard, SectionSubject } from '@/types';
 import {
   Loader2,
@@ -35,7 +35,7 @@ export default function ProfilePage() {
 
   const [dash, setDash] = useState<StudentDashboard | null>(null);
   const [subjects, setSubjects] = useState<SectionSubject[]>([]);
-  const [freeOverview, setFreeOverview] = useState<FreeAnalyticsOverview | null>(null);
+  const [freeOverview, setPlatformOverview] = useState<PlatformAnalyticsOverview | null>(null);
   const [loading, setLoading] = useState(true);
 
   // Profile Edit State
@@ -78,12 +78,12 @@ export default function ProfilePage() {
     Promise.allSettled([
       studentService.getDashboard(),
       studentService.getSubjects(),
-      freeService.getFreeOverview(),
+      platformUserService.getPlatformOverview(),
     ])
       .then(([dRes, sRes, fRes]) => {
         if (dRes.status === 'fulfilled') setDash(dRes.value);
         if (sRes.status === 'fulfilled') setSubjects(sRes.value);
-        if (fRes.status === 'fulfilled') setFreeOverview(fRes.value);
+        if (fRes.status === 'fulfilled') setPlatformOverview(fRes.value);
       })
       .finally(() => setLoading(false));
   }, [setUser]);

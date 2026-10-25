@@ -347,7 +347,7 @@ export default function DailyChallengePage({ baseRoute }: { baseRoute: string })
                       <Zap size={18} fill="#ca8a04" />
                     </div>
                     <div className={styles.metricInfo}>
-                      <span className={styles.metricValue}>+{daily.reward_xp ?? 15} XP</span>
+                      <span className={styles.metricValue}>+{daily.reward_xp ?? 0} XP</span>
                       <span className={styles.metricLabel}>Today's Reward</span>
                     </div>
                   </div>
@@ -386,7 +386,7 @@ export default function DailyChallengePage({ baseRoute }: { baseRoute: string })
                       className={`${styles.solveBtn} ${styles.solveBtnSolved}`}
                       onClick={() => router.push(`${baseRoute}/${daily.slug}`)}
                     >
-                      <Check size={16} strokeWidth={3} /> Solved (+15 XP) • Review Solution →
+                      <Check size={16} strokeWidth={3} /> Solved{daily?.reward_xp ? ` (+${daily.reward_xp} XP)` : ''} • Review Solution →
                     </button>
                   ) : (
                     <button

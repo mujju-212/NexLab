@@ -11,7 +11,7 @@
   box-shadow: 0 4px 14px rgba(20,20,30,.04);
 }
 .xpItem svg { color: #9333ea; flex-shrink: 0; }
-.xpItem strong { color: #201b2e; font-family: 'Space Grotesk', sans-serif; }
+.xpItem strong { color: #201b2e; font-family: var(--font-display); }
 
 /* ── Card grid ───────────────────────────────────────────────────────── */
 .grid {
@@ -41,13 +41,13 @@
   box-shadow: 0 6px 16px rgba(124,58,237,.25);
 }
 
-.diffBeginner     { font-size: 11.5px; font-weight: 700; padding: 3px 11px; border-radius: 999px; background: rgba(209,250,223,.85); color: #0f8a3f; font-family: 'Space Grotesk', sans-serif; text-transform: capitalize; }
-.diffIntermediate { font-size: 11.5px; font-weight: 700; padding: 3px 11px; border-radius: 999px; background: rgba(254,243,199,.85); color: #b45309; font-family: 'Space Grotesk', sans-serif; text-transform: capitalize; }
-.diffAdvanced     { font-size: 11.5px; font-weight: 700; padding: 3px 11px; border-radius: 999px; background: rgba(254,226,226,.85); color: #b91c1c; font-family: 'Space Grotesk', sans-serif; text-transform: capitalize; }
+.diffBeginner     { font-size: 11.5px; font-weight: 700; padding: 3px 11px; border-radius: 999px; background: rgba(209,250,223,.85); color: #0f8a3f; font-family: var(--font-display); text-transform: capitalize; }
+.diffIntermediate { font-size: 11.5px; font-weight: 700; padding: 3px 11px; border-radius: 999px; background: rgba(254,243,199,.85); color: #b45309; font-family: var(--font-display); text-transform: capitalize; }
+.diffAdvanced     { font-size: 11.5px; font-weight: 700; padding: 3px 11px; border-radius: 999px; background: rgba(254,226,226,.85); color: #b91c1c; font-family: var(--font-display); text-transform: capitalize; }
 
 .cardTitle {
   margin: 0; font-size: 17px; font-weight: 700; color: #201b2e;
-  font-family: 'Space Grotesk', sans-serif; line-height: 1.35;
+  font-family: var(--font-display); line-height: 1.35;
 }
 .cardDesc {
   margin: 0; font-size: 13px; color: #615a72; line-height: 1.6;
@@ -59,7 +59,7 @@
 .tag {
   font-size: 11.5px; font-weight: 700; color: #9333ea;
   background: rgba(147,51,234,.1); border-radius: 999px; padding: 3px 10px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .cardMeta {
@@ -86,7 +86,7 @@
   background: linear-gradient(95deg,#7c3aed,#9333ea); color: #fff;
   border: none; border-radius: 11px; padding: 10px 16px;
   font-size: 13.5px; font-weight: 700; cursor: pointer;
-  font-family: 'Space Grotesk', sans-serif; transition: all .15s;
+  font-family: var(--font-display); transition: all .15s;
   box-shadow: 0 6px 16px rgba(124,58,237,.22);
 }
 .cardBtn:hover { transform: translateY(-1px); box-shadow: 0 8px 20px rgba(124,58,237,.3); }

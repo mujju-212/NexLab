@@ -33,7 +33,7 @@
   cursor: pointer;
   transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 1px 3px rgba(0, 0, 0, 0.04);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   text-decoration: none;
 }
 
@@ -410,7 +410,7 @@
   font-weight: 800;
   color: #0f172a;
   margin: 0 0 4px 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   letter-spacing: -0.02em;
 }
 
@@ -484,7 +484,7 @@
   font-size: 13px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .progressStats {
@@ -496,7 +496,7 @@
   font-size: 18px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   line-height: 1.2;
 }
 
@@ -542,7 +542,7 @@
   background: transparent;
   transition: all 0.15s ease;
   white-space: nowrap;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .pageTab:hover {
@@ -608,7 +608,7 @@
   font-weight: 800;
   color: #0f172a;
   margin: 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .modulesCountBadge {
@@ -682,7 +682,7 @@
   background: #ffffff;
   border: 2px solid #e2e8f0;
   color: #64748b;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
 }
 
@@ -784,7 +784,7 @@
   justify-content: center;
   gap: 6px;
   transition: all 0.15s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .addNotesBtn:hover {
@@ -958,7 +958,7 @@
   font-weight: 800;
   color: #0f172a;
   margin: 0 0 14px 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .contentH2 {
@@ -966,7 +966,7 @@
   font-weight: 700;
   color: #1e293b;
   margin: 18px 0 8px 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 /* ── Code Box with Copy & Language ── */
@@ -1013,7 +1013,7 @@
 .codeSnippet {
   padding: 16px 18px;
   margin: 0;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13.5px;
   color: #38bdf8;
   overflow-x: auto;
@@ -1102,7 +1102,7 @@
   gap: 8px;
   box-shadow: 0 4px 14px rgba(124, 58, 237, 0.25);
   transition: all 0.15s cubic-bezier(0.16, 1, 0.3, 1);
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .nextContinueBtn:hover {
@@ -1127,7 +1127,7 @@
   font-size: 17px;
   font-weight: 700;
   color: #201b2e;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .quizThreshold {
@@ -1148,7 +1148,7 @@
   font-size: 14.5px;
   font-weight: 600;
   color: #201b2e;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   line-height: 1.45;
 }
 
@@ -1198,7 +1198,7 @@
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .optSelected .optLetter {
@@ -1217,7 +1217,7 @@
   font-size: 14.5px;
   font-weight: 700;
   cursor: pointer;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   box-shadow: 0 4px 14px rgba(124, 58, 237, 0.25);
   transition: all 0.15s ease;
 }
@@ -1246,7 +1246,7 @@
   font-size: 13px;
   font-weight: 600;
   color: rgba(255, 255, 255, 0.7);
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .codeEditor {
@@ -1255,7 +1255,7 @@
   resize: vertical;
   background: #0f172a;
   color: #e2e8f0;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13.5px;
   line-height: 1.7;
   padding: 18px 20px;
@@ -1287,7 +1287,7 @@
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .outputBox {
@@ -1305,12 +1305,12 @@
   color: #9333ea;
   letter-spacing: 0.07em;
   text-transform: uppercase;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .outputPre {
   margin: 0;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: #a3e635;
   line-height: 1.6;
@@ -1400,7 +1400,7 @@
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 
 .prevBtn:hover:not(:disabled) {
@@ -1427,7 +1427,7 @@
   font-weight: 700;
   cursor: pointer;
   transition: all 0.15s ease;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   box-shadow: 0 4px 14px rgba(124, 58, 237, 0.28);
 }
 
@@ -1548,7 +1548,7 @@
   margin: 0;
   overflow-x: auto;
   max-height: 480px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 13px;
   color: #e2e8f0;
   line-height: 1.6;

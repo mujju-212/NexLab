@@ -55,7 +55,7 @@
   font-weight: 700;
   text-transform: capitalize;
   letter-spacing: 0.04em;
-  color: #7c3aed;
+  color: var(--primary);
   background: rgba(255, 255, 255, 0.85);
   border: 1px solid rgba(196, 181, 253, 0.6);
   padding: 4px 12px;
@@ -137,11 +137,11 @@
   align-items: center;
   gap: 8px;
   padding: 11px 22px;
-  background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+  background: linear-gradient(135deg, var(--primary) 0%, #6366f1 100%);
   color: #ffffff;
   font-size: 13.5px;
   font-weight: 700;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   border: none;
   cursor: pointer;
   box-shadow: 0 4px 14px rgba(124, 58, 237, 0.35);
@@ -162,7 +162,7 @@
   color: #334155;
   font-size: 13.5px;
   font-weight: 600;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   border: 1px solid #e2e8f0;
   cursor: pointer;
   transition: all 0.2s ease;
@@ -197,7 +197,7 @@
   width: 100%;
   height: 100%;
   object-fit: cover;
-  border-radius: 18px;
+  border-radius: var(--radius-lg);
   box-shadow: 0 12px 30px rgba(124, 58, 237, 0.15);
   border: 1px solid rgba(255, 255, 255, 0.6);
 }
@@ -367,7 +367,7 @@
 .statChip {
   background: #f8fafc;
   border: 1px solid #f1f5f9;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 10px 8px;
   display: flex;
   flex-direction: column;
@@ -441,9 +441,9 @@
 }
 
 .tabBtnActive {
-  background: #7c3aed;
+  background: var(--primary);
   color: #ffffff;
-  border-color: #7c3aed;
+  border-color: var(--primary);
   box-shadow: 0 4px 12px rgba(124, 58, 237, 0.25);
 }
 
@@ -475,7 +475,7 @@
 .saveBtnSaved {
   background: #f5f3ff;
   border-color: #c4b5fd;
-  color: #7c3aed;
+  color: var(--primary);
 }
 
 /* ══════════════════════════════════════════════════════════════════════════
@@ -529,7 +529,7 @@
   height: 36px;
   border-radius: 10px;
   background: #f5f3ff;
-  color: #7c3aed;
+  color: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -647,7 +647,7 @@
 .problemIndex {
   width: 32px;
   height: 32px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: #f8fafc;
   border: 1px solid #e2e8f0;
   display: flex;
@@ -682,7 +682,7 @@
 }
 
 .problemTitle:hover {
-  color: #7c3aed;
+  color: var(--primary);
 }
 
 .problemTagChip {
@@ -692,7 +692,7 @@
   background: #f5f3ff;
   border: 1px solid #ede9fe;
   padding: 2px 8px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
 }
 
 .problemStatsRow {
@@ -720,7 +720,7 @@
   align-items: center;
   gap: 4px;
   padding: 4px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: #fffbeb;
   border: 1px solid #fef3c7;
   color: #b45309;
@@ -746,7 +746,7 @@
   font-weight: 700;
   border-radius: 9px;
   background: #ffffff;
-  color: #7c3aed;
+  color: var(--primary);
   border: 1px solid #ddd6fe;
   cursor: pointer;
   transition: all 0.15s ease;
@@ -764,9 +764,9 @@
   font-size: 12.5px;
   font-weight: 700;
   border-radius: 9px;
-  background: #7c3aed;
+  background: var(--primary);
   color: #ffffff;
-  border: 1px solid #7c3aed;
+  border: 1px solid var(--primary);
   cursor: pointer;
   transition: all 0.15s ease;
   min-width: 95px;
@@ -829,7 +829,7 @@
 }
 
 .sidebarCardIcon {
-  color: #7c3aed;
+  color: var(--primary);
 }
 
 .sidebarCardTitle {
@@ -841,7 +841,7 @@
 .sidebarViewAllBtn {
   font-size: 12px;
   font-weight: 700;
-  color: #7c3aed;
+  color: var(--primary);
   background: none;
   border: none;
   cursor: pointer;
@@ -892,7 +892,7 @@
 .topicIndex {
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   background: #f1f5f9;
   color: #475569;
   font-size: 11px;
@@ -904,7 +904,7 @@
 }
 
 .topicRowActive .topicIndex {
-  background: #7c3aed;
+  background: var(--primary);
   color: #ffffff;
 }
 
@@ -934,7 +934,7 @@
 
 .topicBarFill {
   height: 100%;
-  background: #7c3aed;
+  background: var(--primary);
   border-radius: 9999px;
   transition: width 0.4s ease;
 }
@@ -965,7 +965,7 @@
   justify-content: space-between;
   gap: 12px;
   padding: 10px 12px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: #f8fafc;
   border: 1px solid #f1f5f9;
   cursor: pointer;
@@ -1002,7 +1002,7 @@
   height: 36px;
   border-radius: 10px;
   background: #f5f3ff;
-  color: #7c3aed;
+  color: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;

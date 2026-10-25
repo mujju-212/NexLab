@@ -18,7 +18,7 @@
 }
 
 .headerTitle {
-  font-family: 'Space Grotesk', -apple-system, sans-serif;
+  font-family: var(--font-display);
   font-size: 24px;
   font-weight: 700;
   color: #111827;

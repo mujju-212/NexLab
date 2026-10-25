@@ -253,7 +253,7 @@ export default function QuestPage({ baseRoute }: { baseRoute: string }) {
   if (loading) {
     return (
       <div className={styles.loadingSpinner}>
-        <Sparkles size={22} className="animate-spin text-purple-600" />
+        <Sparkles size={22} className="spin text-purple-600" />
         Loading your quest data…
       </div>
     );
@@ -467,13 +467,7 @@ export default function QuestPage({ baseRoute }: { baseRoute: string }) {
         ].map((tab) => (
           <button
             key={tab.key}
-            onClick={() => {
-              if (tab.key === 'badge') {
-                openLeaderboard();
-              } else {
-                setActiveTab(tab.key as any);
-              }
-            }}
+            onClick={() => setActiveTab(tab.key as any)}
             className={`${styles.filterPill} ${activeTab === tab.key ? styles.filterPillActive : ''}`}
           >
             {tab.label}

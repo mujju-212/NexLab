@@ -4,7 +4,7 @@
 .page {
   padding: 1rem 1.5rem 3rem;
   max-width: 1100px;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--font-sans);
 }
 
 .backBtn {
@@ -13,11 +13,11 @@
   gap: .35rem;
   background: none;
   border: none;
-  color: #7c3aed;
+  color: var(--primary);
   font-size: .82rem;
   font-weight: 700;
   cursor: pointer;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--font-sans);
   padding: 0;
   margin-bottom: 1.25rem;
   transition: color .15s;
@@ -44,7 +44,7 @@
   font-size: 1.5rem;
   font-weight: 800;
   color: #201b2e;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   letter-spacing: -.02em;
   margin: 0 0 .3rem;
 }
@@ -62,12 +62,12 @@
 }
 .metaChip {
   background: rgba(124,58,237,.09);
-  color: #7c3aed;
+  color: var(--primary);
   font-size: .72rem;
   font-weight: 700;
   padding: .22rem .65rem;
   border-radius: 7px;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 .metaChipGray {
   background: rgba(0,0,0,.05);
@@ -95,7 +95,7 @@
   font-size: 1.65rem;
   font-weight: 800;
   color: #201b2e;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   margin-bottom: .4rem;
 }
 .overallNumbers span { color: #9891a6; font-size: 1rem; }
@@ -108,7 +108,7 @@
 }
 .progressFill {
   height: 100%;
-  background: linear-gradient(90deg, #7c3aed, #9333ea);
+  background: linear-gradient(90deg, var(--primary), #9333ea);
   border-radius: 99px;
   transition: width .4s ease;
 }
@@ -120,7 +120,7 @@
 .enrollBtn {
   width: 100%;
   margin-top: .75rem;
-  background: linear-gradient(135deg, #7c3aed, #9333ea);
+  background: linear-gradient(135deg, var(--primary), #9333ea);
   color: #fff;
   font-size: .82rem;
   font-weight: 800;
@@ -129,7 +129,7 @@
   border: none;
   cursor: pointer;
   transition: opacity .15s, transform .15s;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--font-sans);
 }
 .enrollBtn:hover { opacity: .88; transform: translateY(-1px); }
 
@@ -158,7 +158,7 @@
   font-size: .9rem;
   font-weight: 800;
   color: #201b2e;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 .sectionProgress {
   display: flex;
@@ -201,17 +201,17 @@
   font-size: .84rem;
   font-weight: 700;
   color: #201b2e;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   flex: 1;
   transition: color .12s;
 }
-.probRow:hover .probRowTitle { color: #7c3aed; }
+.probRow:hover .probRowTitle { color: var(--primary); }
 .diffBadge {
   font-size: .68rem;
   font-weight: 800;
   padding: .15rem .5rem;
-  border-radius: 6px;
-  font-family: 'Space Grotesk', sans-serif;
+  border-radius: var(--radius-xs);
+  font-family: var(--font-display);
   flex-shrink: 0;
 }
 .easy   { background: rgba(22,163,74,.1);  color: #15803d; }
@@ -225,14 +225,14 @@
 .questPage {
   padding: 1rem 1.5rem 3rem;
   max-width: 980px;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--font-sans);
 }
 .questHeader { margin-bottom: 1.75rem; }
 .questHeader h1 {
   font-size: 1.6rem;
   font-weight: 800;
   color: #201b2e;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   margin: 0 0 .25rem;
 }
 .questHeader p { color: #9891a6; font-size: .83rem; font-weight: 600; margin: 0; }
@@ -255,7 +255,7 @@
   font-size: 1.25rem;
   font-weight: 800;
   color: #4c1d95;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   margin: 0 0 .25rem;
 }
 .levelXp {
@@ -267,7 +267,7 @@
 .xpBar { height: 10px; background: rgba(124,58,237,.12); border-radius: 99px; overflow: hidden; }
 .xpFill {
   height: 100%;
-  background: linear-gradient(90deg, #7c3aed, #a855f7);
+  background: linear-gradient(90deg, var(--primary), #a855f7);
   border-radius: 99px;
   transition: width .5s ease;
 }
@@ -282,7 +282,7 @@
 .statCard {
   background: rgba(255,255,255,.7);
   border: 1px solid rgba(255,255,255,.8);
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: .75rem .9rem;
   text-align: center;
   box-shadow: 0 2px 8px rgba(30,20,60,.05);
@@ -291,7 +291,7 @@
   font-size: 1.3rem;
   font-weight: 800;
   color: #201b2e;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   display: block;
 }
 .statLabel { font-size: .72rem; font-weight: 700; color: #9891a6; }
@@ -305,7 +305,7 @@
   text-transform: uppercase;
   letter-spacing: .07em;
   margin-bottom: .85rem;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
 }
 .badgeGrid {
   display: grid;
@@ -328,7 +328,7 @@
   font-size: .78rem;
   font-weight: 800;
   color: #201b2e;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   margin-bottom: .2rem;
 }
 .badgeDesc { font-size: .7rem; color: #9891a6; font-weight: 600; }
@@ -338,14 +338,14 @@
 .dailyPage {
   padding: 1rem 1.5rem 3rem;
   max-width: 1100px;
-  font-family: 'Manrope', sans-serif;
+  font-family: var(--font-sans);
 }
 .dailyHeader { margin-bottom: 1.5rem; }
 .dailyHeader h1 {
   font-size: 1.6rem;
   font-weight: 800;
   color: #201b2e;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   margin: 0 0 .25rem;
 }
 .dailyHeader p { color: #9891a6; font-size: .83rem; font-weight: 600; margin: 0; }
@@ -358,7 +358,7 @@
   padding: .22rem .7rem;
   border-radius: 7px;
   margin-top: .5rem;
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   letter-spacing: .04em;
 }
 

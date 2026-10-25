@@ -3,14 +3,14 @@
 import { useState, useEffect, useCallback, useMemo } from 'react';
 import { useRouter } from 'next/navigation';
 import {
-  freeService,
-  type FreeCourse,
-  type FreeExercise,
+  platformUserService,
+  type PlatformCourse,
+  type PlatformExercise,
   type CourseUserProgress,
   type RunResult,
   type SubmitResult,
   type McqSubmitResult,
-} from '@/services/free.service';
+} from '@/services/platform-user.service';
 import { useAuthStore } from '@/store/auth-store';
 import styles from './ExerciseWorkspace.module.css';
 import {
@@ -34,9 +34,9 @@ export default function ExerciseWorkspace({
   const router = useRouter();
   const { user } = useAuthStore();
 
-  const [course, setCourse] = useState<FreeCourse | null>(null);
-  const [exercise, setExercise] = useState<FreeExercise | null>(null);
-  const [exercises, setExercises] = useState<FreeExercise[]>([]);
+  const [course, setCourse] = useState<PlatformCourse | null>(null);
+  const [exercise, setExercise] = useState<PlatformExercise | null>(null);
+  const [exercises, setExercises] = useState<PlatformExercise[]>([]);
   const [courseProgress, setCourseProgress] = useState<CourseUserProgress | null>(null);
   const [loading, setLoading] = useState(true);
 
@@ -54,6 +54,7 @@ export default function ExerciseWorkspace({
   const [mcqAnswer, setMcqAnswer] = useState<string | null>(null);
   const [mcqResult, setMcqResult] = useState<McqSubmitResult | null>(null);
   const [consoleTab, setConsoleTab] = useState<'output' | 'tests' | 'console'>('output');
+  const [consoleExpanded, setConsoleExpanded] = useState(false);
 
   // View tabs (Problem / Test Cases / Hints / Simulation)
   const [activeTab, setActiveTab] = useState<'problem' | 'testcases' | 'hints' | 'simulation'>('problem');
@@ -64,13 +65,13 @@ export default function ExerciseWorkspace({
   // Load course and exercises
   const loadData = useCallback(async () => {
     try {
-      const data = await freeService.getCourse(courseId);
+      const data = await platformUserService.getCourse(courseId);
       setCourse(data.course);
       setExercises(data.exercises || []);
       setCourseProgress(data.user_progress ?? null);
 
       const current = (data.exercises || []).find(e => e.id === exerciseId)
-        || await freeService.getExercise(exerciseId);
+        || await platformUserService.getExercise(exerciseId);
       setExercise(current);
       setMcqAnswer(null);
       setMcqResult(null);
@@ -102,7 +103,7 @@ export default function ExerciseWorkspace({
 
   const refreshCourseProgress = async () => {
     try {
-      const refreshed = await freeService.getCourse(courseId);
+      const refreshed = await platformUserService.getCourse(courseId);
       setCourseProgress(refreshed.user_progress ?? null);
       setExercises(refreshed.exercises || []);
     } catch {
@@ -175,7 +176,7 @@ export default function ExerciseWorkspace({
     setCompletionMessage(null);
     setSubmitResult(null);
     try {
-      const res = await freeService.runCode(exercise.id, code, lang);
+      const res = await platformUserService.runCode(exercise.id, code, lang);
       setRunResult(res);
     } catch (err) {
       setRunResult(null);
@@ -191,7 +192,7 @@ export default function ExerciseWorkspace({
     setSubmitting(true);
     setExecutionError(null);
     try {
-      const result = await freeService.submitMcq(exercise.id, mcqAnswer);
+      const result = await platformUserService.submitMcq(exercise.id, mcqAnswer);
       setMcqResult(result);
       if (result.correct) await refreshCourseProgress();
     } catch (err) {
@@ -209,7 +210,7 @@ export default function ExerciseWorkspace({
     if (exercise.exercise_type === 'simulation' || exercise.exercise_type === 'reading') {
       setSubmitting(true);
       try {
-        const result = await freeService.completeSimulation(exercise.id);
+        const result = await platformUserService.completeSimulation(exercise.id);
         setCompletionMessage(result.solved ? `Completed • +${result.xp_earned} XP earned` : 'Completion recorded.');
         if (result.solved) await refreshCourseProgress();
       } catch (err) {
@@ -225,7 +226,7 @@ export default function ExerciseWorkspace({
     setSubmitting(true);
     setConsoleTab('output');
     try {
-      const res = await freeService.submitCode(exercise.id, submissionCode, lang || 'python');
+      const res = await platformUserService.submitCode(exercise.id, submissionCode, lang || 'python');
       setSubmitResult(res);
       if (res.solved) await refreshCourseProgress();
       setRunResult({
@@ -246,7 +247,7 @@ export default function ExerciseWorkspace({
   };
 
   // Navigate to another exercise
-  const navigateTo = (targetEx?: FreeExercise) => {
+  const navigateTo = (targetEx?: PlatformExercise) => {
     if (!targetEx) return;
     router.push(`${basePath}/${courseId}/${targetEx.id}`);
   };
@@ -260,6 +261,24 @@ export default function ExerciseWorkspace({
       } else if ((e.ctrlKey || e.metaKey) && (e.key === 's' || e.key === 'S')) {
         e.preventDefault();
         handleSubmit();
+      } else if ((e.ctrlKey || e.metaKey) && (e.key === '/')) {
+        e.preventDefault();
+        const ta = (document.activeElement as HTMLTextAreaElement | null);
+        if (!ta || ta.tagName !== 'TEXTAREA' || ta.value !== code) return;
+        const before = ta.value.slice(0, ta.selectionStart);
+        const after = ta.value.slice(ta.selectionEnd);
+        const lineStart = before.lastIndexOf('\n') + 1;
+        const lineEnd = after.indexOf('\n') === -1 ? ta.value.length : ta.selectionStart + after.indexOf('\n');
+        const line = ta.value.slice(lineStart, lineEnd);
+        const commented = line.trimStart().startsWith('#');
+        const next = commented
+          ? ta.value.slice(lineStart, lineEnd).replace(/^(\s*)#\s?/, '$1')
+          : ta.value.slice(lineStart, lineEnd).replace(/^(\s*)/, '$1# ');
+        const nextValue = ta.value.slice(0, lineStart) + next + ta.value.slice(lineEnd);
+        setCode(nextValue);
+        requestAnimationFrame(() => {
+          ta.selectionStart = ta.selectionEnd = lineStart + next.length;
+        });
       }
     };
     window.addEventListener('keydown', handleKeyDown);
@@ -673,8 +692,24 @@ export default function ExerciseWorkspace({
                 className={styles.codeTextarea}
                 spellCheck={false}
                 rows={17}
+                onScroll={(e) => {
+                  const ta = e.target as HTMLTextAreaElement;
+                  const gutter = ta.previousElementSibling as HTMLDivElement | null;
+                  if (gutter) gutter.scrollTop = ta.scrollTop;
+                }}
               />
-              <button className={styles.editorCornerBtn} title="Fullscreen">
+              <button
+                className={styles.editorCornerBtn}
+                title="Fullscreen"
+                onClick={() => {
+                  const el = document.documentElement;
+                  if (!document.fullscreenElement) {
+                    void el.requestFullscreen?.();
+                  } else {
+                    void document.exitFullscreen();
+                  }
+                }}
+              >
                 <Maximize2 size={13} />
               </button>
             </div>
@@ -716,14 +751,18 @@ export default function ExerciseWorkspace({
                 >
                   <Trash2 size={12} /> Clear
                 </button>
-                <button className={styles.consoleClearBtn} title="Expand Output">
+                <button
+                  className={styles.consoleClearBtn}
+                  title="Expand Output"
+                  onClick={() => setConsoleExpanded((v) => !v)}
+                >
                   <Maximize2 size={12} />
                 </button>
               </div>
             </div>
 
             {/* Console Output Body */}
-            <div className={styles.consoleBody}>
+            <div className={styles.consoleBody} style={consoleExpanded ? { maxHeight: 420, height: 420 } : undefined}>
               {executionError ? (
                 <div role="alert" style={{ width: '100%', padding: 14, borderRadius: 10, background: '#fff7ed', border: '1px solid #fed7aa', color: '#9a3412', fontSize: 13, fontWeight: 600 }}>
                   <AlertCircle size={16} style={{ verticalAlign: 'middle', marginRight: 8 }} />{executionError}

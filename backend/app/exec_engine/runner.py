@@ -121,12 +121,22 @@ def run(code: str, language: str, stdin: str = '', packages: list | str | None =
     if language == 'python' and pkg_list:
         needed_pkgs = [p for p in pkg_list if p.lower() not in PREINSTALLED_PKGS]
         if needed_pkgs:
-            pip_cmd = f"pip install --cache-dir /pip_cache --prefer-binary --quiet --disable-pip-version-check --no-warn-script-location {' '.join(needed_pkgs)}"
+            pip_cmd = f"pip install --cache-dir /pip_cache --prefer-binary --no-cache-dir --disable-pip-version-check --no-warn-script-location {' '.join(needed_pkgs)}"
             compile_cmd = f"{pip_cmd} && {compile_cmd}" if compile_cmd else pip_cmd
             allow_network = True
-            compile_timeout = max(compile_timeout or 180, 180)
+            compile_timeout = max(compile_timeout or 300, 300)
+            memory_mb = max(memory_mb, 768)
         else:
             pkg_list = []
+
+    # JavaScript: npm packages are installed at run time into the writable
+    # workdir (network-enabled), mirroring the pip path for Python.
+    if language == 'javascript' and pkg_list:
+        npm_cmd = ('npm install --no-audit --no-fund --loglevel=error --cache ./.npm_cache -- '
+                   + ' '.join(pkg_list))
+        compile_cmd = f'{npm_cmd} && {compile_cmd}' if compile_cmd else npm_cmd
+        allow_network = True
+        compile_timeout = max(compile_timeout or 120, 120)
 
     # Hard deadline = compile + run + 3 s grace
     hard_deadline = compile_timeout + run_timeout + 3

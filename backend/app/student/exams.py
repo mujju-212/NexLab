@@ -773,6 +773,10 @@ def run_exam_code(exam_id):
     Execute student code against visible/sample test cases during a timed exam
     without consuming attempts or recording grades.
     """
+    from app.execution.routes import _run_docker
+    from app.execution.languages import resolve as resolve_language
+    from app.student.routes import _norm_output
+
     exam, err = _visible_exam_or_404(exam_id)
     if err:
         return err

@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import { useRouter } from 'next/navigation';
 import StudentShell from '@/components/layout/StudentShell';
-import { freeService, type FreeCourse, type Progress } from '@/services/free.service';
+import { platformUserService, type PlatformCourse, type Progress } from '@/services/platform-user.service';
 import {
   Loader2, FlaskConical, Zap, Code2, HelpCircle,
   ArrowRight, Sparkles
@@ -24,15 +24,15 @@ const COURSE_COLORS = [
 
 export default function StudentCoursesPage() {
   const router = useRouter();
-  const [courses, setCourses] = useState<FreeCourse[]>([]);
+  const [courses, setCourses] = useState<PlatformCourse[]>([]);
   const [progress, setProgress] = useState<Progress | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
 
   useEffect(() => {
     Promise.all([
-      freeService.listCourses(),
-      freeService.getProgress().catch(() => null),
+      platformUserService.listCourses(),
+      platformUserService.getProgress().catch(() => null),
     ])
       .then(([list, prog]) => { setCourses(list); setProgress(prog); })
       .catch(e => setError(e instanceof Error ? e.message : 'Failed to load courses'))

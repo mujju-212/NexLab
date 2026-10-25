@@ -959,7 +959,7 @@ def submit_quiz(module_id):
 
 # â”€â”€ Session Join â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 @student_bp.route('/sessions/<session_id>/check-gate', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def check_gate(session_id):
     """Check if student passes pre-lab gate for a session.
 
@@ -2044,7 +2044,7 @@ def submit_viva(module_id):
 # â”€â”€ Student search (shell search bar) â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€â”€
 
 @student_bp.route('/search', methods=['GET'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def student_search():
     """
     Cross-entity search for the student shell.
@@ -2333,7 +2333,7 @@ def toggle_announcement_like(announcement_id):
 
 @student_bp.route('/sessions/<session_id>/proctor-event', methods=['POST'])
 @student_bp.route('/proctor-event', methods=['POST'])
-@require_role('student', 'free_user')
+@require_role('student', 'platform_user')
 def record_proctor_event(session_id=None):
     """
     REST telemetry ingest for proctoring events (beacon / fallback when websocket disconnected).

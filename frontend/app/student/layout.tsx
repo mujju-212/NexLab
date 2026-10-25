@@ -39,7 +39,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
               platform_admin: '/admin/dashboard',
               institution_admin: '/institution/dashboard',
               instructor: '/instructor/dashboard',
-              free_user: '/practice/dashboard',
+              platform_user: '/practice/dashboard',
             };
             router.replace(routes[u.role] ?? '/login');
           }
@@ -58,7 +58,7 @@ export default function StudentLayout({ children }: { children: React.ReactNode 
         platform_admin: '/admin/dashboard',
         institution_admin: '/institution/dashboard',
         instructor: '/instructor/dashboard',
-        free_user: '/practice/dashboard',
+        platform_user: '/practice/dashboard',
       };
       router.replace(routes[user.role] ?? '/login');
     }

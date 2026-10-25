@@ -24,8 +24,7 @@
 .input {
   margin: 0;
   border: 0;
-  font-family: 'JetBrains Mono', 'Fira Code', 'Cascadia Mono', ui-monospace,
-    SFMono-Regular, Menlo, Consolas, monospace;
+  font-family: var(--font-mono);
   font-size: 13.5px;
   line-height: 1.6;
   letter-spacing: 0;

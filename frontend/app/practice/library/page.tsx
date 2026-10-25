@@ -1,4 +1,4 @@
-// /practice/library — Individual/free user's Practice Library
+// /practice/library — Individual platform user Practice Library
 'use client';
 import { Suspense } from 'react';
 import IndividualShell from '@/components/layout/IndividualShell';

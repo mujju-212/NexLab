@@ -4,13 +4,13 @@ import { useState, useEffect, useMemo, useCallback } from 'react';
 import { useRouter } from 'next/navigation';
 import Image from 'next/image';
 import {
-  freeService,
-  type FreeCourse,
-  type FreeExercise,
+  platformUserService,
+  type PlatformCourse,
+  type PlatformExercise,
   type CourseUserProgress,
   type TopicSummaryItem,
-  type FreeCourseLeaderboardItem,
-} from '@/services/free.service';
+  type PlatformCourseLeaderboardItem,
+} from '@/services/platform-user.service';
 import styles from './CourseDetailPage.module.css';
 import {
   Code2, Zap, Clock, ArrowRight, Bookmark, Search,
@@ -27,11 +27,11 @@ interface CourseDetailPageProps {
 export default function CourseDetailPage({ courseId, basePath = '/practice' }: CourseDetailPageProps) {
   const router = useRouter();
 
-  const [course, setCourse] = useState<(FreeCourse & { estimated_hours?: string; topic_count?: number }) | null>(null);
-  const [exercises, setExercises] = useState<FreeExercise[]>([]);
+  const [course, setCourse] = useState<(PlatformCourse & { estimated_hours?: string; topic_count?: number }) | null>(null);
+  const [exercises, setExercises] = useState<PlatformExercise[]>([]);
   const [userProgress, setUserProgress] = useState<CourseUserProgress | null>(null);
   const [topicsSummary, setTopicsSummary] = useState<TopicSummaryItem[]>([]);
-  const [courseLeaderboard, setCourseLeaderboard] = useState<FreeCourseLeaderboardItem[]>([]);
+  const [courseLeaderboard, setCourseLeaderboard] = useState<PlatformCourseLeaderboardItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [activeTab, setActiveTab] = useState<'problems' | 'topics' | 'discussion' | 'editorials' | 'leaderboard' | 'notes'>('problems');
   const [isSaved, setIsSaved] = useState(false);
@@ -44,12 +44,12 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
 
   const loadData = useCallback(async () => {
     try {
-      const data = await freeService.getCourse(courseId);
+      const data = await platformUserService.getCourse(courseId);
       setCourse(data.course);
       setExercises(data.exercises || []);
       if (data.user_progress) setUserProgress(data.user_progress);
       if (data.topics_summary) setTopicsSummary(data.topics_summary);
-      const leaderboardData = await freeService.getLeaderboard(data.course.id).catch(() => ({ leaderboard: [] }));
+      const leaderboardData = await platformUserService.getLeaderboard(data.course.id).catch(() => ({ leaderboard: [] }));
       setCourseLeaderboard(leaderboardData.leaderboard || []);
     } catch (err) {
       console.error('Failed to load course details:', err);
@@ -135,7 +135,7 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
     return list;
   }, [exercises, searchQuery, selectedTopic, selectedDifficulty, sortOrder]);
 
-  const handleExerciseAction = (ex: FreeExercise) => {
+  const handleExerciseAction = (ex: PlatformExercise) => {
     if (basePath === '/student/courses') {
       router.push(`/student/courses/${courseId}/${ex.id}`);
     } else {
@@ -350,38 +350,13 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
             <BookMarked size={15} /> Topics
           </button>
           <button
-            className={`${styles.tabBtn} ${activeTab === 'discussion' ? styles.tabBtnActive : ''}`}
-            onClick={() => setActiveTab('discussion')}
-          >
-            <MessageSquare size={15} /> Discussion
-          </button>
-          <button
-            className={`${styles.tabBtn} ${activeTab === 'editorials' ? styles.tabBtnActive : ''}`}
-            onClick={() => setActiveTab('editorials')}
-          >
-            <FileText size={15} /> Editorials
-          </button>
-          <button
             className={`${styles.tabBtn} ${activeTab === 'leaderboard' ? styles.tabBtnActive : ''}`}
             onClick={() => setActiveTab('leaderboard')}
           >
             <Trophy size={15} /> Leaderboard
           </button>
-          <button
-            className={`${styles.tabBtn} ${activeTab === 'notes' ? styles.tabBtnActive : ''}`}
-            onClick={() => setActiveTab('notes')}
-          >
-            <BookOpen size={15} /> Notes
-          </button>
         </div>
 
-        <button
-          className={`${styles.saveBtn} ${isSaved ? styles.saveBtnSaved : ''}`}
-          onClick={() => setIsSaved(p => !p)}
-        >
-          <Bookmark size={15} fill={isSaved ? '#7c3aed' : 'none'} color={isSaved ? '#7c3aed' : '#475569'} />
-          {isSaved ? 'Saved' : 'Save Course'}
-        </button>
       </div>
 
       {/* ══════════════════════════════════════════════════════════════════════
@@ -657,7 +632,7 @@ export default function CourseDetailPage({ courseId, basePath = '/practice' }: C
         <div className={styles.sectionBox}>
           <h2 className={styles.sectionTitle}>Course Syllabus &amp; Topics</h2>
           <p className={styles.sectionSubtitle}>
-            Full curriculum breakdown across all 8 modules.
+            Full curriculum breakdown across every module.
           </p>
           <div className={styles.topicsList} style={{ marginTop: 12 }}>
             {topicsSummary.map((topic, i) => (

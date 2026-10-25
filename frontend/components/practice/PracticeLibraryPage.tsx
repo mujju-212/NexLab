@@ -421,6 +421,7 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
   const [newCollTitle, setNewCollTitle] = useState('');
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const [loadError, setLoadError] = useState<string | null>(null);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -453,6 +454,8 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
         const dailyData = results[3].status === 'fulfilled' ? results[3].value.data?.daily : null;
         const solvedToday = results[3].status === 'fulfilled' ? results[3].value.data?.solved_today : false;
         const planData = results[4].status === 'fulfilled' ? results[4].value.data?.plans : [];
+        const catalogFailed = results[0].status === 'rejected';
+        setLoadError(catalogFailed ? 'Could not load the problem catalog. Check your connection and retry.' : null);
 
         const cleanedProblems = (probData || []).map((p: any) => {
           let tList: string[] = [];
@@ -633,6 +636,17 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
 
   return (
     <div className={styles.page}>
+      {loadError && (
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, margin: '0 0 14px', padding: '12px 16px', borderRadius: 12, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: 13, fontWeight: 600 }}>
+          <span>{loadError}</span>
+          <button
+            onClick={() => { setLoadError(null); window.location.reload(); }}
+            style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #fecaca', background: '#fff', color: '#b91c1c', fontWeight: 700, cursor: 'pointer', fontSize: 12.5 }}
+          >
+            Retry
+          </button>
+        </div>
+      )}
       {/* ── 1. Page Header ── */}
       <div className={styles.header}>
         <div className={styles.headerLeft}>
@@ -720,7 +734,7 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
                   <span>Today&apos;s Prize</span>
                 </div>
                 <div className={styles.dailyStatValue} style={{ color: '#ea580c' }}>
-                  +{daily.prize_xp ?? 15} XP
+                  +{daily.prize_xp ?? 0} XP
                 </div>
               </div>
               <div className={styles.dailyStatItem}>
@@ -742,7 +756,7 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
             {dailySolved ? (
               <div className={styles.solvedTodayBadge}>
                 <CheckCircle2 size={16} />
-                <span>Solved Today · +15 XP</span>
+                <span>Solved Today{daily?.prize_xp ? ` · +${daily.prize_xp} XP` : ''}</span>
               </div>
             ) : (
               <button className={styles.solveCtaBtn} onClick={() => goToProblem(daily.slug)}>

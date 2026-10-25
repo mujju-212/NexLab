@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import IndividualShell from '@/components/layout/IndividualShell';
 import { useAuthStore } from '@/store/auth-store';
 import { authService } from '@/services/auth.service';
-import { freeService } from '@/services/free.service';
+import { platformUserService } from '@/services/platform-user.service';
 import Cookies from 'js-cookie';
 import ExerciseWorkspace from '@/components/exercise/ExerciseWorkspace';
 
@@ -14,7 +14,7 @@ export default function ExercisePage() {
   const router = useRouter();
   const { user, isAuthenticated, hasHydrated, setUser } = useAuthStore();
   const [mounted, setMounted] = useState(false);
-  const [courseTitle, setCourseTitle] = useState('Algorithm Basics');
+  const [courseTitle, setCourseTitle] = useState('');
 
   useEffect(() => {
     setMounted(true);
@@ -28,20 +28,20 @@ export default function ExercisePage() {
     const token = Cookies.get('access_token') || (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null);
 
     if (!token && !isAuthenticated) {
-      router.replace('/login');
+      router.replace(`/login?next=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/practice')}`);
       return;
     }
 
     if (token && !user) {
       authService.getMe()
         .then((u) => setUser(u))
-        .catch(() => router.replace('/login'));
+        .catch(() => router.replace(`/login?next=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/practice')}`));
     }
   }, [isReady, isAuthenticated, user, router, setUser]);
 
   useEffect(() => {
     if (courseId) {
-      freeService.getCourse(courseId)
+      platformUserService.getCourse(courseId)
         .then(d => {
           if (d.course?.title) setCourseTitle(d.course.title);
         })

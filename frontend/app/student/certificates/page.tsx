@@ -3,7 +3,7 @@
 import { useEffect, useState } from 'react';
 import StudentShell from '@/components/layout/StudentShell';
 import { studentService } from '@/services/student.service';
-import { freeService, type FreeCoursesAnalytics, type FreeCourseItem } from '@/services/free.service';
+import { platformUserService, type PlatformCoursesAnalytics, type PlatformCourseItem } from '@/services/platform-user.service';
 import { practiceExtraService } from '@/services/practice-extra.service';
 import type { SectionSubject } from '@/types';
 import { Loader2, Download, ExternalLink, ShieldCheck, Award, BookOpen, CheckCircle2, Copy } from 'lucide-react';
@@ -31,7 +31,7 @@ export default function CertificatesPage() {
   const [activeTab, setActiveTab] = useState<'academic' | 'platform'>('academic');
   const [historyRows, setHistoryRows] = useState<HistoryRow[]>([]);
   const [subjects, setSubjects] = useState<SectionSubject[]>([]);
-  const [coursesAnalytics, setCoursesAnalytics] = useState<FreeCoursesAnalytics | null>(null);
+  const [coursesAnalytics, setCoursesAnalytics] = useState<PlatformCoursesAnalytics | null>(null);
   const [studyPlans, setStudyPlans] = useState<Array<{
     id: string;
     slug: string;
@@ -53,7 +53,7 @@ export default function CertificatesPage() {
     Promise.allSettled([
       studentService.getHistory(),
       studentService.getSubjects(),
-      freeService.getCoursesAnalytics(),
+      platformUserService.getCoursesAnalytics(),
       practiceExtraService.getPlans(),
     ])
       .then(([hRes, sRes, cRes, pRes]) => {
@@ -314,7 +314,7 @@ export default function CertificatesPage() {
             </div>
           ) : (
             <div className={styles.certGrid}>
-              {/* Free Course Certificates */}
+              {/* Platform Course Certificates */}
               {earnedCerts.map(cert => (
                 <div key={cert.certificate_id} className={styles.certCard}>
                   <div className={styles.certBanner} style={{ background: 'linear-gradient(135deg, #1e1b4b, #4338ca)' }}>
@@ -395,7 +395,7 @@ export default function CertificatesPage() {
                 <span style={{ fontSize: 12, color: '#64748b', fontWeight: 600 }}>Towards Certificate Eligibility</span>
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(280px, 1fr))', gap: 16 }}>
-                {inProgressCourses.map((c: FreeCourseItem) => (
+                {inProgressCourses.map((c: PlatformCourseItem) => (
                   <div
                     key={c.id}
                     style={{

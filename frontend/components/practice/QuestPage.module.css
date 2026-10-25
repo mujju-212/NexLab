@@ -130,7 +130,7 @@
 .heroBanner {
   background: linear-gradient(135deg, #fff6eb 0%, #fff1f2 35%, #faf5ff 75%, #f3e8ff 100%);
   border: 1px solid rgba(244, 114, 182, 0.25);
-  border-radius: 24px;
+  border-radius: var(--radius-xl);
   padding: 24px 28px;
   display: flex;
   align-items: center;
@@ -186,7 +186,7 @@
   font-size: 11.5px;
   font-weight: 600;
   padding: 4px 10px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   display: inline-flex;
   align-items: center;
   gap: 4px;
@@ -253,10 +253,10 @@
 }
 
 .heroCtaBtn {
-  background: linear-gradient(135deg, #7c3aed 0%, #6d28d9 100%);
+  background: linear-gradient(135deg, var(--primary) 0%, #6d28d9 100%);
   color: #ffffff;
   border: none;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 10px 22px;
   font-size: 13.5px;
   font-weight: 700;
@@ -301,7 +301,7 @@
 .weeklyCard {
   background: #ffffff;
   border: 1px solid #f1f5f9;
-  border-radius: 24px;
+  border-radius: var(--radius-xl);
   padding: 22px 24px;
   display: flex;
   flex-direction: column;
@@ -326,9 +326,9 @@
 .weeklyIconBox {
   width: 38px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: #f5f3ff;
-  color: #7c3aed;
+  color: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -351,7 +351,7 @@
 .viewAllLink {
   background: none;
   border: none;
-  color: #7c3aed;
+  color: var(--primary);
   font-size: 12.5px;
   font-weight: 700;
   cursor: pointer;
@@ -406,8 +406,8 @@
 
 .dayBubbleToday {
   background: #ffffff;
-  border: 2px solid #7c3aed;
-  color: #7c3aed;
+  border: 2px solid var(--primary);
+  color: var(--primary);
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.15);
 }
 
@@ -459,7 +459,7 @@
 
 .filterPill {
   padding: 8px 18px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   font-size: 13px;
   font-weight: 600;
   cursor: pointer;
@@ -476,9 +476,9 @@
 }
 
 .filterPillActive {
-  background: #7c3aed !important;
+  background: var(--primary) !important;
   color: #ffffff !important;
-  border-color: #7c3aed !important;
+  border-color: var(--primary) !important;
   box-shadow: 0 2px 8px rgba(124, 58, 237, 0.25);
 }
 
@@ -511,7 +511,7 @@
 .sectionIconBox {
   width: 38px;
   height: 38px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -677,7 +677,7 @@
   background: #dcfce7;
   color: #15803d;
   border: 1px solid #bbf7d0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 5px 12px;
   font-size: 11.5px;
   font-weight: 700;
@@ -685,10 +685,10 @@
 }
 
 .btnPrimary {
-  background: #7c3aed;
+  background: var(--primary);
   color: #ffffff;
   border: none;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 5px 14px;
   font-size: 11.5px;
   font-weight: 700;
@@ -703,9 +703,9 @@
 
 .btnOutline {
   background: transparent;
-  color: #7c3aed;
+  color: var(--primary);
   border: 1px solid #c4b5fd;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 5px 12px;
   font-size: 11.5px;
   font-weight: 600;
@@ -715,7 +715,7 @@
 
 .btnOutline:hover {
   background: #f5f3ff;
-  border-color: #7c3aed;
+  border-color: var(--primary);
 }
 
 /* Weekly Quest Cards */
@@ -813,7 +813,7 @@
   background: #dcfce7;
   color: #15803d;
   border: 1px solid #bbf7d0;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 4px 10px;
   font-size: 11.5px;
   font-weight: 700;
@@ -874,7 +874,7 @@
   background: #111827;
   color: #ffffff;
   padding: 12px 20px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
   display: flex;
   align-items: center;
@@ -903,6 +903,6 @@
   min-height: 350px;
   font-size: 15px;
   font-weight: 600;
-  color: #7c3aed;
+  color: var(--primary);
   gap: 10px;
 }

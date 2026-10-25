@@ -737,8 +737,12 @@ export default function PlaygroundPage() {
           <button
             id="runCodeBtn"
             className={styles.primaryRunBtn}
-            onClick={isBrowserLang ? undefined : run}
-            disabled={running || !lang || isBrowserLang}
+            onClick={isBrowserLang ? () => {
+              setPreviewSrc(langId === 'css'
+                ? `<!DOCTYPE html><html><head><style>${code}</style></head><body><h1>NexLab Preview</h1><p>Sample styled text with dynamic CSS.</p><button>Action Button</button></body></html>`
+                : code);
+            } : run}
+            disabled={running || !lang}
           >
             {running ? (
               <Loader2 size={15} className={styles.spin} />
@@ -1165,6 +1169,22 @@ export default function PlaygroundPage() {
             </div>
 
             <div className={styles.terminalBody} ref={termBodyRef}>
+              {/* Live browser preview for HTML/CSS */}
+              {isBrowserLang && previewSrc && (
+                <iframe
+                  title="Live Preview"
+                  srcDoc={previewSrc}
+                  sandbox="allow-scripts"
+                  style={{ width: '100%', height: 320, border: '1px solid #27272a', borderRadius: 8, background: '#fff' }}
+                />
+              )}
+              {isBrowserLang && !previewSrc && (
+                <div style={{ color: '#64748b', fontStyle: 'italic', padding: '12px 0' }}>
+                  Start typing HTML/CSS — a live preview renders here.
+                </div>
+              )}
+              {!isBrowserLang && (
+              <>
               {/* Idle state */}
               {!result && !runError && !running && (
                 <div style={{ color: '#64748b', fontStyle: 'italic', padding: '12px 0' }}>
@@ -1215,12 +1235,14 @@ export default function PlaygroundPage() {
               {result && typingDone && (
                 <div className={styles.processVerdictRow}>
                   <span>
-                    [[Process completed in {((result.time_ms ?? 120) / 1000).toFixed(2)}s]]
+                    [[Process completed{result.time_ms != null ? ` in ${(result.time_ms / 1000).toFixed(2)}s` : ''}]]
                   </span>
                   <span>
-                    {result.memory_kb ? `${(result.memory_kb / 1024).toFixed(1)} MB` : '12.4 MB'} · exit {result.exit_code ?? 0}
+                    {result.memory_kb ? `${(result.memory_kb / 1024).toFixed(1)} MB · ` : ''}exit {result.exit_code ?? 0}
                   </span>
                 </div>
+              )}
+              </>
               )}
             </div>
           </div>

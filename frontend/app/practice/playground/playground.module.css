@@ -28,7 +28,7 @@
 }
 
 .breadHome {
-  color: #7c3aed;
+  color: var(--primary);
 }
 
 .breadSep {
@@ -41,7 +41,7 @@
 }
 
 .playgroundTitle {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 28px;
   font-weight: 800;
   color: #0f172a;
@@ -75,7 +75,7 @@
   font-style: italic;
   font-size: 13px;
   font-weight: 600;
-  color: #7c3aed;
+  color: var(--primary);
   margin: 0;
   line-height: 1.35;
 }
@@ -83,9 +83,9 @@
 .quoteIconBadge {
   width: 42px;
   height: 42px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: #ffffff;
-  color: #7c3aed;
+  color: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -121,7 +121,7 @@
   align-items: center;
   background: #f8fafc;
   border: 1.5px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 0 10px 0 8px;
   transition: all 0.18s ease;
 }
@@ -132,7 +132,7 @@
 }
 
 .langSelectorWrap:focus-within {
-  border-color: #7c3aed;
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.12);
   background: #ffffff;
 }
@@ -173,8 +173,8 @@
   gap: 8px;
   padding: 9px 18px;
   border: none;
-  border-radius: 12px;
-  background: linear-gradient(135deg, #7c3aed, #9333ea);
+  border-radius: var(--radius-md);
+  background: linear-gradient(135deg, var(--primary), #9333ea);
   color: #ffffff;
   font-family: inherit;
   font-size: 13.5px;
@@ -201,11 +201,11 @@
 }
 
 .ctrlKbd {
-  font-family: 'Space Grotesk', sans-serif;
+  font-family: var(--font-display);
   font-size: 10.5px;
   font-weight: 700;
   background: rgba(255, 255, 255, 0.22);
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   padding: 2px 6px;
   margin-left: 2px;
   letter-spacing: 0.02em;
@@ -217,7 +217,7 @@
   align-items: center;
   gap: 7px;
   padding: 9px 15px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   border: 1.5px solid #e2e8f0;
   background: #ffffff;
   color: #475569;
@@ -236,7 +236,7 @@
 
 .toolActive {
   background: #f5f3ff !important;
-  color: #7c3aed !important;
+  color: var(--primary) !important;
   border-color: #c4b5fd !important;
 }
 
@@ -246,7 +246,7 @@
   align-items: center;
   gap: 7px;
   padding: 9px 15px;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   border: 1.5px solid #fee2e2;
   background: #fef2f2;
   color: #dc2626;
@@ -343,7 +343,7 @@
 
 .resizerGrip:hover .resizerBar,
 .resizerGripActive .resizerBar {
-  background: #7c3aed;
+  background: var(--primary);
   box-shadow: 0 0 8px rgba(124, 58, 237, 0.6);
   height: 140px;
 }
@@ -381,7 +381,7 @@
   width: 32px;
   height: 32px;
   border-radius: 9px;
-  background: #7c3aed;
+  background: var(--primary);
   color: #ffffff;
   border: none;
   display: flex;
@@ -411,7 +411,7 @@
   display: flex;
   flex-direction: column;
   gap: 14px;
-  color: #7c3aed;
+  color: var(--primary);
   margin-top: auto;
   margin-bottom: 12px;
 }
@@ -449,8 +449,8 @@
 .filesAddBtn {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
-  background: #7c3aed;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
   color: #ffffff;
   border: none;
   display: flex;
@@ -496,7 +496,7 @@
 
 .fileSearchInput:focus {
   background: #ffffff;
-  border-color: #7c3aed;
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
 }
 
@@ -539,7 +539,7 @@
 .fileExtIcon {
   width: 22px;
   height: 22px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -549,7 +549,7 @@
 }
 
 .fileNameText {
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12.5px;
   font-weight: 600;
   color: #334155;
@@ -559,7 +559,7 @@
 }
 
 .fileItemActive .fileNameText {
-  color: #7c3aed;
+  color: var(--primary);
   font-weight: 700;
 }
 
@@ -569,7 +569,7 @@
   color: #94a3b8;
   cursor: pointer;
   padding: 2px 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -590,7 +590,7 @@
   gap: 6px;
   background: none;
   border: none;
-  color: #7c3aed;
+  color: var(--primary);
   font-family: inherit;
   font-size: 12.5px;
   font-weight: 700;
@@ -632,7 +632,7 @@
 .storageBarFill {
   height: 100%;
   border-radius: 999px;
-  background: linear-gradient(90deg, #7c3aed, #a855f7);
+  background: linear-gradient(90deg, var(--primary), #a855f7);
   transition: width 0.3s ease;
 }
 
@@ -657,7 +657,7 @@
 .proTipCard {
   background: #faf5ff;
   border: 1px solid #ede9fe;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   display: flex;
   align-items: flex-start;
@@ -665,7 +665,7 @@
 }
 
 .proTipIconBox {
-  color: #7c3aed;
+  color: var(--primary);
   flex-shrink: 0;
   margin-top: 1px;
 }
@@ -725,9 +725,9 @@
   gap: 8px;
   background: #1e1e2e;
   border: 1px solid #313244;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   padding: 5px 10px;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12px;
   font-weight: 600;
   color: #cdd6f4;
@@ -736,7 +736,7 @@
 
 .fileTabActive {
   background: #252538;
-  border-color: #7c3aed;
+  border-color: var(--primary);
   color: #f5f3ff;
 }
 
@@ -762,7 +762,7 @@
   color: #6c7086;
   cursor: pointer;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -800,7 +800,7 @@
   color: #6c7086;
   cursor: pointer;
   padding: 4px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -827,7 +827,7 @@
   display: flex;
   align-items: center;
   justify-content: space-between;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 11px;
   color: #a6adc8;
 }
@@ -879,7 +879,7 @@
   gap: 5px;
   background: transparent;
   border: 1px solid #475569;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   color: #94a3b8;
   font-size: 11px;
   font-weight: 600;
@@ -898,7 +898,7 @@
   min-height: 150px;
   max-height: 240px;
   overflow-y: auto;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
   font-size: 12.5px;
   line-height: 1.6;
   color: #f1f5f9;
@@ -983,7 +983,7 @@
 .collapseToggleBtn {
   width: 28px;
   height: 28px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   background: transparent;
   border: 1px solid #e2e8f0;
   color: #64748b;
@@ -996,7 +996,7 @@
 
 .collapseToggleBtn:hover {
   background: #ede9fe;
-  color: #7c3aed;
+  color: var(--primary);
   border-color: #c4b5fd;
 }
 
@@ -1040,8 +1040,8 @@
 }
 
 .inspectorTabActive {
-  color: #7c3aed !important;
-  border-bottom-color: #7c3aed !important;
+  color: var(--primary) !important;
+  border-bottom-color: var(--primary) !important;
   background: #ffffff;
   border-radius: 8px 8px 0 0;
 }
@@ -1063,7 +1063,7 @@
   height: 36px;
   border-radius: 10px;
   background: #f5f3ff;
-  color: #7c3aed;
+  color: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1112,7 +1112,7 @@
 }
 
 .vizSelectInput:focus {
-  border-color: #7c3aed;
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
   background: #ffffff;
 }
@@ -1122,7 +1122,7 @@
   padding: 10px;
   border: none;
   border-radius: 11px;
-  background: linear-gradient(135deg, #7c3aed, #9333ea);
+  background: linear-gradient(135deg, var(--primary), #9333ea);
   color: #ffffff;
   font-family: inherit;
   font-size: 13px;
@@ -1145,7 +1145,7 @@
 /* Visualization Canvas / Empty state */
 .vizCanvasBox {
   border: 1.5px dashed #cbd5e1;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: #fafafa;
   min-height: 220px;
   display: flex;
@@ -1206,7 +1206,7 @@
 .aiBetaBadge {
   font-size: 10px;
   font-weight: 800;
-  color: #7c3aed;
+  color: var(--primary);
   background: #f3e8ff;
   border: 1px solid #e9d5ff;
   padding: 2px 6px;
@@ -1245,7 +1245,7 @@
 .aiChipBtn:hover:not(:disabled) {
   background: #f5f3ff;
   border-color: #c4b5fd;
-  color: #7c3aed;
+  color: var(--primary);
 }
 
 /* Chat Input */
@@ -1271,7 +1271,7 @@
 
 .aiChatInput:focus {
   background: #ffffff;
-  border-color: #7c3aed;
+  border-color: var(--primary);
   box-shadow: 0 0 0 3px rgba(124, 58, 237, 0.1);
 }
 
@@ -1280,8 +1280,8 @@
   right: 6px;
   width: 28px;
   height: 28px;
-  border-radius: 8px;
-  background: #7c3aed;
+  border-radius: var(--radius-sm);
+  background: var(--primary);
   color: #ffffff;
   border: none;
   display: flex;
@@ -1322,7 +1322,7 @@
 .suggestedPill {
   font-size: 10.5px;
   font-weight: 600;
-  color: #7c3aed;
+  color: var(--primary);
   background: #faf5ff;
   border: 1px solid #ede9fe;
   padding: 3px 8px;
@@ -1360,7 +1360,7 @@
   gap: 8px;
   padding: 11px 18px;
   border-radius: 999px;
-  background: linear-gradient(135deg, #7c3aed, #9333ea);
+  background: linear-gradient(135deg, var(--primary), #9333ea);
   color: #ffffff;
   font-family: inherit;
   font-size: 13px;
@@ -1419,7 +1419,7 @@
   color: #64748b;
   cursor: pointer;
   padding: 4px;
-  border-radius: 8px;
+  border-radius: var(--radius-sm);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1464,7 +1464,7 @@
   height: 36px;
   border-radius: 10px;
   background: #f5f3ff;
-  color: #7c3aed;
+  color: var(--primary);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1495,7 +1495,7 @@
 .perfMetricCard {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   display: flex;
   flex-direction: column;
@@ -1515,7 +1515,7 @@
   font-size: 15px;
   font-weight: 800;
   color: #0f172a;
-  font-family: 'JetBrains Mono', monospace;
+  font-family: var(--font-mono);
 }
 
 .perfBadgeSuccess {
@@ -1525,7 +1525,7 @@
   background: #ecfdf5;
   border: 1px solid #a7f3d0;
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   align-self: flex-start;
 }
 
@@ -1536,7 +1536,7 @@
   background: #fef3c7;
   border: 1px solid #fde68a;
   padding: 2px 6px;
-  border-radius: 6px;
+  border-radius: var(--radius-xs);
   align-self: flex-start;
 }
 
@@ -1623,14 +1623,14 @@
 
 .complexityVal {
   font-weight: 800;
-  color: #7c3aed;
-  font-family: 'JetBrains Mono', monospace;
+  color: var(--primary);
+  font-family: var(--font-mono);
 }
 
 .sandboxConstraintsCard {
   background: #f8fafc;
   border: 1px solid #e2e8f0;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   padding: 10px 12px;
   font-size: 11px;
   color: #64748b;
@@ -1641,7 +1641,7 @@
 
 .nonPythonVizBox {
   border: 1.5px dashed #cbd5e1;
-  border-radius: 12px;
+  border-radius: var(--radius-md);
   background: #fafafa;
   padding: 28px 20px;
   text-align: center;

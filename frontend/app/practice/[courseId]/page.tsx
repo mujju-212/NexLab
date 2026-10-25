@@ -7,7 +7,7 @@ import { useAuthStore } from '@/store/auth-store';
 import { useEffect, useState } from 'react';
 import Cookies from 'js-cookie';
 import { authService } from '@/services/auth.service';
-import { freeService } from '@/services/free.service';
+import { platformUserService } from '@/services/platform-user.service';
 
 export default function CoursePage() {
   const { courseId } = useParams<{ courseId: string }>();
@@ -27,14 +27,14 @@ export default function CoursePage() {
     const token = Cookies.get('access_token') || (typeof window !== 'undefined' ? localStorage.getItem('access_token') : null);
 
     if (!token && !isAuthenticated) {
-      router.replace('/login');
+      router.replace(`/login?next=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/practice')}`);
       return;
     }
 
     if (token && !user) {
       authService.getMe()
         .then((u) => setUser(u))
-        .catch(() => router.replace('/login'));
+        .catch(() => router.replace(`/login?next=${encodeURIComponent(typeof window !== 'undefined' ? window.location.pathname : '/practice')}`));
     }
   }, [isReady, isAuthenticated, user, router, setUser]);
 
@@ -42,7 +42,7 @@ export default function CoursePage() {
 
   useEffect(() => {
     if (courseId) {
-      freeService.getCourse(courseId)
+      platformUserService.getCourse(courseId)
         .then((d: { course?: { title?: string } }) => setCourseTitle(d.course?.title || ''))
         .catch(() => setCourseTitle(courseId.replace(/-/g, ' ').replace(/\b\w/g, l => l.toUpperCase())));
     }
