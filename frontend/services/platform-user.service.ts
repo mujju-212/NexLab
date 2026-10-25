@@ -1,4 +1,5 @@
 import { apiClient } from './api-client';
+import type { PlatformContentBlock } from '@/types/platform-content';
 
 export interface PlatformCourse {
   id: string;
@@ -29,6 +30,7 @@ export interface PlatformExercise {
   test_cases: Array<{ input: string; expected: string; hidden: boolean }>;
   mcq_options?: string[];
   simulation_path?: string;
+  content_blocks?: PlatformContentBlock[];
   xp_reward: number;
   tags?: string[];
   acceptance_rate?: number | null;

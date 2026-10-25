@@ -115,6 +115,56 @@ def test_last_published_exercise_is_protected_and_mcq_answer_keeps_option_index(
     assert admin_client.delete(f"/api/admin/content/exercises/{first_id}").status_code == 200
 
 
+def test_lesson_studio_blocks_persist_render_and_import_bundled_html(admin_client):
+    course_id = _new_course(admin_client)
+    untitled = admin_client.post(
+        f"/api/admin/content/courses/{course_id}/exercises",
+        json={
+            "title": "Untitled lesson block",
+            "exercise_type": "simulation",
+            "content_blocks": [{"module_type": "html", "title": " ", "content_data": {"html": "<html></html>"}}],
+            "is_published": True,
+        },
+    )
+    assert untitled.status_code == 400
+    assert "title" in untitled.get_json()["error"].lower()
+
+    blocks = [
+        {"id": "notes-1", "module_type": "markdown", "title": "Concept", "content_data": {"md": "## Loops\n\nRepeat a task."}},
+        {"id": "html-1", "module_type": "html", "title": "Interactive Lab", "content_data": {"html": "<!doctype html><html><body><button>Try</button></body></html>"}},
+        {"id": "code-1", "module_type": "code", "title": "Example", "content_data": {"language": "python", "code": "for i in range(3):\n    print(i)"}},
+    ]
+    created = admin_client.post(
+        f"/api/admin/content/courses/{course_id}/exercises",
+        json={"title": "Inline HTML Lab", "exercise_type": "simulation", "content_blocks": blocks, "is_published": True},
+    )
+    assert created.status_code == 201, created.get_json()
+    exercise_id = created.get_json()["exercise"]["id"]
+    assert created.get_json()["exercise"]["content_blocks"] == blocks
+    assert admin_client.patch(f"/api/admin/content/courses/{course_id}", json={"is_published": True}).status_code == 200
+
+    learner_course = admin_client.get(f"/api/platform-user/courses/{course_id}").get_json()
+    learner_outline = next(item for item in learner_course["exercises"] if item["id"] == exercise_id)
+    assert "content_blocks" not in learner_outline
+    learner_exercise = admin_client.get(f"/api/platform-user/exercises/{exercise_id}").get_json()["exercise"]
+    assert learner_exercise["content_blocks"] == blocks
+    assert admin_client.patch(f"/api/admin/content/courses/{course_id}", json={"is_published": False}).status_code == 200
+    assert admin_client.get(f"/api/platform-user/exercises/{exercise_id}").status_code == 404
+
+    assets = admin_client.get("/api/admin/content/simulation-assets").get_json()["assets"]
+    loops = next(item for item in assets if item["path"] == "/simulations/python-programming-lab/loops.html")
+    source = admin_client.get("/api/admin/content/simulation-assets/source", query_string={"path": loops["path"]})
+    assert source.status_code == 200
+    assert "<!DOCTYPE html>" in source.get_json()["html"]
+    assert admin_client.get("/api/admin/content/simulation-assets/source", query_string={"path": "/simulations/../../backend/run.py"}).status_code == 400
+
+    invalid = admin_client.patch(
+        f"/api/admin/content/exercises/{exercise_id}",
+        json={"content_blocks": [{"id": "empty", "module_type": "html", "title": "Empty", "content_data": {"html": ""}}]},
+    )
+    assert invalid.status_code == 400
+
+
 def test_update_field_validation_null_clearing_and_legacy_publish_guard(admin_client):
     course_id = _new_course(admin_client)
     created = admin_client.post(

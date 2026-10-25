@@ -11,6 +11,9 @@ bank health. Every mutation is audited; reads never are.
               + enable/disable
 """
 from datetime import datetime
+import json
+from pathlib import Path
+from urllib.parse import urlparse
 
 from flask import Blueprint, jsonify, request, g
 
@@ -23,6 +26,51 @@ from app.models.practice import Problem, PracticeTestCase, PracticeSubmission
 admin_content_bp = Blueprint('admin_content', __name__)
 
 _EXERCISE_TYPES = {'coding', 'mcq', 'reading', 'simulation'}
+_CONTENT_BLOCK_TYPES = {'markdown', 'text', 'code', 'html', 'image', 'video', 'pdf', 'link'}
+_BLOCK_CONTENT_FIELDS = {
+    'markdown': 'md', 'text': 'html', 'code': 'code', 'html': 'html',
+    'image': 'url', 'video': 'url', 'pdf': 'url', 'link': 'url',
+}
+
+
+def _validate_content_blocks(blocks):
+    if blocks is None:
+        return None
+    if not isinstance(blocks, list) or len(blocks) > 40:
+        return 'content_blocks must be an array of at most 40 lesson blocks.'
+    try:
+        if len(json.dumps(blocks, ensure_ascii=False).encode('utf-8')) > 1_000_000:
+            return 'Lesson content is too large (maximum 1 MB).'
+    except (TypeError, ValueError):
+        return 'content_blocks must contain JSON-compatible values.'
+    for index, block in enumerate(blocks, 1):
+        if not isinstance(block, dict):
+            return f'Lesson block {index} must be an object.'
+        kind = block.get('module_type')
+        if not isinstance(kind, str) or kind not in _CONTENT_BLOCK_TYPES:
+            return f'Lesson block {index} has an unsupported type.'
+        block_id = block.get('id')
+        if block_id is not None and (not isinstance(block_id, str) or len(block_id) > 100):
+            return f'Lesson block {index} id must be short text.'
+        title = block.get('title', '')
+        data = block.get('content_data', {})
+        if not isinstance(title, str) or len(title) > 160:
+            return f'Lesson block {index} title must be text up to 160 characters.'
+        if not isinstance(data, dict):
+            return f'Lesson block {index} content_data must be an object.'
+        field = _BLOCK_CONTENT_FIELDS[kind]
+        value = data.get(field, '')
+        limit = 250_000 if field == 'html' else 120_000
+        if not isinstance(value, str) or len(value) > limit:
+            return f'Lesson block {index} {field} must be text up to {limit} characters.'
+        if kind in {'image', 'video', 'pdf', 'link'} and value.strip():
+            parsed = urlparse(value.strip())
+            is_local = value.startswith('/') and not value.startswith('//') and '..' not in value.split('/')
+            if parsed.scheme not in {'http', 'https'} and not is_local:
+                return f'Lesson block {index} URL must be http(s) or a safe local path.'
+        if 'language' in data and not isinstance(data['language'], str):
+            return f'Lesson block {index} language must be text.'
+    return None
 
 
 def _validate_exercise(exercise):
@@ -30,6 +78,16 @@ def _validate_exercise(exercise):
     kind = exercise.exercise_type
     if kind not in _EXERCISE_TYPES:
         return 'Exercise type must be coding, mcq, reading, or simulation.'
+    blocks = exercise.content_blocks or []
+    invalid_blocks = _validate_content_blocks(blocks)
+    if invalid_blocks:
+        return invalid_blocks
+    for index, block in enumerate(blocks, 1):
+        if not (block.get('title') or '').strip():
+            return f'Lesson block {index} needs a title before publishing.'
+        field = _BLOCK_CONTENT_FIELDS[block['module_type']]
+        if not block['content_data'].get(field, '').strip():
+            return f'Lesson block {index} needs {field} content before publishing.'
     if kind in ('coding', 'reading') and not (exercise.description or '').strip():
         return 'Add a learner-facing description before publishing.'
     if kind == 'coding':
@@ -53,9 +111,16 @@ def _validate_exercise(exercise):
             return 'Choose a correct answer that matches one of the provided options.'
     elif kind == 'simulation':
         path = (exercise.simulation_path or '').strip()
-        if (not path.startswith('/simulations/') or path == '/simulations/' or
-                '..' in path.split('/') or chr(92) in path or '?' in path or '#' in path or
-                not path.lower().endswith('.html')):
+        has_inline_html = any(
+            block.get('module_type') == 'html' and
+            (block.get('content_data', {}).get('html') or '').strip()
+            for block in blocks
+        )
+        if not path and not has_inline_html:
+            return 'Add inline HTML lesson content or choose a local /simulations/... .html file.'
+        if path and (not path.startswith('/simulations/') or path == '/simulations/' or
+                     '..' in path.split('/') or chr(92) in path or '%' in path or
+                     '?' in path or '#' in path or not path.lower().endswith('.html')):
             return 'Simulation exercises need a safe local /simulations/... .html path.'
     return None
 
@@ -252,6 +317,7 @@ def _ex_row(e):
         'is_published': bool(e.is_published),
         'test_case_count': len(e.test_cases or []),
         'test_cases': e.test_cases or [],
+        'content_blocks': e.content_blocks or [],
         'mcq_options': e.mcq_options,
         'mcq_answer': e.mcq_answer,
         'mcq_explanation': e.mcq_explanation,
@@ -298,6 +364,10 @@ def create_exercise(course_id):
         if field in data and data[field] is not None and not isinstance(data[field], list):
             return jsonify({'error': f'{field} must be an array.'}), 400
     test_cases = data.get('test_cases', [])
+    content_blocks = data.get('content_blocks', [])
+    block_error = _validate_content_blocks(content_blocks)
+    if block_error:
+        return jsonify({'error': block_error}), 400
     allowed_languages = data.get('allowed_languages', ['python'])
     if not isinstance(test_cases, list) or not isinstance(allowed_languages, list):
         return jsonify({'error': 'test_cases and allowed_languages must be arrays.'}), 400
@@ -348,6 +418,7 @@ def create_exercise(course_id):
         starter_code=data.get('starter_code'),
         allowed_languages=allowed_languages,
         test_cases=test_cases,
+        content_blocks=content_blocks,
         mcq_options=data.get('mcq_options'),
         mcq_answer=(data.get('mcq_answer') or '').upper() or None,
         mcq_explanation=data.get('mcq_explanation'),
@@ -402,6 +473,10 @@ def update_exercise(exercise_id):
         and ('hidden' not in tc or isinstance(tc['hidden'], bool)) for tc in data['test_cases']
     ):
         return jsonify({'error': 'Each test case must have text input and expected values, with an optional boolean hidden flag.'}), 400
+    if 'content_blocks' in data:
+        block_error = _validate_content_blocks(data['content_blocks'])
+        if block_error:
+            return jsonify({'error': block_error}), 400
     if 'starter_code' in data and (
         not isinstance(data['starter_code'], dict) or not all(isinstance(k, str) and isinstance(v, str) for k, v in data['starter_code'].items())
     ):
@@ -416,7 +491,7 @@ def update_exercise(exercise_id):
             return jsonify({'error': f'{field} must be an integer.'}), 400
     changed = []
     for field in ('title', 'description', 'hint_text', 'exercise_type', 'difficulty',
-                  'starter_code', 'allowed_languages', 'test_cases',
+                  'starter_code', 'allowed_languages', 'test_cases', 'content_blocks',
                   'mcq_options', 'mcq_explanation', 'simulation_path', 'tags'):
         if field in data and (data[field] is not None or field in nullable_text_fields):
             value = data[field].strip() if field == 'title' and data[field] is not None else data[field]
@@ -484,6 +559,47 @@ def delete_exercise(exercise_id):
            'exercise', exercise_id, severity='high')
     db.session.commit()
     return jsonify({'deleted': True}), 200
+
+
+# ── bundled simulation HTML source ─────────────────────────────────────────
+
+_SIMULATION_ROOT = Path(__file__).resolve().parents[3] / 'frontend' / 'public' / 'simulations'
+
+
+@admin_content_bp.route('/content/simulation-assets', methods=['GET'])
+@require_role('platform_admin')
+def list_simulation_assets():
+    if not _SIMULATION_ROOT.is_dir():
+        return jsonify({'assets': []}), 200
+    assets = []
+    for file_path in sorted(_SIMULATION_ROOT.rglob('*.html')):
+        resolved = file_path.resolve()
+        if _SIMULATION_ROOT.resolve() not in resolved.parents or not resolved.is_file():
+            continue
+        relative = resolved.relative_to(_SIMULATION_ROOT.resolve()).as_posix()
+        assets.append({'path': f'/simulations/{relative}', 'name': relative})
+    return jsonify({'assets': assets}), 200
+
+
+@admin_content_bp.route('/content/simulation-assets/source', methods=['GET'])
+@require_role('platform_admin')
+def get_simulation_asset_source():
+    raw_path = request.args.get('path', '')
+    if (not raw_path.startswith('/simulations/') or raw_path.startswith('//') or
+            '..' in raw_path.split('/') or chr(92) in raw_path or '%' in raw_path or
+            '?' in raw_path or '#' in raw_path or not raw_path.lower().endswith('.html')):
+        return jsonify({'error': 'Choose a safe /simulations/... .html file.'}), 400
+    root = _SIMULATION_ROOT.resolve()
+    candidate = (root / raw_path[len('/simulations/'):]).resolve()
+    if root not in candidate.parents or not candidate.is_file() or candidate.suffix.lower() != '.html':
+        return jsonify({'error': 'Simulation file not found.'}), 404
+    try:
+        if candidate.stat().st_size > 250_000:
+            return jsonify({'error': 'This simulation file is too large to import (maximum 250 KB).'}), 413
+        html = candidate.read_text(encoding='utf-8')
+    except (OSError, UnicodeError):
+        return jsonify({'error': 'Simulation source could not be read as UTF-8 text.'}), 400
+    return jsonify({'path': raw_path, 'html': html}), 200
 
 
 # ── problem bank health ────────────────────────────────────────────────────

@@ -1,6 +1,6 @@
 'use client';
 
-import { useState, useEffect, useCallback, useMemo } from 'react';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   platformUserService,
@@ -12,6 +12,7 @@ import {
   type McqSubmitResult,
 } from '@/services/platform-user.service';
 import { useAuthStore } from '@/store/auth-store';
+import PlatformLessonBlocks from '@/components/exercise/PlatformLessonBlocks';
 import styles from './ExerciseWorkspace.module.css';
 import {
   Code2, Zap, Play, Send, ChevronLeft, ChevronRight,
@@ -58,6 +59,7 @@ export default function ExerciseWorkspace({
 
   // View tabs (Problem / Test Cases / Hints / Simulation)
   const [activeTab, setActiveTab] = useState<'problem' | 'testcases' | 'hints' | 'simulation'>('problem');
+  const simulationFrameRef = useRef<HTMLIFrameElement>(null);
 
   // Copy feedback state
   const [copiedId, setCopiedId] = useState<string | null>(null);
@@ -70,8 +72,14 @@ export default function ExerciseWorkspace({
       setExercises(data.exercises || []);
       setCourseProgress(data.user_progress ?? null);
 
-      const current = (data.exercises || []).find(e => e.id === exerciseId)
-        || await platformUserService.getExercise(exerciseId);
+      let current = (data.exercises || []).find(e => e.id === exerciseId);
+      try {
+        // Fetch the full lesson only when opened; course outlines intentionally omit HTML/content blocks.
+        current = await platformUserService.getExercise(exerciseId);
+      } catch {
+        if (!current) throw new Error('Exercise content is unavailable.');
+      }
+      if (!current) throw new Error('Exercise content is unavailable.');
       setExercise(current);
       setMcqAnswer(null);
       setMcqResult(null);
@@ -291,8 +299,15 @@ export default function ExerciseWorkspace({
     return Array.from({ length: Math.max(lines, 17) }, (_, i) => i + 1);
   }, [code]);
 
-  // Check if simulation exists
-  const hasSimulation = Boolean(exercise?.simulation_path);
+  // A simulation can be an existing static file or inline HTML authored in the lesson studio.
+  const inlineSimulationHtml = exercise?.content_blocks?.find((block) => block.module_type === 'html')?.content_data?.html;
+  const hasInlineSimulation = typeof inlineSimulationHtml === 'string' && Boolean(inlineSimulationHtml.trim());
+  const hasSimulation = Boolean(exercise?.simulation_path || hasInlineSimulation);
+  const openInlineFullscreen = () => {
+    const requestFullscreen = simulationFrameRef.current?.requestFullscreen;
+    if (requestFullscreen) void requestFullscreen.call(simulationFrameRef.current).catch(() => setExecutionError('Fullscreen mode is unavailable in this browser.'));
+    else setExecutionError('Fullscreen mode is unavailable in this browser.');
+  };
 
   if (loading) {
     return (
@@ -424,14 +439,15 @@ export default function ExerciseWorkspace({
               </span>
             </div>
             <div className={styles.simulationActions}>
-              <a
-                href={exercise.simulation_path}
-                target="_blank"
-                rel="noopener noreferrer"
-                className={styles.openExternalBtn}
-              >
-                <Maximize2 size={14} /> Open Fullscreen
-              </a>
+              {hasInlineSimulation ? (
+                <button type="button" onClick={openInlineFullscreen} className={styles.openExternalBtn}>
+                  <Maximize2 size={14} /> Open Fullscreen
+                </button>
+              ) : exercise.simulation_path ? (
+                <a href={exercise.simulation_path} target="_blank" rel="noopener noreferrer" className={styles.openExternalBtn}>
+                  <Maximize2 size={14} /> Open Fullscreen
+                </a>
+              ) : null}
               <button
                 className={styles.markCompleteBtn}
                 onClick={handleSubmit}
@@ -444,9 +460,14 @@ export default function ExerciseWorkspace({
 
           <div className={styles.simulationFrameWrap}>
             <iframe
-              src={exercise.simulation_path}
+              ref={simulationFrameRef}
+              {...(hasInlineSimulation
+                ? { srcDoc: inlineSimulationHtml as string, sandbox: 'allow-scripts' }
+                : { src: exercise.simulation_path })}
               title={exercise.title}
               className={styles.simulationIframe}
+              allow="fullscreen"
+              allowFullScreen={hasInlineSimulation}
             />
           </div>
 
@@ -500,6 +521,8 @@ export default function ExerciseWorkspace({
                     <p style={{ margin: 0, color: '#64748b' }}>No problem statement has been provided for this exercise yet.</p>
                   )}
                 </div>
+
+                <PlatformLessonBlocks blocks={exercise.content_blocks || []} />
 
                 {exercise.exercise_type === 'mcq' ? (
                   <div style={{ display: 'flex', flexDirection: 'column', gap: 10, marginTop: 18 }}>

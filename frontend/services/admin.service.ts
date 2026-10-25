@@ -1,4 +1,5 @@
 import { apiClient } from './api-client';
+import type { PlatformContentBlock } from '@/types/platform-content';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -421,6 +422,7 @@ export interface AdminPlatformExercise {
   mcq_options: string[] | null; mcq_answer: string | null; mcq_explanation: string | null;
   starter_code: Record<string, string> | null; allowed_languages: string[] | null;
   simulation_path: string | null; hint_text: string | null;
+  content_blocks: PlatformContentBlock[];
 }
 
 export interface AdminProblemBankRow {
@@ -449,6 +451,14 @@ export const adminContentService = {
   },
   async listExercises(courseId: string): Promise<{ exercises: AdminPlatformExercise[] }> {
     const { data } = await apiClient.get(`/admin/content/courses/${courseId}/exercises`);
+    return data;
+  },
+  async listSimulationAssets(): Promise<{ assets: { path: string; name: string }[] }> {
+    const { data } = await apiClient.get('/admin/content/simulation-assets');
+    return data;
+  },
+  async getSimulationAssetSource(path: string): Promise<{ path: string; html: string }> {
+    const { data } = await apiClient.get('/admin/content/simulation-assets/source', { params: { path } });
     return data;
   },
   async createExercise(courseId: string, dto: Record<string, unknown>): Promise<{ exercise: AdminPlatformExercise }> {

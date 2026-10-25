@@ -2,9 +2,11 @@
 
 import { Fragment, useCallback, useEffect, useState } from 'react';
 import AdminShell from '@/components/layout/AdminShell';
+import PlatformLessonStudio from '@/components/admin/PlatformLessonStudio';
+import type { PlatformContentBlock } from '@/types/platform-content';
 import {
   Loader2, RefreshCw, Plus, BookOpen, ChevronRight, ChevronLeft, Trash2,
-  Pencil, Globe, GlobeLock, Search, X, Check,
+  Pencil, Globe, GlobeLock, Search, X, Check, FileCode,
 } from 'lucide-react';
 import {
   adminContentService,
@@ -32,13 +34,13 @@ type ExerciseForm = {
   starter_code: string; starter_code_by_language: Record<string, string>;
   test_cases: { input: string; expected: string; hidden: boolean }[];
   mcq_options: string[]; mcq_answer: string; mcq_explanation: string;
-  simulation_path: string;
+  simulation_path: string; content_blocks: PlatformContentBlock[];
 };
 const emptyExerciseForm = (): ExerciseForm => ({
   title: '', exercise_type: 'coding', difficulty: 'easy', xp_reward: 10,
   description: '', hint_text: '', language: 'python', languages: ['python'], starter_code: '', starter_code_by_language: {},
   test_cases: [{ input: '', expected: '', hidden: false }],
-  mcq_options: ['', '', '', ''], mcq_answer: 'A', mcq_explanation: '', simulation_path: '',
+  mcq_options: ['', '', '', ''], mcq_answer: 'A', mcq_explanation: '', simulation_path: '', content_blocks: [],
 });
 
 export default function ContentPage() {
@@ -52,6 +54,9 @@ export default function ContentPage() {
   const [expanded, setExpanded] = useState<string | null>(null);
   const [exercises, setExercises] = useState<Record<string, AdminPlatformExercise[]>>({});
   const [exerciseLoading, setExerciseLoading] = useState<string | null>(null);
+  const [simulationAssets, setSimulationAssets] = useState<{ path: string; name: string }[]>([]);
+  const [simulationAssetsLoaded, setSimulationAssetsLoaded] = useState(false);
+  const [importingSimulation, setImportingSimulation] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
   const [editingCourse, setEditingCourse] = useState<string | null>(null);
@@ -83,6 +88,14 @@ export default function ContentPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!showExForm || exForm.exercise_type !== 'simulation' || simulationAssetsLoaded) return;
+    adminContentService.listSimulationAssets()
+      .then((res) => setSimulationAssets(res.assets || []))
+      .catch(() => setError('Could not load the existing simulation file list. You can still enter a path manually.'))
+      .finally(() => setSimulationAssetsLoaded(true));
+  }, [showExForm, exForm.exercise_type, simulationAssetsLoaded]);
 
   useEffect(() => {
     if (tab !== 'problems') return;
@@ -150,6 +163,11 @@ export default function ContentPage() {
       mcq_answer: exercise.mcq_answer || 'A',
       mcq_explanation: exercise.mcq_explanation || '',
       simulation_path: exercise.simulation_path || '',
+      content_blocks: (exercise.content_blocks || []).map((block, index) => ({
+        ...block,
+        id: block.id || `loaded-${exercise.id}-${index}`,
+        content_data: block.content_data || {},
+      })),
     });
   };
 
@@ -189,7 +207,8 @@ export default function ContentPage() {
       mcq_options: exForm.exercise_type === 'mcq' ? mcqOptions : [],
       mcq_answer: exForm.exercise_type === 'mcq' ? exForm.mcq_answer : null,
       mcq_explanation: exForm.exercise_type === 'mcq' ? exForm.mcq_explanation.trim() : null,
-      simulation_path: exForm.exercise_type === 'simulation' ? exForm.simulation_path.trim() : null,
+      simulation_path: exForm.exercise_type === 'simulation' ? exForm.simulation_path.trim() || null : null,
+      content_blocks: exForm.content_blocks,
       ...(editingExercise ? {} : { is_published: false }),
     };
     void act(async () => {
@@ -203,6 +222,39 @@ export default function ContentPage() {
       setShowExForm(null);
       setEditingExercise(null);
     }, editingExercise ? 'Exercise saved.' : 'Exercise created as a draft. Complete and publish it when ready.');
+  };
+
+  const importSimulationHtml = async () => {
+    const path = exForm.simulation_path.trim();
+    if (!path) { setError('Choose a simulation file path before importing its HTML.'); return; }
+    setImportingSimulation(true);
+    setError(null);
+    try {
+      const source = await adminContentService.getSimulationAssetSource(path);
+      setExForm((formState) => {
+        const existing = formState.content_blocks.find((block) => block.module_type === 'html');
+        if (existing) {
+          return {
+            ...formState,
+            content_blocks: formState.content_blocks.map((block) => block.id === existing.id
+              ? { ...block, content_data: { ...block.content_data, html: source.html } } : block),
+          };
+        }
+        const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID() : `imported-${Date.now()}`;
+        return {
+          ...formState,
+          content_blocks: [...formState.content_blocks, {
+            id, module_type: 'html', title: 'Interactive simulation', content_data: { html: source.html },
+          }],
+        };
+      });
+      setNotice('Simulation source copied into the lesson studio. Save the exercise to store your editable version.');
+    } catch (error) {
+      setError((error as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Could not import this simulation file.');
+    } finally {
+      setImportingSimulation(false);
+    }
   };
 
   return (
@@ -557,10 +609,21 @@ export default function ContentPage() {
 
             {exForm.exercise_type === 'simulation' && (
               <div style={{ marginTop: 12 }}>
-                <label style={labelS} htmlFor="simulation-path">Simulation path</label>
-                <input id="simulation-path" style={inputS} value={exForm.simulation_path} onChange={e => setExForm(f => ({ ...f, simulation_path: e.target.value }))} placeholder="/simulations/example/index.html" />
+                <label style={labelS} htmlFor="simulation-path">Existing simulation file (optional when you author inline HTML below)</label>
+                <input id="simulation-path" list="platform-simulation-files" style={inputS} value={exForm.simulation_path} onChange={e => setExForm(f => ({ ...f, simulation_path: e.target.value }))} placeholder="/simulations/example/index.html" />
+                <datalist id="platform-simulation-files">{simulationAssets.map(asset => <option key={asset.path} value={asset.path}>{asset.name}</option>)}</datalist>
+                <button type="button" disabled={importingSimulation || !exForm.simulation_path.trim()} onClick={() => void importSimulationHtml()} style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #ddd6fe', borderRadius: 8, background: '#fff', color: '#5b21b6', padding: '7px 10px', fontWeight: 700, fontSize: 12, cursor: importingSimulation ? 'wait' : 'pointer' }}>
+                  {importingSimulation ? <Loader2 size={13} className="spin" /> : <FileCode size={13} />} Import existing HTML into lesson studio
+                </button>
+                <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#64748b' }}>Import copies the bundled file into this exercise&rsquo;s editable database content; it does not overwrite the repository asset.</p>
               </div>
             )}
+
+            <PlatformLessonStudio
+              blocks={exForm.content_blocks}
+              languages={exForm.languages}
+              onChange={(content_blocks) => setExForm(formState => ({ ...formState, content_blocks }))}
+            />
 
             <p style={{ margin: '12px 0 0', color: '#64748b', fontSize: 12 }}>New exercises are saved as drafts. Publish only after validating the learner view.</p>
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
