@@ -5,7 +5,7 @@ import { useRouter } from 'next/navigation';
 import {
   ShieldCheck, LayoutDashboard, Users, BookMarked,
   Activity, BarChart3, FileText, Shield, Settings, LogOut,
-  Bell, Search, ChevronRight, Menu, Building2
+  ChevronRight, Menu, Building2, BookOpen, ClipboardList
 } from 'lucide-react';
 import Image from 'next/image';
 import styles from './AdminShell.module.css';
@@ -25,9 +25,11 @@ const NAV_FAVORITES = [
 ];
 
 const NAV_MAIN = [
-  { id: 'System Monitoring', Icon: Activity,  route: '/admin/monitoring' },
-  { id: 'Reports & Exports', Icon: FileText,  route: '/admin/reports'    },
-  { id: 'Security',          Icon: Shield,    route: '/admin/security'   },
+  { id: 'System Monitoring', Icon: Activity,      route: '/admin/monitoring' },
+  { id: 'Reports & Exports', Icon: FileText,      route: '/admin/reports'    },
+  { id: 'Security',          Icon: Shield,        route: '/admin/security'   },
+  { id: 'Academic Setup',    Icon: BookOpen,      route: '/admin/academic'    },
+  { id: 'Assignments',       Icon: ClipboardList, route: '/admin/assignments' },
 ];
 
 interface AdminShellProps {
@@ -70,9 +72,9 @@ export default function AdminShell({ activePage, children, title, subtitle }: Ad
         {/* ══ SIDEBAR ══ */}
         <aside className={`${styles.sidebar} ${collapsed ? styles.sidebarCollapsed : ''} ${drawerOpen ? styles.sidebarDrawerOpen : ''}`}>
           <div className={styles.sidebarTop}>
-            <div className={styles.logo} onClick={() => router.push('/admin/dashboard')}>
+            <button type="button" aria-label="Go to admin dashboard" className={styles.logo} onClick={() => router.push('/admin/dashboard')} style={{ border: 0, padding: 0, background: 'transparent' }}>
               <Image src="/logo.png" alt="NexLab" width={collapsed ? 54 : 105} height={collapsed ? 36 : 70} style={{ objectFit: 'contain' }} priority />
-            </div>
+            </button>
             <button className={styles.collapseBtn} onClick={() => setCollapsed(p => !p)} title="Collapse">
               <Menu size={16} strokeWidth={2} />
             </button>
@@ -82,9 +84,11 @@ export default function AdminShell({ activePage, children, title, subtitle }: Ad
             <span className={styles.navLabel}>Favorites</span>
             <ul>
               {NAV_FAVORITES.map(({ id, Icon, route }) => (
-                <li key={id} className={navCls(id)} title={id} onClick={() => go(id, route)}>
-                  <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
-                  <span className={styles.label}>{id}</span>
+                <li key={id}>
+                  <button type="button" className={navCls(id)} title={id} aria-current={id === activePage ? 'page' : undefined} onClick={() => go(id, route)} style={{ width: '100%', border: 0, textAlign: 'left', fontFamily: 'inherit' }}>
+                    <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
+                    <span className={styles.label}>{id}</span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -94,9 +98,11 @@ export default function AdminShell({ activePage, children, title, subtitle }: Ad
             <span className={styles.navLabel}>Main Menu</span>
             <ul>
               {NAV_MAIN.map(({ id, Icon, route }) => (
-                <li key={id} className={navCls(id)} title={id} onClick={() => go(id, route)}>
-                  <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
-                  <span className={styles.label}>{id}</span>
+                <li key={id}>
+                  <button type="button" className={navCls(id)} title={id} aria-current={id === activePage ? 'page' : undefined} onClick={() => go(id, route)} style={{ width: '100%', border: 0, textAlign: 'left', fontFamily: 'inherit' }}>
+                    <Icon size={17} strokeWidth={1.9} className={styles.navIcon} />
+                    <span className={styles.label}>{id}</span>
+                  </button>
                 </li>
               ))}
             </ul>
@@ -104,13 +110,17 @@ export default function AdminShell({ activePage, children, title, subtitle }: Ad
 
           <div className={`${styles.navGroup} ${styles.bottomGroup}`}>
             <ul>
-              <li className={navCls('Settings')} title="Settings" onClick={() => go('Settings', '/admin/settings')}>
-                <Settings size={17} strokeWidth={1.9} className={styles.navIcon} />
-                <span className={styles.label}>Settings</span>
+              <li>
+                <button type="button" className={navCls('Settings')} title="Settings" aria-current={'Settings' === activePage ? 'page' : undefined} onClick={() => go('Settings', '/admin/settings')} style={{ width: '100%', border: 0, textAlign: 'left', fontFamily: 'inherit' }}>
+                  <Settings size={17} strokeWidth={1.9} className={styles.navIcon} />
+                  <span className={styles.label}>Settings</span>
+                </button>
               </li>
-              <li className={navCls('Logout', true)} title="Logout" onClick={() => go('Logout', '/login')}>
-                <LogOut size={17} strokeWidth={1.9} className={styles.navIcon} />
-                <span className={styles.label}>Logout</span>
+              <li>
+                <button type="button" className={navCls('Logout', true)} title="Logout" onClick={() => go('Logout', '/login')} style={{ width: '100%', border: 0, textAlign: 'left', fontFamily: 'inherit' }}>
+                  <LogOut size={17} strokeWidth={1.9} className={styles.navIcon} />
+                  <span className={styles.label}>Logout</span>
+                </button>
               </li>
             </ul>
           </div>
@@ -119,7 +129,7 @@ export default function AdminShell({ activePage, children, title, subtitle }: Ad
             <div className={styles.promoIcon}><ShieldCheck size={16} strokeWidth={1.9} /></div>
             <div className={styles.promoText}>
               <p className={styles.promoTitle}>Admin Portal</p>
-              <a className={styles.promoLink} onClick={() => router.push('/admin/monitoring')}>System Health →</a>
+              <button type="button" className={styles.promoLink} onClick={() => router.push('/admin/monitoring')}>System Health →</button>
             </div>
           </div>
         </aside>
@@ -145,7 +155,7 @@ export default function AdminShell({ activePage, children, title, subtitle }: Ad
                   return (res.users ?? []).map(u => ({
                     type: 'user', id: u.id, label: u.full_name,
                     sub_label: `${u.role} · ${u.email}`,
-                    link: '/admin/users',
+                    link: `/admin/users/${u.id}`,
                   }));
                 }}
                 onSelect={(hit: SearchHit) => router.push(hit.link ?? '/admin/users')}

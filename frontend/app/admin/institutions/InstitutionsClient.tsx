@@ -26,7 +26,7 @@ function CreateModal({ onClose, onCreated }: {
   const [form, setForm] = useState<CreateInstitutionDto>({
     name: '', code: '', contact_email: '',
     email_domain: '', address: '',
-    plan: 'free', admin_password: '', admin_name: '',
+    plan: 'free', admin_name: '',
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -49,7 +49,6 @@ function CreateModal({ onClose, onCreated }: {
         // Only send optional fields if non-empty
         email_domain:    form.email_domain    || undefined,
         address:         form.address         || undefined,
-        admin_password:  form.admin_password  || undefined,
         admin_name:      form.admin_name      || undefined,
       });
       onCreated(result);
@@ -136,11 +135,8 @@ function CreateModal({ onClose, onCreated }: {
                   value={form.address} onChange={handle('address')} />
               </div>
 
-              <div className={styles.field}>
-                <label className={styles.label}>Temp Admin Password</label>
-                <input className={styles.input} type="text" placeholder="Leave blank → ChangeMe@123"
-                  value={form.admin_password} onChange={handle('admin_password')} />
-                <span className={styles.hint}>Institution admin must change on first login.</span>
+              <div className={styles.hint}>
+                A unique temporary password will be generated and shown once after creation. The admin must change it at first login.
               </div>
             </div>
           </div>
@@ -387,7 +383,7 @@ export default function InstitutionsClient() {
         {[
           { label: 'Total',     value: total,          color: '#9333ea' },
           { label: 'Active',    value: active,          color: '#22c55e' },
-          { label: 'Suspended', value: total - active,  color: '#ef4444' },
+          { label: 'Inactive',  value: total - active,  color: '#ef4444' },
           { label: 'Free',      value: byPlan.free,     color: '#64748b' },
           { label: 'Pro',       value: byPlan.pro,      color: '#9333ea' },
           { label: 'Enterprise',value: byPlan.enterprise,color: '#f59e0b' },
@@ -483,7 +479,7 @@ export default function InstitutionsClient() {
                     <td>
                       {inst.is_active
                         ? <span className={styles.statusActive}><CheckCircle2 size={13} /> Active</span>
-                        : <span className={styles.statusSuspended}><XCircle size={13} /> Suspended</span>
+                        : <span className={styles.statusSuspended}><XCircle size={13} /> Inactive</span>
                       }
                     </td>
 
@@ -493,7 +489,7 @@ export default function InstitutionsClient() {
                         inst.onboarding_status === 'active'    ? styles.obActive :
                         inst.onboarding_status === 'pending'   ? styles.obPending : styles.obSuspended
                       }>
-                        {inst.onboarding_status}
+                        {inst.onboarding_status === 'active' ? 'Complete' : inst.onboarding_status === 'pending' ? 'Pending' : 'Suspended'}
                       </span>
                     </td>
 

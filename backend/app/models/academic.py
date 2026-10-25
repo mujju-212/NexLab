@@ -156,7 +156,8 @@ class AuditLog(db.Model):
     )
 
     id             = db.Column(db.String(36), primary_key=True, default=lambda: str(uuid.uuid4()))
-    institution_id = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=False)
+    # NULL for platform-scope audit events; tenant views filter by institution_id.
+    institution_id = db.Column(db.String(36), db.ForeignKey('institutions.id'), nullable=True)
     actor_id       = db.Column(db.String(36), db.ForeignKey('users.id'), nullable=False)
     action         = db.Column(db.String(50), nullable=False)
     # actions: force_logout | create_user | deactivate_user | bulk_upload

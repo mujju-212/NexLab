@@ -52,46 +52,54 @@ def _force_logout_response():
 
 
 def _is_force_logged_out(claims: dict) -> bool:
-    """
-    True when an admin force-logged-out this user AFTER the presented
-    token was issued, the account is administratively suspended, or the
-    user no longer exists (cached 30s in memory to avoid per-request DB
-    scans). Suspended accounts fail here so their live tokens die at once;
-    the login route gives them the explanatory 'Account suspended' error.
+    """Reject revoked, inactive, suspended, deleted, or tenant-blocked sessions.
+
+    Per-user revocation metadata is cached briefly. Institution state is checked
+    on every request so a platform-admin tenant suspension takes effect across
+    all workers immediately instead of waiting for a process-local cache TTL.
     """
     iat = claims.get('iat')
     uid = claims.get('sub')
     if not iat or not uid:
         return True
+
     now_mono = _time.monotonic()
+    from app.extensions import db
     cached = _FORCE_LOGOUT_CACHE.get(uid)
     if cached and cached[0] > now_mono:
-        force_dt, user_exists, suspended = cached[1], cached[2], cached[3]
-        if not user_exists:
-            return True
+        force_dt, user_exists, suspended, user_active, institution_id = cached[1:]
     else:
         from app.extensions import db
         from app.models.user import User
         row = db.session.query(
-            User.id, User.force_logout_at, User.status, User.suspended_until
+            User.id, User.force_logout_at, User.status, User.suspended_until,
+            User.is_active, User.institution_id,
         ).filter_by(id=uid).first()
         if not row:
-            # User row does not exist in database (deleted or stale token)
-            _FORCE_LOGOUT_CACHE[uid] = (now_mono + 30.0, None, False, False)
+            _FORCE_LOGOUT_CACHE[uid] = (now_mono + 30.0, None, False, False, None, None)
             return True
         force_dt = row[1]
         suspended = (row[2] == 'suspended') and (
             row[3] is None or row[3] > datetime.utcnow())
-        _FORCE_LOGOUT_CACHE[uid] = (now_mono + 30.0, force_dt, True, suspended)
-    if suspended:
+        user_active = bool(row[4])
+        institution_id = row[5]
+        _FORCE_LOGOUT_CACHE[uid] = (
+            now_mono + 30.0, force_dt, True, suspended, user_active, institution_id)
+        user_exists = True
+
+    if not user_exists or not user_active or suspended:
         return True
+
+    if institution_id:
+        from app.models.institution import Institution
+        institution_active = db.session.query(Institution.is_active).filter_by(
+            id=institution_id).scalar()
+        if institution_active is not True:
+            return True
+
     if force_dt is None:
         return False
-    # 'iat_f' is a float-precision issue-time claim (see build_jwt_claims).
-    # flask-jwt's standard 'iat' is truncated to whole seconds, so a token
-    # re-issued within the same wall-second as the logout would otherwise
-    # look revoked. Prefer iat_f; for legacy tokens without it, allow a
-    # one-second grace on the truncated comparison.
+    # 'iat_f' preserves sub-second precision; older tokens only have integer iat.
     iat_f = claims.get('iat_f')
     if iat_f is not None:
         return force_dt > datetime.utcfromtimestamp(float(iat_f))

@@ -63,12 +63,12 @@ def institution_users(iid):
     if err:
         return err
 
-    from app.admin.users import _dir_row
+    from app.admin.users import _dir_row, _filter_status, _bounded_int
     q_txt = (request.args.get('q') or '').strip()
     role = request.args.get('role') or None
     status = (request.args.get('status') or '').strip() or None
-    page = max(1, int(request.args.get('page', 1)))
-    per_page = min(int(request.args.get('per_page', 25)), 100)
+    page = _bounded_int(request.args.get('page'), 1, 1, 1_000_000)
+    per_page = _bounded_int(request.args.get('per_page'), 25, 1, 100)
 
     query = User.query.filter_by(institution_id=iid)
     if q_txt:
@@ -77,7 +77,7 @@ def institution_users(iid):
     if role:
         query = query.filter_by(role=role)
     if status:
-        query = query.filter_by(status=status)
+        query = _filter_status(query, status)
     query = query.order_by(User.full_name.asc())
 
     total = query.count()

@@ -32,7 +32,6 @@ export interface CreateInstitutionDto {
   email_domain?: string;
   address?: string;
   plan?: 'free' | 'pro' | 'enterprise';
-  admin_password?: string;
   admin_name?: string;
 }
 
@@ -108,8 +107,9 @@ export const adminService = {
   },
 
   // POST /api/admin/institutions/<id>/reset-admin-password
-  async resetAdminPassword(id: string, newPassword: string): Promise<void> {
-    await apiClient.post(`/admin/institutions/${id}/reset-admin-password`, { new_password: newPassword });
+  async resetAdminPassword(id: string): Promise<{ email: string; temp_password: string; must_change_password: boolean }> {
+    const { data } = await apiClient.post(`/admin/institutions/${id}/reset-admin-password`, {});
+    return data;
   },
 
   // ── Platform Dashboard ───────────────────────────────────────────────────────
@@ -317,6 +317,11 @@ export interface AdminUserActivity {
 }
 
 export const adminUsersService = {
+  async createUser(dto: { email: string; full_name: string; role: string; institution_id?: string }): Promise<{ user: AdminDirectoryUser; temp_password: string; must_change_password: boolean }> {
+    const { data } = await apiClient.post('/admin/users', dto);
+    return data;
+  },
+
   async listUsers(params: { q?: string; role?: string; institution_id?: string; status?: string; sort?: string; page?: number; per_page?: number }): Promise<{ total: number; page: number; pages: number; users: AdminDirectoryUser[] }> {
     const { data } = await apiClient.get('/admin/users', { params });
     return data;
@@ -412,8 +417,10 @@ export interface AdminPlatformExercise {
   id: string; course_id: string; order_index: number; title: string;
   description: string | null; exercise_type: string; difficulty: string;
   xp_reward: number; tags: string[]; solves_count: number; is_published: boolean;
-  test_case_count: number; mcq_options: string[] | null;
+  test_case_count: number; test_cases: { input: string; expected: string; hidden?: boolean }[];
+  mcq_options: string[] | null; mcq_answer: string | null; mcq_explanation: string | null;
   starter_code: Record<string, string> | null; allowed_languages: string[] | null;
+  simulation_path: string | null; hint_text: string | null;
 }
 
 export interface AdminProblemBankRow {
@@ -536,12 +543,21 @@ export const adminGovernanceService = {
     return data;
   },
 
+  async downloadExport(jobId: string): Promise<Blob> {
+    const { data } = await apiClient.get(`/admin/exports/${jobId}`, { responseType: 'blob' });
+    return data as Blob;
+  },
+
+  async downloadAuditCsv(days = 30): Promise<Blob> {
+    const { data } = await apiClient.get('/admin/governance/audit-logs/export', {
+      params: { days }, responseType: 'blob',
+    });
+    return data as Blob;
+  },
+
   async getJobsMonitor(): Promise<JobsMonitor> {
     const { data } = await apiClient.get('/admin/jobs');
     return data;
   },
 
-  auditExportUrl(days = 30): string {
-    return `/api/admin/governance/audit-logs/export?days=${days}`;
-  },
 };

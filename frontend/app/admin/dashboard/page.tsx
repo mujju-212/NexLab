@@ -6,8 +6,8 @@ import AdminShell from '@/components/layout/AdminShell';
 import { adminService, type PlatformDashboard } from '@/services/admin.service';
 import { useAuthStore } from '@/store/auth-store';
 import {
-  Building2, Users, Activity, Calendar,
-  ArrowUp, RefreshCw, Plus, AlertCircle
+  Building2, Users, Activity,
+  ArrowUp, RefreshCw, Plus, AlertCircle, ShieldOff
 } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -123,10 +123,10 @@ export default function AdminDashboard() {
             </div>
 
             <div className={styles.statCard} style={{ cursor:'default' }}>
-              <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg,#22c55e,#16a34a)' }}>
-                <Calendar size={17} strokeWidth={1.9} color="#fff" />
+              <div className={styles.statIcon} style={{ background: 'linear-gradient(135deg,#ef4444,#dc2626)' }}>
+                <ShieldOff size={17} strokeWidth={1.9} color="#fff" />
               </div>
-              <p className={styles.statLabel}>Suspended</p>
+              <p className={styles.statLabel}>Inactive</p>
               <div className={styles.statRow}>
                 <span className={styles.statValue}>
                   {dash ? (dash.institutions.total - dash.institutions.active) : '—'}

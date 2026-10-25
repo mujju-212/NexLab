@@ -30,6 +30,49 @@ IMPERSONATION_MINUTES = 30
 EXPORT_EXPIRY_DAYS = 7
 
 
+def _export_directory():
+    return os.path.realpath(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'exports'))
+
+
+def _remove_export_file(path):
+    """Delete only files inside the dedicated export directory."""
+    if not path:
+        return False
+    root = _export_directory()
+    candidate = os.path.realpath(path)
+    try:
+        inside_root = os.path.commonpath((root, candidate)) == root
+    except ValueError:
+        inside_root = False
+    if not inside_root:
+        raise ValueError('Export path is outside the dedicated export directory.')
+    if os.path.isfile(candidate):
+        os.remove(candidate)
+        return True
+    return False
+
+
+def cleanup_expired_exports(now=None):
+    """Enforce the stated TTL and remove sensitive export files from disk."""
+    now = now or datetime.utcnow()
+    expired = DataExportJob.query.filter(
+        DataExportJob.status == 'ready', DataExportJob.expires_at <= now).all()
+    changed = 0
+    for job in expired:
+        try:
+            _remove_export_file(job.file_path)
+        except (OSError, ValueError):
+            from flask import current_app
+            current_app.logger.exception('Could not safely remove expired export %s', job.id)
+            continue
+        job.file_path = None
+        job.status = 'expired'
+        changed += 1
+    if changed:
+        db.session.commit()
+    return changed
+
+
 def _audit(action, detail, target_type, target_id, severity='medium'):
     db.session.add(AuditLog(
         institution_id=None, actor_id=g.user_id, action=action,
@@ -188,10 +231,15 @@ def create_export(user_id):
 
     try:
         bundle = _build_export_bundle(user)
-        out_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), 'exports')
-        os.makedirs(out_dir, exist_ok=True)
+        out_dir = _export_directory()
+        os.makedirs(out_dir, mode=0o700, exist_ok=True)
+        try:
+            os.chmod(out_dir, 0o700)
+        except OSError:
+            pass
         path = os.path.join(out_dir, f'{kind}_{user.id[:8]}_{job.id[:8]}.json')
-        with open(path, 'w', encoding='utf-8') as f:
+        fd = os.open(path, os.O_WRONLY | os.O_CREAT | os.O_EXCL, 0o600)
+        with os.fdopen(fd, 'w', encoding='utf-8') as f:
             json.dump(bundle, f, indent=2, default=str)
         job.file_path = path
         job.status = 'ready'
@@ -208,12 +256,8 @@ def create_export(user_id):
 @admin_governance_bp.route('/exports', methods=['GET'])
 @require_role('platform_admin')
 def list_exports():
+    cleanup_expired_exports()
     rows = DataExportJob.query.order_by(DataExportJob.created_at.desc()).limit(50).all()
-    now = datetime.utcnow()
-    for j in rows:                       # lazy expiry
-        if j.status == 'ready' and j.expires_at and j.expires_at < now:
-            j.status = 'expired'
-    db.session.commit()
     return jsonify({'jobs': [j.to_dict() for j in rows]}), 200
 
 
@@ -223,14 +267,21 @@ def download_export(job_id):
     job = DataExportJob.query.get(job_id)
     if not job:
         return jsonify({'error': 'Export job not found.'}), 404
-    if job.status != 'ready' or not job.file_path or not os.path.exists(job.file_path):
-        return jsonify({'error': 'Export unavailable or expired.'}), 410
-    if job.expires_at and job.expires_at < datetime.utcnow():
-        job.status = 'expired'
-        db.session.commit()
+    if job.expires_at and job.expires_at <= datetime.utcnow():
+        cleanup_expired_exports()
         return jsonify({'error': 'Export expired.'}), 410
-    return send_file(job.file_path, as_attachment=True,
-                     download_name=os.path.basename(job.file_path),
+    if job.status != 'ready' or not job.file_path:
+        return jsonify({'error': 'Export unavailable or expired.'}), 410
+    path = os.path.realpath(job.file_path)
+    try:
+        if os.path.commonpath((_export_directory(), path)) != _export_directory():
+            return jsonify({'error': 'Export unavailable.'}), 410
+    except ValueError:
+        return jsonify({'error': 'Export unavailable.'}), 410
+    if not os.path.isfile(path):
+        return jsonify({'error': 'Export unavailable or expired.'}), 410
+    return send_file(path, as_attachment=True,
+                     download_name=os.path.basename(path),
                      mimetype='application/json')
 
 

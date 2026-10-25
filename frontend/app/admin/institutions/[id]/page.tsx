@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import AdminShell from '@/components/layout/AdminShell';
 import {
   ArrowLeft, Loader2, RefreshCw, Building2, Users as UsersIcon, Zap, FlaskConical,
-  Activity, Trophy, ShieldOff, ShieldCheck, KeyRound, Search, ChevronLeft, ChevronRight,
+  Activity, Trophy, ShieldOff, ShieldCheck, KeyRound, Search, ChevronLeft, ChevronRight, Copy, Check, X,
 } from 'lucide-react';
 import {
   adminService, adminTenantService,
@@ -54,6 +54,8 @@ export default function InstitutionDetailPage() {
   const [onboarding, setOnboarding] = useState<Record<string, unknown> | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [tempCredentials, setTempCredentials] = useState<{ email: string; password: string } | null>(null);
+  const [copiedCredentials, setCopiedCredentials] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -102,6 +104,20 @@ export default function InstitutionDetailPage() {
     try { await fn(); setNotice(done); await load(); }
     catch (e) { setNotice((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Action failed.'); }
     finally { setBusy(false); }
+  };
+
+  const resetInstitutionAdminPassword = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await adminService.resetAdminPassword(id);
+      setTempCredentials({ email: result.email, password: result.temp_password });
+      await load();
+    } catch (e) {
+      setNotice((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Could not reset the admin password.');
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (loading) {
@@ -365,12 +381,34 @@ export default function InstitutionDetailPage() {
               </button>
             )}
             <button className={styles.btnSecondary} disabled={busy} onClick={() => {
-              const np = window.prompt('New password for the institution admin:');
-              if (np) act(() => adminService.resetAdminPassword(id, np), 'Admin password reset.');
+              if (window.confirm('Issue a new one-time password and sign the institution admin out of all sessions?')) {
+                void resetInstitutionAdminPassword();
+              }
             }}>
               <KeyRound size={14} /> Reset institution admin password
             </button>
           </div>
+        </div>
+      )}
+
+      {tempCredentials && (
+        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setTempCredentials(null); }} style={{ position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(15,10,30,.55)', display: 'grid', placeItems: 'center', padding: 16 }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="temp-password-title" style={{ width: 'min(480px, 100%)', background: '#fff', borderRadius: 18, padding: 24, boxShadow: '0 24px 80px rgba(0,0,0,.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <h2 id="temp-password-title" style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#201b2e' }}>Temporary password issued</h2>
+                <p style={{ margin: '6px 0 18px', color: '#64748b', fontSize: 13 }}>Share this once with {tempCredentials.email}. They must change it at their next login.</p>
+              </div>
+              <button type="button" aria-label="Close" onClick={() => setTempCredentials(null)} style={{ border: 0, background: 'transparent', cursor: 'pointer' }}><X size={18} /></button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12 }}>
+              <code style={{ flex: 1, overflowWrap: 'anywhere', fontSize: 14 }}>{tempCredentials.password}</code>
+              <button type="button" onClick={async () => { await navigator.clipboard.writeText(`Email: ${tempCredentials.email}\nTemporary password: ${tempCredentials.password}`); setCopiedCredentials(true); window.setTimeout(() => setCopiedCredentials(false), 1800); }} aria-label="Copy temporary credentials" style={{ border: 0, background: '#ede9fe', color: '#6d28d9', borderRadius: 8, padding: 8, cursor: 'pointer' }}>
+                {copiedCredentials ? <Check size={15} /> : <Copy size={15} />}
+              </button>
+            </div>
+            <button type="button" className={styles.btnPrimary} onClick={() => setTempCredentials(null)} style={{ marginTop: 18 }}>Done</button>
+          </section>
         </div>
       )}
     </AdminShell>

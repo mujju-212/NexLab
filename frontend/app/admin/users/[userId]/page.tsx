@@ -92,6 +92,18 @@ export default function User360Page() {
     }
   };
 
+  const createUserExport = async () => {
+    setBusy(true);
+    try {
+      const res = await adminGovernanceService.createExport(userId);
+      setNotice(`Export ready — expires ${new Date(res.job.expires_at).toLocaleString()}. Download it in Security → Governance.`);
+    } catch (e) {
+      setNotice((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Export generation failed.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
   if (loading) {
     return (
       <AdminShell activePage="User Management">
@@ -226,10 +238,7 @@ export default function User360Page() {
               className={styles.btnSecondary}
               disabled={busy}
               title="Generate a GDPR/portability JSON bundle (7-day expiry)"
-              onClick={() => act(async () => {
-                const res = await adminGovernanceService.createExport(u.id);
-                setNotice(`Export ready — expires ${new Date(res.job.expires_at).toLocaleString()}. Download from Governance → Exports.`);
-              }, 'Export ready.')}
+              onClick={() => void createUserExport()}
             >
               <Download size={14} /> Export data
             </button>
