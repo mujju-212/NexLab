@@ -4,7 +4,7 @@ import Cookies from 'js-cookie';
 // Flask backend runs on :5000 with /api prefix already in .env.local
 export const apiClient = axios.create({
   baseURL: process.env.NEXT_PUBLIC_API_URL || 'http://127.0.0.1:5000/api',
-  timeout: 30000, // allow deep analytics computations to complete smoothly
+  timeout: 60000, // allow deep analytics and multi-step AI agent operations
   headers: {
     'Content-Type': 'application/json',
   },
@@ -25,11 +25,13 @@ apiClient.interceptors.request.use((config) => {
   return config;
 });
 
-// Response interceptor — handle 401 (JWT expired or revoked)
+// Response interceptor — handle 401 / expired token (JWT expired or revoked)
 apiClient.interceptors.response.use(
   (response) => response,
   async (error) => {
-    if (error.response?.status === 401) {
+    const status = error.response?.status;
+    const isAuthError = status === 401 || (status === 422 && (error.response?.data?.code === 'token_expired' || error.response?.data?.error?.includes('token')));
+    if (isAuthError) {
       Cookies.remove('access_token', { path: '/' });
       if (typeof window !== 'undefined') {
         localStorage.removeItem('access_token');

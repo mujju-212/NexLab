@@ -957,6 +957,7 @@ def create_chat_session():
     data = request.get_json(silent=True) or {}
     title = (data.get('title') or '').strip() or 'New Conversation'
     mode = data.get('mode') or 'chat'
+    page_context = data.get('page_context')
     from app.models.user import User
     current_user = User.query.get(g.user_id)
     if not current_user:

@@ -1095,7 +1095,7 @@ def build_complete_experiment_suite(
             department_id=dept.id if dept else None,
             name=subject_name or 'Data Structures & Algorithms Lab',
             code='CS301L',
-            semester=3,
+            subject_type='Lab',
         )
         db.session.add(subj)
         db.session.flush()
@@ -1994,11 +1994,9 @@ def autonomous_grant_extension_or_intervention(
         db.session.add(ext)
         db.session.add(Notification(
             user_id=stu.id,
-            institution_id=g.institution_id,
-            notif_type='extension',
+            type='extension',
             title=f'Deadline Extended: {exp.title}',
             message=f"Your deadline for '{exp.title}' has been extended until {deadline.strftime('%Y-%m-%d %H:%M UTC')}.",
-            link='/student/subjects',
         ))
         db.session.commit()
         return {
@@ -2021,11 +2019,9 @@ def autonomous_grant_extension_or_intervention(
     db.session.add(iv)
     db.session.add(Notification(
         user_id=stu.id,
-        institution_id=g.institution_id,
-        notif_type='intervention',
+        type='intervention',
         title='Instructor Academic Support Note',
         message=note or 'Your instructor shared an academic support check-in. Check your dashboard for details.',
-        link='/student/dashboard',
     ))
     db.session.commit()
     return {
@@ -2510,8 +2506,7 @@ def autonomous_campus_setup(
                 department_id=dept.id,
                 name=sub_clean,
                 code=sub_code,
-                semester=3,
-                credits=2,
+                subject_type='Lab',
             )
             db.session.add(sub)
             db.session.flush()
@@ -2734,7 +2729,7 @@ def autonomous_create_academic_entity(
         department_id=dept.id if dept else None,
         name=name.strip(),
         code=s_code,
-        semester=int(semester or 3),
+        subject_type='Lab',
     )
     db.session.add(subj)
     db.session.commit()
@@ -3199,6 +3194,7 @@ def admin_propose_force_logout_users(target_role_or_email: str = 'student', reas
             raise AgentToolError(f"User with email '{target}' not found.")
         return {
             'requires_confirmation': True,
+            'action': 'admin_force_logout',
             'draft': {
                 'action': 'admin_force_logout',
                 'scope': 'single_user',
@@ -3213,6 +3209,7 @@ def admin_propose_force_logout_users(target_role_or_email: str = 'student', reas
     cnt = User.query.filter_by(institution_id=iid, role=role_key, is_active=True).count()
     return {
         'requires_confirmation': True,
+        'action': 'admin_force_logout',
         'draft': {
             'action': 'admin_force_logout',
             'scope': 'role_cohort',
@@ -3362,6 +3359,7 @@ def platform_get_overview(**_):
     configs = {c.key: c.value for c in PlatformConfig.query.all()}
     return {
         'total_institutions': inst_count,
+        'total_users': sum(role_counts.values()),
         'users_by_role': role_counts,
         'global_ai_tokens_today': int(tokens_today),
         'platform_configs': configs,
@@ -3870,7 +3868,7 @@ def get_tools_for_role(role: str) -> dict:
         return PLATFORM_USER_TOOLS
     if r == 'instructor':
         return INSTRUCTOR_TOOLS
-    if r == 'admin':
+    if r in ('admin', 'platform_admin'):
         return PLATFORM_ADMIN_TOOLS
 
     # Default: institution_admin (includes autonomous campus setup, entity creation, assignment/enrollment,
@@ -4318,7 +4316,7 @@ def execute_role_action(action_payload: dict, institution_id: str, user_id: str,
             department_id=action_payload.get('department_id'),
             name=action_payload.get('name') or 'New Subject',
             code=code,
-            semester=int(action_payload.get('semester') or 3),
+            subject_type='Lab',
         )
         db.session.add(subj)
         db.session.commit()

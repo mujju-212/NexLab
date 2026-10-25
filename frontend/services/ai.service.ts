@@ -143,7 +143,7 @@ export const aiService = {
     page_context?: Record<string, any>;
   }): Promise<HarnessMessageResponse> {
     const { data } = await apiClient.post<HarnessMessageResponse>('/ai/harness/message', payload, {
-      timeout: 90_000,
+      timeout: 120_000,
     });
     return data;
   },

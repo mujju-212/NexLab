@@ -382,6 +382,8 @@ def build_six_layer_prompt(role: str, mode: str, user: User = None,
                            catalog_str: str = '', is_planner: bool = False,
                            role_context: str = '') -> str:
     role_key = (role or 'student').lower().strip()
+    if role_key == 'platform_admin':
+        role_key = 'admin'
     u_name = user.full_name if user else 'User'
     inst_name = inst.name if inst else ('NexLab Platform' if role_key == 'platform_user' else 'NexLab Platform')
     ctx_dict = page_context or {}
@@ -536,6 +538,8 @@ def _run_deterministic_autonomous_fallback(prompt: str, role_key: str, role_tool
     explicit user requests to create/setup/build/query still execute deterministically!
     """
     p_lower = prompt.lower()
+    if role_key == 'platform_admin':
+        role_key = 'admin'
     executed = []
 
     def _call(t_name: str, **kwargs):
@@ -565,7 +569,7 @@ def _run_deterministic_autonomous_fallback(prompt: str, role_key: str, role_tool
             _call('query_submissions_and_plagiarism')
         elif any(w in p_lower for w in ('error', 'mistake', 'bug', 'fail')):
             _call('get_common_errors')
-        else:
+        elif any(w in p_lower for w in ('analytic', 'stat', 'metric', 'attendance', 'at-risk', 'student list')):
             _call('get_section_analytics')
 
     elif role_key == 'institution_admin':
@@ -600,7 +604,7 @@ def _run_deterministic_autonomous_fallback(prompt: str, role_key: str, role_tool
             _call('query_academic_catalog_deep')
         elif any(w in p_lower for w in ('report', 'naac', 'nba', '/report')):
             _call('generate_executive_report', report_type='naac_nba_accreditation' if 'naac' in p_lower or 'nba' in p_lower else 'executive_summary')
-        else:
+        elif any(w in p_lower for w in ('analytic', 'stat', 'metric', 'domain')):
             _call('query_analytics_domain', domain='grades')
 
     elif role_key == 'student':
@@ -622,7 +626,7 @@ def _run_deterministic_autonomous_fallback(prompt: str, role_key: str, role_tool
             _call('get_upcoming_sessions_and_exams')
         elif any(w in p_lower for w in ('hint', 'stuck', 'clue')):
             _call('get_socratic_hint')
-        else:
+        elif any(w in p_lower for w in ('code', 'analyze', 'review', 'check code')):
             _call('analyze_my_code')
 
     elif role_key == 'platform_user':
@@ -634,7 +638,7 @@ def _run_deterministic_autonomous_fallback(prompt: str, role_key: str, role_tool
             _call('enroll_and_build_study_plan')
         elif any(w in p_lower for w in ('recommend', 'next', 'problem')):
             _call('recommend_next_problem')
-        else:
+        elif any(w in p_lower for w in ('stat', 'practice', 'progress', 'score')):
             _call('get_my_practice_stats')
 
     elif role_key == 'admin':
@@ -646,7 +650,7 @@ def _run_deterministic_autonomous_fallback(prompt: str, role_key: str, role_tool
             _call('autonomous_create_platform_course_or_contest', entity_type='contest' if 'contest' in p_lower else 'platform_course', title=title)
         elif any(w in p_lower for w in ('list institution', 'institutions', 'tenants')):
             _call('list_platform_institutions')
-        else:
+        elif any(w in p_lower for w in ('overview', 'platform', 'stats', 'system')):
             _call('get_platform_overview')
 
     return executed
@@ -668,12 +672,6 @@ def run_harness_turn(prompt: str, institution_id: str, user_id: str, role: str,
     - Emits real-time Socket.IO events (`ai:tool_start`, `ai:tool_result`, `ai:token`, `ai:done`)
     - Enforces deterministic Socratic output filtering for `student` and `platform_user`
     """
-    # Live role context (learner memory / teaching / platform snapshot)
-    from app.ai.learner_context import build_role_context
-    try:
-        role_context_block = build_role_context(current_user)
-    except Exception:
-        role_context_block = ''
     role_key = (role or 'student').lower().strip()
     g.user_id = user_id
     g.institution_id = institution_id
@@ -682,6 +680,13 @@ def run_harness_turn(prompt: str, institution_id: str, user_id: str, role: str,
 
     user_obj = User.query.get(user_id) if user_id else None
     inst_obj = Institution.query.get(institution_id) if institution_id else None
+
+    # Live role context (learner memory / teaching / platform snapshot)
+    from app.ai.learner_context import build_role_context
+    try:
+        role_context_block = build_role_context(user_obj) if user_obj else ''
+    except Exception:
+        role_context_block = ''
 
     role_tools = get_tools_for_role(role_key)
 
@@ -758,84 +763,100 @@ def run_harness_turn(prompt: str, institution_id: str, user_id: str, role: str,
 
     gate_feature = 'chat' if role_key in ('student', 'platform_user') else 'agent'
 
-    # 4. Claw-Code Multi-Turn QueryEngine Loop (Up to 6 Chained Tool Calls!)
-    for _turn in range(ENGINE_CONFIG.max_turns):
-        if usage_summary.total_tokens >= ENGINE_CONFIG.max_budget_tokens:
-            break
+    # Fast path for conversational greetings or capabilities inquiries in chat mode
+    is_pure_convo = False
+    if mode == 'chat' and not matched_cmd and not doc_id and not web_search_enabled:
+        trimmed_p = p_lower.strip(' ?.!/,')
+        if trimmed_p in (
+            'hi', 'hello', 'hey', 'greetings', 'help', 'wt can u do', 'what can you do',
+            'what can u do', 'what are your capabilities', 'who are you', 'how can you help me',
+            'tell me about yourself'
+        ) or (len(trimmed_p.split()) <= 4 and any(w in trimmed_p for w in ('what can', 'wt can', 'how can you', 'who are you'))):
+            is_pure_convo = True
 
-        text, _model, is_fallback, usage = guarded_ai_call(
-            gate_feature,
-            institution_id=institution_id,
-            user_id=user_id,
-            role=role_key,
-            messages=planner_history,
-            pool='quality',
-            max_tokens=2048,
-            temperature=0.1,
-        )
-        usage_summary = usage_summary.add(usage)
+    planner_concluded_no_tool = False
 
-        if is_fallback or not text:
-            break
+    # 4. Claw-Code Multi-Turn QueryEngine Loop (Fast 2-turn for Chat, up to 6 for Agent)
+    if not is_pure_convo:
+        turn_limit = 2 if mode == 'chat' else ENGINE_CONFIG.max_turns
+        for _turn in range(turn_limit):
+            if usage_summary.total_tokens >= ENGINE_CONFIG.max_budget_tokens:
+                break
 
-        plan = _extract_json(text)
-        tool_name = plan.get('tool')
-        if not tool_name:
-            break
+            text, _model, is_fallback, usage = guarded_ai_call(
+                gate_feature,
+                institution_id=institution_id,
+                user_id=user_id,
+                role=role_key,
+                messages=planner_history,
+                pool='quality',
+                max_tokens=2048,
+                temperature=0.1,
+            )
+            usage_summary = usage_summary.add(usage)
 
-        entry = role_tools.get(tool_name)
-        if not entry:
+            if is_fallback or not text:
+                break
+
+            plan = _extract_json(text)
+            tool_name = plan.get('tool')
+            if not tool_name:
+                planner_concluded_no_tool = True
+                break
+
+            entry = role_tools.get(tool_name)
+            if not entry:
+                planner_history.append({'role': 'assistant', 'content': text})
+                planner_history.append({'role': 'user', 'content': f"Unknown tool '{tool_name}'. Choose from the routed tools list."})
+                continue
+
+            fn = entry[0]
+            args = plan.get('args') if isinstance(plan.get('args'), dict) else {}
+
+            _emit_ai_event(user_id, 'ai:tool_start', {'tool': tool_name, 'args': args, 'session_id': session_id})
+            try:
+                result = fn(**args)
+                call_record = {'tool': tool_name, 'args': args, 'result': result}
+
+                if tool_name in CONFIRM_ACTION_NAMES or (isinstance(result, dict) and result.get('requires_confirmation')):
+                    pending_action = result.get('draft') or result
+                    _emit_ai_event(user_id, 'ai:confirm_action', {'pending_action': pending_action, 'session_id': session_id})
+                    _emit_ai_event(user_id, 'ai:action_card', {'pending_action': pending_action, 'session_id': session_id})
+
+                if isinstance(result, dict) and result.get('generated_document'):
+                    generated_doc = result.get('generated_document')
+
+                if tool_name == 'search_uploaded_documents' and isinstance(result, dict):
+                    for src in result.get('sources', []):
+                        sources.append({'type': 'document', 'filename': src.get('filename'), 'page': src.get('page'), 'text': src.get('text')})
+                elif tool_name == 'search_web' and isinstance(result, dict):
+                    for w in result.get('results', []):
+                        sources.append({'type': 'web', 'title': w.get('title'), 'url': w.get('url'), 'snippet': w.get('snippet')})
+            except AgentToolError as exc:
+                call_record = {'tool': tool_name, 'args': args, 'error': str(exc)}
+            except Exception as exc:
+                log.warning("[harness.tool] %s failed: %s", tool_name, exc)
+                call_record = {'tool': tool_name, 'args': args, 'error': f"Tool error: {str(exc)}"}
+
+            _emit_ai_event(user_id, 'ai:tool_result', {'tool': tool_name, 'session_id': session_id})
+            tool_calls.append(call_record)
+
             planner_history.append({'role': 'assistant', 'content': text})
-            planner_history.append({'role': 'user', 'content': f"Unknown tool '{tool_name}'. Choose from the routed tools list."})
-            continue
+            planner_history.append({
+                'role': 'user',
+                'content': (
+                    f"Observation from {tool_name}:\n{_truncate(call_record.get('result') or call_record.get('error'))}\n\n"
+                    "If additional steps are needed to fulfill the user's request, call the next tool; "
+                    "otherwise reply {\"tool\": null, \"reason\": \"done\"}."
+                ),
+            })
 
-        fn = entry[0]
-        args = plan.get('args') if isinstance(plan.get('args'), dict) else {}
-
-        _emit_ai_event(user_id, 'ai:tool_start', {'tool': tool_name, 'args': args, 'session_id': session_id})
-        try:
-            result = fn(**args)
-            call_record = {'tool': tool_name, 'args': args, 'result': result}
-
-            if tool_name in CONFIRM_ACTION_NAMES or (isinstance(result, dict) and result.get('requires_confirmation')):
-                pending_action = result.get('draft') or result
-                _emit_ai_event(user_id, 'ai:confirm_action', {'pending_action': pending_action, 'session_id': session_id})
-                _emit_ai_event(user_id, 'ai:action_card', {'pending_action': pending_action, 'session_id': session_id})
-
-            if isinstance(result, dict) and result.get('generated_document'):
-                generated_doc = result.get('generated_document')
-
-            if tool_name == 'search_uploaded_documents' and isinstance(result, dict):
-                for src in result.get('sources', []):
-                    sources.append({'type': 'document', 'filename': src.get('filename'), 'page': src.get('page'), 'text': src.get('text')})
-            elif tool_name == 'search_web' and isinstance(result, dict):
-                for w in result.get('results', []):
-                    sources.append({'type': 'web', 'title': w.get('title'), 'url': w.get('url'), 'snippet': w.get('snippet')})
-        except AgentToolError as exc:
-            call_record = {'tool': tool_name, 'args': args, 'error': str(exc)}
-        except Exception as exc:
-            log.warning("[harness.tool] %s failed: %s", tool_name, exc)
-            call_record = {'tool': tool_name, 'args': args, 'error': f"Tool error: {str(exc)}"}
-
-        _emit_ai_event(user_id, 'ai:tool_result', {'tool': tool_name, 'session_id': session_id})
-        tool_calls.append(call_record)
-
-        planner_history.append({'role': 'assistant', 'content': text})
-        planner_history.append({
-            'role': 'user',
-            'content': (
-                f"Observation from {tool_name}:\n{_truncate(call_record.get('result') or call_record.get('error'))}\n\n"
-                "If additional steps are needed to fulfill the user's request, call the next tool; "
-                "otherwise reply {\"tool\": null, \"reason\": \"done\"}."
-            ),
-        })
-
-        # Only break early if a destructive operation requires user confirmation
-        if pending_action:
-            break
+            # Only break early if a destructive operation requires user confirmation
+            if pending_action:
+                break
 
     # 5. Deterministic Autonomous Fallback if LLM was rate-limited or skipped tool execution
-    if not tool_calls:
+    if not tool_calls and not planner_concluded_no_tool and not is_pure_convo:
         fallback_calls = _run_deterministic_autonomous_fallback(effective_prompt, role_key, role_tools)
         for fc in fallback_calls:
             tool_calls.append(fc)

@@ -44,14 +44,28 @@ class AgentToolError(Exception):
 # ══════════════════════════════════════════════════════════════════════════════
 
 def _call_view(view_func, params: dict = None):
-    query = urlencode({k: v for k, v in (params or {}).items() if v not in (None, '')})
-    env = request.environ.copy()
-    env['REQUEST_METHOD'] = 'GET'
-    env['QUERY_STRING'] = query
-    env.pop('wsgi.input', None)
-    env['CONTENT_LENGTH'] = '0'
-    env['CONTENT_TYPE'] = ''
+    from flask import has_request_context, g
+    from werkzeug.test import EnvironBuilder
+    from flask_jwt_extended import create_access_token
+    from app.auth.utils import build_jwt_claims
+    from app.models.user import User
 
+    clean_params = {k: v for k, v in (params or {}).items() if v not in (None, '')}
+    builder = EnvironBuilder(method='GET', query_string=urlencode(clean_params))
+
+    auth_header = None
+    if has_request_context() and 'HTTP_AUTHORIZATION' in request.environ:
+        auth_header = request.environ['HTTP_AUTHORIZATION']
+    elif getattr(g, 'user_id', None):
+        u = db.session.get(User, g.user_id) if hasattr(db.session, 'get') else User.query.filter_by(id=g.user_id).first()
+        if u:
+            tok = create_access_token(identity=u.id, additional_claims=build_jwt_claims(u))
+            auth_header = f'Bearer {tok}'
+
+    if auth_header:
+        builder.headers['Authorization'] = auth_header
+
+    env = builder.get_environ()
     with current_app.request_context(env):
         result = view_func()
 

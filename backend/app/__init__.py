@@ -315,6 +315,19 @@ def create_app(config_name=None):
             abort(404)
         return send_from_directory(lab_dir, filename, mimetype='application/pdf')
 
+    # ── JWT error callbacks (return 401 instead of 422 so client intercepts auth errors) ──
+    @jwt.expired_token_loader
+    def expired_token_callback(jwt_header, jwt_payload):
+        return {'error': 'The token has expired', 'code': 'token_expired'}, 401
+
+    @jwt.invalid_token_loader
+    def invalid_token_callback(error):
+        return {'error': 'Invalid authorization token', 'code': 'invalid_token'}, 401
+
+    @jwt.unauthorized_loader
+    def missing_token_callback(error):
+        return {'error': 'Authorization header required', 'code': 'authorization_required'}, 401
+
     # ── Global error handlers ──────────────────────────────────────────────
     @app.errorhandler(404)
     def not_found(e):

@@ -22,7 +22,7 @@ from flask import current_app
 
 # ── Rotation pools (tried in order) ─────────────────────────────────────
 DEFAULT_POOLS = {
-    # fast, cheap models for hints / short evaluations
+    # fast, cheap models for hints / short evaluations (sub-second LPU inference)
     'fast': [
         'qwen/qwen3.8-27b',
         'openai/gpt-oss-120b',
@@ -36,7 +36,7 @@ DEFAULT_POOLS = {
     ],
 }
 
-REASONING_MODELS = {'qwen/qwen3.8-27b'}
+REASONING_MODELS = {'qwen/qwen3.8-27b', 'openai/gpt-oss-120b', 'openai/gpt-oss-20b'}
 
 # OpenRouter Free Models Pool (100% verified active sub-second models)
 
@@ -126,7 +126,7 @@ def _gemini_fallback(messages: list, max_tokens: int, temperature: float):
                         'temperature': temperature,
                     },
                 },
-                timeout=60,
+                timeout=8,
             )
             if resp.status_code == 200:
                 text = (resp.json().get('candidates') or [{}])[0] \
@@ -174,7 +174,7 @@ def _openrouter_fallback(messages: list, max_tokens: int, temperature: float):
             "temperature": temperature
         }
         try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=10)
+            resp = requests.post(url, headers=headers, json=payload, timeout=4)
             if resp.status_code == 200:
                 data = resp.json()
                 choices = data.get('choices', [])
@@ -208,13 +208,20 @@ DEEPSEEK_MODEL_QUALITY = os.environ.get('DEEPSEEK_MODEL_QUALITY', 'DeepSeek-V4-P
 def deepseek_chat(messages: list, pool: str = 'fast', max_tokens: int = 1200,
                    temperature: float = 0.4):
     """
-    Primary engine. Returns the groq_chat contract:
+    Secondary fallback engine. Returns the groq_chat contract:
     (content, model_id, is_fallback, usage_dict) or (None, None, True, None)
     when unavailable — the caller then continues down the chain.
     """
     import requests as _rq
     if not DEEPSEEK_API_KEY or not DEEPSEEK_BASE_URL:
         return None, None, True, None
+
+    now = time.time()
+    with _lock:
+        if _cooldowns.get('deepseek', 0) > now:
+            # Circuit breaker active — skip immediately in 0.00ms
+            return None, None, True, None
+
     model = DEEPSEEK_MODEL_QUALITY if pool == 'quality' else DEEPSEEK_MODEL_FAST
     try:
         resp = _rq.post(
@@ -223,11 +230,12 @@ def deepseek_chat(messages: list, pool: str = 'fast', max_tokens: int = 1200,
                      'Content-Type': 'application/json'},
             json={'model': model, 'messages': messages,
                   'max_tokens': max_tokens, 'temperature': temperature},
-            timeout=90,
+            timeout=(2.0, 4.0),
         )
         if resp.status_code != 200:
+            _mark_down('deepseek', 300)
             current_app.logger.warning(
-                '[ai] DeepSeek-V4 %s HTTP %s — falling through', model, resp.status_code)
+                '[ai] DeepSeek-V4 %s HTTP %s — cooling down 300s', model, resp.status_code)
             return None, None, True, None
         data = resp.json()
         choice = (data.get('choices') or [{}])[0]
@@ -242,104 +250,83 @@ def deepseek_chat(messages: list, pool: str = 'fast', max_tokens: int = 1200,
         }
         return content, f'deepseek/{model}', False, usage_dict
     except Exception as exc:
-        current_app.logger.warning('[ai] DeepSeek-V4 call failed: %s — falling through', exc)
+        _mark_down('deepseek', 300)
+        current_app.logger.warning('[ai] DeepSeek-V4 call failed: %s — cooling down 300s', exc)
         return None, None, True, None
 
 
 def groq_chat(messages: list, pool: str = 'fast',
               max_tokens: int = 200, temperature: float = 0.3):
     """
-    Chat completion with model rotation.
+    Chat completion with sub-second LPU model rotation.
 
-    Returns (text, model_used, is_fallback, usage_dict):
-      - on success via Groq: (content, model id, False, {prompt_tokens, completion_tokens, total_tokens})
-      - on success via Gemini: (content, gemini model id, False, {estimated usage})
-      - when every attempt failed: (None, None, True, None)
-
-    A missing `groq` package or API key is treated as "the whole Groq pool is
-    unavailable" and skips straight to Gemini — callers already handle that
-    contract, and the AI panels must degrade rather than 500.
-
-    Note: existing callers that unpack only 3 values (text, model, flag = ...) will
-    raise ValueError. All call sites are updated to accept 4 values. groq_single()
-    already passes through whatever groq_chat() returns.
+    1. Primary: Groq LPU engine (ultra-fast sub-second response)
+    2. Fallback: DeepSeek-V4 (guarded by circuit breaker)
+    3. Fallback: OpenRouter, Gemini & Studio AI Engine
     """
-    # 1. Primary: DeepSeek-V4 (paid-capable, large context)
+    # 1. Primary: Groq LPU engine (sub-second response)
+    try:
+        from groq import Groq, RateLimitError, APIStatusError
+        api_key = current_app.config.get('GROQ_API_KEY') or os.environ.get('GROQ_API_KEY')
+        if api_key:
+            client = Groq(api_key=api_key)
+            pool_models = get_pool(pool)
+            tried = set()
+
+            while True:
+                model = _next_available(pool_models, tried)
+                if model is None:
+                    break
+                tried.add(model)
+                try:
+                    params = {
+                        'model': model,
+                        'messages': messages,
+                        'max_tokens': max_tokens,
+                        'temperature': temperature,
+                    }
+                    if model in REASONING_MODELS:
+                        params['reasoning_format'] = 'hidden'
+                    resp = client.chat.completions.create(**params)
+                    msg_obj = resp.choices[0].message
+                    content = getattr(msg_obj, 'content', None) or ''
+                    if not content.strip() and getattr(msg_obj, 'reasoning_content', None):
+                        content = msg_obj.reasoning_content
+                    if content is not None and content.strip():
+                        usage = resp.usage
+                        usage_dict = {
+                            'prompt_tokens':     getattr(usage, 'prompt_tokens', 0) or 0,
+                            'completion_tokens': getattr(usage, 'completion_tokens', 0) or 0,
+                            'total_tokens':      getattr(usage, 'total_tokens', 0) or 0,
+                        } if usage is not None else None
+                        return content, model, False, usage_dict
+                    current_app.logger.warning(
+                        f"Groq model {model} returned empty reply, rotating"
+                    )
+                except RateLimitError:
+                    _mark_down(model, COOLDOWN_RATE_LIMIT)
+                except APIStatusError as e:
+                    status = getattr(e, 'status_code', None)
+                    if status == 429:
+                        _mark_down(model, COOLDOWN_RATE_LIMIT)
+                    elif status in (400, 404):
+                        _mark_down(model, COOLDOWN_BAD_MODEL)
+                    else:
+                        current_app.logger.error(f"Groq API error {status} on {model}: {e}")
+                        _mark_down(model, COOLDOWN_SERVER_ERR)
+                except Exception as e:
+                    current_app.logger.error(f"Groq call failed on {model}: {e}")
+                    _mark_down(model, COOLDOWN_SERVER_ERR)
+    except Exception as exc:
+        current_app.logger.warning('[ai] Groq client initialization failed: %s', exc)
+
+    # 2. Secondary fallback: DeepSeek-V4 (guarded by circuit breaker)
     ds_content, ds_model, ds_fb, ds_usage = deepseek_chat(
         messages, pool=pool, max_tokens=max_tokens, temperature=temperature)
     if ds_content:
         return ds_content, ds_model, ds_fb, ds_usage
 
-    # 2. Groq pool, then OpenRouter fallback
-    try:
-        from groq import Groq, RateLimitError, APIStatusError
-    except ImportError:
-        current_app.logger.warning('[ai] groq SDK not installed — skipping to fallback')
-        return _fallback_or_none(messages, max_tokens, temperature)
-
-    api_key = current_app.config.get('GROQ_API_KEY')
-    if not api_key:
-        current_app.logger.warning('[ai] GROQ_API_KEY not configured — skipping to fallback')
-        return _fallback_or_none(messages, max_tokens, temperature)
-
-    client = Groq(api_key=api_key)
-    pool_models = get_pool(pool)
-    tried = set()
-
-    while True:
-        model = _next_available(pool_models, tried)
-        if model is None:
-            break
-        tried.add(model)
-        try:
-            params = {
-                'model': model,
-                'messages': messages,
-                'max_tokens': max_tokens,
-                'temperature': temperature,
-            }
-            # Reasoning models otherwise spend the whole (often tiny) token
-            # budget on hidden thinking and return empty content. Cap the
-            # reasoning at 'low' and keep the <think> block out of content.
-            if model in REASONING_MODELS:
-                params['reasoning_effort'] = 'low'
-                params['reasoning_format'] = 'hidden'
-            resp = client.chat.completions.create(**params)
-            msg_obj = resp.choices[0].message
-            content = getattr(msg_obj, 'content', None) or ''
-            if not content.strip() and getattr(msg_obj, 'reasoning_content', None):
-                content = msg_obj.reasoning_content
-            if content is not None and content.strip():
-                # Capture token usage from the provider response
-                usage = resp.usage
-                usage_dict = {
-                    'prompt_tokens':     getattr(usage, 'prompt_tokens', 0) or 0,
-                    'completion_tokens': getattr(usage, 'completion_tokens', 0) or 0,
-                    'total_tokens':      getattr(usage, 'total_tokens', 0) or 0,
-                } if usage is not None else None
-                return content, model, False, usage_dict
-            # empty reply (e.g. reasoning tokens ate a tiny budget) →
-            # treat as soft failure and try the next model
-            current_app.logger.warning(
-                f"Groq model {model} returned empty reply, rotating"
-            )
-        except RateLimitError:
-            # token / request limit exceeded → rotate to the next model
-            _mark_down(model, COOLDOWN_RATE_LIMIT)
-        except APIStatusError as e:
-            status = getattr(e, 'status_code', None)
-            if status == 429:
-                _mark_down(model, COOLDOWN_RATE_LIMIT)
-            elif status in (400, 404):
-                _mark_down(model, COOLDOWN_BAD_MODEL)
-            else:
-                current_app.logger.error(f"Groq API error {status} on {model}: {e}")
-                _mark_down(model, COOLDOWN_SERVER_ERR)
-        except Exception as e:
-            current_app.logger.error(f"Groq call failed on {model}: {e}")
-            _mark_down(model, COOLDOWN_SERVER_ERR)
-
-    # ── Entire Groq pool exhausted → last-resort Gemini fallback ─────────
+    # 3. Tertiary fallback: OpenRouter, Gemini & Studio AI Engine fallback chain
     return _fallback_or_none(messages, max_tokens, temperature)
 
 
