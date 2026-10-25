@@ -122,6 +122,7 @@ backend/inspect_*.py
 # Screenshot/JSON output from the UI audit harnesses, local runtime uploads
 # and per-machine scratch files are intentionally not part of the repo.
 ui-checks/
+screenshots/
 uploads/
 backend/uploads/
 .config/
