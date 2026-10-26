@@ -162,10 +162,6 @@ class PlatformConfig(db.Model):
             if not cls.query.get(k):
                 db.session.add(cls(key=k, value=v))
 
-        # Ensure allow_self_registration is 'true' so individual users can register.
-        # The initial migration seeded it as 'false'; correct it here if still at that value.
-        row = cls.query.get('allow_self_registration')
-        if row and row.value == 'false':
-            row.value = 'true'
-
+        # Explicit operator settings must survive restarts. Defaults are inserted
+        # only when a key is absent; never overwrite a deliberately stored false.
         db.session.commit()

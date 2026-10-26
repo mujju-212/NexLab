@@ -62,6 +62,7 @@ const NAV_MANAGEMENT = [
   { id: 'Notifications',         Icon: Bell,        route: '/institution/notifications' },
   { id: 'Audit Log',             Icon: ShieldCheck, route: '/institution/audit-log' },
   { id: 'Billing & Plan',        Icon: CreditCard,  route: '/institution/billing' },
+  { id: 'Environment Requests',  Icon: Layers,      route: '/institution/environments' },
   { id: 'Institution Settings',  Icon: Settings,    route: '/institution/settings' },
 ];
 

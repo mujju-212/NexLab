@@ -115,10 +115,7 @@ export default function SettingsPage() {
   const handleSaveMaintenance = async () => {
     setSavingMaintenance(true);
     try {
-      await adminService.updatePlatformConfig({
-        maintenance_mode: maintenanceOn ? 'true' : 'false',
-        maintenance_message: maintenanceMessage,
-      });
+      await adminService.setMaintenance(maintenanceOn, maintenanceMessage);
       flash(`Maintenance mode ${maintenanceOn ? 'enabled' : 'disabled'}.`);
     } catch {
       setError('Failed to update maintenance mode.');

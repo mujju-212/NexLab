@@ -72,9 +72,10 @@ class PlatformExercise(db.Model):
 
     # Exercise type: coding | mcq | reading | simulation
     exercise_type    = db.Column(db.String(10), default='coding')
-    # For simulation exercises: static HTML lab served by the frontend
-    # (e.g. '/simulations/python-programming-lab/loops.html')
+    # For simulation exercises: an existing bundled lab path or authored inline HTML.
+    # Inline lessons are stored as ContentStudio-style JSON blocks for durable editing.
     simulation_path  = db.Column(db.Text)
+    content_blocks   = db.Column(db.JSON, default=list)
     # For MCQ exercises:
     mcq_options      = db.Column(db.JSON)    # ["Option A", "Option B", ...]
     mcq_answer       = db.Column(db.String(2))  # "A"|"B"|"C"|"D"
@@ -88,7 +89,7 @@ class PlatformExercise(db.Model):
     is_published     = db.Column(db.Boolean, default=True)
     created_at       = db.Column(db.DateTime, default=datetime.utcnow)
 
-    def to_dict(self, include_answer=False, actual_solves=None):
+    def to_dict(self, include_answer=False, actual_solves=None, include_content=True):
         # Progress rows are the source of truth; the old denormalized counter
         # may be stale for activity recorded before solve-count maintenance.
         # Callers serializing a collection can pass a grouped count to avoid N+1.
@@ -117,6 +118,8 @@ class PlatformExercise(db.Model):
                 if not tc.get('hidden', False)
             ],
         }
+        if include_content:
+            d['content_blocks'] = self.content_blocks or []
         if self.exercise_type == 'mcq':
             d['mcq_options'] = self.mcq_options
             if include_answer:

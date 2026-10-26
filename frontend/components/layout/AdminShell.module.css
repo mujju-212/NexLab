@@ -47,8 +47,8 @@
 
 .navItem {
   position: relative; display: flex; align-items: center; gap: 11px;
-  padding: 9px 12px; border-radius: 11px; cursor: pointer;
-  font-size: 14px; font-weight: 600; color: #463f57;
+  padding: 9px 12px; border-radius: 11px; cursor: pointer; border: 0; width: 100%; text-align: left; background: transparent;
+  font-size: 14px; font-weight: 600; font-family: inherit; color: #463f57;
   transition: background .15s ease, color .15s ease; user-select: none;
 }
 .navIcon { color: #9b93ad; flex-shrink: 0; }
@@ -67,7 +67,7 @@
 .promoBanner { margin-top: auto; background: linear-gradient(135deg,rgba(199,210,254,.85),rgba(245,243,255,.85)); border: 1px solid rgba(255,255,255,.7); border-radius: 16px; padding: 14px; display: flex; gap: 10px; align-items: flex-start; }
 .promoIcon { width: 32px; height: 32px; border-radius: 9px; background: rgba(255,255,255,.7); display: flex; align-items: center; justify-content: center; color: #7c3aed; flex-shrink: 0; }
 .promoTitle { margin: 0 0 3px; font-size: 13px; font-weight: 700; color: #581c87; font-family: var(--font-display); }
-.promoLink { font-size: 12.5px; color: #7c3aed; font-weight: 700; text-decoration: underline; cursor: pointer; }
+.promoLink { border: 0; padding: 0; background: transparent; font: inherit; font-size: 12.5px; color: #7c3aed; font-weight: 700; text-decoration: underline; cursor: pointer; }
 
 /* ── Content ─────────────────────────────────────────────────────────────── */
 .content { flex: 1; overflow-y: auto; padding: 30px 38px 40px; }

@@ -18,24 +18,29 @@ const nextConfig: NextConfig = {
   // :5000, but setting NEXT_PUBLIC_API_URL=/api makes the browser same-origin
   // (no CORS) behind the frontend container — kept for that deployment.
   async rewrites() {
-    return [
-      {
-        source: '/api/:path*',
-        destination: `${API_URL}/:path*`,
-      },
-      // Socket.IO proxied same-origin (polling transport only) so browsers in
-      // remote/preview environments don't need to reach the backend port.
-      // Next strips the trailing slash from /socket.io/ -> /socket.io, so map
-      // both forms explicitly to the backend's canonical /socket.io/ path.
-      {
-        source: '/socket.io',
-        destination: `${BACKEND_URL}/socket.io/`,
-      },
-      {
-        source: '/socket.io/:path*',
-        destination: `${BACKEND_URL}/socket.io/:path*`,
-      },
-    ];
+    return {
+      // Keep Socket.IO rewrites ahead of filesystem routing, as before.
+      beforeFiles: [
+        {
+          source: '/socket.io',
+          destination: `${BACKEND_URL}/socket.io/`,
+        },
+        {
+          source: '/socket.io/:path*',
+          destination: `${BACKEND_URL}/socket.io/:path*`,
+        },
+      ],
+      // Let the explicit /api/ai/harness/message route handler proxy long AI
+      // turns without Next's 30-second rewrite timeout. Other API calls still
+      // use the standard same-origin proxy when no app route matches.
+      afterFiles: [],
+      fallback: [
+        {
+          source: '/api/:path*',
+          destination: `${API_URL}/:path*`,
+        },
+      ],
+    };
   },
   async redirects() {
     return [

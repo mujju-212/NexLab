@@ -114,6 +114,15 @@ def start():
         replace_existing=True
     )
 
+    # Daily privacy-retention sweep for one-time GDPR export files.
+    scheduler.add_job(
+        func=_cleanup_expired_admin_exports,
+        trigger='cron',
+        hour=4, minute=0,
+        id='cleanup_expired_admin_exports',
+        replace_existing=True
+    )
+
     scheduler.start()
 
 
@@ -503,3 +512,17 @@ def _platform_metric_snapshots():
             from app.extensions import db
             db.session.rollback()
             scheduler.app.logger.warning('[jobs] platform metric snapshot failed: %s', exc)
+
+
+def _cleanup_expired_admin_exports():
+    """Remove expired, sensitive admin export bundles from local storage."""
+    with scheduler.app.app_context():
+        from app.admin.governance import cleanup_expired_exports
+        try:
+            count = cleanup_expired_exports()
+            if count:
+                scheduler.app.logger.info('[jobs] removed %d expired admin export(s)', count)
+        except Exception as exc:
+            from app.extensions import db
+            db.session.rollback()
+            scheduler.app.logger.warning('[jobs] admin export cleanup failed: %s', exc)

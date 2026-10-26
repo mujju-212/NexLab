@@ -34,6 +34,18 @@ def login():
     if not user:
         return jsonify({'error': 'Invalid credentials'}), 401
 
+    # A platform-admin institution suspension is a tenant-wide access gate,
+    # separate from an individual user's own active/suspended state.
+    if user.institution_id:
+        from app.models.institution import Institution
+        institution_active = db.session.query(Institution.is_active).filter_by(
+            id=user.institution_id).scalar()
+        if institution_active is not True:
+            return jsonify({
+                'error': 'This institution is suspended. Contact your institution administrator.',
+                'code': 'INSTITUTION_SUSPENDED',
+            }), 403
+
     # Administrative suspension gate (platform admin console). A temp
     # suspension that has already expired lifts itself here.
     if user.status == 'suspended':

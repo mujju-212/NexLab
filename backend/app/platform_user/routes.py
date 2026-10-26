@@ -5,12 +5,13 @@ Course listing is fully PUBLIC (no auth required).
 """
 import os
 from sqlalchemy import func
-from flask import Blueprint, request, jsonify, g, current_app, send_file
+from flask import Blueprint, request, jsonify, g, send_file
 from app.extensions import db
 from app.models.platform_content import PlatformCourse, PlatformExercise, PlatformProgress
 from app.models.user import User
 from app.auth.utils import require_auth, require_role
 from app.execution.languages import resolve as resolve_language
+from app.exec_engine.availability import execution_is_enabled
 from datetime import datetime
 
 platform_user_bp = Blueprint('platform_user', __name__)
@@ -163,7 +164,8 @@ def get_course(course_id):
 
     formatted_exercises = []
     for e in exercises:
-        d = e.to_dict(actual_solves=solved_counts.get(e.id, 0))
+        # Course outlines need only list metadata; lesson blocks may include large HTML.
+        d = e.to_dict(actual_solves=solved_counts.get(e.id, 0), include_content=False)
         is_solved = e.id in solved_ids
         is_attempted = e.id in attempted_ids
         is_locked = (e.order_index > 6 and not is_solved)
@@ -186,12 +188,18 @@ def get_course(course_id):
     }), 200
 
 
+def _ensure_learner_exercise(exercise):
+    """A published exercise is available only while its containing course is live."""
+    if not exercise.is_published or not exercise.course or not exercise.course.is_published:
+        from flask import abort
+        abort(404)
+    return exercise
+
+
 @platform_user_bp.route('/exercises/<exercise_id>', methods=['GET'])
 def get_exercise(exercise_id):
     """Public — single exercise detail (hidden test cases excluded)."""
-    ex = PlatformExercise.query.get_or_404(exercise_id)
-    if not ex.is_published:
-        return jsonify({'error': 'Exercise not available'}), 404
+    ex = _ensure_learner_exercise(PlatformExercise.query.get_or_404(exercise_id))
     return jsonify({'exercise': ex.to_dict()}), 200
 
 
@@ -228,7 +236,7 @@ def run_exercise(exercise_id):
     Run code against public test cases only (no hidden cases exposed).
     Each case executes in the Docker sandbox (fixed 5 s / 256 MB caps).
     """
-    ex = PlatformExercise.query.get_or_404(exercise_id)
+    ex = _ensure_learner_exercise(PlatformExercise.query.get_or_404(exercise_id))
     data = request.get_json()
     code     = data.get('code', '')
     language = data.get('language', 'python')
@@ -244,9 +252,9 @@ def run_exercise(exercise_id):
 
     visible_cases = [tc for tc in (ex.test_cases or []) if not tc.get('hidden', False)]
 
-    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+    if not execution_is_enabled():
         return jsonify({
-            'error': 'Code execution is currently unavailable. Your code was not run.'
+            'error': 'Code execution is currently disabled by the platform or unavailable on this server.'
         }), 503
 
     results = []
@@ -291,7 +299,7 @@ def submit_exercise(exercise_id):
     Run code against ALL test cases (including hidden), store progress.
     Returns per-test-case results with hidden test cases masked.
     """
-    ex = PlatformExercise.query.get_or_404(exercise_id)
+    ex = _ensure_learner_exercise(PlatformExercise.query.get_or_404(exercise_id))
     data = request.get_json()
     code     = data.get('code', '')
     language = data.get('language', 'python')
@@ -312,9 +320,9 @@ def submit_exercise(exercise_id):
     results = []
     passed_count = 0
 
-    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+    if not execution_is_enabled():
         return jsonify({
-            'error': 'Code execution is currently unavailable. Your code was not run or saved.'
+            'error': 'Code execution is currently disabled by the platform or unavailable on this server.'
         }), 503
     else:
         for tc in all_cases:
@@ -407,7 +415,7 @@ def submit_exercise(exercise_id):
 @require_auth
 def submit_mcq(exercise_id):
     """Submit MCQ answer — reveals correct answer + explanation."""
-    ex = PlatformExercise.query.get_or_404(exercise_id)
+    ex = _ensure_learner_exercise(PlatformExercise.query.get_or_404(exercise_id))
     if ex.exercise_type != 'mcq':
         return jsonify({'error': 'Not an MCQ exercise'}), 400
 
@@ -461,7 +469,7 @@ def submit_mcq(exercise_id):
 @require_auth
 def complete_simulation(exercise_id):
     """Mark a simulation experiment or reading module as completed — awards XP once."""
-    ex = PlatformExercise.query.get_or_404(exercise_id)
+    ex = _ensure_learner_exercise(PlatformExercise.query.get_or_404(exercise_id))
     if ex.exercise_type not in ('simulation', 'reading'):
         return jsonify({'error': 'Not a simulation or reading exercise'}), 400
 
@@ -690,25 +698,44 @@ def leaderboard(course_id):
 @platform_user_bp.route('/admin/courses', methods=['POST'])
 @require_role('platform_admin')
 def create_course():
-    """Platform admin creates a platform course."""
-    data = request.get_json()
-    if not data.get('title') or not data.get('slug'):
-        return jsonify({'error': 'title and slug required'}), 400
+    """Legacy compatibility endpoint; creates courses as drafts."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get('title'), str) or not isinstance(data.get('slug'), str) or not data['title'].strip() or not data['slug'].strip():
+        return jsonify({'error': 'title and slug are required.'}), 400
+    if data.get('is_published', False) is not False:
+        return jsonify({'error': 'Create the course as a draft, add a complete exercise, then publish it.'}), 400
+    slug = data['slug'].strip()
+    title = data['title'].strip()
+    if len(slug) > 80 or not slug.replace('-', '').replace('_', '').isalnum() or any(ch.isspace() for ch in slug):
+        return jsonify({'error': 'slug must be at most 80 characters and contain only letters, numbers, hyphens, and underscores.'}), 400
+    if any(data.get(field) is not None and not isinstance(data.get(field), str) for field in ('description', 'difficulty', 'language')):
+        return jsonify({'error': 'description, difficulty, and language must be text.'}), 400
+    if data.get('difficulty', 'beginner') not in {'beginner', 'intermediate', 'advanced'}:
+        return jsonify({'error': 'difficulty must be beginner, intermediate, or advanced.'}), 400
+    tags = data.get('tags', [])
+    if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+        return jsonify({'error': 'tags must be an array of text values.'}), 400
+    order_index = data.get('order_index', 0)
+    if isinstance(order_index, bool) or not str(order_index).isdigit():
+        return jsonify({'error': 'order_index must be a non-negative integer.'}), 400
 
-    if PlatformCourse.query.filter_by(slug=data['slug']).first():
+    if PlatformCourse.query.filter_by(slug=slug).first():
         return jsonify({'error': 'Slug already exists'}), 409
 
     course = PlatformCourse(
-        slug=data['slug'],
-        title=data['title'],
+        slug=slug,
+        title=title,
         description=data.get('description'),
         difficulty=data.get('difficulty', 'beginner'),
         tags=data.get('tags', []),
         language=data.get('language', 'python'),
-        order_index=data.get('order_index', 0),
-        is_published=data.get('is_published', False),
+        order_index=int(order_index),
+        is_published=False,
     )
     db.session.add(course)
+    db.session.flush()
+    from app.admin.content import _audit
+    _audit('admin.content.course_create', f'Created platform course {title!r} ({slug}) via legacy endpoint', 'course', course.id)
     db.session.commit()
     return jsonify({'course': course.to_dict()}), 201
 
@@ -718,38 +745,126 @@ def create_course():
 def create_exercise(course_id):
     """Add an exercise to a platform course."""
     course = PlatformCourse.query.get_or_404(course_id)
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'A JSON object is required.'}), 400
+    title = data.get('title')
+    if not isinstance(title, str) or not title.strip():
+        return jsonify({'error': 'title is required.'}), 400
+    title = title.strip()
+    published = data.get('is_published', False)
+    if not isinstance(published, bool):
+        return jsonify({'error': 'is_published must be a boolean.'}), 400
+    exercise_type = data.get('exercise_type', 'coding')
+    difficulty = data.get('difficulty', 'easy')
+    if not isinstance(exercise_type, str) or exercise_type not in {'coding', 'mcq', 'reading', 'simulation'}:
+        return jsonify({'error': 'exercise_type must be coding, mcq, reading, or simulation.'}), 400
+    if not isinstance(difficulty, str) or difficulty not in {'easy', 'medium', 'hard'}:
+        return jsonify({'error': 'difficulty must be easy, medium, or hard.'}), 400
+    for field in ('description', 'hint_text', 'mcq_answer', 'mcq_explanation', 'simulation_path'):
+        if data.get(field) is not None and not isinstance(data.get(field), str):
+            return jsonify({'error': f'{field} must be text.'}), 400
+    test_cases = data.get('test_cases', [])
+    allowed_languages = data.get('allowed_languages', ['python'])
+    mcq_options = data.get('mcq_options')
+    tags = data.get('tags', [])
+    if not isinstance(test_cases, list) or not all(
+        isinstance(tc, dict) and isinstance(tc.get('input'), str) and isinstance(tc.get('expected'), str)
+        and ('hidden' not in tc or isinstance(tc['hidden'], bool)) for tc in test_cases
+    ):
+        return jsonify({'error': 'test_cases must contain objects with text input and expected values.'}), 400
+    if not isinstance(allowed_languages, list) or not all(isinstance(lang, str) for lang in allowed_languages):
+        return jsonify({'error': 'allowed_languages must be an array of text values.'}), 400
+    if mcq_options is not None and (not isinstance(mcq_options, list) or not all(isinstance(option, str) for option in mcq_options)):
+        return jsonify({'error': 'mcq_options must be an array of text values.'}), 400
+    if not isinstance(tags, list) or not all(isinstance(tag, str) for tag in tags):
+        return jsonify({'error': 'tags must be an array of text values.'}), 400
+    content_blocks = data.get('content_blocks', [])
+    from app.admin.content import _validate_content_blocks
+    block_error = _validate_content_blocks(content_blocks)
+    if block_error:
+        return jsonify({'error': block_error}), 400
+    starter_code = data.get('starter_code', {})
+    if not isinstance(starter_code, dict) or not all(isinstance(key, str) and isinstance(value, str) for key, value in starter_code.items()):
+        return jsonify({'error': 'starter_code must be an object of language-to-code text values.'}), 400
+    numeric_values = {}
+    for field, default in (('xp_reward', 10), ('order_index', None), ('time_limit_sec', 5), ('memory_limit_kb', 131072)):
+        value = data.get(field, default)
+        if field == 'order_index' and value is None:
+            last_order = db.session.query(db.func.max(PlatformExercise.order_index)).filter_by(course_id=course.id).scalar()
+            value = (last_order if last_order is not None else -1) + 1
+        if isinstance(value, bool) or not str(value).lstrip('-').isdigit():
+            return jsonify({'error': f'{field} must be an integer.'}), 400
+        numeric_values[field] = int(value)
+    if not 0 <= numeric_values['xp_reward'] <= 10000 or numeric_values['order_index'] < 0:
+        return jsonify({'error': 'xp_reward must be 0–10000 and order_index must be non-negative.'}), 400
+    if not 1 <= numeric_values['time_limit_sec'] <= 300 or not 16384 <= numeric_values['memory_limit_kb'] <= 1048576:
+        return jsonify({'error': 'time_limit_sec must be 1–300 and memory_limit_kb 16384–1048576.'}), 400
 
     ex = PlatformExercise(
         course_id=course.id,
-        title=data['title'],
+        title=title,
         description=data.get('description'),
         hint_text=data.get('hint_text'),
-        difficulty=data.get('difficulty', 'easy'),
-        exercise_type=data.get('exercise_type', 'coding'),
-        starter_code=data.get('starter_code', {}),
-        allowed_languages=data.get('allowed_languages', ['python']),
-        test_cases=data.get('test_cases', []),
-        mcq_options=data.get('mcq_options'),
-        mcq_answer=data.get('mcq_answer'),
+        difficulty=difficulty,
+        exercise_type=exercise_type,
+        starter_code=starter_code,
+        allowed_languages=allowed_languages,
+        test_cases=test_cases,
+        content_blocks=content_blocks,
+        mcq_options=mcq_options,
+        mcq_answer=(data.get('mcq_answer') or '').upper() or None,
         mcq_explanation=data.get('mcq_explanation'),
-        xp_reward=data.get('xp_reward', 10),
-        order_index=data.get('order_index', 0),
-        time_limit_sec=data.get('time_limit_sec', 5),
-        memory_limit_kb=data.get('memory_limit_kb', 131072),
+        tags=tags,
+        xp_reward=numeric_values['xp_reward'],
+        order_index=numeric_values['order_index'],
+        time_limit_sec=numeric_values['time_limit_sec'],
+        memory_limit_kb=numeric_values['memory_limit_kb'],
         simulation_path=data.get('simulation_path'),
+        is_published=published,
     )
+    if published:
+        from app.admin.content import _validate_exercise
+        invalid = _validate_exercise(ex)
+        if invalid:
+            return jsonify({'error': invalid}), 400
     db.session.add(ex)
+    db.session.flush()
+    from app.admin.content import _audit
+    _audit('admin.content.exercise_create', f'Added exercise {title!r} via legacy endpoint to course {course.slug!r}', 'exercise', ex.id)
     db.session.commit()
-    return jsonify({'exercise': ex.to_dict(include_answer=True)}), 201
+    exercise_data = ex.to_dict(include_answer=True)
+    exercise_data['is_published'] = bool(ex.is_published)
+    return jsonify({'exercise': exercise_data}), 201
 
 
 @platform_user_bp.route('/admin/courses/<course_id>/publish', methods=['POST'])
 @require_role('platform_admin')
 def publish_course(course_id):
-    """Publish or unpublish a platform course."""
+    """Legacy compatibility endpoint with the same publish checks as admin UI."""
     course = PlatformCourse.query.get_or_404(course_id)
-    published = request.get_json().get('published', True)
-    course.is_published = published
-    db.session.commit()
+    data = request.get_json(silent=True)
+    if data is None:
+        data = {}
+    if not isinstance(data, dict):
+        return jsonify({'error': 'A JSON object is required.'}), 400
+    published = data.get('published', True)
+    if not isinstance(published, bool):
+        return jsonify({'error': 'published must be a boolean.'}), 400
+    if published:
+        exercises = PlatformExercise.query.filter_by(course_id=course.id, is_published=True).all()
+        if not exercises:
+            return jsonify({'error': 'Publish at least one complete exercise before publishing the course.'}), 400
+        from app.admin.content import _validate_exercise
+        for exercise in exercises:
+            invalid = _validate_exercise(exercise)
+            if invalid:
+                return jsonify({'error': f'Exercise “{exercise.title}” is incomplete: {invalid}'}), 400
+    if course.is_published != published:
+        course.is_published = published
+        from app.admin.content import _audit
+        _audit('admin.content.course_publish' if published else 'admin.content.course_unpublish',
+               f'{"Published" if published else "Unpublished"} platform course {course.slug!r} via legacy endpoint',
+               'course', course.id)
+        db.session.commit()
     return jsonify({'course': course.to_dict()}), 200

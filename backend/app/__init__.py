@@ -241,6 +241,7 @@ def create_app(config_name=None):
                 "CREATE INDEX IF NOT EXISTS ix_exam_attempts_student_exam ON exam_attempts (student_id, exam_id)",
                 "CREATE INDEX IF NOT EXISTS ix_exam_attempts_student_exp ON exam_attempts (student_id, experiment_id)",
                 "CREATE INDEX IF NOT EXISTS ix_practice_subs_stu_run_status_dt ON practice_submissions (student_id, is_run, status, submitted_at)",
+                "ALTER TABLE platform_exercises ADD COLUMN content_blocks JSON",
                 "CREATE INDEX IF NOT EXISTS ix_platform_exercises_course_order ON platform_exercises (course_id, order_index)",
                 "CREATE INDEX IF NOT EXISTS ix_platform_progress_user_course ON platform_progress (user_id, course_id, status)",
                 "CREATE INDEX IF NOT EXISTS ix_admin_chat_sessions_user_role ON admin_chat_sessions (user_id, role_scope)",
@@ -271,27 +272,8 @@ def create_app(config_name=None):
     def health():
         return {'status': 'ok', 'service': 'virtual-lab-api'}, 200
 
-    # ── Test UI route (dev only) ───────────────────────────────────────────
-    import os as _os
-    @app.route('/test')
-    def test_ui():
-        from flask import send_file
-        ui_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'test_ui.html')
-        return send_file(ui_path)
-
-    @app.route('/student-test')
-    def student_test():
-        from flask import send_file
-        p = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'test_live_student.html')
-        return send_file(p)
-
-    @app.route('/instructor-test')
-    def instructor_test():
-        from flask import send_file
-        p = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'test_live_instructor.html')
-        return send_file(p)
-
     # ── Serve workspace (platform courses) as static files ────────────────────
+    import os as _os
     @app.route('/workspace/')
     @app.route('/workspace/<path:filename>')
     def serve_workspace(filename='index.html'):

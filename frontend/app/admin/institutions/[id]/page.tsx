@@ -5,7 +5,7 @@ import { useParams, useRouter } from 'next/navigation';
 import AdminShell from '@/components/layout/AdminShell';
 import {
   ArrowLeft, Loader2, RefreshCw, Building2, Users as UsersIcon, Zap, FlaskConical,
-  Activity, Trophy, ShieldOff, ShieldCheck, KeyRound, Search, ChevronLeft, ChevronRight,
+  Activity, Trophy, ShieldOff, ShieldCheck, KeyRound, Search, ChevronLeft, ChevronRight, Copy, Check, X,
 } from 'lucide-react';
 import {
   adminService, adminTenantService,
@@ -13,9 +13,28 @@ import {
 } from '@/services/admin.service';
 import styles from '../../users/page.module.css';
 
-type Tab = 'overview' | 'users' | 'usage' | 'billing' | 'onboarding' | 'danger';
+type Tab = 'overview' | 'profile' | 'users' | 'usage' | 'billing' | 'onboarding' | 'danger';
+type OnboardingStatus = {
+  institution_id: string;
+  name: string;
+  status: string;
+  checklist: Record<string, boolean>;
+  complete: boolean;
+  completed_at: string | null;
+};
+type BillingDetails = {
+  plan: 'free' | 'pro' | 'enterprise';
+  billing_email: string | null;
+  billing_notes: string | null;
+  groq_limit: number;
+  groq_limit_source: string;
+  student_limit: number | null;
+  student_count: number;
+  student_headroom: number | null;
+};
 const TABS: { key: Tab; label: string }[] = [
   { key: 'overview', label: 'Overview' },
+  { key: 'profile', label: 'Profile' },
   { key: 'users', label: 'Users' },
   { key: 'usage', label: 'Usage' },
   { key: 'billing', label: 'Billing' },
@@ -35,6 +54,7 @@ export default function InstitutionDetailPage() {
   const router = useRouter();
 
   const [detail, setDetail] = useState<{ institution: Record<string, unknown> & { name?: string; plan?: string; is_active?: boolean }; stats: Record<string, number> } | null>(null);
+  const [profileForm, setProfileForm] = useState({ name: '', contact_email: '', email_domain: '', address: '', phone: '', website: '' });
   const [analytics, setAnalytics] = useState<TenantAnalytics | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -50,10 +70,14 @@ export default function InstitutionDetailPage() {
   const [uLoading, setULoading] = useState(false);
 
   // billing + onboarding
-  const [billing, setBilling] = useState<Record<string, unknown> | null>(null);
-  const [onboarding, setOnboarding] = useState<Record<string, unknown> | null>(null);
+  const [billing, setBilling] = useState<BillingDetails | null>(null);
+  const [billingForm, setBillingForm] = useState({ plan: 'free' as BillingDetails['plan'], billing_email: '', billing_notes: '' });
+  const [groqLimitForm, setGroqLimitForm] = useState('');
+  const [onboarding, setOnboarding] = useState<OnboardingStatus | null>(null);
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState<string | null>(null);
+  const [tempCredentials, setTempCredentials] = useState<{ email: string; password: string } | null>(null);
+  const [copiedCredentials, setCopiedCredentials] = useState(false);
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -76,6 +100,19 @@ export default function InstitutionDetailPage() {
   useEffect(() => { load(); }, [load]);
 
   useEffect(() => {
+    const institution = detail?.institution;
+    if (!institution) return;
+    setProfileForm({
+      name: String(institution.name || ''),
+      contact_email: String(institution.contact_email || ''),
+      email_domain: String(institution.email_domain || ''),
+      address: String(institution.address || ''),
+      phone: String(institution.phone || ''),
+      website: String(institution.website || ''),
+    });
+  }, [detail]);
+
+  useEffect(() => {
     if (tab !== 'users') return;
     const t = setTimeout(async () => {
       setULoading(true);
@@ -93,8 +130,12 @@ export default function InstitutionDetailPage() {
   }, [tab, uq, uRole, uPage, id]);
 
   useEffect(() => {
-    if (tab === 'billing' && !billing) adminService.getBilling(id).then(setBilling).catch(() => setBilling(null));
-    if (tab === 'onboarding' && !onboarding) adminService.getOnboardingChecklist(id).then((r: unknown) => setOnboarding(r as Record<string, unknown>)).catch(() => setOnboarding(null));
+    if (tab === 'billing' && !billing) adminService.getBilling(id).then((result: BillingDetails) => {
+      setBilling(result);
+      setBillingForm({ plan: result.plan, billing_email: result.billing_email || '', billing_notes: result.billing_notes || '' });
+      setGroqLimitForm(result.groq_limit_source === 'override' ? String(result.groq_limit) : '');
+    }).catch(() => setBilling(null));
+    if (tab === 'onboarding' && !onboarding) adminService.getOnboardingChecklist(id).then((r: OnboardingStatus) => setOnboarding(r)).catch(() => setOnboarding(null));
   }, [tab, billing, onboarding, id]);
 
   const act = async (fn: () => Promise<unknown>, done: string) => {
@@ -102,6 +143,86 @@ export default function InstitutionDetailPage() {
     try { await fn(); setNotice(done); await load(); }
     catch (e) { setNotice((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Action failed.'); }
     finally { setBusy(false); }
+  };
+
+  const resetInstitutionAdminPassword = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = await adminService.resetAdminPassword(id);
+      setTempCredentials({ email: result.email, password: result.temp_password });
+      await load();
+    } catch (e) {
+      setNotice((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Could not reset the admin password.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const saveProfile = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await adminService.updateInstitution(id, profileForm);
+      await load();
+      setNotice('Institution profile saved.');
+    } catch (e) {
+      setNotice((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Could not save institution profile.');
+    } finally { setBusy(false); }
+  };
+
+  const refreshBilling = async () => {
+    const result = await adminService.getBilling(id) as BillingDetails;
+    setBilling(result);
+    setBillingForm({ plan: result.plan, billing_email: result.billing_email || '', billing_notes: result.billing_notes || '' });
+    setGroqLimitForm(result.groq_limit_source === 'override' ? String(result.groq_limit) : '');
+  };
+
+  const saveBilling = async () => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      await adminService.updateBillingPlan(id, billingForm);
+      await refreshBilling();
+      setNotice('Plan and billing details saved.');
+    } catch (e) {
+      setNotice((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Could not save billing details.');
+    } finally { setBusy(false); }
+  };
+
+  const saveGroqLimit = async () => {
+    const value = groqLimitForm.trim() === '' ? null : Number(groqLimitForm);
+    if (value !== null && (!Number.isInteger(value) || value < 0 || value > 1_000_000)) {
+      setNotice('AI request override must be a whole number from 0 to 1,000,000, or blank for the plan default.');
+      return;
+    }
+    setBusy(true);
+    setNotice(null);
+    try {
+      await adminService.setInstitutionGroqLimit(id, value);
+      await refreshBilling();
+      setNotice(value === null ? 'AI request limit reset to the plan default.' : 'AI request override saved.');
+    } catch (e) {
+      setNotice((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Could not save the AI request limit.');
+    } finally { setBusy(false); }
+  };
+
+  const mutateOnboarding = async (action: 'complete' | 'reset') => {
+    setBusy(true);
+    setNotice(null);
+    try {
+      const result = action === 'complete'
+        ? await adminService.completeOnboarding(id)
+        : await adminService.resetOnboarding(id);
+      setOnboarding(await adminService.getOnboardingChecklist(id));
+      setNotice(result.message || `Onboarding ${action === 'complete' ? 'completed' : 'reset'}.`);
+    } catch (e) {
+      setNotice((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Onboarding action failed.');
+      const refreshed = await adminService.getOnboardingChecklist(id).catch(() => null);
+      if (refreshed) setOnboarding(refreshed);
+    } finally {
+      setBusy(false);
+    }
   };
 
   if (loading) {
@@ -182,6 +303,37 @@ export default function InstitutionDetailPage() {
           <button key={t.key} className={`${styles.tab} ${tab === t.key ? styles.tabActive : ''}`} onClick={() => setTab(t.key)}>{t.label}</button>
         ))}
       </div>
+
+      {/* ── Institution profile ── */}
+      {tab === 'profile' && (
+        <section style={{ background: 'rgba(255,255,255,.55)', border: '1px solid rgba(255,255,255,.75)', borderRadius: 18, padding: 24, maxWidth: 760 }}>
+          <h2 style={{ margin: 0, fontSize: 17, fontWeight: 800 }}>Institution profile</h2>
+          <p style={{ margin: '6px 0 18px', color: '#716b80', fontSize: 13 }}>Edit contact and identity details. Plan and activation controls remain in their dedicated workflows.</p>
+          <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(230px,1fr))', gap: 14 }}>
+            <label style={fieldLabel}>Institution name
+              <input value={profileForm.name} maxLength={200} onChange={e => setProfileForm(f => ({ ...f, name: e.target.value }))} style={fieldInput} />
+            </label>
+            <label style={fieldLabel}>Contact email
+              <input type="email" value={profileForm.contact_email} onChange={e => setProfileForm(f => ({ ...f, contact_email: e.target.value }))} placeholder="contact@example.edu" style={fieldInput} />
+            </label>
+            <label style={fieldLabel}>Allowed email domain
+              <input value={profileForm.email_domain} onChange={e => setProfileForm(f => ({ ...f, email_domain: e.target.value }))} placeholder="example.edu" style={fieldInput} />
+            </label>
+            <label style={fieldLabel}>Phone
+              <input value={profileForm.phone} maxLength={50} onChange={e => setProfileForm(f => ({ ...f, phone: e.target.value }))} style={fieldInput} />
+            </label>
+            <label style={fieldLabel}>Website
+              <input type="url" value={profileForm.website} maxLength={500} onChange={e => setProfileForm(f => ({ ...f, website: e.target.value }))} placeholder="https://example.edu" style={fieldInput} />
+            </label>
+            <label style={{ ...fieldLabel, gridColumn: '1 / -1' }}>Address
+              <textarea value={profileForm.address} maxLength={1000} rows={3} onChange={e => setProfileForm(f => ({ ...f, address: e.target.value }))} style={{ ...fieldInput, resize: 'vertical' }} />
+            </label>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: 18 }}>
+            <button type="button" className={styles.btnPrimary} disabled={busy} onClick={() => void saveProfile()}>{busy ? <Loader2 size={14} className="spin" /> : <Check size={14} />} Save profile</button>
+          </div>
+        </section>
+      )}
 
       {/* ── Overview ── */}
       {tab === 'overview' && (
@@ -311,16 +463,40 @@ export default function InstitutionDetailPage() {
       {/* ── Billing ── */}
       {tab === 'billing' && (
         billing ? (
-          <div style={{ background: 'rgba(255,255,255,.5)', border: '1px solid rgba(255,255,255,.7)', borderRadius: 18, padding: 24, maxWidth: 640 }}>
-            <h3 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 800 }}>Billing</h3>
-            <div style={{ display: 'grid', gap: 10, fontSize: 13.5, fontWeight: 600, color: '#463f57' }}>
-              {Object.entries(billing).map(([k, v]) => (
-                <div key={k} style={{ display: 'flex', justifyContent: 'space-between', borderBottom: '1px solid rgba(255,255,255,.7)', paddingBottom: 8 }}>
-                  <span style={{ color: '#9891a6' }}>{k.replace(/_/g, ' ')}</span>
-                  <span>{typeof v === 'object' ? JSON.stringify(v) : String(v ?? '—')}</span>
+          <div style={{ display: 'grid', gap: 16, maxWidth: 720 }}>
+            <section style={{ background: 'rgba(255,255,255,.5)', border: '1px solid rgba(255,255,255,.7)', borderRadius: 18, padding: 24 }}>
+              <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 800 }}>Plan and billing details</h3>
+              <p style={{ margin: '0 0 16px', fontSize: 12.5, color: '#777184' }}>Student capacity reflects the same plan quota used when adding students.</p>
+              <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <label style={fieldLabel}>Plan
+                  <select value={billingForm.plan} onChange={e => setBillingForm(f => ({ ...f, plan: e.target.value as BillingDetails['plan'] }))} style={fieldInput}>
+                    <option value="free">Free</option><option value="pro">Pro</option><option value="enterprise">Enterprise</option>
+                  </select>
+                </label>
+                <label style={fieldLabel}>Billing email
+                  <input type="email" value={billingForm.billing_email} onChange={e => setBillingForm(f => ({ ...f, billing_email: e.target.value }))} placeholder="billing@example.com" style={fieldInput} />
+                </label>
+                <div style={{ ...fieldLabel, gridColumn: '1 / -1' }}>Billing notes
+                  <textarea value={billingForm.billing_notes} onChange={e => setBillingForm(f => ({ ...f, billing_notes: e.target.value }))} rows={3} maxLength={4000} style={{ ...fieldInput, resize: 'vertical' }} />
                 </div>
-              ))}
-            </div>
+              </div>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 16, flexWrap: 'wrap', gap: 10 }}>
+                <span style={{ fontSize: 12.5, color: '#716b80' }}>Students: {billing.student_count} / {billing.student_limit ?? 'uncapped'} · {billing.student_headroom ?? '—'} seats remaining</span>
+                <button type="button" className={styles.btnPrimary} disabled={busy} onClick={() => void saveBilling()}>{busy ? <Loader2 size={14} className="spin" /> : <Check size={14} />} Save billing details</button>
+              </div>
+            </section>
+
+            <section style={{ background: 'rgba(255,255,255,.5)', border: '1px solid rgba(255,255,255,.7)', borderRadius: 18, padding: 24 }}>
+              <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 800 }}>AI request allowance</h3>
+              <p style={{ margin: '0 0 14px', fontSize: 12.5, color: '#777184' }}>Blank resets to the plan default. Set 0 to disable institution AI allowance.</p>
+              <div style={{ display: 'flex', gap: 10, alignItems: 'end', flexWrap: 'wrap' }}>
+                <label style={{ ...fieldLabel, minWidth: 240, flex: 1 }}>Requests per day
+                  <input type="number" min={0} max={1000000} step={1} value={groqLimitForm} onChange={e => setGroqLimitForm(e.target.value)} placeholder={`Plan default (${billing.groq_limit})`} style={fieldInput} />
+                </label>
+                <button type="button" className={styles.btnSecondary} disabled={busy} onClick={() => void saveGroqLimit()}>{busy ? <Loader2 size={14} className="spin" /> : <Check size={14} />} Save AI limit</button>
+              </div>
+              <div style={{ fontSize: 12, color: '#716b80', marginTop: 10 }}>Effective limit: {billing.groq_limit.toLocaleString()} per day ({billing.groq_limit_source === 'override' ? 'custom override' : 'plan default'}).</div>
+            </section>
           </div>
         ) : (
           <div style={{ padding: '2.5rem', textAlign: 'center', color: '#9891a6', fontWeight: 600 }}>No billing record for this institution.</div>
@@ -331,13 +507,29 @@ export default function InstitutionDetailPage() {
       {tab === 'onboarding' && (
         onboarding ? (
           <div style={{ background: 'rgba(255,255,255,.5)', border: '1px solid rgba(255,255,255,.7)', borderRadius: 18, padding: 24, maxWidth: 640 }}>
-            <h3 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 800 }}>Onboarding checklist</h3>
-            {Object.entries(onboarding).map(([k, v]) => (
-              <div key={k} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,.7)', fontSize: 13.5, fontWeight: 600, color: '#463f57' }}>
-                <span>{k.replace(/_/g, ' ')}</span>
-                <span style={{ color: v ? '#15803d' : '#b45309' }}>{v ? '✓ done' : 'pending'}</span>
+            <h3 style={{ margin: '0 0 6px', fontSize: 15, fontWeight: 800 }}>Onboarding checklist</h3>
+            <p style={{ margin: '0 0 14px', color: '#64748b', fontSize: 12.5 }}>
+              {onboarding.name} · status: <strong>{onboarding.status}</strong> · {onboarding.complete ? 'All steps complete' : 'Setup remains incomplete'}
+            </p>
+            {Object.entries(onboarding.checklist || {}).map(([key, done]) => (
+              <div key={key} style={{ display: 'flex', justifyContent: 'space-between', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,.7)', fontSize: 13.5, fontWeight: 600, color: '#463f57' }}>
+                <span>{key.replace(/_/g, ' ')}</span>
+                <span style={{ color: done ? '#15803d' : '#b45309' }}>{done ? '✓ done' : 'pending'}</span>
               </div>
             ))}
+            {onboarding.completed_at && <p style={{ margin: '12px 0 0', fontSize: 12, color: '#64748b' }}>Completed {fmtDate(onboarding.completed_at)}</p>}
+            <div style={{ display: 'flex', gap: 8, marginTop: 18, flexWrap: 'wrap' }}>
+              {onboarding.status !== 'active' ? (
+                <button type="button" className={styles.btnPrimary} disabled={busy || !onboarding.complete} onClick={() => void mutateOnboarding('complete')}>
+                  {busy ? <Loader2 size={14} className="spin" /> : <Check size={14} />} Mark onboarding complete
+                </button>
+              ) : (
+                <button type="button" className={styles.btnSecondary} disabled={busy} onClick={() => void mutateOnboarding('reset')}>
+                  Reset onboarding to pending
+                </button>
+              )}
+              {!onboarding.complete && <span style={{ alignSelf: 'center', color: '#b45309', fontSize: 12 }}>Complete every checklist item before activating.</span>}
+            </div>
           </div>
         ) : (
           <div style={{ padding: '2.5rem', textAlign: 'center', color: '#9891a6', fontWeight: 600 }}>Onboarding data unavailable.</div>
@@ -365,14 +557,45 @@ export default function InstitutionDetailPage() {
               </button>
             )}
             <button className={styles.btnSecondary} disabled={busy} onClick={() => {
-              const np = window.prompt('New password for the institution admin:');
-              if (np) act(() => adminService.resetAdminPassword(id, np), 'Admin password reset.');
+              if (window.confirm('Issue a new one-time password and sign the institution admin out of all sessions?')) {
+                void resetInstitutionAdminPassword();
+              }
             }}>
               <KeyRound size={14} /> Reset institution admin password
             </button>
           </div>
         </div>
       )}
+
+      {tempCredentials && (
+        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setTempCredentials(null); }} style={{ position: 'fixed', inset: 0, zIndex: 120, background: 'rgba(15,10,30,.55)', display: 'grid', placeItems: 'center', padding: 16 }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="temp-password-title" style={{ width: 'min(480px, 100%)', background: '#fff', borderRadius: 18, padding: 24, boxShadow: '0 24px 80px rgba(0,0,0,.25)' }}>
+            <div style={{ display: 'flex', alignItems: 'start', justifyContent: 'space-between', gap: 12 }}>
+              <div>
+                <h2 id="temp-password-title" style={{ margin: 0, fontSize: 18, fontWeight: 800, color: '#201b2e' }}>Temporary password issued</h2>
+                <p style={{ margin: '6px 0 18px', color: '#64748b', fontSize: 13 }}>Share this once with {tempCredentials.email}. They must change it at their next login.</p>
+              </div>
+              <button type="button" aria-label="Close" onClick={() => setTempCredentials(null)} style={{ border: 0, background: 'transparent', cursor: 'pointer' }}><X size={18} /></button>
+            </div>
+            <div style={{ display: 'flex', gap: 8, alignItems: 'center', background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 10, padding: 12 }}>
+              <code style={{ flex: 1, overflowWrap: 'anywhere', fontSize: 14 }}>{tempCredentials.password}</code>
+              <button type="button" onClick={async () => { await navigator.clipboard.writeText(`Email: ${tempCredentials.email}\nTemporary password: ${tempCredentials.password}`); setCopiedCredentials(true); window.setTimeout(() => setCopiedCredentials(false), 1800); }} aria-label="Copy temporary credentials" style={{ border: 0, background: '#ede9fe', color: '#6d28d9', borderRadius: 8, padding: 8, cursor: 'pointer' }}>
+                {copiedCredentials ? <Check size={15} /> : <Copy size={15} />}
+              </button>
+            </div>
+            <button type="button" className={styles.btnPrimary} onClick={() => setTempCredentials(null)} style={{ marginTop: 18 }}>Done</button>
+          </section>
+        </div>
+      )}
     </AdminShell>
   );
 }
+
+const fieldLabel: React.CSSProperties = {
+  display: 'grid', gap: 6, color: '#625b70', fontSize: 12, fontWeight: 700,
+};
+const fieldInput: React.CSSProperties = {
+  width: '100%', boxSizing: 'border-box', border: '1px solid #ddd8e8', borderRadius: 9,
+  padding: '10px 11px', background: 'rgba(255,255,255,.8)', color: '#302a41',
+  font: 'inherit', fontSize: 13,
+};

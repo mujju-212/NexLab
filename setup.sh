@@ -53,6 +53,19 @@ cd "$ROOT/backend"
 # the whole schema), so we build tables from the models — the project's own
 # migrate_missing_columns.py helper does exactly this.
 python3 migrate_missing_columns.py
+# Raw-SQL tables that db.create_all() cannot build (idempotent):
+python3 migrate_admin_p3.py   # platform_metrics_daily (platform admin metrics)
+# groq_usage: legacy per-institution daily request-count meter (declared in
+# database/init.sql for Docker; native installs need it created explicitly).
+psql -h 127.0.0.1 -p 5433 -U postgres -d virtuallab -q <<'SQL' || true
+CREATE TABLE IF NOT EXISTS groq_usage (
+    institution_id VARCHAR(36) NOT NULL,
+    usage_date     DATE NOT NULL,
+    count          INTEGER DEFAULT 0,
+    PRIMARY KEY (institution_id, usage_date)
+);
+CREATE INDEX IF NOT EXISTS idx_groq_usage_date ON groq_usage(usage_date);
+SQL
 export PGPASSWORD=vlabpass
 for t in free_courses free_exercises practice_problems; do
   psql -h 127.0.0.1 -p 5433 -U postgres -d virtuallab -q \
@@ -63,6 +76,11 @@ if [ "$SEED" = "1" ]; then
   python3 run_all_seeds.py || true
   python3 database/seed_free_courses.py || true
   python3 database/seed_simulation_courses.py || true
+  # Full two-month SKIT dataset (16 students, 10 lab sessions, attempts,
+  # exams, AI usage, 3 platform users). Self-skips until walkthrough.py has
+  # created the SKIT tenant; idempotent — safe to re-run after the backend
+  # is up (re-runs fill in any grade rows missed while the API was down).
+  python3 database/seed_complete_demo.py || true
 else
   echo "  ✓ schema only — no demo data (use ./setup.sh --seed if you want it)"
 fi

@@ -1,4 +1,5 @@
 import { apiClient } from './api-client';
+import type { PlatformContentBlock } from '@/types/platform-content';
 
 // ── Types ──────────────────────────────────────────────────────────────────────
 
@@ -12,6 +13,9 @@ export interface Institution {
   is_active: boolean;
   contact_email: string;
   address: string | null;
+  phone?: string | null;
+  website?: string | null;
+  institution_type?: string | null;
   onboarded_at: string;
   onboarding_status: 'pending' | 'active' | 'suspended';
   plan_updated_at: string | null;
@@ -32,7 +36,6 @@ export interface CreateInstitutionDto {
   email_domain?: string;
   address?: string;
   plan?: 'free' | 'pro' | 'enterprise';
-  admin_password?: string;
   admin_name?: string;
 }
 
@@ -92,7 +95,7 @@ export const adminService = {
   },
 
   // PATCH /api/admin/institutions/<id>
-  async updateInstitution(id: string, payload: Partial<Pick<Institution, 'name' | 'plan' | 'is_active' | 'email_domain'>>): Promise<Institution> {
+  async updateInstitution(id: string, payload: Partial<Pick<Institution, 'name' | 'contact_email' | 'email_domain' | 'address' | 'phone' | 'website'>>): Promise<Institution> {
     const { data } = await apiClient.patch<{ institution: Institution }>(`/admin/institutions/${id}`, payload);
     return data.institution;
   },
@@ -108,8 +111,9 @@ export const adminService = {
   },
 
   // POST /api/admin/institutions/<id>/reset-admin-password
-  async resetAdminPassword(id: string, newPassword: string): Promise<void> {
-    await apiClient.post(`/admin/institutions/${id}/reset-admin-password`, { new_password: newPassword });
+  async resetAdminPassword(id: string): Promise<{ email: string; temp_password: string; must_change_password: boolean }> {
+    const { data } = await apiClient.post(`/admin/institutions/${id}/reset-admin-password`, {});
+    return data;
   },
 
   // ── Platform Dashboard ───────────────────────────────────────────────────────
@@ -166,9 +170,63 @@ export const adminService = {
     return data;
   },
 
+  async getPendingEnvironments() {
+    const { data } = await apiClient.get('/admin/environments/pending');
+    return data as { pending: Array<{
+      id: string; name: string; display_name: string; docker_image: string;
+      institution_id: string | null; is_platform_default: boolean;
+      pip_packages: string[]; apt_packages: string[]; build_status: string;
+      created_at: string | null;
+    }> };
+  },
+  async approveEnvironment(id: string) {
+    const { data } = await apiClient.post(`/admin/environments/${id}/approve`);
+    return data;
+  },
+  async rejectEnvironment(id: string) {
+    const { data } = await apiClient.post(`/admin/environments/${id}/reject`);
+    return data;
+  },
+  async getAnnouncementPreview(): Promise<{ recipient_count: number }> {
+    const { data } = await apiClient.get('/admin/announcements/preview');
+    return data;
+  },
+  async sendPlatformAnnouncement(payload: { title: string; message: string; expected_recipients: number }) {
+    const { data } = await apiClient.post('/admin/announcements', payload);
+    return data;
+  },
+  async getPlatformAnnouncements(): Promise<{ announcements: Array<{ id: string; title: string; message: string; sent_to: number; actor_id: string | null; created_at: string | null }> }> {
+    const { data } = await apiClient.get('/admin/announcements');
+    return data;
+  },
+  async getUserChangeRequests(status = 'pending') {
+    const { data } = await apiClient.get('/admin/user-change-requests', { params: { status } });
+    return data;
+  },
+  async createUserChangeRequest(payload: { user_id: string; to_role: string; to_institution_id: string; reason: string }) {
+    const { data } = await apiClient.post('/admin/user-change-requests', payload);
+    return data;
+  },
+  async approveUserChangeRequest(id: string, review_note = '') {
+    const { data } = await apiClient.post(`/admin/user-change-requests/${id}/approve`, { review_note });
+    return data;
+  },
+  async rejectUserChangeRequest(id: string, review_note = '') {
+    const { data } = await apiClient.post(`/admin/user-change-requests/${id}/reject`, { review_note });
+    return data;
+  },
+
   // GET /api/platform/institutions/<iid>/onboarding
   async getOnboardingChecklist(iid: string) {
     const { data } = await apiClient.get(`/platform/institutions/${iid}/onboarding`);
+    return data;
+  },
+  async completeOnboarding(iid: string) {
+    const { data } = await apiClient.post(`/platform/institutions/${iid}/onboarding/complete`);
+    return data;
+  },
+  async resetOnboarding(iid: string) {
+    const { data } = await apiClient.post(`/platform/institutions/${iid}/onboarding/reset`);
     return data;
   },
 
@@ -183,6 +241,11 @@ export const adminService = {
   // PATCH /api/platform/config
   async updatePlatformConfig(updates: Record<string, string>): Promise<void> {
     await apiClient.patch('/platform/config', updates);
+  },
+
+  async setMaintenance(enabled: boolean, message: string): Promise<{ maintenance_mode: boolean; message: string }> {
+    const { data } = await apiClient.post('/platform/config/maintenance', { enabled, message });
+    return data;
   },
 
   // GET /api/platform/config/features
@@ -228,6 +291,14 @@ export const adminService = {
   // GET /api/platform/institutions/<iid>/billing
   async getBilling(iid: string) {
     const { data } = await apiClient.get(`/platform/institutions/${iid}/billing`);
+    return data;
+  },
+  async updateBillingPlan(iid: string, payload: { plan: 'free' | 'pro' | 'enterprise'; billing_email: string; billing_notes: string }) {
+    const { data } = await apiClient.patch(`/platform/institutions/${iid}/billing/plan`, payload);
+    return data;
+  },
+  async setInstitutionGroqLimit(iid: string, limit: number | null) {
+    const { data } = await apiClient.patch(`/platform/institutions/${iid}/billing/groq-limit`, { limit });
     return data;
   },
 
@@ -317,6 +388,11 @@ export interface AdminUserActivity {
 }
 
 export const adminUsersService = {
+  async createUser(dto: { email: string; full_name: string; role: string; institution_id?: string }): Promise<{ user: AdminDirectoryUser; temp_password: string; must_change_password: boolean }> {
+    const { data } = await apiClient.post('/admin/users', dto);
+    return data;
+  },
+
   async listUsers(params: { q?: string; role?: string; institution_id?: string; status?: string; sort?: string; page?: number; per_page?: number }): Promise<{ total: number; page: number; pages: number; users: AdminDirectoryUser[] }> {
     const { data } = await apiClient.get('/admin/users', { params });
     return data;
@@ -412,13 +488,26 @@ export interface AdminPlatformExercise {
   id: string; course_id: string; order_index: number; title: string;
   description: string | null; exercise_type: string; difficulty: string;
   xp_reward: number; tags: string[]; solves_count: number; is_published: boolean;
-  test_case_count: number; mcq_options: string[] | null;
+  test_case_count: number; test_cases: { input: string; expected: string; hidden?: boolean }[];
+  mcq_options: string[] | null; mcq_answer: string | null; mcq_explanation: string | null;
   starter_code: Record<string, string> | null; allowed_languages: string[] | null;
+  simulation_path: string | null; hint_text: string | null;
+  content_blocks: PlatformContentBlock[];
 }
 
 export interface AdminProblemBankRow {
   id: string; slug: string; lc_id: string | null; title: string;
   difficulty: string; nexlab_topic: string; is_active: boolean; acceptance: number | null;
+}
+
+export interface AdminProblemDetail extends AdminProblemBankRow {
+  description: string;
+  topics: string[];
+  constraints: string[];
+  hints: string[];
+  examples: { input?: string; output?: string; explanation?: string }[];
+  starter_code: Record<string, string>;
+  test_cases: { id: string; input_data: string; expected: string; is_sample: boolean }[];
 }
 
 export interface AdminFunnelStage { key: string; label: string; count: number; pct: number; }
@@ -444,6 +533,14 @@ export const adminContentService = {
     const { data } = await apiClient.get(`/admin/content/courses/${courseId}/exercises`);
     return data;
   },
+  async listSimulationAssets(): Promise<{ assets: { path: string; name: string }[] }> {
+    const { data } = await apiClient.get('/admin/content/simulation-assets');
+    return data;
+  },
+  async getSimulationAssetSource(path: string): Promise<{ path: string; html: string }> {
+    const { data } = await apiClient.get('/admin/content/simulation-assets/source', { params: { path } });
+    return data;
+  },
   async createExercise(courseId: string, dto: Record<string, unknown>): Promise<{ exercise: AdminPlatformExercise }> {
     const { data } = await apiClient.post(`/admin/content/courses/${courseId}/exercises`, dto);
     return data;
@@ -457,6 +554,18 @@ export const adminContentService = {
   },
   async listProblems(filter: string, page = 1): Promise<{ filter: string; total: number; page: number; pages: number; summary: { no_test_cases: number; disabled: number; total: number }; problems: AdminProblemBankRow[] }> {
     const { data } = await apiClient.get('/admin/content/problems', { params: { filter, page, per_page: 20 } });
+    return data;
+  },
+  async getProblem(id: string): Promise<{ problem: AdminProblemDetail }> {
+    const { data } = await apiClient.get(`/admin/content/problems/${id}`);
+    return data;
+  },
+  async createProblem(dto: Record<string, unknown>): Promise<{ problem: AdminProblemDetail }> {
+    const { data } = await apiClient.post('/admin/content/problems', dto);
+    return data;
+  },
+  async updateProblem(id: string, patch: Record<string, unknown>): Promise<{ problem: AdminProblemDetail }> {
+    const { data } = await apiClient.patch(`/admin/content/problems/${id}`, patch);
     return data;
   },
   async toggleProblem(id: string, isActive: boolean): Promise<void> {
@@ -536,12 +645,21 @@ export const adminGovernanceService = {
     return data;
   },
 
+  async downloadExport(jobId: string): Promise<Blob> {
+    const { data } = await apiClient.get(`/admin/exports/${jobId}`, { responseType: 'blob' });
+    return data as Blob;
+  },
+
+  async downloadAuditCsv(days = 30): Promise<Blob> {
+    const { data } = await apiClient.get('/admin/governance/audit-logs/export', {
+      params: { days }, responseType: 'blob',
+    });
+    return data as Blob;
+  },
+
   async getJobsMonitor(): Promise<JobsMonitor> {
     const { data } = await apiClient.get('/admin/jobs');
     return data;
   },
 
-  auditExportUrl(days = 30): string {
-    return `/api/admin/governance/audit-logs/export?days=${days}`;
-  },
 };

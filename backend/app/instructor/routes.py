@@ -5,6 +5,7 @@ Handles: experiments, sessions, live monitoring, grading, viva, analytics
 from flask import Blueprint, request, jsonify, g, current_app
 from app.auth.utils import require_role
 from app.extensions import db, socketio
+from app.exec_engine.availability import execution_is_enabled
 from app.models.experiment import Experiment, TestCase, ContentModule, QuizQuestion, ContentProgress
 from app.models.session import LabSession, SessionAttendance
 from app.models.submission import CodeAttempt, CodeVersion
@@ -1523,7 +1524,7 @@ def start_session(session_id):
     # Gate on the code execution engine — warn if Docker is disabled, but don't
     # block session start. Code submission will degrade gracefully if Docker is
     # down; refusing to start the session entirely is too aggressive for dev.
-    if current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+    if execution_is_enabled():
         try:
             probe = subprocess.run(
                 [current_app.config.get('DOCKER_BIN', 'docker'),

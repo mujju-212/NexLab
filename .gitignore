@@ -127,3 +127,8 @@ uploads/
 backend/uploads/
 .config/
 .sudo_as_admin_successful
+
+# ── Local caches & scratch (never commit) ─────────────────────────────
+.cache/
+.npm/
+.tmpwork/

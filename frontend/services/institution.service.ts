@@ -2396,6 +2396,15 @@ export const institutionService = {
     return data.subject;
   },
 
+  async getEnvironments(): Promise<{ environments: Array<{ id: string; name: string; display_name: string; docker_image: string; build_status: string; is_platform_default: boolean; institution_id: string | null; pip_packages: string[]; apt_packages: string[] }>; runtime_supported: boolean; notice: string }> {
+    const { data } = await apiClient.get('/institution/environments');
+    return data;
+  },
+  async requestEnvironmentProfile(payload: { name: string; display_name: string; docker_image: string; pip_packages: string[]; apt_packages: string[] }) {
+    const { data } = await apiClient.post('/institution/environments', payload);
+    return data;
+  },
+
   async assignSubjectToSection(dto: {
     section_id: string;
     subject_id: string;

@@ -29,7 +29,7 @@ from datetime import datetime, timedelta
 # pyrefly: ignore [missing-import]
 from sqlalchemy import func, or_, case, text as sa_text
 # pyrefly: ignore [missing-import]
-import bcrypt, uuid, csv, io, json
+import bcrypt, uuid, csv, io, json, re
 
 institution_bp = Blueprint('institution', __name__)
 
@@ -657,25 +657,25 @@ def academic_structure():
     Returns years, batches, sections, subjects, departments, and assignments in 1 single round-trip (<25ms).
     """
     iid = g.institution_id
-    
+
     # 1. Academic Years
     years = AcademicYear.query.filter_by(institution_id=iid).order_by(AcademicYear.created_at.desc()).all()
-    
+
     # 2. Batches
     batches = Batch.query.filter_by(institution_id=iid).order_by(Batch.created_at.desc()).all()
-    
+
     # 3. Sections
     sections = Section.query.filter_by(institution_id=iid).order_by(Section.name.asc()).all()
-    
+
     # 4. Subjects
     subjects = Subject.query.filter_by(institution_id=iid).order_by(Subject.name.asc()).all()
-    
+
     # 5. Departments
     departments = Department.query.filter_by(institution_id=iid).order_by(Department.name.asc()).all()
-    
+
     # 6. Section Subjects
     section_subjects = SectionSubject.query.filter_by(institution_id=iid).order_by(SectionSubject.created_at.desc()).all()
-    
+
     # 7. Instructors (lightweight list for assignment selectors)
     instructors = User.query.filter_by(institution_id=iid, role='instructor', is_active=True).order_by(User.full_name.asc()).all()
 
@@ -1306,6 +1306,9 @@ def subjects():
     elif data.get('icon_url'):
         data['icon'] = data['icon_url']
 
+    if data.get('env_profile_id') not in (None, ''):
+        return jsonify({'error': 'Custom environment selection is retired; the execution service uses its standard runtime and does not consume profile images.'}), 409
+
     subject = Subject(
         institution_id=g.institution_id,
         name=data['name'],
@@ -1348,8 +1351,10 @@ def update_subject(subject_id):
             return jsonify({'error': str(exc)}), 400
     elif data.get('icon_url'):
         data['icon'] = data['icon_url']
+    if data.get('env_profile_id') not in (None, ''):
+        return jsonify({'error': 'Custom environment selection is retired; the execution service uses its standard runtime and does not consume profile images.'}), 409
     changed = []
-    for field in ('name', 'code', 'description', 'icon', 'color', 'department_id', 'subject_type', 'is_active', 'env_profile_id', 'total_marks'):
+    for field in ('name', 'code', 'description', 'icon', 'color', 'department_id', 'subject_type', 'is_active', 'total_marks'):
         if field in data:
             setattr(subject, field, data[field])
             changed.append(field)
@@ -1723,8 +1728,56 @@ def list_environments():
     profiles = EnvironmentProfile.query.filter(
         (EnvironmentProfile.institution_id == g.institution_id) |
         (EnvironmentProfile.is_platform_default == True)
-    ).all()
-    return jsonify({'environments': [p.to_dict() for p in profiles]}), 200
+    ).order_by(EnvironmentProfile.created_at.desc()).all()
+    return jsonify({
+        'environments': [p.to_dict() for p in profiles],
+        'runtime_supported': False,
+        'notice': 'Custom profile requests are review records only. The current execution service uses its standard runtime and does not build or select custom images.',
+    }), 200
+
+
+@institution_bp.route('/environments', methods=['POST'])
+@require_role('institution_admin')
+def request_environment_profile():
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Request body must be an object.'}), 400
+    name = data.get('name')
+    display_name = data.get('display_name')
+    docker_image = data.get('docker_image')
+    pip_packages = data.get('pip_packages', [])
+    apt_packages = data.get('apt_packages', [])
+    if not isinstance(name, str) or not re.fullmatch(r'[a-z0-9][a-z0-9-]{1,39}', name):
+        return jsonify({'error': 'name must be a 2–40 character lowercase slug using letters, numbers, and hyphens.'}), 400
+    if not isinstance(display_name, str) or not display_name.strip() or len(display_name.strip()) > 120:
+        return jsonify({'error': 'display_name is required and must be at most 120 characters.'}), 400
+    if not isinstance(docker_image, str) or not re.fullmatch(r'[A-Za-z0-9][A-Za-z0-9._:/-]{0,254}', docker_image):
+        return jsonify({'error': 'docker_image must be a valid image reference string up to 255 characters.'}), 400
+    package_pattern = re.compile(r'[A-Za-z0-9][A-Za-z0-9_.+=<>!:-]{0,79}')
+    for field, values in (('pip_packages', pip_packages), ('apt_packages', apt_packages)):
+        if not isinstance(values, list) or len(values) > 50 or any(
+            not isinstance(value, str) or not package_pattern.fullmatch(value) for value in values
+        ):
+            return jsonify({'error': f'{field} must be a list of at most 50 simple package specifiers.'}), 400
+
+    requested_key = f"tenant-{g.institution_id[:8]}-{name}"
+    if EnvironmentProfile.query.filter_by(name=requested_key).first():
+        return jsonify({'error': 'A profile with this name has already been requested by this institution.'}), 409
+    profile = EnvironmentProfile(
+        institution_id=g.institution_id, name=requested_key,
+        display_name=display_name.strip(), docker_image=docker_image,
+        is_platform_default=False, pip_packages=pip_packages, apt_packages=apt_packages,
+        build_status='pending', created_by=g.user_id,
+    )
+    db.session.add(profile)
+    db.session.commit()
+    _write_audit(g.user_id, g.institution_id, 'request_environment_profile',
+                 'environment_profile', profile.id,
+                 f'Requested profile {profile.display_name}; no image build is available.')
+    return jsonify({
+        'message': 'Request submitted for platform review. Approval will not build or activate a custom image.',
+        'profile': profile.to_dict(),
+    }), 201
 
 
 # ── Institution Dashboard ───────────────────────────────────────────────────────
@@ -1764,8 +1817,9 @@ def _probe_system_status():
         checks.append({"name": "Live Session Servers", "status": "Not configured", "healthy": False,
                        "detail": "LIVEKIT_URL / LIVEKIT_API_KEY missing"})
 
-    # 4. Code execution — reflects the real DOCKER_RUNNER_ENABLED switch
-    if current_app.config.get('DOCKER_RUNNER_ENABLED'):
+    # 4. Code execution — requires infrastructure and the live platform switch.
+    from app.exec_engine.availability import execution_is_enabled
+    if execution_is_enabled():
         import shutil
         docker_bin = current_app.config.get('DOCKER_BIN', 'docker')
         if shutil.which(docker_bin):
@@ -1776,7 +1830,7 @@ def _probe_system_status():
                        "detail": detail})
     else:
         checks.append({"name": "Code Execution", "status": "Disabled", "healthy": False,
-                       "detail": "DOCKER_RUNNER_ENABLED=false — /run returns 503"})
+                       "detail": "Execution is disabled by the platform setting or runner configuration; /run returns 503"})
 
     # 5. AI services — report which providers actually have keys
     providers = []
@@ -3291,7 +3345,7 @@ def risk_overview():
             d_bands[band] = d_bands.get(band, 0) + 1
             # risk_score can be None for students without enough data
             d_risk_sum += float(ds['risk'].get('risk_score') or 0.0)
-        
+
         d_avg_risk = round(d_risk_sum / d_total, 1) if d_total else 0.0
         by_department.append({
             'department_id': d.id,
@@ -3638,7 +3692,7 @@ def analytics_benchmark():
             })
 
     result = compute_cohort_benchmarks(entities, metric_keys=['avg_grade', 'attendance_rate', 'focus_avg', 'risk_score'])
-    
+
     # Campus Baseline Mean for avg_grade (None when nothing was measured)
     campus_mean = result.get('baselines', {}).get('avg_grade', {}).get('mean')
 
@@ -3842,7 +3896,7 @@ def analytics_attendance():
 
     # Query attendance records
     att_q = SessionAttendance.query.filter(SessionAttendance.session_id.in_(session_ids)) if session_ids else SessionAttendance.query.filter(False)
-    
+
     # Optional student scope filtering
     if dept_id or sec_id or (batch_id and batch_id != 'all'):
         u_filter = User.query.filter_by(institution_id=iid, role='student')
@@ -3855,7 +3909,7 @@ def analytics_attendance():
             s_ids = [s.id for s in Section.query.filter_by(batch_id=batch_id).all()]
             enrolled = [s.student_id for s in SectionStudent.query.filter(SectionStudent.section_id.in_(s_ids)).all()]
             u_filter = u_filter.filter(User.id.in_(enrolled))
-        
+
         target_student_ids = set(u.id for u in u_filter.all())
         att_q = att_q.filter(SessionAttendance.student_id.in_(target_student_ids))
 
@@ -4198,7 +4252,7 @@ def analytics_integrity():
             w = st_data['weighted']
             cnt = st_data['count']
             high_sev_count = st_data['severities']['critical'] + st_data['severities']['high']
-            
+
             if high_sev_count >= 3 or w >= 9.0:
                 risk_level = 'Critical'
             elif high_sev_count >= 1 or w >= 4.5:
@@ -4239,7 +4293,7 @@ def analytics_integrity():
 
     valid_top_sessions = [s for s in sorted(by_session.keys(), key=lambda s: by_session[s], reverse=True) if s][:5]
     session_objs = {ls.id: ls for ls in LabSession.query.filter(LabSession.id.in_(valid_top_sessions)).all()} if valid_top_sessions else {}
-    
+
     exp_ids = [ls.experiment_id for ls in session_objs.values() if ls.experiment_id]
     exp_objs = {e.id: e.title for e in Experiment.query.filter(Experiment.id.in_(exp_ids)).all()} if exp_ids else {}
 
@@ -4250,7 +4304,7 @@ def analytics_integrity():
             friendly_name = ls.title or exp_objs.get(ls.experiment_id) or f"Lab Session {str(s_id)[:8]}"
         else:
             friendly_name = f"Session {str(s_id)[:8]}"
-            
+
         session_hotspots.append({
             'session_id': s_id,
             'session_title': friendly_name,

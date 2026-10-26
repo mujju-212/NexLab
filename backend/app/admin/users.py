@@ -15,8 +15,10 @@ Suspension & revocation semantics:
 import secrets
 import string
 from datetime import datetime
+import re
 
 from flask import Blueprint, jsonify, request, g
+from sqlalchemy.exc import IntegrityError
 
 from app.auth.utils import require_role
 from app.extensions import db
@@ -44,7 +46,8 @@ def _audit(action, target_user, detail, severity='medium', module='Platform User
         detail=detail,
         module=module,
         severity=severity,
-        ip_address=request.headers.get('X-Forwarded-For', request.remote_addr or ''),
+        # Do not trust arbitrary X-Forwarded-For unless a trusted proxy layer is configured.
+        ip_address=request.remote_addr or '',
     ))
 
 
@@ -71,7 +74,7 @@ def _dir_row(u):
         'institution_id': u.institution_id,
         'institution_name': _inst_name(u.institution_id),
         'account_type': 'institution' if u.institution_id else 'direct',
-        'status': u.status or 'active',
+        'status': ('inactive' if (u.status or 'active') == 'active' and not u.is_active else (u.status or 'active')),
         'is_active': bool(u.is_active),
         'must_change_password': bool(u.must_change_password),
         'created_at': u.created_at.isoformat() + 'Z' if u.created_at else None,
@@ -79,7 +82,86 @@ def _dir_row(u):
     }
 
 
+def _bounded_int(value, default, minimum, maximum):
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        parsed = default
+    return min(max(parsed, minimum), maximum)
+
+
+def _filter_status(query, status):
+    """Filter the effective lifecycle state exposed by _dir_row."""
+    if status == 'active':
+        return query.filter(User.is_active.is_(True), User.status == 'active')
+    if status == 'inactive':
+        return query.filter(User.is_active.is_(False), User.status == 'active')
+    if status in ('suspended', 'pending_deletion'):
+        return query.filter_by(status=status)
+    return query
+
+
 # ── directory ──────────────────────────────────────────────────────────────
+
+@admin_users_bp.route('/users', methods=['POST'])
+@require_role('platform_admin')
+def create_user():
+    """Create a non-platform-admin account with a one-time password."""
+    data = request.get_json(silent=True) or {}
+    email = (data.get('email') or '').strip().lower()
+    full_name = (data.get('full_name') or '').strip()
+    role = (data.get('role') or '').strip()
+    institution_id = (data.get('institution_id') or '').strip() or None
+
+    if not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
+        return jsonify({'error': 'A valid email is required.'}), 400
+    if not full_name:
+        return jsonify({'error': 'full_name is required.'}), 400
+    if role not in ('institution_admin', 'instructor', 'student', 'platform_user'):
+        return jsonify({'error': 'Choose institution_admin, instructor, student, or platform_user.'}), 400
+    if role == 'platform_user' and institution_id:
+        return jsonify({'error': 'Platform users must not be assigned to an institution.'}), 400
+    if role != 'platform_user' and not institution_id:
+        return jsonify({'error': 'Select an institution for institution accounts.'}), 400
+    if User.query.filter_by(email=email).first():
+        return jsonify({'error': 'A user with this email already exists.'}), 409
+
+    institution = None
+    if institution_id:
+        institution = Institution.query.get(institution_id)
+        if not institution:
+            return jsonify({'error': 'Institution not found.'}), 404
+        if not institution.is_active:
+            return jsonify({'error': 'Cannot add an account to a suspended institution.'}), 409
+
+    import bcrypt
+    temp_password = secrets.token_urlsafe(24)
+    user = User(
+        institution_id=institution_id,
+        email=email,
+        password_hash=bcrypt.hashpw(temp_password.encode(), bcrypt.gensalt()).decode(),
+        full_name=full_name,
+        role=role,
+        must_change_password=True,
+        is_active=True,
+        status='active',
+    )
+    try:
+        db.session.add(user)
+        db.session.flush()
+        _audit('admin.user.create', user,
+               f'Created {role} account {email}; temporary password issued.', severity='high')
+        db.session.commit()
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({'error': 'A user with this email already exists.'}), 409
+
+    return jsonify({
+        'user': _dir_row(user),
+        'temp_password': temp_password,
+        'must_change_password': True,
+    }), 201
+
 
 @admin_users_bp.route('/users', methods=['GET'])
 @require_role('platform_admin')
@@ -90,8 +172,8 @@ def list_users():
     role = request.args.get('role') or None
     inst = (request.args.get('institution_id') or '').strip()
     status = (request.args.get('status') or '').strip() or None
-    page = max(1, int(request.args.get('page', 1)))
-    per_page = min(int(request.args.get('per_page', 25)), 100)
+    page = _bounded_int(request.args.get('page'), 1, 1, 1_000_000)
+    per_page = _bounded_int(request.args.get('per_page'), 25, 1, 100)
     sort = (request.args.get('sort') or '-last_login').strip()
 
     query = User.query
@@ -105,7 +187,7 @@ def list_users():
     elif inst:
         query = query.filter_by(institution_id=inst)
     if status:
-        query = query.filter_by(status=status)
+        query = _filter_status(query, status)
 
     sort_map = {
         'last_login': User.last_login.asc().nullsfirst(),
@@ -250,8 +332,8 @@ def user_attempts(user_id):
     from app.models.experiment import Experiment
     from app.models.practice import PracticeSubmission, Problem
 
-    page = max(1, int(request.args.get('page', 1)))
-    per_page = min(int(request.args.get('per_page', 25)), 100)
+    page = _bounded_int(request.args.get('page'), 1, 1, 1_000_000)
+    per_page = _bounded_int(request.args.get('per_page'), 25, 1, 100)
 
     lab_q = CodeAttempt.query.filter_by(student_id=user.id) \
         .order_by(CodeAttempt.submitted_at.desc().nullslast())
@@ -392,12 +474,15 @@ def activate_user(user_id):
     user, err = _user_or_404(user_id)
     if err:
         return err
-    if (user.status or 'active') == 'active':
+    if (user.status or 'active') == 'active' and user.is_active:
         return jsonify({'user': _dir_row(user), 'activated': False}), 200
 
     user.status = 'active'
+    user.is_active = True
     user.suspension_reason = None
     user.suspended_until = None
+    from app.auth.utils import invalidate_force_logout_cache
+    invalidate_force_logout_cache(user.id)
     _audit('admin.user.activate', user, f'Reactivated {user.email}', severity='medium')
     db.session.commit()
     return jsonify({'user': _dir_row(user), 'activated': True}), 200

@@ -1,10 +1,12 @@
 'use client';
 
-import { useCallback, useEffect, useState } from 'react';
+import { Fragment, useCallback, useEffect, useState } from 'react';
 import AdminShell from '@/components/layout/AdminShell';
+import PlatformLessonStudio from '@/components/admin/PlatformLessonStudio';
+import type { PlatformContentBlock } from '@/types/platform-content';
 import {
   Loader2, RefreshCw, Plus, BookOpen, ChevronRight, ChevronLeft, Trash2,
-  Pencil, Globe, GlobeLock, Search, X, Check,
+  Pencil, Globe, GlobeLock, Search, X, Check, FileCode,
 } from 'lucide-react';
 import {
   adminContentService,
@@ -26,6 +28,33 @@ const fmtDate = (iso: string | null) => {
   return Number.isNaN(d.getTime()) ? '—' : d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' });
 };
 
+type ExerciseForm = {
+  title: string; exercise_type: string; difficulty: string; xp_reward: number;
+  description: string; hint_text: string; language: string; languages: string[];
+  starter_code: string; starter_code_by_language: Record<string, string>;
+  test_cases: { input: string; expected: string; hidden: boolean }[];
+  mcq_options: string[]; mcq_answer: string; mcq_explanation: string;
+  simulation_path: string; content_blocks: PlatformContentBlock[];
+};
+type ProblemForm = {
+  title: string; slug: string; lc_id: string; difficulty: string; nexlab_topic: string;
+  description: string; topics: string; is_active: boolean;
+  constraints: string; hints: string; examplesJson: string; starterCodeJson: string;
+  test_cases: { input_data: string; expected: string; is_sample: boolean }[];
+};
+const emptyProblemForm = (): ProblemForm => ({
+  title: '', slug: '', lc_id: '', difficulty: 'Easy', nexlab_topic: '', description: '',
+  topics: '', is_active: false, constraints: '', hints: '', examplesJson: '[]', starterCodeJson: '{}',
+  test_cases: [{ input_data: '', expected: '', is_sample: true }],
+});
+
+const emptyExerciseForm = (): ExerciseForm => ({
+  title: '', exercise_type: 'coding', difficulty: 'easy', xp_reward: 10,
+  description: '', hint_text: '', language: 'python', languages: ['python'], starter_code: '', starter_code_by_language: {},
+  test_cases: [{ input: '', expected: '', hidden: false }],
+  mcq_options: ['', '', '', ''], mcq_answer: 'A', mcq_explanation: '', simulation_path: '', content_blocks: [],
+});
+
 export default function ContentPage() {
   const [tab, setTab] = useState<Tab>('courses');
 
@@ -36,11 +65,17 @@ export default function ContentPage() {
   const [notice, setNotice] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
   const [exercises, setExercises] = useState<Record<string, AdminPlatformExercise[]>>({});
+  const [exerciseLoading, setExerciseLoading] = useState<string | null>(null);
+  const [simulationAssets, setSimulationAssets] = useState<{ path: string; name: string }[]>([]);
+  const [simulationAssetsLoaded, setSimulationAssetsLoaded] = useState(false);
+  const [importingSimulation, setImportingSimulation] = useState(false);
   const [busy, setBusy] = useState(false);
   const [showCreate, setShowCreate] = useState(false);
+  const [editingCourse, setEditingCourse] = useState<string | null>(null);
   const [form, setForm] = useState({ title: '', slug: '', difficulty: 'beginner', language: 'python', description: '' });
   const [showExForm, setShowExForm] = useState<string | null>(null);
-  const [exForm, setExForm] = useState({ title: '', exercise_type: 'coding', difficulty: 'easy', xp_reward: 10 });
+  const [editingExercise, setEditingExercise] = useState<string | null>(null);
+  const [exForm, setExForm] = useState<ExerciseForm>(emptyExerciseForm());
 
   // problems
   const [pFilter, setPFilter] = useState('all');
@@ -50,6 +85,9 @@ export default function ContentPage() {
   const [pSummary, setPSummary] = useState<{ no_test_cases: number; disabled: number; total: number } | null>(null);
   const [problems, setProblems] = useState<AdminProblemBankRow[]>([]);
   const [pLoading, setPLoading] = useState(false);
+  const [showProblemForm, setShowProblemForm] = useState(false);
+  const [editingProblem, setEditingProblem] = useState<string | null>(null);
+  const [problemForm, setProblemForm] = useState<ProblemForm>(emptyProblemForm());
 
   const load = useCallback(async () => {
     setLoading(true);
@@ -65,6 +103,14 @@ export default function ContentPage() {
   }, []);
 
   useEffect(() => { load(); }, [load]);
+
+  useEffect(() => {
+    if (!showExForm || exForm.exercise_type !== 'simulation' || simulationAssetsLoaded) return;
+    adminContentService.listSimulationAssets()
+      .then((res) => setSimulationAssets(res.assets || []))
+      .catch(() => setError('Could not load the existing simulation file list. You can still enter a path manually.'))
+      .finally(() => setSimulationAssetsLoaded(true));
+  }, [showExForm, exForm.exercise_type, simulationAssetsLoaded]);
 
   useEffect(() => {
     if (tab !== 'problems') return;
@@ -83,19 +129,241 @@ export default function ContentPage() {
 
   const act = async (fn: () => Promise<void>, done: string) => {
     setBusy(true);
+    setError(null);
     try { await fn(); setNotice(done); await load(); }
-    catch (e) { setNotice((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Action failed.'); }
-    finally { setBusy(false); }
+    catch (e) {
+      setNotice(null);
+      setError((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Action failed.');
+    } finally { setBusy(false); }
+  };
+
+  const fetchExercises = async (courseId: string) => {
+    setExerciseLoading(courseId);
+    setError(null);
+    try {
+      const res = await adminContentService.listExercises(courseId);
+      setExercises((p) => ({ ...p, [courseId]: res.exercises || [] }));
+    } catch {
+      setExercises((p) => { const next = { ...p }; delete next[courseId]; return next; });
+      setError('Could not load exercises for this course. Retry to try again.');
+    } finally {
+      setExerciseLoading((current) => current === courseId ? null : current);
+    }
   };
 
   const openExercises = async (courseId: string) => {
     if (expanded === courseId) { setExpanded(null); return; }
     setExpanded(courseId);
-    if (!exercises[courseId]) {
-      try {
-        const res = await adminContentService.listExercises(courseId);
-        setExercises((p) => ({ ...p, [courseId]: res.exercises || [] }));
-      } catch { setExercises((p) => ({ ...p, [courseId]: [] })); }
+    if (!exercises[courseId]) await fetchExercises(courseId);
+  };
+
+  const openEditExercise = (courseId: string, exercise: AdminPlatformExercise) => {
+    const languages = exercise.allowed_languages?.length ? exercise.allowed_languages : ['python'];
+    const language = languages[0];
+    setShowExForm(courseId);
+    setEditingExercise(exercise.id);
+    setExForm({
+      title: exercise.title,
+      exercise_type: exercise.exercise_type,
+      difficulty: exercise.difficulty,
+      xp_reward: exercise.xp_reward,
+      description: exercise.description || '',
+      hint_text: exercise.hint_text || '',
+      language,
+      languages,
+      starter_code: exercise.starter_code?.[language] || '',
+      starter_code_by_language: exercise.starter_code || {},
+      test_cases: (exercise.test_cases || []).map((tc) => ({ input: tc.input ?? '', expected: tc.expected ?? '', hidden: Boolean(tc.hidden) })),
+      mcq_options: [...(exercise.mcq_options || []), '', '', '', ''].slice(0, 4),
+      mcq_answer: exercise.mcq_answer || 'A',
+      mcq_explanation: exercise.mcq_explanation || '',
+      simulation_path: exercise.simulation_path || '',
+      content_blocks: (exercise.content_blocks || []).map((block, index) => ({
+        ...block,
+        id: block.id || `loaded-${exercise.id}-${index}`,
+        content_data: block.content_data || {},
+      })),
+    });
+  };
+
+  const submitExercise = () => {
+    if (!showExForm) return;
+    const testCases = exForm.exercise_type === 'coding'
+      ? exForm.test_cases.filter((tc) => tc.input.trim() !== '' || tc.expected.trim() !== '')
+      : [];
+    const mcqOptions = exForm.mcq_options.map((option) => option.trim());
+    while (mcqOptions.length && !mcqOptions[mcqOptions.length - 1]) mcqOptions.pop();
+    if (exForm.exercise_type === 'mcq' && (mcqOptions.length < 2 || mcqOptions.some((option) => !option))) {
+      setError('MCQ choices must be filled consecutively from A, with at least two choices.');
+      return;
+    }
+    if (exForm.exercise_type === 'mcq' && (exForm.mcq_answer.charCodeAt(0) - 65 < 0 || exForm.mcq_answer.charCodeAt(0) - 65 >= mcqOptions.length)) {
+      setError('Choose a correct answer that matches a filled choice.');
+      return;
+    }
+    const allowedLanguages = Array.from(new Set(exForm.languages.includes(exForm.language)
+      ? exForm.languages : [...exForm.languages, exForm.language]));
+    const starterCodeByLanguage = {
+      ...exForm.starter_code_by_language,
+      [exForm.language]: exForm.starter_code,
+    };
+    const starterCode = Object.fromEntries(Object.entries(starterCodeByLanguage)
+      .filter(([language, code]) => allowedLanguages.includes(language) && code.trim() !== ''));
+    const payload: Record<string, unknown> = {
+      title: exForm.title.trim(),
+      exercise_type: exForm.exercise_type,
+      difficulty: exForm.difficulty,
+      xp_reward: exForm.xp_reward,
+      description: exForm.description.trim(),
+      hint_text: exForm.hint_text.trim() || null,
+      starter_code: exForm.exercise_type === 'coding' ? starterCode : {},
+      allowed_languages: exForm.exercise_type === 'coding' ? allowedLanguages : [],
+      test_cases: testCases,
+      mcq_options: exForm.exercise_type === 'mcq' ? mcqOptions : [],
+      mcq_answer: exForm.exercise_type === 'mcq' ? exForm.mcq_answer : null,
+      mcq_explanation: exForm.exercise_type === 'mcq' ? exForm.mcq_explanation.trim() : null,
+      simulation_path: exForm.exercise_type === 'simulation' ? exForm.simulation_path.trim() || null : null,
+      content_blocks: exForm.content_blocks,
+      ...(editingExercise ? {} : { is_published: false }),
+    };
+    void act(async () => {
+      if (editingExercise) {
+        await adminContentService.updateExercise(editingExercise, payload);
+      } else {
+        await adminContentService.createExercise(showExForm, payload);
+      }
+      const res = await adminContentService.listExercises(showExForm);
+      setExercises((p) => ({ ...p, [showExForm]: res.exercises || [] }));
+      setShowExForm(null);
+      setEditingExercise(null);
+    }, editingExercise ? 'Exercise saved.' : 'Exercise created as a draft. Complete and publish it when ready.');
+  };
+
+  const openProblemEditor = async (problem?: AdminProblemBankRow) => {
+    setError(null);
+    if (!problem) {
+      setEditingProblem(null);
+      setProblemForm(emptyProblemForm());
+      setShowProblemForm(true);
+      return;
+    }
+    setBusy(true);
+    try {
+      const { problem: detail } = await adminContentService.getProblem(problem.id);
+      setEditingProblem(problem.id);
+      setProblemForm({
+        title: detail.title,
+        slug: detail.slug,
+        lc_id: detail.lc_id || '',
+        difficulty: detail.difficulty,
+        nexlab_topic: detail.nexlab_topic,
+        description: detail.description || '',
+        topics: (detail.topics || []).join(', '),
+        is_active: Boolean(detail.is_active),
+        constraints: (detail.constraints || []).join('\n'),
+        hints: (detail.hints || []).join('\n'),
+        examplesJson: JSON.stringify(detail.examples || [], null, 2),
+        starterCodeJson: JSON.stringify(detail.starter_code || {}, null, 2),
+        test_cases: (detail.test_cases || []).map((test) => ({
+          input_data: test.input_data || '', expected: test.expected || '', is_sample: Boolean(test.is_sample),
+        })),
+      });
+      setShowProblemForm(true);
+    } catch (error) {
+      setError((error as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Could not load problem details.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const submitProblem = async () => {
+    if (!problemForm.title.trim() || !problemForm.slug.trim() || !problemForm.nexlab_topic.trim() || !problemForm.description.trim()) {
+      setError('Title, slug, topic, and problem description are required.');
+      return;
+    }
+    if (problemForm.is_active && !problemForm.test_cases.length) {
+      setError('Add at least one test case before enabling this problem.');
+      return;
+    }
+    let examples: unknown;
+    let starterCode: unknown;
+    try {
+      examples = JSON.parse(problemForm.examplesJson);
+      starterCode = JSON.parse(problemForm.starterCodeJson);
+    } catch {
+      setError('Examples and starter code must be valid JSON.');
+      return;
+    }
+    if (!Array.isArray(examples) || !starterCode || typeof starterCode !== 'object' || Array.isArray(starterCode)) {
+      setError('Examples must be a JSON array and starter code must be a language-to-code JSON object.');
+      return;
+    }
+    const payload = {
+      title: problemForm.title.trim(),
+      slug: problemForm.slug.trim(),
+      lc_id: problemForm.lc_id.trim() || null,
+      difficulty: problemForm.difficulty,
+      nexlab_topic: problemForm.nexlab_topic.trim(),
+      description: problemForm.description.trim(),
+      topics: problemForm.topics.split(',').map((topic) => topic.trim()).filter(Boolean),
+      constraints: problemForm.constraints.split('\n').map((item) => item.trim()).filter(Boolean),
+      hints: problemForm.hints.split('\n').map((item) => item.trim()).filter(Boolean),
+      examples,
+      starter_code: starterCode,
+      is_active: problemForm.is_active,
+      test_cases: problemForm.test_cases,
+    };
+    setBusy(true);
+    setError(null);
+    try {
+      if (editingProblem) await adminContentService.updateProblem(editingProblem, payload);
+      else await adminContentService.createProblem(payload);
+      const res = await adminContentService.listProblems(pFilter, pPage);
+      setProblems(res.problems || []);
+      setPTotal(res.total);
+      setPPages(res.pages || 1);
+      setPSummary(res.summary);
+      setShowProblemForm(false);
+      setEditingProblem(null);
+      setNotice(editingProblem ? 'Problem and test cases saved.' : 'Problem created.');
+    } catch (error) {
+      setNotice(null);
+      setError((error as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Could not save this problem.');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const importSimulationHtml = async () => {
+    const path = exForm.simulation_path.trim();
+    if (!path) { setError('Choose a simulation file path before importing its HTML.'); return; }
+    setImportingSimulation(true);
+    setError(null);
+    try {
+      const source = await adminContentService.getSimulationAssetSource(path);
+      setExForm((formState) => {
+        const existing = formState.content_blocks.find((block) => block.module_type === 'html');
+        if (existing) {
+          return {
+            ...formState,
+            content_blocks: formState.content_blocks.map((block) => block.id === existing.id
+              ? { ...block, content_data: { ...block.content_data, html: source.html } } : block),
+          };
+        }
+        const id = typeof crypto !== 'undefined' && 'randomUUID' in crypto
+          ? crypto.randomUUID() : `imported-${Date.now()}`;
+        return {
+          ...formState,
+          content_blocks: [...formState.content_blocks, {
+            id, module_type: 'html', title: 'Interactive simulation', content_data: { html: source.html },
+          }],
+        };
+      });
+      setNotice('Simulation source copied into the lesson studio. Save the exercise to store your editable version.');
+    } catch (error) {
+      setError((error as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Could not import this simulation file.');
+    } finally {
+      setImportingSimulation(false);
     }
   };
 
@@ -110,7 +378,7 @@ export default function ContentPage() {
       {error && (
         <div style={{ display: 'flex', justifyContent: 'space-between', margin: '0 0 14px', padding: '12px 16px', borderRadius: 12, background: '#fef2f2', border: '1px solid #fecaca', color: '#b91c1c', fontSize: 13, fontWeight: 600 }}>
           <span>{error}</span>
-          <button onClick={load} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #fecaca', background: '#fff', color: '#b91c1c', fontWeight: 700, cursor: 'pointer' }}>Retry</button>
+          <button onClick={() => { void load(); if (expanded) void fetchExercises(expanded); }} style={{ padding: '6px 12px', borderRadius: 8, border: '1px solid #fecaca', background: '#fff', color: '#b91c1c', fontWeight: 700, cursor: 'pointer' }}>Retry</button>
         </div>
       )}
 
@@ -122,7 +390,7 @@ export default function ContentPage() {
         {tab === 'courses' && (
           <div className={styles.toolRight}>
             <button className={styles.btnSecondary} onClick={load}><RefreshCw size={14} /> Refresh</button>
-            <button className={styles.btnPrimary} onClick={() => { setForm({ title: '', slug: '', difficulty: 'beginner', language: 'python', description: '' }); setShowCreate(true); }}>
+            <button className={styles.btnPrimary} onClick={() => { setEditingCourse(null); setForm({ title: '', slug: '', difficulty: 'beginner', language: 'python', description: '' }); setShowCreate(true); }}>
               <Plus size={14} /> New course
             </button>
           </div>
@@ -147,7 +415,7 @@ export default function ContentPage() {
               </thead>
               <tbody>
                 {courses.map(c => (
-                  <>
+                  <Fragment key={c.id}>
                     <tr key={c.id}>
                       <td>
                         <div style={{ fontWeight: 700, color: '#201b2e', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }} onClick={() => openExercises(c.id)}>
@@ -167,10 +435,15 @@ export default function ContentPage() {
                       <td>{fmtDate(c.created_at)}</td>
                       <td>
                         <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
+                          <button type="button" title="Edit course" aria-label={`Edit ${c.title}`} disabled={busy} onClick={() => {
+                            setEditingCourse(c.id);
+                            setForm({ title: c.title, slug: c.slug, difficulty: c.difficulty, language: c.language, description: c.description || '' });
+                            setShowCreate(true);
+                          }} style={{ border: 'none', cursor: 'pointer', borderRadius: 8, padding: '6px 8px', background: '#e0e7ff', color: '#4338ca' }}><Pencil size={13} /></button>
                           <button title={c.is_published ? 'Unpublish' : 'Publish'} disabled={busy} onClick={() => act(() => adminContentService.updateCourse(c.id, { is_published: !c.is_published }).then(() => {}), c.is_published ? 'Course unpublished.' : 'Course published.')} style={{ border: 'none', cursor: 'pointer', borderRadius: 8, padding: '6px 8px', background: c.is_published ? '#fef3c7' : '#dcfce7', color: c.is_published ? '#b45309' : '#15803d' }}>
                             {c.is_published ? <GlobeLock size={13} /> : <Globe size={13} />}
                           </button>
-                          <button title="Add exercise" onClick={() => { setExForm({ title: '', exercise_type: 'coding', difficulty: 'easy', xp_reward: 10 }); setShowExForm(c.id); }} style={{ border: 'none', cursor: 'pointer', borderRadius: 8, padding: '6px 8px', background: '#e0e7ff', color: '#4338ca' }}>
+                          <button type="button" title="Add exercise" aria-label={`Add exercise to ${c.title}`} onClick={() => { setExForm(emptyExerciseForm()); setEditingExercise(null); setShowExForm(c.id); }} style={{ border: 'none', cursor: 'pointer', borderRadius: 8, padding: '6px 8px', background: '#e0e7ff', color: '#4338ca' }}>
                             <Plus size={13} />
                           </button>
                           <button title="Delete" disabled={busy} onClick={() => {
@@ -188,11 +461,22 @@ export default function ContentPage() {
                         <td colSpan={7} style={{ background: 'rgba(255,255,255,.35)' }}>
                           <div style={{ padding: '4px 10px' }}>
                             <strong style={{ fontSize: 12.5, color: '#463f57' }}>Exercises</strong>
-                            {(exercises[c.id] || []).map(e => (
+                            {exerciseLoading === c.id ? <p style={{ color: '#64748b', fontSize: 12.5 }}>Loading exercises…</p> : exercises[c.id] ? <>
+                            {exercises[c.id].map(e => (
                               <div key={e.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '7px 0', borderBottom: '1px solid rgba(255,255,255,.7)', fontSize: 13 }}>
                                 <span style={{ fontWeight: 700, color: '#201b2e', flex: 1 }}>{e.title}</span>
-                                <span style={{ color: '#64748b', fontSize: 12 }}>{e.exercise_type} · {e.difficulty} · {e.xp_reward} XP · {e.test_case_count} cases · {e.solves_count} solves</span>
-                                <button title="Delete exercise" onClick={() => {
+                                <span style={{ color: '#64748b', fontSize: 12 }}>{e.exercise_type} · {e.difficulty} · {e.xp_reward} XP · {e.test_case_count} cases · {e.solves_count} solves · {e.is_published ? 'published' : 'draft'}</span>
+                                <button type="button" title={e.is_published ? 'Unpublish exercise' : 'Publish exercise'} aria-label={`${e.is_published ? 'Unpublish' : 'Publish'} ${e.title}`} disabled={busy} onClick={() => act(async () => {
+                                  await adminContentService.updateExercise(e.id, { is_published: !e.is_published });
+                                  const res = await adminContentService.listExercises(c.id);
+                                  setExercises((p) => ({ ...p, [c.id]: res.exercises || [] }));
+                                }, e.is_published ? 'Exercise unpublished.' : 'Exercise published.')} style={{ border: 'none', cursor: 'pointer', borderRadius: 8, padding: '5px 7px', background: e.is_published ? '#fef3c7' : '#dcfce7', color: e.is_published ? '#b45309' : '#15803d' }}>
+                                  {e.is_published ? <GlobeLock size={12} /> : <Globe size={12} />}
+                                </button>
+                                <button type="button" title="Edit exercise" aria-label={`Edit ${e.title}`} onClick={() => openEditExercise(c.id, e)} style={{ border: 'none', cursor: 'pointer', borderRadius: 8, padding: '5px 7px', background: '#e0e7ff', color: '#4338ca' }}>
+                                  <Pencil size={12} />
+                                </button>
+                                <button type="button" title="Delete exercise" aria-label={`Delete ${e.title}`} disabled={busy} onClick={() => {
                                   if (window.confirm(`Delete exercise "${e.title}"?`)) {
                                     act(async () => {
                                       await adminContentService.deleteExercise(e.id);
@@ -205,14 +489,15 @@ export default function ContentPage() {
                                 </button>
                               </div>
                             ))}
-                            {(exercises[c.id] || []).length === 0 && (
+                            {exercises[c.id].length === 0 && (
                               <p style={{ color: '#9891a6', fontSize: 12.5, margin: '8px 0' }}>No exercises yet — add the first one.</p>
                             )}
+                            </> : <p style={{ color: '#b91c1c', fontSize: 12.5 }}>Exercises could not be loaded. <button type="button" onClick={() => void fetchExercises(c.id)} style={{ color: '#4338ca', border: 0, background: 'transparent', cursor: 'pointer', fontWeight: 700 }}>Retry</button></p>}
                           </div>
                         </td>
                       </tr>
                     )}
-                  </>
+                  </Fragment>
                 ))}
               </tbody>
             </table>
@@ -223,6 +508,10 @@ export default function ContentPage() {
       {/* ── problem bank ── */}
       {tab === 'problems' && (
         <>
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 12, marginBottom: 14 }}>
+            <p style={{ margin: 0, color: '#64748b', fontSize: 12.5 }}>Create and maintain standalone practice problems and their public and hidden test cases.</p>
+            <button className={styles.btnPrimary} onClick={() => void openProblemEditor()}><Plus size={14} /> Create problem</button>
+          </div>
           <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginBottom: 14 }}>
             {PROBLEM_FILTERS.map(f => (
               <button key={f.key} onClick={() => { setPFilter(f.key); setPPage(1); }}
@@ -261,7 +550,11 @@ export default function ContentPage() {
                       <td>
                         <span style={{ fontWeight: 700, fontSize: 12, color: p.is_active ? '#15803d' : '#b91c1c' }}>● {p.is_active ? 'live' : 'disabled'}</span>
                       </td>
-                      <td style={{ textAlign: 'right' }}>
+                      <td style={{ textAlign: 'right', whiteSpace: 'nowrap' }}>
+                        <button onClick={() => void openProblemEditor(p)} disabled={busy}
+                          style={{ border: '1px solid #e2e8f0', cursor: 'pointer', borderRadius: 8, padding: '6px 10px', background: '#fff', color: '#463f57', fontWeight: 700, fontSize: 12.5, marginRight: 6 }}>
+                          Edit
+                        </button>
                         <button onClick={() => act(async () => {
                           await adminContentService.toggleProblem(p.id, !p.is_active);
                           const res = await adminContentService.listProblems(pFilter, pPage);
@@ -287,15 +580,85 @@ export default function ContentPage() {
         </>
       )}
 
+      {/* ── create/edit standalone practice problem ── */}
+      {showProblemForm && (
+        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget && !busy) { setShowProblemForm(false); setEditingProblem(null); } }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,10,30,.5)', display: 'grid', placeItems: 'center', zIndex: 85, padding: 16 }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="problem-editor-title" style={{ width: 'min(760px, 100%)', maxHeight: '92vh', overflowY: 'auto', background: '#fff', borderRadius: 18, padding: 26, boxShadow: '0 30px 80px rgba(0,0,0,.25)' }}>
+            <h2 id="problem-editor-title" style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 800 }}>{editingProblem ? 'Edit practice problem' : 'Create practice problem'}</h2>
+            <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr', gap: 10 }}>
+              <div>
+                <label style={labelS} htmlFor="problem-title">Title</label>
+                <input id="problem-title" style={inputS} maxLength={300} value={problemForm.title} onChange={e => setProblemForm(f => ({ ...f, title: e.target.value }))} />
+              </div>
+              <div>
+                <label style={labelS} htmlFor="problem-slug">Slug (lowercase, hyphens)</label>
+                <input id="problem-slug" style={inputS} maxLength={120} value={problemForm.slug} onChange={e => setProblemForm(f => ({ ...f, slug: e.target.value }))} placeholder="two-sum" />
+              </div>
+            </div>
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginTop: 10 }}>
+              <div>
+                <label style={labelS} htmlFor="problem-difficulty">Difficulty</label>
+                <select id="problem-difficulty" style={inputS} value={problemForm.difficulty} onChange={e => setProblemForm(f => ({ ...f, difficulty: e.target.value }))}>
+                  <option>Easy</option><option>Medium</option><option>Hard</option>
+                </select>
+              </div>
+              <div>
+                <label style={labelS} htmlFor="problem-topic">Primary topic</label>
+                <input id="problem-topic" style={inputS} maxLength={60} value={problemForm.nexlab_topic} onChange={e => setProblemForm(f => ({ ...f, nexlab_topic: e.target.value }))} placeholder="Arrays" />
+              </div>
+              <div>
+                <label style={labelS} htmlFor="problem-lc-id">External problem ID (optional)</label>
+                <input id="problem-lc-id" style={inputS} maxLength={10} value={problemForm.lc_id} onChange={e => setProblemForm(f => ({ ...f, lc_id: e.target.value }))} />
+              </div>
+            </div>
+            <label style={{ ...labelS, marginTop: 12 }} htmlFor="problem-description">Problem statement (Markdown supported by learner view)</label>
+            <textarea id="problem-description" style={{ ...inputS, resize: 'vertical' }} rows={6} value={problemForm.description} onChange={e => setProblemForm(f => ({ ...f, description: e.target.value }))} />
+            <label style={{ ...labelS, marginTop: 10 }} htmlFor="problem-topics">Tags (comma-separated)</label>
+            <input id="problem-topics" style={inputS} value={problemForm.topics} onChange={e => setProblemForm(f => ({ ...f, topics: e.target.value }))} placeholder="arrays, hashing" />
+            <label style={{ ...labelS, marginTop: 10 }} htmlFor="problem-constraints">Constraints (one per line)</label>
+            <textarea id="problem-constraints" style={{ ...inputS, resize: 'vertical' }} rows={3} value={problemForm.constraints} onChange={e => setProblemForm(f => ({ ...f, constraints: e.target.value }))} />
+            <label style={{ ...labelS, marginTop: 10 }} htmlFor="problem-hints">Hints (one per line)</label>
+            <textarea id="problem-hints" style={{ ...inputS, resize: 'vertical' }} rows={3} value={problemForm.hints} onChange={e => setProblemForm(f => ({ ...f, hints: e.target.value }))} />
+            <label style={{ ...labelS, marginTop: 10 }} htmlFor="problem-examples">Examples JSON (array of example objects)</label>
+            <textarea id="problem-examples" style={{ ...inputS, resize: 'vertical', fontFamily: 'monospace' }} rows={5} value={problemForm.examplesJson} onChange={e => setProblemForm(f => ({ ...f, examplesJson: e.target.value }))} placeholder={'[{"input":"...","output":"...","explanation":"..."}]'} />
+            <label style={{ ...labelS, marginTop: 10 }} htmlFor="problem-starter-code">Starter code JSON (language-to-code map)</label>
+            <textarea id="problem-starter-code" style={{ ...inputS, resize: 'vertical', fontFamily: 'monospace' }} rows={5} value={problemForm.starterCodeJson} onChange={e => setProblemForm(f => ({ ...f, starterCodeJson: e.target.value }))} placeholder={'{"python":"def solve():\\n    pass"}'} />
+            <div style={{ marginTop: 16 }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 10 }}>
+                <label style={labelS}>Test cases ({problemForm.test_cases.length}; sample cases are learner-visible)</label>
+                <button type="button" className={styles.btnSecondary} onClick={() => setProblemForm(f => ({ ...f, test_cases: [...f.test_cases, { input_data: '', expected: '', is_sample: false }] }))}><Plus size={13} /> Add case</button>
+              </div>
+              {problemForm.test_cases.map((test, index) => (
+                <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: 8, alignItems: 'start', marginTop: 8 }}>
+                  <textarea aria-label={`Problem test case ${index + 1} input`} style={{ ...inputS, resize: 'vertical', fontFamily: 'monospace' }} rows={2} value={test.input_data} onChange={e => setProblemForm(f => ({ ...f, test_cases: f.test_cases.map((item, i) => i === index ? { ...item, input_data: e.target.value } : item) }))} placeholder="stdin" />
+                  <textarea aria-label={`Problem test case ${index + 1} expected output`} style={{ ...inputS, resize: 'vertical', fontFamily: 'monospace' }} rows={2} value={test.expected} onChange={e => setProblemForm(f => ({ ...f, test_cases: f.test_cases.map((item, i) => i === index ? { ...item, expected: e.target.value } : item) }))} placeholder="Expected output" />
+                  <label style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 11, whiteSpace: 'nowrap', paddingTop: 8 }}><input type="checkbox" checked={test.is_sample} onChange={e => setProblemForm(f => ({ ...f, test_cases: f.test_cases.map((item, i) => i === index ? { ...item, is_sample: e.target.checked } : item) }))} /> Sample</label>
+                  <button type="button" aria-label={`Remove problem test case ${index + 1}`} onClick={() => setProblemForm(f => ({ ...f, test_cases: f.test_cases.filter((_, i) => i !== index) }))} style={{ border: 0, background: 'transparent', color: '#b91c1c', cursor: 'pointer', paddingTop: 8 }}><X size={15} /></button>
+                </div>
+              ))}
+            </div>
+            <label style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, color: '#463f57', fontSize: 13, fontWeight: 700 }}>
+              <input type="checkbox" checked={problemForm.is_active} onChange={e => setProblemForm(f => ({ ...f, is_active: e.target.checked }))} /> Enable for learners after saving
+            </label>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+              <button type="button" className={styles.btnSecondary} disabled={busy} onClick={() => { setShowProblemForm(false); setEditingProblem(null); }}>Cancel</button>
+              <button type="button" className={styles.btnPrimary} disabled={busy || !problemForm.title.trim() || !problemForm.slug.trim() || !problemForm.nexlab_topic.trim() || !problemForm.description.trim()} onClick={() => void submitProblem()}>
+                {busy ? <Loader2 size={14} className="spin" /> : <Check size={14} />} {editingProblem ? 'Save problem' : 'Create problem'}
+              </button>
+            </div>
+          </section>
+        </div>
+      )}
+
       {/* ── create course modal ── */}
       {showCreate && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,10,30,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 80 }} onClick={() => setShowCreate(false)}>
+        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,10,30,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 80 }} onClick={() => { setShowCreate(false); setEditingCourse(null); }}>
           <div onClick={e => e.stopPropagation()} style={{ width: 'min(460px, 92vw)', background: '#fff', borderRadius: 18, padding: 26, boxShadow: '0 30px 80px rgba(0,0,0,.25)' }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: 17, fontWeight: 800 }}>New platform course</h3>
+            <h3 style={{ margin: '0 0 16px', fontSize: 17, fontWeight: 800 }}>{editingCourse ? 'Edit platform course' : 'New platform course'}</h3>
             <label style={labelS}>Title</label>
             <input style={inputS} value={form.title} onChange={e => setForm({ ...form, title: e.target.value })} placeholder="Python Basics" />
             <label style={{ ...labelS, marginTop: 10 }}>Slug</label>
-            <input style={inputS} value={form.slug} onChange={e => setForm({ ...form, slug: e.target.value })} placeholder="python-basics" />
+            <input style={inputS} value={form.slug} disabled={Boolean(editingCourse)} onChange={e => setForm({ ...form, slug: e.target.value })} placeholder="python-basics" />
             <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 10, marginTop: 10 }}>
               <div>
                 <label style={labelS}>Difficulty</label>
@@ -313,58 +676,151 @@ export default function ContentPage() {
             <label style={{ ...labelS, marginTop: 10 }}>Description</label>
             <textarea style={{ ...inputS, resize: 'vertical' }} rows={2} value={form.description} onChange={e => setForm({ ...form, description: e.target.value })} />
             <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
-              <button className={styles.btnSecondary} onClick={() => setShowCreate(false)}>Cancel</button>
-              <button className={styles.btnPrimary} disabled={!form.title.trim() || !form.slug.trim()} onClick={() => act(async () => {
-                await adminContentService.createCourse({ ...form, title: form.title.trim(), slug: form.slug.trim() });
+              <button className={styles.btnSecondary} onClick={() => { setShowCreate(false); setEditingCourse(null); }}>Cancel</button>
+              <button className={styles.btnPrimary} disabled={!form.title.trim() || (!editingCourse && !form.slug.trim()) || busy} onClick={() => act(async () => {
+                if (editingCourse) {
+                  await adminContentService.updateCourse(editingCourse, {
+                    title: form.title.trim(), description: form.description.trim(),
+                    difficulty: form.difficulty, language: form.language,
+                  });
+                } else {
+                  await adminContentService.createCourse({ ...form, title: form.title.trim(), slug: form.slug.trim() });
+                }
                 setShowCreate(false);
-              }, 'Course created.')}>
-                <Check size={14} /> Create
+                setEditingCourse(null);
+              }, editingCourse ? 'Course updated.' : 'Course created.')}>
+                <Check size={14} /> {editingCourse ? 'Save changes' : 'Create'}
               </button>
             </div>
           </div>
         </div>
       )}
 
-      {/* ── add exercise modal ── */}
+      {/* ── add/edit exercise modal ── */}
       {showExForm && (
-        <div style={{ position: 'fixed', inset: 0, background: 'rgba(15,10,30,.45)', display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 80 }} onClick={() => setShowExForm(null)}>
-          <div onClick={e => e.stopPropagation()} style={{ width: 'min(460px, 92vw)', background: '#fff', borderRadius: 18, padding: 26, boxShadow: '0 30px 80px rgba(0,0,0,.25)' }}>
-            <h3 style={{ margin: '0 0 16px', fontSize: 17, fontWeight: 800 }}>Add exercise</h3>
-            <label style={labelS}>Title</label>
-            <input style={inputS} value={exForm.title} onChange={e => setExForm({ ...exForm, title: e.target.value })} placeholder="Sum Two Numbers" />
-            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginTop: 10 }}>
+        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget && !busy) { setShowExForm(null); setEditingExercise(null); } }} style={{ position: 'fixed', inset: 0, background: 'rgba(15,10,30,.5)', display: 'grid', placeItems: 'center', zIndex: 80, padding: 16 }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="exercise-editor-title" style={{ width: 'min(720px, 100%)', maxHeight: '90vh', overflowY: 'auto', background: '#fff', borderRadius: 18, padding: 26, boxShadow: '0 30px 80px rgba(0,0,0,.25)' }}>
+            <h2 id="exercise-editor-title" style={{ margin: '0 0 16px', fontSize: 18, fontWeight: 800 }}>{editingExercise ? 'Edit exercise' : 'Add exercise'}</h2>
+            <label style={labelS} htmlFor="exercise-title">Title / question</label>
+            <input id="exercise-title" required style={inputS} value={exForm.title} onChange={e => setExForm(f => ({ ...f, title: e.target.value }))} placeholder="Sum Two Numbers" />
+            <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(150px,1fr))', gap: 10, marginTop: 12 }}>
               <div>
-                <label style={labelS}>Type</label>
-                <select style={inputS} value={exForm.exercise_type} onChange={e => setExForm({ ...exForm, exercise_type: e.target.value })}>
-                  <option>coding</option><option>mcq</option><option>reading</option><option>simulation</option>
+                <label style={labelS} htmlFor="exercise-type">Type</label>
+                <select id="exercise-type" style={inputS} value={exForm.exercise_type} onChange={e => setExForm(f => ({ ...f, exercise_type: e.target.value }))}>
+                  <option value="coding">Coding</option><option value="mcq">Multiple choice</option><option value="reading">Reading</option><option value="simulation">Simulation</option>
                 </select>
               </div>
               <div>
-                <label style={labelS}>Difficulty</label>
-                <select style={inputS} value={exForm.difficulty} onChange={e => setExForm({ ...exForm, difficulty: e.target.value })}>
-                  <option>easy</option><option>medium</option><option>hard</option>
+                <label style={labelS} htmlFor="exercise-difficulty">Difficulty</label>
+                <select id="exercise-difficulty" style={inputS} value={exForm.difficulty} onChange={e => setExForm(f => ({ ...f, difficulty: e.target.value }))}>
+                  <option value="easy">Easy</option><option value="medium">Medium</option><option value="hard">Hard</option>
                 </select>
               </div>
               <div>
-                <label style={labelS}>XP</label>
-                <input style={inputS} type="number" min={1} value={exForm.xp_reward} onChange={e => setExForm({ ...exForm, xp_reward: Number(e.target.value) })} />
+                <label style={labelS} htmlFor="exercise-xp">XP reward</label>
+                <input id="exercise-xp" style={inputS} type="number" min={0} max={10000} value={exForm.xp_reward} onChange={e => setExForm(f => ({ ...f, xp_reward: Number(e.target.value) }))} />
               </div>
             </div>
-            <p style={{ fontSize: 12, color: '#9891a6', fontWeight: 600, margin: '12px 0 0' }}>
-              Test cases, MCQ options and starter code can be edited after creation via the API.
-            </p>
-            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 18 }}>
-              <button className={styles.btnSecondary} onClick={() => setShowExForm(null)}>Cancel</button>
-              <button className={styles.btnPrimary} disabled={!exForm.title.trim()} onClick={() => act(async () => {
-                await adminContentService.createExercise(showExForm, { ...exForm, title: exForm.title.trim() });
-                const res = await adminContentService.listExercises(showExForm);
-                setExercises(p => ({ ...p, [showExForm]: res.exercises || [] }));
-                setShowExForm(null);
-              }, 'Exercise added.')}>
-                <Check size={14} /> Add
+            {(exForm.exercise_type === 'coding' || exForm.exercise_type === 'reading' || exForm.exercise_type === 'simulation') && (
+              <>
+                <label style={{ ...labelS, marginTop: 12 }} htmlFor="exercise-description">Learner instructions / content</label>
+                <textarea id="exercise-description" style={{ ...inputS, resize: 'vertical' }} rows={4} value={exForm.description} onChange={e => setExForm(f => ({ ...f, description: e.target.value }))} placeholder="Write the prompt or learning content…" />
+              </>
+            )}
+            <label style={{ ...labelS, marginTop: 12 }} htmlFor="exercise-hint">Hint (optional)</label>
+            <textarea id="exercise-hint" style={{ ...inputS, resize: 'vertical' }} rows={2} value={exForm.hint_text} onChange={e => setExForm(f => ({ ...f, hint_text: e.target.value }))} />
+
+            {exForm.exercise_type === 'coding' && (
+              <div style={{ marginTop: 14, display: 'grid', gap: 12 }}>
+                <div>
+                  <label style={labelS} htmlFor="exercise-language">Starter-code language</label>
+                  <select id="exercise-language" style={inputS} value={exForm.language} onChange={e => setExForm(f => {
+                    const codeByLanguage = { ...f.starter_code_by_language, [f.language]: f.starter_code };
+                    const language = e.target.value;
+                    return { ...f, language, starter_code: codeByLanguage[language] || '', starter_code_by_language: codeByLanguage };
+                  })}>
+                    {Array.from(new Set(['python', 'javascript', 'c', 'cpp', 'java', ...exForm.languages])).map(language => <option key={language} value={language}>{language}</option>)}
+                  </select>
+                  <div style={{ marginTop: 8, display: 'flex', flexWrap: 'wrap', gap: '6px 12px' }}>
+                    {Array.from(new Set(['python', 'javascript', 'c', 'cpp', 'java', ...exForm.languages])).map(language => (
+                      <label key={language} style={{ display: 'flex', alignItems: 'center', gap: 4, fontSize: 12, color: '#475569' }}>
+                        <input type="checkbox" checked={exForm.languages.includes(language)} onChange={e => setExForm(f => {
+                          const willCheck = e.target.checked;
+                          if (!willCheck && f.languages.length <= 1) return f;
+                          const languages = willCheck ? [...f.languages, language] : f.languages.filter(item => item !== language);
+                          const codeByLanguage = { ...f.starter_code_by_language, [f.language]: f.starter_code };
+                          const currentLanguage = languages.includes(f.language) ? f.language : languages[0];
+                          return { ...f, languages, language: currentLanguage, starter_code: codeByLanguage[currentLanguage] || '', starter_code_by_language: codeByLanguage };
+                        })} /> {language}
+                      </label>
+                    ))}
+                  </div>
+                </div>
+                <div>
+                  <label style={labelS} htmlFor="exercise-starter">Starter code for {exForm.language} (optional)</label>
+                  <textarea id="exercise-starter" style={{ ...inputS, resize: 'vertical', fontFamily: 'monospace' }} rows={5} value={exForm.starter_code} onChange={e => setExForm(f => ({ ...f, starter_code: e.target.value, starter_code_by_language: { ...f.starter_code_by_language, [f.language]: e.target.value } }))} />
+                </div>
+                <div>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+                    <label style={labelS}>Test cases (at least one required to publish)</label>
+                    <button type="button" className={styles.btnSecondary} onClick={() => setExForm(f => ({ ...f, test_cases: [...f.test_cases, { input: '', expected: '', hidden: false }] }))}><Plus size={13} /> Add case</button>
+                  </div>
+                  {exForm.test_cases.map((tc, index) => (
+                    <div key={index} style={{ display: 'grid', gridTemplateColumns: '1fr 1fr auto auto', gap: 8, alignItems: 'center', marginTop: 8 }}>
+                      <input aria-label={`Test case ${index + 1} input`} style={inputS} value={tc.input} onChange={e => setExForm(f => ({ ...f, test_cases: f.test_cases.map((x, i) => i === index ? { ...x, input: e.target.value } : x) }))} placeholder="stdin" />
+                      <input aria-label={`Test case ${index + 1} expected output`} style={inputS} value={tc.expected} onChange={e => setExForm(f => ({ ...f, test_cases: f.test_cases.map((x, i) => i === index ? { ...x, expected: e.target.value } : x) }))} placeholder="Expected stdout" />
+                      <label style={{ display: 'flex', gap: 4, alignItems: 'center', fontSize: 11, whiteSpace: 'nowrap' }}><input type="checkbox" checked={tc.hidden} onChange={e => setExForm(f => ({ ...f, test_cases: f.test_cases.map((x, i) => i === index ? { ...x, hidden: e.target.checked } : x) }))} /> Hidden</label>
+                      <button type="button" aria-label={`Remove test case ${index + 1}`} disabled={exForm.test_cases.length <= 1} onClick={() => setExForm(f => ({ ...f, test_cases: f.test_cases.filter((_, i) => i !== index) }))} style={{ border: 0, background: 'transparent', color: '#b91c1c', cursor: 'pointer' }}><X size={15} /></button>
+                    </div>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {exForm.exercise_type === 'mcq' && (
+              <div style={{ marginTop: 14, display: 'grid', gap: 8 }}>
+                <label style={labelS}>Answer options</label>
+                {['A', 'B', 'C', 'D'].map((letter, index) => (
+                  <div key={letter} style={{ display: 'flex', gap: 8, alignItems: 'center' }}>
+                    <strong style={{ width: 22 }}>{letter}</strong>
+                    <input aria-label={`Option ${letter}`} style={inputS} value={exForm.mcq_options[index] || ''} onChange={e => setExForm(f => ({ ...f, mcq_options: f.mcq_options.map((option, i) => i === index ? e.target.value : option) }))} />
+                  </div>
+                ))}
+                <label style={{ ...labelS, marginTop: 4 }} htmlFor="mcq-answer">Correct answer</label>
+                <select id="mcq-answer" style={inputS} value={exForm.mcq_answer} onChange={e => setExForm(f => ({ ...f, mcq_answer: e.target.value }))}>
+                  {['A', 'B', 'C', 'D'].map((letter, i) => <option key={letter} value={letter} disabled={!exForm.mcq_options[i]?.trim()}>{letter}</option>)}
+                </select>
+                <label style={labelS} htmlFor="mcq-explanation">Explanation (optional)</label>
+                <textarea id="mcq-explanation" style={{ ...inputS, resize: 'vertical' }} rows={2} value={exForm.mcq_explanation} onChange={e => setExForm(f => ({ ...f, mcq_explanation: e.target.value }))} />
+              </div>
+            )}
+
+            {exForm.exercise_type === 'simulation' && (
+              <div style={{ marginTop: 12 }}>
+                <label style={labelS} htmlFor="simulation-path">Existing simulation file (optional when you author inline HTML below)</label>
+                <input id="simulation-path" list="platform-simulation-files" style={inputS} value={exForm.simulation_path} onChange={e => setExForm(f => ({ ...f, simulation_path: e.target.value }))} placeholder="/simulations/example/index.html" />
+                <datalist id="platform-simulation-files">{simulationAssets.map(asset => <option key={asset.path} value={asset.path}>{asset.name}</option>)}</datalist>
+                <button type="button" disabled={importingSimulation || !exForm.simulation_path.trim()} onClick={() => void importSimulationHtml()} style={{ marginTop: 8, display: 'inline-flex', alignItems: 'center', gap: 6, border: '1px solid #ddd6fe', borderRadius: 8, background: '#fff', color: '#5b21b6', padding: '7px 10px', fontWeight: 700, fontSize: 12, cursor: importingSimulation ? 'wait' : 'pointer' }}>
+                  {importingSimulation ? <Loader2 size={13} className="spin" /> : <FileCode size={13} />} Import existing HTML into lesson studio
+                </button>
+                <p style={{ margin: '6px 0 0', fontSize: 11.5, color: '#64748b' }}>Import copies the bundled file into this exercise&rsquo;s editable database content; it does not overwrite the repository asset.</p>
+              </div>
+            )}
+
+            <PlatformLessonStudio
+              blocks={exForm.content_blocks}
+              languages={exForm.languages}
+              onChange={(content_blocks) => setExForm(formState => ({ ...formState, content_blocks }))}
+            />
+
+            <p style={{ margin: '12px 0 0', color: '#64748b', fontSize: 12 }}>New exercises are saved as drafts. Publish only after validating the learner view.</p>
+            <div style={{ display: 'flex', gap: 10, justifyContent: 'flex-end', marginTop: 20 }}>
+              <button type="button" className={styles.btnSecondary} disabled={busy} onClick={() => { setShowExForm(null); setEditingExercise(null); }}>Cancel</button>
+              <button type="button" className={styles.btnPrimary} disabled={busy || !exForm.title.trim()} onClick={submitExercise}>
+                {busy ? <Loader2 size={14} className="spin" /> : <Check size={14} />} {editingExercise ? 'Save changes' : 'Create draft'}
               </button>
             </div>
-          </div>
+          </section>
         </div>
       )}
     </AdminShell>

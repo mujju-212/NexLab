@@ -5,13 +5,13 @@ import { useRouter } from 'next/navigation';
 import AdminShell from '@/components/layout/AdminShell';
 import {
   Search, Users as UsersIcon, ShieldCheck, ShieldOff, KeyRound, LogOut,
-  Loader2, ChevronLeft, ChevronRight, RefreshCw, X, Copy, Check,
+  Loader2, ChevronLeft, ChevronRight, RefreshCw, X, Copy, Check, Plus,
 } from 'lucide-react';
-import { adminService, adminUsersService, Institution, type AdminDirectoryUser } from '@/services/admin.service';
+import { adminService, adminUsersService, type Institution, type AdminDirectoryUser } from '@/services/admin.service';
 import styles from './page.module.css';
 
 const ROLE_OPTIONS = ['student', 'instructor', 'institution_admin', 'platform_admin', 'platform_user'];
-const STATUS_OPTIONS = ['active', 'suspended'];
+const STATUS_OPTIONS = ['active', 'inactive', 'suspended', 'pending_deletion'];
 
 const fmtDate = (iso: string | null) => {
   if (!iso) return '—';
@@ -56,6 +56,10 @@ export default function UserManagementPage() {
   const [suspendUntil, setSuspendUntil] = useState('');
   const [actionBusy, setActionBusy] = useState(false);
   const [copied, setCopied] = useState(false);
+  const [createOpen, setCreateOpen] = useState(false);
+  const [creating, setCreating] = useState(false);
+  const [createForm, setCreateForm] = useState({ email: '', full_name: '', role: 'student', institution_id: '' });
+  const [createdCredentials, setCreatedCredentials] = useState<{ email: string; full_name: string; temp_password: string } | null>(null);
   const timerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
@@ -90,19 +94,50 @@ export default function UserManagementPage() {
     return () => { if (timerRef.current) clearTimeout(timerRef.current); };
   }, [load]);
 
-  const runAction = async (fn: () => Promise<void>, done: string) => {
+  const runAction = async (fn: () => Promise<void>, done: string, closeModal = true) => {
     setActionBusy(true);
     try {
       await fn();
-      setNotice(done);
-      setModal(null);
+      if (done) setNotice(done);
+      if (closeModal) setModal(null);
       await load();
     } catch (e) {
       const msg = (e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Action failed.';
       setError(msg);
-      setModal(null);
+      if (closeModal) setModal(null);
     } finally {
       setActionBusy(false);
+    }
+  };
+
+  const createUser = async () => {
+    const institutionId = createForm.role === 'platform_user' ? undefined : createForm.institution_id || undefined;
+    if (createForm.role !== 'platform_user' && !institutionId) {
+      setError('Select an institution for this account.');
+      return;
+    }
+    setCreating(true);
+    setError(null);
+    try {
+      const result = await adminUsersService.createUser({
+        email: createForm.email.trim(),
+        full_name: createForm.full_name.trim(),
+        role: createForm.role,
+        institution_id: institutionId,
+      });
+      setCreateOpen(false);
+      setCreatedCredentials({
+        email: result.user.email,
+        full_name: result.user.full_name,
+        temp_password: result.temp_password,
+      });
+      setCreateForm({ email: '', full_name: '', role: 'student', institution_id: '' });
+      setNotice('User created. Deliver the one-time password securely.');
+      await load();
+    } catch (e) {
+      setError((e as { response?: { data?: { error?: string } } })?.response?.data?.error || 'Could not create the user.');
+    } finally {
+      setCreating(false);
     }
   };
 
@@ -118,15 +153,16 @@ export default function UserManagementPage() {
       </span>
     );
   };
-  const statusPill = (s: string) => (
-    <span style={{
-      padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap',
-      background: s === 'suspended' ? '#fee2e2' : '#dcfce7',
-      color: s === 'suspended' ? '#b91c1c' : '#15803d',
-    }}>
-      {s === 'suspended' ? '● suspended' : '● active'}
-    </span>
-  );
+  const statusPill = (s: string) => {
+    const meta: Record<string, { label: string; bg: string; fg: string }> = {
+      active: { label: 'Active', bg: '#dcfce7', fg: '#15803d' },
+      inactive: { label: 'Inactive', bg: '#f1f5f9', fg: '#475569' },
+      suspended: { label: 'Suspended', bg: '#fee2e2', fg: '#b91c1c' },
+      pending_deletion: { label: 'Pending deletion', bg: '#fef3c7', fg: '#b45309' },
+    };
+    const item = meta[s] ?? { label: s.replace(/_/g, ' '), bg: '#f1f5f9', fg: '#475569' };
+    return <span style={{ padding: '3px 10px', borderRadius: 999, fontSize: 11, fontWeight: 700, whiteSpace: 'nowrap', background: item.bg, color: item.fg }}>● {item.label}</span>;
+  };
 
   return (
     <AdminShell activePage="User Management">
@@ -137,9 +173,14 @@ export default function UserManagementPage() {
             Every account on the platform — institutions and direct users. {total.toLocaleString()} total.
           </p>
         </div>
-        <button className={styles.btnSecondary} onClick={load}>
-          <RefreshCw size={14} /> Refresh
-        </button>
+        <div style={{ display: 'flex', gap: 8 }}>
+          <button className={styles.btnPrimary} onClick={() => { setError(null); setCreateOpen(true); }}>
+            <Plus size={14} /> Add user
+          </button>
+          <button className={styles.btnSecondary} onClick={load}>
+            <RefreshCw size={14} /> Refresh
+          </button>
+        </div>
       </div>
 
       {/* filters */}
@@ -220,21 +261,27 @@ export default function UserManagementPage() {
                   <td style={{ whiteSpace: 'nowrap' }}>{fmtDate(u.created_at)}</td>
                   <td onClick={(e) => e.stopPropagation()}>
                     <div style={{ display: 'flex', gap: 6, justifyContent: 'flex-end' }}>
-                      {u.status === 'suspended' ? (
-                        <button title="Activate" onClick={() => runAction(() => adminUsersService.activateUser(u.id).then(() => {}), `${u.full_name} reactivated.`)} style={actBtn('#dcfce7', '#15803d')}>
-                          <ShieldCheck size={13} />
-                        </button>
+                      {u.role === 'platform_admin' ? (
+                        <span title="Platform admin account actions are restricted" style={{ fontSize: 11, color: '#64748b' }}>Restricted</span>
                       ) : (
-                        <button title="Suspend" onClick={() => { setSuspendReason(''); setSuspendUntil(''); setModal({ kind: 'suspend', user: u }); }} style={actBtn('#fee2e2', '#b91c1c')}>
-                          <ShieldOff size={13} />
-                        </button>
+                        <>
+                          {u.status === 'suspended' || u.status === 'inactive' ? (
+                            <button title="Reactivate" aria-label={`Reactivate ${u.full_name}`} onClick={() => runAction(() => adminUsersService.activateUser(u.id).then(() => {}), `${u.full_name} reactivated.`)} style={actBtn('#dcfce7', '#15803d')}>
+                              <ShieldCheck size={13} />
+                            </button>
+                          ) : u.status === 'active' ? (
+                            <button title="Suspend" aria-label={`Suspend ${u.full_name}`} onClick={() => { setSuspendReason(''); setSuspendUntil(''); setModal({ kind: 'suspend', user: u }); }} style={actBtn('#fee2e2', '#b91c1c')}>
+                              <ShieldOff size={13} />
+                            </button>
+                          ) : null}
+                          <button title="Reset password" aria-label={`Reset password for ${u.full_name}`} onClick={() => setModal({ kind: 'reset', user: u })} style={actBtn('#fef3c7', '#b45309')}>
+                            <KeyRound size={13} />
+                          </button>
+                          <button title="Force logout" aria-label={`Force logout ${u.full_name}`} onClick={() => setModal({ kind: 'force-logout', user: u })} style={actBtn('#e0e7ff', '#4338ca')}>
+                            <LogOut size={13} />
+                          </button>
+                        </>
                       )}
-                      <button title="Reset password" onClick={() => setModal({ kind: 'reset', user: u })} style={actBtn('#fef3c7', '#b45309')}>
-                        <KeyRound size={13} />
-                      </button>
-                      <button title="Force logout" onClick={() => setModal({ kind: 'force-logout', user: u })} style={actBtn('#e0e7ff', '#4338ca')}>
-                        <LogOut size={13} />
-                      </button>
                     </div>
                   </td>
                 </tr>
@@ -305,7 +352,7 @@ export default function UserManagementPage() {
                     onClick={() => runAction(async () => {
                       const res = await adminUsersService.resetUserPassword(modal.user.id);
                       setModal({ kind: 'reset', user: modal.user, temp: res.temp_password });
-                    }, '')}
+                    }, 'Temporary password issued; deliver it securely.', false)}
                   >
                     {actionBusy ? <Loader2 size={14} className="spin" /> : <KeyRound size={14} />} Issue temp password
                   </button>
@@ -353,6 +400,68 @@ export default function UserManagementPage() {
               </>
             )}
           </div>
+        </div>
+      )}
+
+      {createOpen && (
+        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget && !creating) setCreateOpen(false); }} style={{ position: 'fixed', inset: 0, zIndex: 90, background: 'rgba(15,10,30,.48)', display: 'grid', placeItems: 'center', padding: 16 }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="create-user-title" style={{ width: 'min(520px, 100%)', background: '#fff', borderRadius: 18, padding: 24, boxShadow: '0 24px 80px rgba(0,0,0,.25)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 12, marginBottom: 18 }}>
+              <div>
+                <h2 id="create-user-title" style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>Add user</h2>
+                <p style={{ margin: '5px 0 0', fontSize: 13, color: '#64748b' }}>A unique temporary password will be generated and shown once.</p>
+              </div>
+              <button type="button" aria-label="Close" disabled={creating} onClick={() => setCreateOpen(false)} style={{ border: 0, background: 'transparent', cursor: 'pointer' }}><X size={18} /></button>
+            </div>
+            <form onSubmit={(e) => { e.preventDefault(); void createUser(); }}>
+              <label style={labelStyle} htmlFor="new-user-name">Full name</label>
+              <input id="new-user-name" required value={createForm.full_name} onChange={(e) => setCreateForm((f) => ({ ...f, full_name: e.target.value }))} style={inputStyle} autoComplete="name" />
+              <label style={{ ...labelStyle, marginTop: 12 }} htmlFor="new-user-email">Email</label>
+              <input id="new-user-email" required type="email" value={createForm.email} onChange={(e) => setCreateForm((f) => ({ ...f, email: e.target.value }))} style={inputStyle} autoComplete="email" />
+              <label style={{ ...labelStyle, marginTop: 12 }} htmlFor="new-user-role">Role</label>
+              <select id="new-user-role" value={createForm.role} onChange={(e) => setCreateForm((f) => ({ ...f, role: e.target.value, institution_id: e.target.value === 'platform_user' ? '' : f.institution_id }))} style={{ ...inputStyle, background: '#fff' }}>
+                <option value="student">Student</option>
+                <option value="instructor">Instructor</option>
+                <option value="institution_admin">Institution admin</option>
+                <option value="platform_user">Direct platform user</option>
+              </select>
+              {createForm.role !== 'platform_user' && (
+                <>
+                  <label style={{ ...labelStyle, marginTop: 12 }} htmlFor="new-user-institution">Institution</label>
+                  <select id="new-user-institution" required value={createForm.institution_id} onChange={(e) => setCreateForm((f) => ({ ...f, institution_id: e.target.value }))} style={{ ...inputStyle, background: '#fff' }}>
+                    <option value="">Select an active institution</option>
+                    {institutions.filter((i) => i.is_active).map((i) => <option key={i.id} value={i.id}>{i.name} ({i.code})</option>)}
+                  </select>
+                </>
+              )}
+              {error && <p role="alert" style={{ margin: '12px 0 0', color: '#b91c1c', fontSize: 13, fontWeight: 600 }}>{error}</p>}
+              <div style={{ display: 'flex', justifyContent: 'flex-end', gap: 8, marginTop: 20 }}>
+                <button type="button" className={styles.btnSecondary} disabled={creating} onClick={() => setCreateOpen(false)}>Cancel</button>
+                <button type="submit" className={styles.btnPrimary} disabled={creating || !createForm.full_name.trim() || !createForm.email.trim() || (createForm.role !== 'platform_user' && !createForm.institution_id)}>
+                  {creating ? <><Loader2 size={14} className="spin" /> Creating…</> : <><Plus size={14} /> Create account</>}
+                </button>
+              </div>
+            </form>
+          </section>
+        </div>
+      )}
+
+      {createdCredentials && (
+        <div role="presentation" onClick={(e) => { if (e.target === e.currentTarget) setCreatedCredentials(null); }} style={{ position: 'fixed', inset: 0, zIndex: 100, background: 'rgba(15,10,30,.55)', display: 'grid', placeItems: 'center', padding: 16 }}>
+          <section role="dialog" aria-modal="true" aria-labelledby="created-user-title" style={{ width: 'min(500px, 100%)', background: '#fff', borderRadius: 18, padding: 24, boxShadow: '0 24px 80px rgba(0,0,0,.25)' }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'start', gap: 12 }}>
+              <div>
+                <h2 id="created-user-title" style={{ margin: 0, fontSize: 18, fontWeight: 800 }}>User created</h2>
+                <p style={{ margin: '5px 0 16px', color: '#64748b', fontSize: 13 }}>Share these credentials securely with {createdCredentials.full_name}. They must change the password at first login.</p>
+              </div>
+              <button type="button" aria-label="Close" onClick={() => setCreatedCredentials(null)} style={{ border: 0, background: 'transparent', cursor: 'pointer' }}><X size={18} /></button>
+            </div>
+            <div style={{ display: 'grid', gap: 10, padding: 14, background: '#f8fafc', border: '1px solid #e2e8f0', borderRadius: 12 }}>
+              <div><span style={{ color: '#64748b', fontSize: 11, fontWeight: 700 }}>EMAIL</span><div style={{ fontWeight: 700 }}>{createdCredentials.email}</div></div>
+              <div><span style={{ color: '#64748b', fontSize: 11, fontWeight: 700 }}>ONE-TIME PASSWORD</span><div style={{ display: 'flex', alignItems: 'center', gap: 8 }}><code style={{ flex: 1, overflowWrap: 'anywhere', fontSize: 14 }}>{createdCredentials.temp_password}</code><button type="button" aria-label="Copy credentials" onClick={async () => { try { await navigator.clipboard.writeText(`Email: ${createdCredentials.email}\nTemporary password: ${createdCredentials.temp_password}`); setCopied(true); window.setTimeout(() => setCopied(false), 1600); } catch { setError('Clipboard access was denied. Select and copy the credentials manually.'); } }} style={{ border: 0, background: '#ede9fe', color: '#6d28d9', borderRadius: 8, padding: 8, cursor: 'pointer' }}>{copied ? <Check size={15} /> : <Copy size={15} />}</button></div></div>
+            </div>
+            <button type="button" className={styles.btnPrimary} onClick={() => setCreatedCredentials(null)} style={{ marginTop: 18 }}>Done</button>
+          </section>
         </div>
       )}
     </AdminShell>

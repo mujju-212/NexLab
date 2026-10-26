@@ -176,6 +176,8 @@ def guarded_ai_call(
     max_tokens: int = 200,
     temperature: float = 0.3,
     section_subject_id: str = None,
+    json_mode: bool = False,
+    reasoning_effort: str = None,
 ):
     """
     Policy check → quota check → call → log → return.
@@ -297,6 +299,8 @@ def guarded_ai_call(
             pool=pool,
             max_tokens=max_tokens,
             temperature=temperature,
+            json_mode=json_mode,
+            reasoning_effort=reasoning_effort,
         )
         success = (text is not None and not is_fallback)
     except Exception as exc:

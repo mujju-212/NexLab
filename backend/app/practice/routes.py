@@ -17,6 +17,7 @@ POST /api/practice/plans/<id>/enroll           - enroll in plan
 from flask import Blueprint, request, jsonify, g
 from app.auth.utils import require_role
 from app.extensions import db
+from app.exec_engine.availability import execution_is_enabled
 from app.models.practice import (
     Problem, PracticeTestCase, PracticeSubmission,
     StudyPlan, StudyPlanSection, StudyPlanProgress,
@@ -1098,9 +1099,9 @@ def run_problem(slug):
     if not spec:
         return jsonify({'error': f'Unsupported language: {language}'}), 400
 
-    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+    if not execution_is_enabled():
         return jsonify({
-            'error': 'Code execution is currently unavailable. Your code was not run.'
+            'error': 'Code execution is currently disabled by the platform or unavailable on this server.'
         }), 503
 
     samples = PracticeTestCase.query.filter_by(
@@ -1179,9 +1180,9 @@ def submit_problem(slug):
             'error': 'No test cases configured for this problem yet. Please try another problem.'
         }), 400
 
-    if not current_app.config.get('DOCKER_RUNNER_ENABLED', False):
+    if not execution_is_enabled():
         return jsonify({
-            'error': 'Code execution is currently unavailable. Your code was not run or saved.'
+            'error': 'Code execution is currently disabled by the platform or unavailable on this server.'
         }), 503
 
     passed_count = 0

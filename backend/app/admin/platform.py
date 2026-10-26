@@ -10,10 +10,35 @@ from app.models.user import User
 from app.models.academic import AuditLog
 from app.models.session import LabSession
 from app.models.ai_usage import AIUsageLog
+from app.institution.quota import student_quota
 from datetime import datetime, timedelta
 from sqlalchemy import func, text
+import re
 
 platform_bp = Blueprint('platform', __name__)
+
+_NUMERIC_CONFIG_LIMITS = {
+    'groq_daily_limit': 1_000_000,
+    'platform_user_daily_ai_calls': 1_000_000,
+    'max_students_free': 10_000_000,
+    'max_students_pro': 10_000_000,
+    'max_students_enterprise': 10_000_000,
+}
+
+
+def _audit_platform(action, target_type, target_id, detail, severity='medium'):
+    db.session.add(AuditLog(
+        institution_id=None,
+        actor_id=g.user_id,
+        action=action,
+        target_type=target_type,
+        target_id=target_id,
+        detail=detail,
+        module='Platform Administration',
+        severity=severity,
+        ip_address=request.remote_addr or '',
+    ))
+
 
 PLAN_LIMITS = {
     'free':       {'groq': 50,  'students': 100},
@@ -30,7 +55,7 @@ PLAN_LIMITS = {
 @require_role('platform_admin')
 def get_billing(iid):
     inst = Institution.query.get_or_404(iid)
-    student_count = User.query.filter_by(institution_id=iid, role='student').count()
+    quota = student_quota(iid)
     plan_info = PLAN_LIMITS.get(inst.plan, PLAN_LIMITS['free'])
     return jsonify({
         'institution_id':    iid,
@@ -39,11 +64,11 @@ def get_billing(iid):
         'plan_updated_at':   inst.plan_updated_at.isoformat() if inst.plan_updated_at else None,
         'billing_email':     inst.billing_email,
         'billing_notes':     inst.billing_notes,
-        'groq_limit':        inst.groq_limit_override or plan_info['groq'],
-        'groq_limit_source': 'override' if inst.groq_limit_override else 'plan_default',
-        'student_limit':     plan_info['students'],
-        'student_count':     student_count,
-        'student_headroom':  plan_info['students'] - student_count,
+        'groq_limit':        inst.groq_limit_override if inst.groq_limit_override is not None else plan_info['groq'],
+        'groq_limit_source': 'override' if inst.groq_limit_override is not None else 'plan_default',
+        'student_limit':     quota['limit'],
+        'student_count':     quota['used'],
+        'student_headroom':  quota['remaining'],
     }), 200
 
 
@@ -51,22 +76,37 @@ def get_billing(iid):
 @require_role('platform_admin')
 def update_plan(iid):
     inst = Institution.query.get_or_404(iid)
-    data = request.get_json()
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict):
+        return jsonify({'error': 'Request body must be an object.'}), 400
     new_plan = data.get('plan')
     if new_plan not in PLAN_LIMITS:
         return jsonify({'error': f'Invalid plan. Choose from: {list(PLAN_LIMITS)}'}), 400
+    if 'billing_email' in data:
+        email = data['billing_email']
+        if not isinstance(email, str) or len(email) > 320:
+            return jsonify({'error': 'billing_email must be text up to 320 characters.'}), 400
+        email = email.strip()
+        if email and not re.fullmatch(r'[^@\s]+@[^@\s]+\.[^@\s]+', email):
+            return jsonify({'error': 'billing_email must be a valid email address or blank.'}), 400
+        data['billing_email'] = email
+    if 'billing_notes' in data and (not isinstance(data['billing_notes'], str) or len(data['billing_notes']) > 4000):
+        return jsonify({'error': 'billing_notes must be text up to 4000 characters.'}), 400
     old_plan = inst.plan
     inst.plan = new_plan
     inst.plan_updated_at = datetime.utcnow()
-    if data.get('billing_notes'):
+    if 'billing_notes' in data:
         inst.billing_notes = data['billing_notes']
-    if data.get('billing_email'):
-        inst.billing_email = data['billing_email']
+    if 'billing_email' in data:
+        inst.billing_email = data['billing_email'] or None
+    _audit_platform('admin.billing.plan_update', 'institution', inst.id,
+                    f'Plan changed {old_plan} -> {new_plan}; billing fields updated.', severity='high')
     db.session.commit()
+    quota = student_quota(iid)
     return jsonify({
         'message':  f'{inst.name} plan changed {old_plan} -> {new_plan}',
         'new_plan': new_plan,
-        'limits':   PLAN_LIMITS[new_plan],
+        'limits':   {'groq': PLAN_LIMITS[new_plan]['groq'], 'students': quota['limit']},
     }), 200
 
 
@@ -74,11 +114,15 @@ def update_plan(iid):
 @require_role('platform_admin')
 def set_groq_limit(iid):
     inst = Institution.query.get_or_404(iid)
-    data = request.get_json()
-    limit = data.get('limit')
-    if limit is not None and (not isinstance(limit, int) or limit < 0):
-        return jsonify({'error': 'limit must be a non-negative integer'}), 400
-    inst.groq_limit_override = limit   # None resets to plan default
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or 'limit' not in data:
+        return jsonify({'error': 'Request body must include limit (a non-negative integer or null).'}), 400
+    limit = data['limit']
+    if limit is not None and (type(limit) is not int or not 0 <= limit <= 1_000_000):
+        return jsonify({'error': 'limit must be a non-negative integer up to 1000000, or null to reset.'}), 400
+    inst.groq_limit_override = limit   # None resets to platform default
+    _audit_platform('admin.billing.groq_limit', 'institution', inst.id,
+                    f'Groq request limit override set to {limit!r}.', severity='medium')
     db.session.commit()
     return jsonify({
         'institution_id': iid,
@@ -91,7 +135,12 @@ def set_groq_limit(iid):
 @require_role('platform_admin')
 def update_billing_notes(iid):
     inst = Institution.query.get_or_404(iid)
-    inst.billing_notes = request.get_json().get('notes', '')
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get('notes'), str) or len(data['notes']) > 4000:
+        return jsonify({'error': 'notes must be text up to 4000 characters.'}), 400
+    inst.billing_notes = data['notes']
+    _audit_platform('admin.billing.notes', 'institution', inst.id,
+                    'Updated institution billing notes.', severity='low')
     db.session.commit()
     return jsonify({'message': 'Billing notes updated'}), 200
 
@@ -166,13 +215,7 @@ def pending_institutions():
     return jsonify({'pending': [i.to_dict() for i in pending], 'count': len(pending)}), 200
 
 
-@platform_bp.route('/institutions/<iid>/onboarding', methods=['GET'])
-@require_role('platform_admin')
-def onboarding_checklist(iid):
-    """Live checklist — auto-checks DB for each criterion."""
-    inst = Institution.query.get_or_404(iid)
-
-    # Auto-detect checklist state from DB
+def _onboarding_checklist(iid):
     user_count = User.query.filter_by(institution_id=iid).filter(
         User.role.in_(['student', 'instructor'])
     ).count()
@@ -180,20 +223,27 @@ def onboarding_checklist(iid):
         text("SELECT COUNT(*) FROM experiments WHERE institution_id=:iid"), {'iid': iid}
     ).scalar()
     env_count = db.session.execute(
-        text("SELECT COUNT(*) FROM environment_profiles WHERE institution_id=:iid"), {'iid': iid}
+        text("SELECT COUNT(*) FROM environment_profiles WHERE institution_id=:iid AND build_status='active'"), {'iid': iid}
     ).scalar()
-
-    checklist = {
-        'institution_created':  True,
+    return {
+        'institution_created': True,
         'admin_account_exists': User.query.filter_by(institution_id=iid, role='institution_admin').count() > 0,
-        'has_users':            user_count > 0,
-        'has_experiments':      exp_count > 0,
-        'has_environment':      env_count > 0,
+        'has_users': user_count > 0,
+        'has_experiments': bool(exp_count),
+        'has_environment': bool(env_count),
     }
+
+
+@platform_bp.route('/institutions/<iid>/onboarding', methods=['GET'])
+@require_role('platform_admin')
+def onboarding_checklist(iid):
+    """Live checklist — auto-checks DB for each criterion."""
+    inst = Institution.query.get_or_404(iid)
+    checklist = _onboarding_checklist(iid)
     complete = all(checklist.values())
 
-    # Sync model flags
-    inst.has_users       = checklist['has_users']
+    # Sync model flags from the same checklist returned to the caller.
+    inst.has_users = checklist['has_users']
     inst.has_experiments = checklist['has_experiments']
     inst.has_environment = checklist['has_environment']
     db.session.commit()
@@ -212,18 +262,30 @@ def onboarding_checklist(iid):
 @require_role('platform_admin')
 def mark_onboarding_complete(iid):
     inst = Institution.query.get_or_404(iid)
-    inst.onboarding_status       = 'active'
+    checklist = _onboarding_checklist(iid)
+    incomplete = [key for key, done in checklist.items() if not done]
+    if incomplete:
+        return jsonify({
+            'error': 'Onboarding cannot be completed until every checklist item is satisfied.',
+            'checklist': checklist,
+            'incomplete': incomplete,
+        }), 409
+    inst.onboarding_status = 'active'
     inst.onboarding_completed_at = datetime.utcnow()
+    _audit_platform('admin.institution.onboarding_complete', 'institution', inst.id,
+                    'Marked institution onboarding complete.', severity='medium')
     db.session.commit()
-    return jsonify({'message': f'{inst.name} marked as fully onboarded'}), 200
+    return jsonify({'message': f'{inst.name} marked as fully onboarded', 'checklist': checklist}), 200
 
 
 @platform_bp.route('/institutions/<iid>/onboarding/reset', methods=['POST'])
 @require_role('platform_admin')
 def reset_onboarding(iid):
     inst = Institution.query.get_or_404(iid)
-    inst.onboarding_status       = 'pending'
+    inst.onboarding_status = 'pending'
     inst.onboarding_completed_at = None
+    _audit_platform('admin.institution.onboarding_reset', 'institution', inst.id,
+                    'Reset institution onboarding to pending.', severity='medium')
     db.session.commit()
     return jsonify({'message': f'{inst.name} onboarding reset to pending'}), 200
 
@@ -425,46 +487,64 @@ def get_config():
 @platform_bp.route('/config', methods=['PATCH'])
 @require_role('platform_admin')
 def update_config():
-    """
-    Update one or more config keys.
-    Body: { "key1": "value1", "key2": "value2" }
-    """
-    data    = request.get_json()
-    updated = []
+    """Update only the documented numeric quota keys; reject partial bad writes."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not data:
+        return jsonify({'error': 'Request body must be a non-empty object.'}), 400
+    unknown = sorted(set(data) - set(_NUMERIC_CONFIG_LIMITS))
+    if unknown:
+        return jsonify({'error': f'Unsupported configuration keys: {", ".join(unknown)}'}), 400
+
+    normalized = {}
     for key, value in data.items():
+        if isinstance(value, bool):
+            return jsonify({'error': f'{key} must be a non-negative integer.'}), 400
+        try:
+            parsed = int(value)
+        except (TypeError, ValueError):
+            return jsonify({'error': f'{key} must be a non-negative integer.'}), 400
+        if str(value).strip() != str(parsed) or not 0 <= parsed <= _NUMERIC_CONFIG_LIMITS[key]:
+            return jsonify({'error': f'{key} must be between 0 and {_NUMERIC_CONFIG_LIMITS[key]}.'}), 400
+        normalized[key] = str(parsed)
+
+    for key, value in normalized.items():
         PlatformConfig.set(key, value, updated_by=g.user_id)
-        updated.append(key)
+    _audit_platform('admin.platform.quotas_update', 'platform_config', None,
+                    f'Updated platform quota keys: {", ".join(sorted(normalized))}.', severity='high')
     db.session.commit()
-    return jsonify({'updated': updated}), 200
+    return jsonify({'updated': sorted(normalized)}), 200
+
+
+@platform_bp.route('/config/maintenance/status', methods=['GET'])
+def maintenance_status():
+    """Public, read-only state used to display maintenance notices before login."""
+    return jsonify({
+        'enabled': str(PlatformConfig.get('maintenance_mode', 'false')).lower() == 'true',
+        'message': PlatformConfig.get('maintenance_message', ''),
+    }), 200
 
 
 @platform_bp.route('/config/maintenance', methods=['POST'])
 @require_role('platform_admin')
 def set_maintenance():
-    """
-    Enable or disable maintenance mode.
-    Body: { "enabled": true, "message": "optional custom message" }
-    """
-    data    = request.get_json()
-    enabled = data.get('enabled', False)
-    message = data.get('message')
+    """Enable or disable maintenance notices for connected users."""
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get('enabled'), bool):
+        return jsonify({'error': 'enabled must be a boolean.'}), 400
+    if 'message' in data and (not isinstance(data['message'], str) or len(data['message']) > 500):
+        return jsonify({'error': 'message must be text up to 500 characters.'}), 400
+    enabled = data['enabled']
+    message = data.get('message', PlatformConfig.get('maintenance_message', ''))
 
     PlatformConfig.set('maintenance_mode', 'true' if enabled else 'false', g.user_id)
-    if message:
-        PlatformConfig.set('maintenance_message', message, g.user_id)
+    PlatformConfig.set('maintenance_message', message, g.user_id)
+    _audit_platform('admin.platform.maintenance', 'platform_config', 'maintenance_mode',
+                    f'Maintenance notice {"enabled" if enabled else "disabled"}.', severity='high')
     db.session.commit()
 
-    # Broadcast via SocketIO so connected clients show maintenance banner
     from app.extensions import socketio
-    socketio.emit('maintenance_mode', {
-        'enabled': enabled,
-        'message': message or PlatformConfig.get('maintenance_message'),
-    })
-
-    return jsonify({
-        'maintenance_mode': enabled,
-        'message': message or PlatformConfig.get('maintenance_message'),
-    }), 200
+    socketio.emit('maintenance_mode', {'enabled': enabled, 'message': message})
+    return jsonify({'maintenance_mode': enabled, 'message': message}), 200
 
 
 @platform_bp.route('/config/features', methods=['GET'])
@@ -483,7 +563,12 @@ def toggle_feature(flag):
     allowed = {'ai_hints_enabled', 'code_execution_enabled', 'allow_self_registration'}
     if flag not in allowed:
         return jsonify({'error': f'Unknown flag. Allowed: {list(allowed)}'}), 400
-    enabled = request.get_json().get('enabled', True)
+    data = request.get_json(silent=True)
+    if not isinstance(data, dict) or not isinstance(data.get('enabled'), bool):
+        return jsonify({'error': 'enabled must be a boolean.'}), 400
+    enabled = data['enabled']
     PlatformConfig.set(flag, 'true' if enabled else 'false', g.user_id)
+    _audit_platform('admin.platform.feature_toggle', 'platform_config', flag,
+                    f'{flag} set to {enabled}.', severity='high')
     db.session.commit()
     return jsonify({'flag': flag, 'enabled': enabled}), 200

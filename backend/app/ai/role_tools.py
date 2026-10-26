@@ -71,6 +71,7 @@ from app.ai.agent import (
     AgentToolError,
     _call_view,
     _resolve,
+    _extract_json,
     TOOLS as ADMIN_LEGACY_TOOLS,
     CONFIRM_TOOLS as ADMIN_LEGACY_CONFIRM_TOOLS,
     execute_copilot_action as execute_legacy_admin_action,
@@ -167,6 +168,53 @@ def save_generated_document(title: str, fmt: str, content_text: str = None,
 # 1. STUDENT & PLATFORM-USER SOCRATIC + AUTONOMOUS WORKSPACE TOOLS
 # ══════════════════════════════════════════════════════════════════════════════
 
+def _coerce_str(value, default: str = '') -> str:
+    """Normalize planner-supplied arguments to plain strings.
+
+    Weak fallback models sometimes pass booleans/numbers/lists where a string
+    is expected (e.g. language=true). These builders must degrade to sane
+    defaults instead of crashing mid-transaction.
+    """
+    if value is None or isinstance(value, bool):
+        return default
+    if isinstance(value, str):
+        return value.strip()
+    if isinstance(value, (list, tuple)):
+        return ', '.join(str(v).strip() for v in value if str(v).strip()).strip() or default
+    if isinstance(value, (int, float)):
+        return str(value)
+    return str(value).strip() or default
+
+
+def _code_text_from_files(files) -> str:
+    """Extract source text from CodeVersion/CodeAttempt.files JSON safely."""
+    if isinstance(files, str):
+        return files
+    if not isinstance(files, dict):
+        return ''
+    preferred = ('main', 'main.py', 'solution.py', 'solution', 'Main.java', 'Main.cpp')
+    ordered = []
+    for key in preferred:
+        value = files.get(key)
+        if isinstance(value, str) and value.strip():
+            ordered.append((key, value))
+    if not ordered:
+        ordered = [(str(k), v) for k, v in sorted(files.items()) if isinstance(v, str) and v.strip()]
+    if len(ordered) == 1:
+        return ordered[0][1]
+    return '\n'.join(f"# File: {name}\n{content}" for name, content in ordered)
+
+
+def _attempt_error_text(attempt) -> str:
+    """Compose available compiler/runtime diagnostics from the persisted schema."""
+    parts = [getattr(attempt, 'stderr', None), getattr(attempt, 'compile_output', None)]
+    if not any((p or '').strip() for p in parts):
+        status = getattr(attempt, 'compile_status', None)
+        if status and status not in ('success', 'accepted'):
+            parts.append(f"Execution status: {status}")
+    return '\n'.join((p or '').strip() for p in parts if (p or '').strip())[:1200]
+
+
 def student_analyze_my_code(experiment_id: str = None, code: str = None,
                             language: str = None, error: str = None, **_):
     """
@@ -187,8 +235,7 @@ def student_analyze_my_code(experiment_id: str = None, code: str = None,
             student_id=uid, experiment_id=exp_id
         ).order_by(CodeVersion.version_number.desc()).first()
         if latest_ver:
-            editor_code = latest_ver.code or ''
-            lang = latest_ver.language or lang
+            editor_code = _code_text_from_files(latest_ver.files)
 
     if exp_id:
         latest_attempt = CodeAttempt.query.filter_by(
@@ -200,9 +247,11 @@ def student_analyze_my_code(experiment_id: str = None, code: str = None,
         ).order_by(CodeAttempt.submitted_at.desc()).first()
         if latest_attempt and not exp:
             exp = Experiment.query.get(latest_attempt.experiment_id)
-            if not editor_code:
-                editor_code = latest_attempt.code or ''
-                lang = latest_attempt.language or lang
+
+    if latest_attempt:
+        if not editor_code:
+            editor_code = _code_text_from_files(latest_attempt.files)
+        lang = latest_attempt.language or lang
 
     visible_tests = []
     if exp:
@@ -218,9 +267,9 @@ def student_analyze_my_code(experiment_id: str = None, code: str = None,
     if latest_attempt:
         attempt_summary = {
             'submitted_at': latest_attempt.submitted_at.isoformat() if latest_attempt.submitted_at else None,
-            'passed_count': latest_attempt.passed_count,
-            'total_count': latest_attempt.total_count,
-            'Compile/Runtime Error': (latest_attempt.error_message or '')[:500] if latest_attempt.error_message else None,
+            'passed_count': latest_attempt.test_cases_passed,
+            'total_count': latest_attempt.test_cases_total,
+            'Compile/Runtime Error': _attempt_error_text(latest_attempt) or None,
             'execution_time_ms': latest_attempt.execution_time_ms,
         }
 
@@ -250,8 +299,8 @@ def student_explain_error(error_message: str = None, language: str = 'python', *
 
     if not err:
         last_att = CodeAttempt.query.filter_by(student_id=uid).order_by(CodeAttempt.submitted_at.desc()).first()
-        if last_att and last_att.error_message:
-            err = last_att.error_message
+        if last_att:
+            err = _attempt_error_text(last_att)
             lang = last_att.language or lang
 
     if not err:
@@ -284,7 +333,7 @@ def student_get_socratic_hint(experiment_id: str = None, level: int = None, **_)
     failed_attempts = CodeAttempt.query.filter(
         CodeAttempt.student_id == uid,
         CodeAttempt.experiment_id == exp_id,
-        or_(CodeAttempt.passed_count < CodeAttempt.total_count, CodeAttempt.total_count == 0)
+        or_(CodeAttempt.test_cases_passed < CodeAttempt.test_cases_total, CodeAttempt.test_cases_total == 0)
     ).count() if exp_id else 0
 
     if level in (1, 2, 3):
@@ -427,12 +476,13 @@ def student_get_my_spark_and_skills(**_):
 
     return {
         'spark_profile': {
-            'overall_score': round(float(ranking.overall_score or 0), 1) if ranking else None,
+            'overall_score': round(float(ranking.rank_score or 0), 1) if ranking else None,
+            'mastery_score': round(float(ranking.mastery_score or 0), 1) if ranking else None,
+            'engagement_score': round(float(ranking.engagement_score or 0), 1) if ranking else None,
+            'effort_score': round(float(ranking.effort_score or 0), 1) if ranking else None,
+            'efficiency_score': round(float(ranking.efficiency_score or 0), 1) if ranking else None,
             'consistency_score': round(float(ranking.consistency_score or 0), 1) if ranking else None,
-            'efficiency_score': round(float(ranking.code_quality_score or 0), 1) if ranking else None,
-            'rank_in_section': ranking.rank_in_section if ranking else None,
-            'total_in_section': ranking.total_in_section if ranking else None,
-            'percentile': round(float(ranking.percentile or 0), 1) if ranking else None,
+            'rank_position': ranking.rank_position if ranking else None,
         },
         'weak_concepts_needing_practice': weak_concepts,
         'strong_concepts': strong_concepts,
@@ -695,6 +745,14 @@ def enroll_and_build_study_plan(plan_name_or_goal: str = 'Data Structures & Algo
             db.session.add(prog)
             db.session.commit()
         enrolled_plan_title = plan.title
+        enrollment_msg = f"Enrolled you in the '{plan.title}' study plan track"
+    else:
+        # No matching track in the catalog — do NOT claim an enrollment that
+        # was not recorded (summaries must reflect actual data).
+        enrollment_msg = (
+            "No matching study plan track exists in the platform catalog yet, so no "
+            "formal enrollment was recorded — your playlist and roadmap are saved to your account"
+        )
 
     playlist = build_personal_problem_collection(
         collection_title=f"{days}-Day Roadmap Playlist: {plan_name_or_goal[:40]}",
@@ -710,8 +768,8 @@ def enroll_and_build_study_plan(plan_name_or_goal: str = 'Data Structures & Algo
         'problems_in_playlist': playlist.get('problems'),
         'generated_document': doc_res.get('generated_document'),
         'message': (
-            f"Enrolled you in '{enrolled_plan_title or plan_name_or_goal}', created playlist "
-            f"'{playlist.get('collection_title')}', and generated your downloadable {days}-day roadmap."
+            f"{enrollment_msg}. Created playlist '{playlist.get('collection_title')}' and "
+            f"generated your downloadable {days}-day roadmap."
         ),
     }
 
@@ -1028,6 +1086,7 @@ def build_complete_experiment_suite(
     language: str = 'python',
     aim: str = None,
     problem_statement: str = None,
+    requirements: str = None,
     custom_html_simulation: str = None,
     include_quiz: bool = True,
     include_viva: bool = True,
@@ -1054,8 +1113,27 @@ def build_complete_experiment_suite(
     5. Inserts visible + hidden `TestCase` rows and SPARK `Checkpoint` milestones.
     6. Calls `publish_experiment_content(exp)` so `exp.published_content` is frozen and immediately live!
     """
-    title = (title or topic or '').strip()
-    subject_name = (subject_name or subject or '').strip()
+    # Coerce planner-supplied arguments: weak fallback models occasionally pass
+    # booleans/numbers/lists where strings are expected (e.g. language=true).
+    title = _coerce_str(title)
+    topic = _coerce_str(topic)
+    subject_name = _coerce_str(subject_name)
+    subject = _coerce_str(subject)
+    difficulty = _coerce_str(difficulty, 'medium')
+    language = _coerce_str(language, 'python')
+    aim = _coerce_str(aim)
+    problem_statement = _coerce_str(problem_statement)
+    requirements = _coerce_str(requirements)
+    include_quiz = bool(include_quiz)
+    include_viva = bool(include_viva)
+    include_checkpoints = bool(include_checkpoints)
+    try:
+        test_case_count = int(test_case_count)
+    except (TypeError, ValueError):
+        test_case_count = 5
+
+    title = title or topic
+    subject_name = subject_name or subject
     if not title:
         raise AgentToolError('title or topic is required to build an experiment suite')
 
@@ -1088,17 +1166,10 @@ def build_complete_experiment_suite(
     if not subj:
         subj = Subject.query.filter_by(institution_id=iid).first()
     if not subj:
-        # Auto-create a default Subject so the instructor is never blocked!
-        dept = Department.query.filter_by(institution_id=iid).first()
-        subj = Subject(
-            institution_id=iid,
-            department_id=dept.id if dept else None,
-            name=subject_name or 'Data Structures & Algorithms Lab',
-            code='CS301L',
-            subject_type='Lab',
+        raise AgentToolError(
+            'No subject is available in this institution. Create or assign a subject first; '
+            'the Harness will not invent and persist a placeholder subject.'
         )
-        db.session.add(subj)
-        db.session.flush()
 
     existing_count = Experiment.query.filter_by(subject_id=subj.id).count()
     diff_map = {'easy': 1, 'beginner': 1, 'medium': 2, 'intermediate': 2, 'hard': 3, 'advanced': 4}
@@ -1129,167 +1200,273 @@ def build_complete_experiment_suite(
             else:
                 pages.append({'title': p_name})
 
-    aim_text = (aim or f"Design, implement, and verify {clean_title} in {lang.capitalize()} with full boundary condition analysis.").strip()
-    prob_text = (problem_statement or f"Write a {lang.capitalize()} program to implement {clean_title}. Read input from standard input and print the exact required result to standard output.").strip()
+    aim_text = (aim or '').strip()
+    prob_text = (problem_statement or '').strip()
 
-    # 2. Generate tailored AI content (Markdown notes, runnable code, MCQ quiz, Viva, Test cases, optional custom HTML)
-    theory_md = (
-        f"# {clean_title}\n\n"
-        f"## 1. Learning Objective & Aim\n{aim_text}\n\n"
-        f"## 2. Core Algorithmic Concept & Invariants\n"
-        f"- **Primary Concepts:** `{', '.join(tags)}`\n"
-        f"- Maintain clear data invariants across every iteration or recursive call.\n"
-        f"- Always validate boundary inputs (`n = 0`, `n = 1`, duplicate elements, and extremal values).\n\n"
-        f"## 3. Complexity Targets\n"
-        f"- **Time Complexity:** Aim for optimal $O(N)$ or $O(N \\log N)$ time.\n"
-        f"- **Space Complexity:** Minimize auxiliary memory overhead.\n"
-    )
-    runnable_code = (
-        f"# Demonstration: {clean_title}\n"
-        f"def demo_solution(arr):\n"
-        f"    if not arr:\n"
-        f"        return 0\n"
-        f"    return sum(arr)\n\n"
-        f"if __name__ == '__main__':\n"
-        f"    sample = [10, 20, 30, 40]\n"
-        f"    print('Input:', sample)\n"
-        f"    print('Result:', demo_solution(sample))\n"
-    )
-    starter_code = (
-        f"# Lab Assignment: {clean_title}\n"
-        f"import sys\n\n"
-        f"def solve():\n"
-        f"    lines = sys.stdin.read().strip().splitlines()\n"
-        f"    if not lines:\n"
-        f"        return\n"
-        f"    # Implement your logic for {clean_title} below\n"
-        f"    print(lines[0])\n\n"
-        f"if __name__ == '__main__':\n"
-        f"    solve()\n"
-    )
-    if not custom_html_simulation and is_sorting_suite and pages and isinstance(pages[0], dict) and pages[0].get('simulation_html'):
-        html_sim = pages[0]['simulation_html']
-    else:
-        html_sim = custom_html_simulation if (custom_html_simulation and '<html' in custom_html_simulation.lower()) else _build_default_interactive_html_simulation(clean_title, ', '.join(tags))
+    # These fields remain empty until topic-specific material is provided by an
+    # explicit curated sorting template or a successful model response.
+    theory_md = ''
+    runnable_code = ''
+    starter_code = ''
+    html_sim = custom_html_simulation if (
+        custom_html_simulation and '<html' in custom_html_simulation.lower()
+    ) else ''
+    quiz_items = []
+    viva_items = []
+    tc_list = []
 
-    quiz_items = [
-        {
-            'question_text': f"What is the primary invariant to maintain when implementing {clean_title}?",
-            'options': [
-                'Ensure state transitions preserve structure validity at every step',
-                'Ignore empty and single-element inputs',
-                'Use unbounded recursion without a base case',
-                'Hardcode outputs for sample inputs only',
-            ],
-            'correct_answer': 'A',
-            'explanation': 'Preserving structural invariants guarantees correctness across both sample and hidden test cases.',
-        },
-        {
-            'question_text': f"Which boundary input is most critical to test first for {clean_title}?",
-            'options': [
-                'Empty collection (n = 0) and single-element collection (n = 1)',
-                'Only sorted even numbers',
-                'Comments and whitespace',
-                'Variable naming length',
-            ],
-            'correct_answer': 'A',
-            'explanation': 'Edge cases like n = 0 and n = 1 expose off-by-one and null/index errors immediately.',
-        },
-        {
-            'question_text': f"Why do we analyze worst-case Big-O time complexity for {clean_title}?",
-            'options': [
-                'To guarantee the solution finishes within the execution time limit on large hidden inputs',
-                'To make the source code file larger',
-                'Because syntax errors depend on Big-O',
-                'To avoid using functions',
-            ],
-            'correct_answer': 'A',
-            'explanation': 'Hidden judge test cases test upper constraint bounds where suboptimal algorithms time out (TLE).',
-        },
-        {
-            'question_text': "What happens if an index accesses position `len(arr)` in a 0-indexed array?",
-            'options': [
-                'It raises an IndexError / Out-of-Bounds error because valid indices are 0 to len(arr) - 1',
-                'It automatically wraps around to index 1',
-                'It returns 0 silently in all languages',
-                'It sorts the array',
-            ],
-            'correct_answer': 'A',
-            'explanation': '0-indexed arrays of length N have valid indices 0 through N-1.',
-        },
-    ]
-
-    viva_items = [
-        {
-            'question': f"Walk through the time and space complexity of your {clean_title} implementation.",
-            'expected_answer': 'State the loop/recursion depth for time complexity and auxiliary data structures for space complexity.',
-            'topics': tags,
-            'difficulty': diff_int,
-        },
-        {
-            'question': f"How does your code handle empty or single-element boundary inputs in {clean_title}?",
-            'expected_answer': 'Explain the early guard condition or base case at the start of the function.',
-            'topics': tags,
-            'difficulty': diff_int,
-        },
-        {
-            'question': f"If the input size N increases by 10x, how will your solution's runtime scale?",
-            'expected_answer': 'Relate input scaling directly to linear O(N), log-linear O(N log N), or quadratic O(N^2) behavior.',
-            'topics': tags,
-            'difficulty': diff_int,
-        },
-    ]
-
-    tc_list = [
-        {'input_data': '5\n1 2 3 4 5', 'expected_output': '15', 'is_hidden': False, 'points_weight': 1.0, 'description': f'Sample baseline case for {clean_title}'},
-        {'input_data': '1\n42', 'expected_output': '42', 'is_hidden': False, 'points_weight': 1.0, 'description': 'Single-element visible boundary case'},
-        {'input_data': '0\n', 'expected_output': '0', 'is_hidden': True, 'points_weight': 2.0, 'description': 'Hidden empty input boundary case'},
-        {'input_data': '6\n-10 -5 0 5 10 20', 'expected_output': '20', 'is_hidden': True, 'points_weight': 2.0, 'description': 'Hidden negative & mixed values test case'},
-        {'input_data': '10\n100 200 300 400 500 600 700 800 900 1000', 'expected_output': '5500', 'is_hidden': True, 'points_weight': 2.0, 'description': 'Hidden stress test case'},
-    ][:max(2, min(int(test_case_count or 5), 10))]
-
-    # Try enriching via Groq fast/quality call if live key is active (only if custom pages not provided and not a sorting suite)
     if not pages and not is_sorting_suite:
-        try:
-            synth_prompt = [
+        tc_required = max(2, min(int(test_case_count or 5), 10))
+        # ── Stage 1: pedagogical core as one JSON document (no HTML — embedding
+        # a raw HTML document inside a JSON string field is where generations
+        # routinely break and truncate). ─────────────────────────────────────
+        core_prompt = [
+            {
+                'role': 'system',
+                'content': (
+                    'You are an academic curriculum and assessment author. Produce only one valid JSON object. '
+                    'All material must be specifically correct for the named topic and supplied requirements; '
+                    'never substitute a generic sum/echo task or unrelated template. Required keys: '
+                    'aim, problem_statement, theory_md, runnable_code, starter_code, test_cases, quiz_questions, '
+                    'viva_questions. The problem statement must define input/output format and constraints. '
+                    'runnable_code must solve that exact problem. starter_code must be a genuine incomplete scaffold '
+                    'with TODOs, not a full solution and not an echo placeholder. test_cases must be an array of '
+                    'objects with input_data, expected_output, is_hidden, points_weight, description; expected outputs '
+                    'must be correct for the statement. quiz_questions must contain topic-specific objects with '
+                    'question_text, exactly four options, correct_answer (A/B/C/D), and explanation. viva_questions '
+                    'must contain topic-specific question, expected_answer, topics, difficulty. '
+                    'Keep it tight and complete: theory_md under 550 words, code compact, each quiz explanation under 40 words. '
+                    'Do not output any reasoning, planning, schema, or template text: the response must consist of '
+                    'exactly one real JSON object with real content values, no markdown fences and no HTML.'
+                ),
+            },
+            {
+                'role': 'user',
+                'content': (
+                    f"Create the core lab material for the topic: {clean_title}. Subject: {subj.name}. Language: {lang}. "
+                    f"Difficulty: {difficulty}. Requested aim: {aim or '(derive an accurate learning objective)'}. "
+                    f"Requested problem: {problem_statement or '(write a complete, unambiguous problem statement)'}. "
+                    f"Additional exact instructor requirements: {(requirements or '(none supplied)')[:900]}. "
+                    f"Generate exactly {tc_required} test cases with a mix of visible and hidden edge cases. "
+                    f"Include quiz questions: {bool(include_quiz)}. Include viva questions: {bool(include_viva)}. "
+                    'Note: any interactive HTML visualizer requested in the requirements is generated separately — '
+                    'include NO HTML, no visualizer code, and no visualizer description in this document.'
+                ),
+            },
+        ]
+        # Free-tier fallback models are nondeterministic (sometimes a clean
+        # document, sometimes a truncated one). One automatic retry materially
+        # improves reliability while keeping the no-placeholder contract: if
+        # both attempts fail, nothing is created.
+        parsed = {}
+        unavailable = True
+        for _attempt in range(2):
+            # NOTE: json_mode (response_format=json_object) breaks reasoning
+            # separation on the free fallback model — its chain-of-thought then
+            # leaks into the content and eats the whole token budget. Low
+            # reasoning effort + the lenient balanced-JSON extractor is the
+            # reliable combination for this large document.
+            ai_txt, _, is_fb, _ = guarded_ai_call(
+                'agent', institution_id=iid, user_id=uid, role=g.role,
+                messages=core_prompt, pool='quality', max_tokens=5000, temperature=0.2,
+                reasoning_effort='low',
+            )
+            if is_fb or not ai_txt:
+                continue
+            unavailable = False
+            candidate = _extract_json(ai_txt)
+            if candidate:
+                parsed = candidate
+                break
+            log.warning(
+                "[harness.experiment] core material attempt %d incomplete: len=%d head=%r tail=%r",
+                _attempt + 1, len(ai_txt or ''), (ai_txt or '')[:120], (ai_txt or '')[-160:],
+            )
+        if unavailable:
+            raise AgentToolError(
+                'AI content generation is unavailable. No experiment was created; retry when a provider is available.'
+            )
+        if not parsed:
+            raise AgentToolError(
+                'AI content generation returned an incomplete document twice. No experiment was created; retry.'
+            )
+        aim_text = aim_text or str(parsed.get('aim') or '').strip()
+        prob_text = prob_text or str(parsed.get('problem_statement') or '').strip()
+        theory_md = str(parsed.get('theory_md') or '').strip()
+        runnable_code = str(parsed.get('runnable_code') or '').strip()
+        starter_code = str(parsed.get('starter_code') or '').strip()
+        tc_list = parsed.get('test_cases') if isinstance(parsed.get('test_cases'), list) else []
+        if include_quiz:
+            quiz_items = parsed.get('quiz_questions') if isinstance(parsed.get('quiz_questions'), list) else []
+        if include_viva:
+            viva_items = parsed.get('viva_questions') if isinstance(parsed.get('viva_questions'), list) else []
+
+        required_text = {
+            'aim': aim_text,
+            'problem statement': prob_text,
+            'theory': theory_md,
+            'runnable code': runnable_code,
+            'starter code': starter_code,
+        }
+        missing = [name for name, value in required_text.items() if len(value) < 20]
+        if len(tc_list) < tc_required:
+            missing.append('complete requested test-case set')
+        if include_quiz and len(quiz_items) < 3:
+            missing.append('topic-specific quiz questions')
+        if include_viva and len(viva_items) < 2:
+            missing.append('topic-specific viva questions')
+        if missing:
+            raise AgentToolError(
+                'AI returned incomplete task material (' + ', '.join(missing) + '). No experiment was created; retry.'
+            )
+
+        # Normalize minor model-format drift (lowercase answers, dict options,
+        # alias keys) before strict validation.
+        def _norm_tc(tc):
+            if not isinstance(tc, dict):
+                return None
+            inp = tc.get('input_data')
+            exp_out = tc.get('expected_output')
+            if inp is None or str(inp) == '':
+                inp = tc.get('input')
+            if exp_out is None or str(exp_out) == '':
+                exp_out = tc.get('expected') or tc.get('expected_output')
+            if inp is None or exp_out is None:
+                return None
+            return {
+                'input_data': str(inp),
+                'expected_output': str(exp_out),
+                'is_hidden': bool(tc.get('is_hidden', tc.get('hidden', False))),
+                'points_weight': float(tc.get('points_weight') or tc.get('weight') or 1.0),
+                'description': str(tc.get('description') or ''),
+            }
+
+        norm_tcs = [_norm_tc(tc) for tc in tc_list[:tc_required]]
+        if any(t is None for t in norm_tcs) or len(norm_tcs) < tc_required:
+            raise AgentToolError('AI returned malformed or incomplete test cases. No experiment was created; retry.')
+        tc_list = norm_tcs
+
+        def _norm_quiz(q):
+            if not isinstance(q, dict):
+                return None
+            qt = str(q.get('question_text') or q.get('question') or '').strip()
+            opts = q.get('options')
+            if isinstance(opts, dict):
+                opts = [opts.get(k) for k in ('A', 'B', 'C', 'D')]
+            if not isinstance(opts, list):
+                return None
+            opts = [str(o).strip() for o in opts]
+            ca = str(q.get('correct_answer') or q.get('answer') or q.get('correct') or '').strip().upper()
+            if len(opts) != 4 or ca not in ('A', 'B', 'C', 'D') or not qt:
+                return None
+            return {
+                'question_text': qt,
+                'options': opts,
+                'correct_answer': ca,
+                'explanation': str(q.get('explanation') or '').strip(),
+            }
+
+        norm_quiz = [_norm_quiz(q) for q in quiz_items]
+        norm_quiz = [q for q in norm_quiz if q]
+        if include_quiz and len(norm_quiz) < 3:
+            raise AgentToolError('AI returned malformed or incomplete quiz questions. No experiment was created; retry.')
+        quiz_items = norm_quiz
+
+        def _norm_viva(q):
+            if not isinstance(q, dict):
+                return None
+            qtext = str(q.get('question') or q.get('question_text') or '').strip()
+            ans = str(q.get('expected_answer') or q.get('answer') or '').strip()
+            if not qtext or not ans:
+                return None
+            return {
+                'question': qtext,
+                'expected_answer': ans,
+                'topics': q.get('topics') if isinstance(q.get('topics'), list) else [],
+                'difficulty': int(q.get('difficulty') or 2) if str(q.get('difficulty') or '').isdigit() else 2,
+            }
+
+        norm_viva = [q for q in (_norm_viva(q) for q in viva_items) if q]
+        if include_viva and len(norm_viva) < 2:
+            raise AgentToolError('AI returned malformed or incomplete viva questions. No experiment was created; retry.')
+        viva_items = norm_viva
+
+        # ── Stage 2: standalone interactive visualizer, generated as plain
+        # HTML (no JSON escaping involved). Must visualize THIS topic. ───────
+        if not html_sim:
+            html_prompt = [
                 {
                     'role': 'system',
                     'content': (
-                        'You are an academic curriculum architect. Return ONLY a valid JSON object with keys: '
-                        '{"theory_md": "...", "runnable_code": "...", "starter_code": "...", '
-                        '"html_simulation": "<!DOCTYPE html><html>...</html>", '
-                        '"test_cases": [{"input_data": "...", "expected_output": "...", "is_hidden": false, "description": "..."}]}'
+                        'You are an interactive lab author. Do not output any reasoning, planning, or explanation: '
+                        'the response must be ONLY one complete standalone HTML document '
+                        '(DOCTYPE through </html>) with inline CSS and JavaScript. No markdown fences, no prose. '
+                        'Dark theme (#0f0f23 background, #6366f1 accent). The visualizer must actually model the '
+                        'named topic and include user controls (step/run/reset) plus a visible state readout. '
+                        'Keep it compact (under about 220 lines).'
                     ),
                 },
                 {
                     'role': 'user',
                     'content': (
-                        f"Create complete experiment material for '{clean_title}' in {lang}. "
-                        f"Aim: {aim_text}. Problem: {prob_text}. "
-                        "html_simulation must be a complete self-contained dark-themed (#0f0f23) interactive HTML/CSS/JS visualizer."
+                        f"Build the interactive visualizer for the lab topic: {clean_title}. "
+                        f"Problem context: {prob_text[:600]} "
+                        f"It must visualize {clean_title} itself (states, steps, or the algorithm executing on a small worked example), "
+                        'not a generic list demo.'
                     ),
                 },
             ]
-            ai_txt, _, is_fb, _ = guarded_ai_call(
-                'agent', institution_id=iid, user_id=uid, role=g.role,
-                messages=synth_prompt, pool='quality', max_tokens=2200, temperature=0.25,
-            )
-            if ai_txt and not is_fb:
-                m = re.search(r'\{.*\}', ai_txt, re.DOTALL)
-                if m:
-                    parsed = json.loads(m.group())
-                    if isinstance(parsed.get('theory_md'), str) and len(parsed['theory_md']) > 80:
-                        theory_md = parsed['theory_md']
-                    if isinstance(parsed.get('runnable_code'), str) and len(parsed['runnable_code']) > 20:
-                        runnable_code = parsed['runnable_code']
-                    if isinstance(parsed.get('starter_code'), str) and len(parsed['starter_code']) > 20:
-                        starter_code = parsed['starter_code']
-                    if not custom_html_simulation and isinstance(parsed.get('html_simulation'), str) and '<html' in parsed['html_simulation'].lower():
-                        html_sim = parsed['html_simulation']
-                    if isinstance(parsed.get('test_cases'), list) and len(parsed['test_cases']) >= 2:
-                        tc_list = parsed['test_cases'][:max(2, min(int(test_case_count or 5), 10))]
-        except Exception as exc:
-            log.warning("[harness.experiment] AI enrichment fallback used: %s", exc)
+            html_unavailable = True
+            for _attempt in range(2):
+                html_txt, _, html_fb, _ = guarded_ai_call(
+                    'agent', institution_id=iid, user_id=uid, role=g.role,
+                    messages=html_prompt, pool='quality', max_tokens=2500, temperature=0.3,
+                    reasoning_effort='low',
+                )
+                if html_fb or not html_txt:
+                    continue
+                html_unavailable = False
+                candidate = html_txt.strip()
+                fence = re.search(r'```(?:html)?\s*(<!DOCTYPE.*?</html>)', candidate, re.DOTALL | re.IGNORECASE)
+                if fence:
+                    candidate = fence.group(1).strip()
+                else:
+                    # Reasoning models may wrap the document in prose; pull the
+                    # outermost DOCTYPE/<html> ... </html> region directly.
+                    low = candidate.lower()
+                    doc_start = low.find('<!doctype')
+                    html_start = low.find('<html')
+                    html_end = low.rfind('</html>')
+                    if html_end != -1 and (doc_start != -1 or html_start != -1):
+                        start = doc_start if (doc_start != -1 and (html_start == -1 or doc_start < html_start)) else html_start
+                        candidate = candidate[start:html_end + len('</html>')].strip()
+                if '<html' in candidate.lower() and '</html>' in candidate.lower() and len(candidate) > 800:
+                    html_sim = candidate
+                    break
+            if not html_sim:
+                if html_unavailable:
+                    raise AgentToolError(
+                        'Interactive visualizer generation is unavailable. No experiment was created; retry when a provider is available.'
+                    )
+                raise AgentToolError(
+                    'AI returned an incomplete HTML visualizer twice. No experiment was created; retry.'
+                )
+    if pages:
+        # Custom page inputs must be complete; curated algorithm pages may use their
+        # exact topic-specific built-in specification, but never generic placeholders.
+        for page in pages:
+            if not isinstance(page, dict):
+                raise AgentToolError('Pages must include a title and topic-specific content.')
+            page_title = str(page.get('title') or '').strip()
+            spec = get_sorting_spec(page_title)
+            page_theory = str(page.get('theory') or page.get('content') or '').strip()
+            page_html = str(page.get('simulation_html') or page.get('html') or '').strip()
+            if not spec and (len(page_theory) < 40 or '<html' not in page_html.lower()):
+                raise AgentToolError('Custom pages need substantive theory and a complete HTML simulation; no experiment was created.')
+
+    if pages or is_sorting_suite:
+        aim_text = aim_text or f"Study and implement {clean_title} using the provided topic-specific learning materials."
+        prob_text = prob_text or f"Complete the published learning pages and implement {clean_title} according to the associated requirements."
 
     # 3. Create Experiment row (rubric weights sum to 100)
     exp = Experiment(
@@ -1358,13 +1535,13 @@ def build_complete_experiment_suite(
             db.session.flush()
             created_pages.append(cp)
 
-            raw_theory = p_data.get('theory') if isinstance(p_data, dict) else None
+            raw_theory = p_data.get('theory') or p_data.get('content')
             if raw_theory and len(str(raw_theory).strip()) > 40:
                 p_theory = str(raw_theory).strip()
             elif spec:
                 p_theory = spec['theory']
             else:
-                p_theory = (p_data.get('content') if isinstance(p_data, dict) else None) or f"### {p_title}\n\nTheory walkthrough and algorithmic derivations."
+                raise AgentToolError(f"Page '{p_title}' is missing substantive topic-specific theory.")
 
             mod_th = ContentModule(
                 experiment_id=exp.id,
@@ -1377,14 +1554,13 @@ def build_complete_experiment_suite(
             mod_order += 1
             db.session.add(mod_th)
 
-            p_sim = p_data.get('simulation_html') or p_data.get('html') if isinstance(p_data, dict) else None
+            p_sim = p_data.get('simulation_html') or p_data.get('html')
             if not p_sim or '<html' not in p_sim.lower():
-                if spec:
-                    p_sim = generate_sorting_simulation_html(
-                        spec['title'], spec['key'], spec['description'], spec.get('default_arr') or spec.get('default_array')
-                    )
-                else:
-                    p_sim = _build_default_interactive_html_simulation(p_title, ', '.join(tags))
+                if not spec:
+                    raise AgentToolError(f"Page '{p_title}' is missing its interactive HTML simulation.")
+                p_sim = generate_sorting_simulation_html(
+                    spec['title'], spec['key'], spec['description'], spec.get('default_arr') or spec.get('default_array')
+                )
             mod_s = ContentModule(
                 experiment_id=exp.id,
                 page_id=cp.id,
@@ -1720,6 +1896,22 @@ def build_complete_exam(
     Creates and publishes a standalone timed `Exam` (`exams` + `exam_questions`) with both
     multiple-choice (`mcq`) and Docker-graded `coding` questions in one shot!
     """
+    title = _coerce_str(title)
+    subject_name = _coerce_str(subject_name)
+    exam_type = _coerce_str(exam_type, 'mixed')
+    try:
+        duration_minutes = int(duration_minutes)
+    except (TypeError, ValueError):
+        duration_minutes = 45
+    try:
+        mcq_count = int(mcq_count)
+    except (TypeError, ValueError):
+        mcq_count = 3
+    try:
+        coding_count = int(coding_count)
+    except (TypeError, ValueError):
+        coding_count = 1
+
     iid = g.institution_id
     uid = g.user_id
     ss_rows = _instructor_section_subjects()
@@ -1734,7 +1926,7 @@ def build_complete_exam(
     if not subj:
         raise AgentToolError('No subject found to attach this exam.')
 
-    e_type = (exam_type or 'mixed').lower().strip()
+    e_type = exam_type.lower().strip()
     if e_type not in ('mcq', 'coding', 'mixed'):
         e_type = 'mixed'
 
@@ -1836,7 +2028,7 @@ def autonomous_bulk_autograde(experiment_title: str = None, publish_immediately:
     attempts = CodeAttempt.query.filter_by(experiment_id=exp.id).order_by(CodeAttempt.submitted_at.asc()).all()
     best_by_student = {}
     for att in attempts:
-        pct = (float(att.passed_count or 0) / max(int(att.total_count or 1), 1)) * 100.0
+        pct = (float(att.test_cases_passed or 0) / max(int(att.test_cases_total or 1), 1)) * 100.0
         if att.student_id not in best_by_student or pct >= best_by_student[att.student_id]:
             best_by_student[att.student_id] = round(pct, 1)
 
@@ -1994,9 +2186,11 @@ def autonomous_grant_extension_or_intervention(
         db.session.add(ext)
         db.session.add(Notification(
             user_id=stu.id,
-            type='extension',
+            institution_id=g.institution_id,
+            notif_type='extension',
             title=f'Deadline Extended: {exp.title}',
             message=f"Your deadline for '{exp.title}' has been extended until {deadline.strftime('%Y-%m-%d %H:%M UTC')}.",
+            link='/student/subjects',
         ))
         db.session.commit()
         return {
@@ -2019,9 +2213,11 @@ def autonomous_grant_extension_or_intervention(
     db.session.add(iv)
     db.session.add(Notification(
         user_id=stu.id,
-        type='intervention',
+        institution_id=g.institution_id,
+        notif_type='intervention',
         title='Instructor Academic Support Note',
         message=note or 'Your instructor shared an academic support check-in. Check your dashboard for details.',
+        link='/student/dashboard',
     ))
     db.session.commit()
     return {
@@ -2138,12 +2334,17 @@ def instructor_get_common_errors(experiment_title: str = None, limit: int = 15, 
 
     failed = CodeAttempt.query.filter(
         CodeAttempt.experiment_id.in_(exp_ids),
-        or_(CodeAttempt.error_message.isnot(None), CodeAttempt.passed_count < CodeAttempt.total_count)
+        or_(
+            CodeAttempt.stderr.isnot(None),
+            CodeAttempt.compile_output.isnot(None),
+            CodeAttempt.test_cases_passed < CodeAttempt.test_cases_total,
+            CodeAttempt.test_cases_total == 0,
+        )
     ).order_by(CodeAttempt.submitted_at.desc()).limit(100).all()
 
     clusters = defaultdict(lambda: {'count': 0, 'experiments': set(), 'sample_error': ''})
     for att in failed:
-        err_raw = (att.error_message or '').strip()
+        err_raw = _attempt_error_text(att)
         if not err_raw:
             err_type = 'Logic / Wrong Output on Test Cases'
         elif 'SyntaxError' in err_raw or 'IndentationError' in err_raw:
@@ -2506,7 +2707,6 @@ def autonomous_campus_setup(
                 department_id=dept.id,
                 name=sub_clean,
                 code=sub_code,
-                subject_type='Lab',
             )
             db.session.add(sub)
             db.session.flush()
@@ -2729,7 +2929,6 @@ def autonomous_create_academic_entity(
         department_id=dept.id if dept else None,
         name=name.strip(),
         code=s_code,
-        subject_type='Lab',
     )
     db.session.add(subj)
     db.session.commit()
@@ -3118,9 +3317,12 @@ def admin_query_analytics_domain(domain: str = 'grades', days: int = 30,
     fn = _resolve(target[0], target[1])
     res = _call_view(fn, params)
     if isinstance(res, dict) and 'rows' in res and isinstance(res['rows'], list):
-        res['rows_sample'] = res['rows'][:15]
-        res['total_rows_count'] = len(res['rows'])
-        del res['rows']
+        # rows_sample carries student identities — place it FIRST so it
+        # survives harness observation truncation (MAX_OBSERVATION_CHARS).
+        sample = res['rows'][:15]
+        total = len(res['rows'])
+        rest = {k: v for k, v in res.items() if k != 'rows'}
+        res = {'rows_sample': sample, 'total_rows_count': total, **rest}
     return res
 
 
@@ -3151,7 +3353,7 @@ def admin_query_academic_catalog_deep(**_):
         'departments': [d.to_dict() for d in depts],
         'batches': [b.to_dict() for b in batches],
         'sections': [s.to_dict() for s in sections],
-        'subjects': [{'id': s.id, 'name': s.name, 'code': s.code, 'semester': s.semester} for s in subjects],
+        'subjects': [{'id': s.id, 'name': s.name, 'code': s.code, 'subject_type': s.subject_type} for s in subjects],
         'section_subject_assignments_count': len(ss_rows),
         'unassigned_subjects': unassigned_subjects,
         'empty_sections_without_students': empty_sections,
@@ -3194,7 +3396,6 @@ def admin_propose_force_logout_users(target_role_or_email: str = 'student', reas
             raise AgentToolError(f"User with email '{target}' not found.")
         return {
             'requires_confirmation': True,
-            'action': 'admin_force_logout',
             'draft': {
                 'action': 'admin_force_logout',
                 'scope': 'single_user',
@@ -3209,7 +3410,6 @@ def admin_propose_force_logout_users(target_role_or_email: str = 'student', reas
     cnt = User.query.filter_by(institution_id=iid, role=role_key, is_active=True).count()
     return {
         'requires_confirmation': True,
-        'action': 'admin_force_logout',
         'draft': {
             'action': 'admin_force_logout',
             'scope': 'role_cohort',
@@ -3359,7 +3559,6 @@ def platform_get_overview(**_):
     configs = {c.key: c.value for c in PlatformConfig.query.all()}
     return {
         'total_institutions': inst_count,
-        'total_users': sum(role_counts.values()),
         'users_by_role': role_counts,
         'global_ai_tokens_today': int(tokens_today),
         'platform_configs': configs,
@@ -3370,8 +3569,8 @@ def platform_list_institutions(search: str = None, **_):
     """List all institutions on the platform with subscription plan, status, seat usage, and AI token consumption."""
     q = Institution.query
     if search:
-        q = q.filter(or_(Institution.name.ilike(f"%{search}%"), Institution.subdomain.ilike(f"%{search}%")))
-    insts = q.order_by(Institution.created_at.desc()).limit(30).all()
+        q = q.filter(or_(Institution.name.ilike(f"%{search}%"), Institution.code.ilike(f"%{search}%")))
+    insts = q.order_by(Institution.onboarded_at.desc()).limit(30).all()
 
     out = []
     for inst in insts:
@@ -3383,11 +3582,11 @@ def platform_list_institutions(search: str = None, **_):
         out.append({
             'id': inst.id,
             'name': inst.name,
-            'subdomain': inst.subdomain,
+            'code': inst.code,
             'plan': inst.plan,
-            'status': inst.status,
-            'students': f"{stu_cnt}/{inst.max_students or 0}",
-            'instructors': f"{instr_cnt}/{inst.max_instructors or 10}",
+            'status': 'active' if inst.is_active else 'suspended',
+            'students': str(stu_cnt),
+            'instructors': str(instr_cnt),
             'total_ai_tokens': int(tkns),
         })
     return {'institutions': out}
@@ -3410,15 +3609,19 @@ def autonomous_onboard_institution(
     if not name:
         raise AgentToolError('Institution name is required.')
     sub = (subdomain or ''.join(c for c in name.lower() if c.isalnum())[:16]).strip()
-    inst = Institution.query.filter_by(subdomain=sub).first()
+    # `institutions.code` is the unique tenant identifier (VARCHAR(20), NOT NULL).
+    base_code = (sub or name).upper().replace(' ', '')[:20]
+    code = base_code
+    while Institution.query.filter_by(code=code).first():
+        code = f"{base_code[:16]}{str(uuid.uuid4())[:4].upper()}"
+    inst = Institution.query.filter_by(code=code).first()
     if not inst:
         inst = Institution(
             name=name.strip(),
-            subdomain=sub,
+            code=code,
             plan=(plan or 'enterprise').lower().strip(),
-            status='active',
-            max_students=int(max_students or 1000),
-            max_instructors=50,
+            is_active=True,
+            email_domain=f"{sub}.edu" if sub else None,
             onboarding_status='completed',
         )
         db.session.add(inst)
@@ -3451,11 +3654,11 @@ def autonomous_onboard_institution(
         'success': True,
         'institution_id': inst.id,
         'name': inst.name,
-        'subdomain': inst.subdomain,
+        'code': inst.code,
         'plan': inst.plan,
         'admin_email': adm_user.email,
         'daily_token_quota': pol.daily_token_quota,
-        'message': f"Onboarded institution '{inst.name}' ({inst.subdomain}), provisioned admin '{adm_user.email}', and set {pol.daily_token_quota:,} daily AI token quota.",
+        'message': f"Onboarded institution '{inst.name}' (code {inst.code}), provisioned admin '{adm_user.email}', and set {pol.daily_token_quota:,} daily AI token quota. Note: the {int(max_students or 1000)}-seat cap was requested, but seat caps are not tracked per institution on this platform.",
     }
 
 
@@ -3566,18 +3769,20 @@ def autonomous_update_tenant_or_platform_config(
         raise AgentToolError('Provide either institution_name_or_subdomain or config_key/config_value.')
     q_str = institution_name_or_subdomain.strip()
     inst = Institution.query.filter(
-        or_(Institution.name.ilike(f"%{q_str}%"), Institution.subdomain.ilike(f"%{q_str}%"))
+        or_(Institution.name.ilike(f"%{q_str}%"), Institution.code.ilike(f"%{q_str}%"))
     ).first()
     if not inst:
         raise AgentToolError(f"Institution '{q_str}' not found.")
     if plan:
         inst.plan = plan.lower().strip()
-    if status and status.lower() != 'suspended':
-        inst.status = status.lower().strip()
-    if max_students:
-        inst.max_students = int(max_students)
+    if status and status.lower() in ('active', 'pending', 'suspended'):
+        inst.onboarding_status = status.lower()
+        inst.is_active = status.lower() != 'suspended'
     db.session.commit()
-    return {'success': True, 'institution': inst.name, 'plan': inst.plan, 'max_students': inst.max_students, 'message': f"Updated '{inst.name}' (Plan: {inst.plan}, Max Students: {inst.max_students})."}
+    return {'success': True, 'institution': inst.name, 'plan': inst.plan,
+            'status': inst.onboarding_status,
+            'message': f"Updated '{inst.name}' (Plan: {inst.plan}, Status: {inst.onboarding_status})." + (
+                ' Seat cap is not tracked per institution.' if max_students else '')}
 
 
 # ══════════════════════════════════════════════════════════════════════════════
@@ -3708,7 +3913,7 @@ PLATFORM_USER_TOOLS = {
 INSTRUCTOR_TOOLS = {
     'build_complete_experiment_suite': (
         build_complete_experiment_suite,
-        'build_complete_experiment_suite(title?, topic?, subject_name?, difficulty="medium", language="python", aim?, problem_statement?, custom_html_simulation?, include_quiz=True, include_viva=True, include_checkpoints=True, test_case_count=5, algorithm_pages=["Bubble Sort", "Selection Sort", "Insertion Sort", "Merge Sort", "Quick Sort"], pages?) — Autonomously create and publish a complete Experiment with ContentPages, interactive HTML simulation visualizers, theory, runnable code, Quiz, Viva, TestCases & SPARK Checkpoints. For multi-algorithm suites like Sorting or Searching, specify algorithm_pages=[...] without writing raw HTML.',
+        'build_complete_experiment_suite(title?, topic?, subject_name?, difficulty="medium", language="python", aim?, problem_statement?, requirements?, custom_html_simulation?, include_quiz=True, include_viva=True, include_checkpoints=True, test_case_count=5, algorithm_pages=["Bubble Sort", "Selection Sort", "Insertion Sort", "Merge Sort", "Quick Sort"], pages?) — Autonomously create and publish a complete Experiment with ContentPages, interactive HTML simulation visualizers, theory, runnable code, Quiz, Viva, TestCases & SPARK Checkpoints. For multi-algorithm suites like Sorting or Searching, specify algorithm_pages=[...] without writing raw HTML.',
         'both',
     ),
     'autonomous_add_experiment_content_or_html': (
@@ -3862,13 +4067,16 @@ PLATFORM_ADMIN_TOOLS = {
 def get_tools_for_role(role: str) -> dict:
     """Return the complete tool map for a given user role."""
     r = (role or 'student').lower().strip()
+    # The JWT uses `platform_admin`; the Harness UI/config and tool registry use `admin`.
+    if r == 'platform_admin':
+        r = 'admin'
     if r == 'student':
         return STUDENT_TOOLS
     if r == 'platform_user':
         return PLATFORM_USER_TOOLS
     if r == 'instructor':
         return INSTRUCTOR_TOOLS
-    if r in ('admin', 'platform_admin'):
+    if r == 'admin':
         return PLATFORM_ADMIN_TOOLS
 
     # Default: institution_admin (includes autonomous campus setup, entity creation, assignment/enrollment,
@@ -3910,7 +4118,7 @@ def get_tools_for_role(role: str) -> dict:
         ),
         'build_complete_experiment_suite': (
             build_complete_experiment_suite,
-            'build_complete_experiment_suite(title?, topic?, subject_name?, difficulty="medium", language="python", aim?, problem_statement?, custom_html_simulation?, include_quiz=True, include_viva=True, include_checkpoints=True, test_case_count=5, algorithm_pages=["Bubble Sort", "Selection Sort", "Insertion Sort", "Merge Sort", "Quick Sort"], pages?) — Autonomously create and publish a complete Experiment with ContentPages, interactive HTML simulation visualizers, Quiz, Viva, TestCases & SPARK Checkpoints. For multi-algorithm suites like Sorting or Searching, specify algorithm_pages=[...] without writing raw HTML.',
+            'build_complete_experiment_suite(title?, topic?, subject_name?, difficulty="medium", language="python", aim?, problem_statement?, requirements?, custom_html_simulation?, include_quiz=True, include_viva=True, include_checkpoints=True, test_case_count=5, algorithm_pages=["Bubble Sort", "Selection Sort", "Insertion Sort", "Merge Sort", "Quick Sort"], pages?) — Autonomously create and publish a complete Experiment with ContentPages, interactive HTML simulation visualizers, Quiz, Viva, TestCases & SPARK Checkpoints. For multi-algorithm suites like Sorting or Searching, specify algorithm_pages=[...] without writing raw HTML.',
             'both',
         ),
         'query_analytics_domain': (
@@ -4316,7 +4524,6 @@ def execute_role_action(action_payload: dict, institution_id: str, user_id: str,
             department_id=action_payload.get('department_id'),
             name=action_payload.get('name') or 'New Subject',
             code=code,
-            subject_type='Lab',
         )
         db.session.add(subj)
         db.session.commit()
@@ -4361,13 +4568,18 @@ def execute_role_action(action_payload: dict, institution_id: str, user_id: str,
     if action == 'platform_provision_institution':
         if role != 'admin':
             raise AgentToolError('Only Platform Admins can provision institutions.')
+        sub = (action_payload.get('subdomain') or action_payload.get('name') or 'inst')
+        base_code = str(sub).upper().replace(' ', '')[:20]
+        code = base_code
+        while Institution.query.filter_by(code=code).first():
+            code = f"{base_code[:16]}{str(uuid.uuid4())[:4].upper()}"
         inst = Institution(
             name=action_payload.get('name'),
-            subdomain=action_payload.get('subdomain'),
+            code=code,
             plan=action_payload.get('plan') or 'pro',
-            status='active',
-            max_students=int(action_payload.get('max_students') or 500),
-            max_instructors=25,
+            is_active=True,
+            email_domain=f"{sub}.edu",
+            onboarding_status='completed',
         )
         db.session.add(inst)
         db.session.flush()
@@ -4387,7 +4599,7 @@ def execute_role_action(action_payload: dict, institution_id: str, user_id: str,
         return {
             'success': True,
             'institution_id': inst.id,
-            'message': f"Provisioned Institution '{inst.name}' (subdomain: {inst.subdomain}, plan: {inst.plan}).",
+            'message': f"Provisioned Institution '{inst.name}' (code: {inst.code}, plan: {inst.plan}).",
         }
 
     if action == 'platform_update_tenant':
@@ -4397,15 +4609,14 @@ def execute_role_action(action_payload: dict, institution_id: str, user_id: str,
         if not inst:
             raise AgentToolError('Institution not found.')
         if action_payload.get('new_plan'):
-            inst.plan = action_payload['new_plan']
-        if action_payload.get('new_status'):
-            inst.status = action_payload['new_status']
-        if action_payload.get('new_max_students'):
-            inst.max_students = int(action_payload['new_max_students'])
+            inst.plan = action_payload['new_plan'].lower().strip()
+        if action_payload.get('new_status') and str(action_payload['new_status']).lower() in ('active', 'pending', 'suspended'):
+            inst.onboarding_status = str(action_payload['new_status']).lower()
+            inst.is_active = inst.onboarding_status != 'suspended'
         db.session.commit()
         return {
             'success': True,
-            'message': f"Updated '{inst.name}' -> Plan: {inst.plan}, Status: {inst.status}, Max Students: {inst.max_students}.",
+            'message': f"Updated '{inst.name}' -> Plan: {inst.plan}, Status: {inst.onboarding_status}.",
         }
 
     if action == 'platform_update_config':

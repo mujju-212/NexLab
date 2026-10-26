@@ -17,11 +17,11 @@ const ROLES = [
 ];
 
 const AUTH_SETTINGS = [
-  { key: 'Auth Mechanism',     value: 'JWT (httpOnly cookie: access_token)' },
-  { key: 'Token Transport',    value: 'Cookie + Bearer header fallback' },
-  { key: 'Password Hashing',   value: 'werkzeug PBKDF2-SHA256' },
-  { key: 'Role Enforcement',   value: '@require_role decorator per route' },
-  { key: 'Session Invalidation', value: 'force_logout flag (per-user)' },
+  { key: 'Auth Mechanism', value: 'Signed JWT, validated by the backend' },
+  { key: 'Token Transport', value: 'Authorization: Bearer header; client token storage is JavaScript-readable' },
+  { key: 'Password Hashing', value: 'bcrypt' },
+  { key: 'Role Enforcement', value: '@require_role decorator per protected route' },
+  { key: 'Session Invalidation', value: 'Per-user force_logout plus account and institution status checks' },
 ];
 
 const ACTION_STYLE = (action: string) => {
@@ -47,6 +47,7 @@ export default function SecurityPage() {
   const [exportJobs, setExportJobs] = useState<ExportJobRow[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [downloading, setDownloading] = useState<string | null>(null);
 
   useEffect(() => {
     if (tab !== 'audit') return;
@@ -65,6 +66,54 @@ export default function SecurityPage() {
       }
     })();
   }, [tab, days, page]);
+
+  useEffect(() => {
+    if (tab !== 'governance') return;
+    let cancelled = false;
+    setLoading(true);
+    setError(null);
+    Promise.all([
+      adminGovernanceService.getImpersonationHistory(),
+      adminGovernanceService.listExports(),
+    ]).then(([sessions, exports]) => {
+      if (cancelled) return;
+      setImpSessions(sessions.sessions ?? []);
+      setExportJobs(exports.jobs ?? []);
+    }).catch(() => {
+      if (!cancelled) setError('Could not load governance history and export jobs.');
+    }).finally(() => {
+      if (!cancelled) setLoading(false);
+    });
+    return () => { cancelled = true; };
+  }, [tab]);
+
+  const saveDownload = async (key: string, filename: string, fetchBlob: () => Promise<Blob>) => {
+    setDownloading(key);
+    setError(null);
+    try {
+      const blob = await fetchBlob();
+      const url = URL.createObjectURL(blob);
+      const anchor = document.createElement('a');
+      anchor.href = url;
+      anchor.download = filename;
+      document.body.appendChild(anchor);
+      anchor.click();
+      anchor.remove();
+      window.setTimeout(() => URL.revokeObjectURL(url), 1000);
+    } catch (e) {
+      const response = (e as { response?: { data?: Blob } }).response?.data;
+      let message = 'Download failed. Please retry.';
+      if (response instanceof Blob) {
+        try {
+          const parsed = JSON.parse(await response.text()) as { error?: string };
+          if (parsed.error) message = parsed.error;
+        } catch { /* keep generic download error */ }
+      }
+      setError(message);
+    } finally {
+      setDownloading(null);
+    }
+  };
 
   return (
     <AdminShell activePage="Security" title="Security & Access Control" subtitle="Role matrix, platform-wide audit trail and authentication details">
@@ -89,6 +138,10 @@ export default function SecurityPage() {
 
       {/* ── Roles ─────────────────────────────────────────────────────── */}
       {tab === 'roles' && (
+        <>
+        <p role="note" style={{ padding: '10px 13px', margin: '0 0 14px', borderRadius: 10, background: '#f4f1ff', color: '#5b3cc4', fontSize: 12.5 }}>
+          Reference only: this matrix describes the current role model. It does not edit permissions or authorize access changes.
+        </p>
         <div className={styles.roleGrid}>
           {ROLES.map(r => (
             <div key={r.role} className={styles.roleCard}>
@@ -111,6 +164,7 @@ export default function SecurityPage() {
             </div>
           ))}
         </div>
+        </>
       )}
 
       {/* ── Audit Logs ────────────────────────────────────────────────── */}
@@ -172,7 +226,9 @@ export default function SecurityPage() {
       {tab === 'governance' && (
         <div className={styles.card}>
           <h3 className={styles.cardTitle}>Impersonation history</h3>
-          {impSessions.length === 0 && <p style={{ color: '#9891a6', fontSize: 13, fontWeight: 600 }}>No impersonation sessions recorded.</p>}
+          {error && <p role="alert" style={{ color: '#b91c1c', fontSize: 13 }}>{error}</p>}
+          {loading && <p style={{ color: '#64748b', fontSize: 13 }}>Loading governance records…</p>}
+          {!loading && impSessions.length === 0 && <p style={{ color: '#9891a6', fontSize: 13, fontWeight: 600 }}>No impersonation sessions recorded.</p>}
           {impSessions.map(s => (
             <div key={s.id} style={{ display: 'flex', gap: 12, flexWrap: 'wrap', alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,.7)', fontSize: 13 }}>
               <span style={{ fontWeight: 700, color: s.active ? '#b45309' : '#463f57', minWidth: 90 }}>
@@ -184,21 +240,23 @@ export default function SecurityPage() {
           ))}
 
           <h3 className={styles.cardTitle} style={{ marginTop: 22 }}>Data export jobs</h3>
-          {exportJobs.length === 0 && <p style={{ color: '#9891a6', fontSize: 13, fontWeight: 600 }}>No export jobs yet — generate one from any User-360 profile.</p>}
+          {!loading && exportJobs.length === 0 && <p style={{ color: '#9891a6', fontSize: 13, fontWeight: 600 }}>No export jobs yet — generate one from a User 360 profile.</p>}
           {exportJobs.map(j => (
             <div key={j.id} style={{ display: 'flex', gap: 12, alignItems: 'center', padding: '8px 0', borderBottom: '1px solid rgba(255,255,255,.7)', fontSize: 13 }}>
               <span style={{ fontWeight: 700, color: j.status === 'ready' ? '#15803d' : '#b45309', minWidth: 70 }}>{j.status}</span>
               <span style={{ flex: 1 }}>GDPR bundle · expires {new Date(j.expires_at).toLocaleString()}</span>
               {j.status === 'ready' && (
-                <a href={`/api/admin/exports/${j.id}`} download style={{ fontWeight: 700, color: '#6d28d9' }}>Download</a>
+                <button type="button" disabled={downloading === j.id} onClick={() => void saveDownload(j.id, `user-data-export-${j.id}.json`, () => adminGovernanceService.downloadExport(j.id))} style={{ border: 0, background: 'transparent', fontWeight: 700, color: '#6d28d9', cursor: 'pointer' }}>
+                  {downloading === j.id ? 'Downloading…' : 'Download'}
+                </button>
               )}
             </div>
           ))}
 
           <div style={{ marginTop: 22, display: 'flex', gap: 10, flexWrap: 'wrap' }}>
-            <a className={styles.btnSecondary} style={{ textDecoration: 'none' }} href={adminGovernanceService.auditExportUrl(30)} download>
-              Export audit log CSV (30 days)
-            </a>
+            <button type="button" className={styles.btnSecondary} disabled={downloading === 'audit'} onClick={() => void saveDownload('audit', `nexlab_audit_${new Date().toISOString().slice(0, 10)}.csv`, () => adminGovernanceService.downloadAuditCsv(30))}>
+              {downloading === 'audit' ? 'Exporting…' : 'Export audit log CSV (30 days)'}
+            </button>
           </div>
         </div>
       )}
