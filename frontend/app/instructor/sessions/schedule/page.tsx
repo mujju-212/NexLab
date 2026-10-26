@@ -25,6 +25,7 @@ import { experimentService } from '@/services/experiment.service';
 import { experienceService } from '@/services/experience.service';
 import { apiClient } from '@/services/api-client';
 import styles from '../shared.module.css';
+import scheduleStyles from './schedule.module.css';
 
 interface SectionSubjectRow {
   section_subject_id: string;
@@ -283,25 +284,35 @@ export default function ScheduleWizardPage() {
       )}
 
       {/* ── Step indicator ──────────────────────────────────────────────── */}
-      <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginBottom: 24, flexWrap: 'wrap' }}>
+      <div className={scheduleStyles.stepIndicatorBar}>
         {STEPS.map((label, i) => (
-          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-            <div style={{
-              display: 'flex', alignItems: 'center', gap: 8, padding: '8px 14px',
-              borderRadius: 999, fontSize: 13, fontWeight: 700,
-              background: i === step ? 'linear-gradient(135deg,#7c3aed,#9333ea)' : i < step ? 'rgba(124,58,237,.1)' : '#f3f4f6',
-              color: i === step ? '#fff' : i < step ? '#7c3aed' : '#9ca3af',
-              cursor: i < step ? 'pointer' : 'default',
-            }} onClick={() => i < step && setStep(i)}>
-              <span style={{
-                width: 20, height: 20, borderRadius: 10, display: 'flex',
-                alignItems: 'center', justifyContent: 'center', fontSize: 11,
-                background: i === step ? 'rgba(255,255,255,.25)' : i < step ? '#7c3aed' : '#e5e7eb',
-                color: i === step ? '#fff' : i < step ? '#fff' : '#9ca3af',
-              }}>{i < step ? '✓' : i + 1}</span>
+          <div key={label} style={{ display: 'flex', alignItems: 'center', gap: 6, flexShrink: 0 }}>
+            <div
+              className={scheduleStyles.stepPill}
+              style={{
+                background: i === step ? 'linear-gradient(135deg,#7c3aed,#9333ea)' : i < step ? 'rgba(124,58,237,.1)' : '#f3f4f6',
+                color: i === step ? '#fff' : i < step ? '#7c3aed' : '#9ca3af',
+                cursor: i < step ? 'pointer' : 'default',
+              }}
+              onClick={() => i < step && setStep(i)}
+            >
+              <span
+                className={scheduleStyles.stepBadge}
+                style={{
+                  background: i === step ? 'rgba(255,255,255,.25)' : i < step ? '#7c3aed' : '#e5e7eb',
+                  color: i === step ? '#fff' : i < step ? '#fff' : '#9ca3af',
+                }}
+              >
+                {i < step ? '✓' : i + 1}
+              </span>
               {label}
             </div>
-            {i < STEPS.length - 1 && <div style={{ width: 22, height: 2, background: i < step ? '#c4b5fd' : '#e5e7eb', borderRadius: 2 }} />}
+            {i < STEPS.length - 1 && (
+              <div
+                className={scheduleStyles.stepConnector}
+                style={{ background: i < step ? '#c4b5fd' : '#e5e7eb' }}
+              />
+            )}
           </div>
         ))}
       </div>
@@ -395,10 +406,10 @@ export default function ScheduleWizardPage() {
 
           {/* ═══ STEP 2 — Schedule ═══ */}
           {step === 1 && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 22, alignItems: 'start' }}>
+            <div className={scheduleStyles.twoColLayout}>
               <div style={{ background: '#fff', borderRadius: 18, border: '1px solid #e5e7eb', padding: 22 }}>
                 <h3 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 800, color: '#201b2e' }}>When does it run?</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
+                <div className={scheduleStyles.dateTimeGrid}>
                   <div>
                     <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: '#374151', marginBottom: 6 }}>Date</label>
                     <input type="date" value={date} min={new Date().toISOString().slice(0, 10)}
@@ -438,10 +449,7 @@ export default function ScheduleWizardPage() {
               </div>
 
               {/* Live preview */}
-              <div style={{
-                background: 'linear-gradient(135deg,#1d1430,#2b1f42)', borderRadius: 18,
-                padding: 22, color: '#e2d9f3', position: 'sticky', top: 90,
-              }}>
+              <div className={scheduleStyles.previewCard}>
                 <p style={{ margin: 0, fontSize: 11, fontWeight: 800, letterSpacing: 3, color: '#a78bfa' }}>SESSION PREVIEW</p>
                 <p style={{ margin: '10px 0 2px', fontSize: 20, fontWeight: 800, color: '#fff' }}>
                   {selectedExp?.title ?? '—'}
@@ -450,7 +458,7 @@ export default function ScheduleWizardPage() {
                   {selectedSS?.subject_name} · Section {selectedSS?.section_name}
                 </p>
                 <div style={{ height: 1, background: 'rgba(255,255,255,.12)', margin: '16px 0' }} />
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, fontSize: 13 }}>
+                <div className={scheduleStyles.previewGrid}>
                   <div>
                     <p style={{ margin: 0, fontSize: 11, color: '#8b7fa8', fontWeight: 700, textTransform: 'uppercase' }}>Starts</p>
                     <p style={{ margin: '3px 0 0', fontWeight: 700, color: '#fff' }}>{fmtDateTime(date, time)}</p>
@@ -477,7 +485,7 @@ export default function ScheduleWizardPage() {
             <div style={{ display: 'grid', gap: 22 }}>
               <div style={{ background: '#fff', borderRadius: 18, border: '1px solid #e5e7eb', padding: 22 }}>
                 <h3 style={{ margin: '0 0 14px', fontSize: 15, fontWeight: 800, color: '#201b2e' }}>Entry rules</h3>
-                <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 14 }}>
+                <div className={scheduleStyles.threeColGrid}>
                   <div>
                     <label style={{ display: 'block', fontSize: 12.5, fontWeight: 700, color: '#374151', marginBottom: 6 }}>
                       Quiz gate threshold
@@ -567,7 +575,7 @@ export default function ScheduleWizardPage() {
 
           {/* ═══ STEP 4 — Review & Launch ═══ */}
           {step === 3 && (
-            <div style={{ display: 'grid', gridTemplateColumns: '1.2fr 1fr', gap: 22, alignItems: 'start' }}>
+            <div className={scheduleStyles.twoColLayout}>
               <div style={{ background: '#fff', borderRadius: 18, border: '1px solid #e5e7eb', padding: 24 }}>
                 <h3 style={{ margin: '0 0 16px', fontSize: 15, fontWeight: 800, color: '#201b2e' }}>Review everything</h3>
                 {[
@@ -653,6 +661,7 @@ export default function ScheduleWizardPage() {
                     fontSize: 15, fontWeight: 800, color: '#fff', cursor: 'pointer',
                     background: 'linear-gradient(135deg,#7c3aed,#9333ea)',
                     opacity: saving || !canSubmit ? .6 : 1,
+                    minHeight: 48,
                   }}>
                   {saving ? 'Scheduling…' : conflicts && conflicts.length > 0 ? 'Schedule Anyway' : 'Schedule Session'}
                 </button>
@@ -664,22 +673,18 @@ export default function ScheduleWizardPage() {
           )}
 
           {/* ── Step navigation ─────────────────────────────────────────────── */}
-          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 26 }}>
+          <div className={scheduleStyles.navBar}>
             <button
               onClick={() => (step === 0 ? router.push('/instructor/sessions') : setStep(step - 1))}
-              style={{
-                padding: '11px 22px', borderRadius: 12, fontSize: 14, fontWeight: 700,
-                border: '1px solid #e5e7eb', background: '#fff', color: '#374151', cursor: 'pointer',
-              }}>
+              className={scheduleStyles.navBtnSecondary}>
               {step === 0 ? 'Cancel' : '← Back'}
             </button>
             {step < 3 && (
               <button
                 onClick={() => stepValid[step] && setStep(step + 1)}
                 disabled={!stepValid[step]}
+                className={scheduleStyles.navBtnPrimary}
                 style={{
-                  padding: '11px 26px', borderRadius: 12, fontSize: 14, fontWeight: 800, border: 'none',
-                  background: 'linear-gradient(135deg,#7c3aed,#9333ea)', color: '#fff', cursor: 'pointer',
                   opacity: stepValid[step] ? 1 : .5,
                 }}>
                 Continue →

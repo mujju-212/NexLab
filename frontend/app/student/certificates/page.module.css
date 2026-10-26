@@ -54,6 +54,7 @@
 }
 .ledgerHeader { display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px; }
 .ledgerTitle { margin: 0; font-size: 15px; font-weight: 700; color: #1e293b; }
+.ledgerScroll { overflow-x: auto; -webkit-overflow-scrolling: touch; max-width: 100%; }
 .ledgerTable { width: 100%; border-collapse: collapse; }
 .ledgerTable th {
   text-align: left; font-size: 11px; font-weight: 700; color: #94a3b8;
@@ -132,4 +133,23 @@
   .notifCard { padding: 15px 14px; gap: 12px; }
   .notifIcon { font-size: 24px; }
   .recordCard { padding: 18px 16px; }
+  .recordRow { flex-direction: column; align-items: stretch; }
+  .recordSelect { width: 100%; min-width: 0; }
+  .accreditationBanner {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 16px;
+  }
+  .summaryBanner {
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
 }
+
+@media (max-width: 480px) {
+  .summaryBanner {
+    grid-template-columns: 1fr;
+  }
+}
+

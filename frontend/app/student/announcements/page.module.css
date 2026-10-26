@@ -246,3 +246,96 @@
   border-color: #fecaca !important;
   color: #dc2626 !important;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE DESIGN (MOBILE & TABLET)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .container {
+    gap: 16px;
+    padding-bottom: 30px;
+  }
+
+  .headerTitle {
+    font-size: 20px;
+  }
+
+  .headerSub {
+    font-size: 12.5px;
+  }
+
+  .filterChips {
+    overflow-x: auto;
+    flex-wrap: nowrap;
+    width: 100%;
+    padding-bottom: 4px;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .filterChips::-webkit-scrollbar {
+    display: none;
+  }
+
+  .filterChip {
+    flex-shrink: 0;
+    padding: 6px 12px;
+    font-size: 12px;
+  }
+
+  .announcementCard {
+    padding: 16px 14px;
+    border-radius: 14px;
+    gap: 10px;
+  }
+
+  .unreadDot {
+    top: 14px;
+    right: 14px;
+  }
+
+  .cardTopRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+    padding-right: 18px; /* avoid unread dot overlap */
+  }
+
+  .cardTitle {
+    font-size: 15px;
+  }
+
+  .cardMessage {
+    font-size: 13px;
+    line-height: 1.5;
+  }
+
+  .attachmentPill {
+    width: 100%;
+    box-sizing: border-box;
+    font-size: 12px;
+    padding: 8px 12px;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+  }
+
+  .cardBottomRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .bottomActions {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .actionBtn {
+    flex: 1;
+    justify-content: center;
+    padding: 7px 10px;
+    font-size: 12px;
+  }
+}
+

@@ -122,8 +122,8 @@ export default function IndividualShell({ activePage, children, title, subtitle,
 
           {/* ── Fixed footer: Sign Out + promo ── */}
           <div className={styles.sidebarFooter}>
-            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }}>
-              {user ? (
+            <ul style={{ listStyle: 'none', margin: 0, padding: 0 }} suppressHydrationWarning>
+              {mounted && user ? (
                 <li className={navCls('Logout', true)} title="Sign Out" onClick={() => go('Logout', '/login')}>
                   <LogOut size={17} strokeWidth={1.9} className={styles.navIcon} />
                   <span className={styles.label}>Sign Out</span>

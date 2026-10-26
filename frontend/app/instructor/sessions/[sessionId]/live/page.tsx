@@ -643,7 +643,11 @@ export default function ConductorPage() {
         <h2 style={{ margin: 0, fontSize: 18, fontWeight: 700, color: '#111827', flex: 1 }}>
           Conductor — {(state.experiment?.title as string) || (state.session?.title as string) || 'Live Lab'}
         </h2>
-        <div style={{ display: 'flex', gap: 4, background: 'rgba(245,243,255,.7)', borderRadius: 10, padding: 3, border: '1px solid rgba(255,255,255,.9)' }}>
+        <div style={{
+          display: 'flex', gap: 4, background: 'rgba(245,243,255,.7)', borderRadius: 10, padding: 3,
+          border: '1px solid rgba(255,255,255,.9)', overflowX: 'auto', maxWidth: '100%',
+          WebkitOverflowScrolling: 'touch', scrollbarWidth: 'none',
+        }}>
           {MODES.map(m => (
             <button key={m.value} onClick={() => changeMode(m.value)} disabled={busy === 'mode'}
               style={{
@@ -740,7 +744,8 @@ export default function ConductorPage() {
             </div>
           </div>
 
-          <div style={{ overflowX: 'auto' }}>
+          {/* Desktop Table View */}
+          <div className={styles.desktopTableView} style={{ overflowX: 'auto' }}>
             <table className={styles.table} style={{ minWidth: 760 }}>
               <thead>
                 <tr>
@@ -818,6 +823,83 @@ export default function ConductorPage() {
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Mobile Card Feed */}
+          <div className={styles.mobileStudentCards}>
+            {filteredGrid.map((row) => {
+              const initials = row.full_name.split(' ').map(w => w[0]).join('').slice(0, 2).toUpperCase();
+              const lowF = row.focus_score !== null && (row.focus_score as number) < 50;
+              const statusLabel = row.focus_score === null ? 'Idle' : lowF ? 'Low Focus' : 'Active';
+              const statusCls = row.focus_score === null ? styles.slateBadge : lowF ? styles.amberBadge : styles.greenBadge;
+              const allDone = cps.length > 0 && row.verified_checkpoints >= cps.length;
+
+              return (
+                <div key={row.student_id} className={styles.mobileCard}>
+                  <div className={styles.mobileCardHeader}>
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                      <div style={{
+                        width: 38, height: 38, borderRadius: 12, flexShrink: 0,
+                        background: 'linear-gradient(135deg, #7c3aed, #9333ea)',
+                        color: '#fff', fontSize: 13, fontWeight: 800,
+                        display: 'flex', alignItems: 'center', justifyContent: 'center',
+                        boxShadow: '0 2px 8px rgba(124, 58, 237, 0.25)',
+                      }}>
+                        {initials}
+                      </div>
+                      <div>
+                        <div style={{ fontSize: 14.5, fontWeight: 800, color: '#0f172a' }}>{row.full_name}</div>
+                        <div style={{ fontSize: 11.5, color: '#64748b' }}>Roll: {row.roll_number || '—'}</div>
+                      </div>
+                    </div>
+                    <span className={statusCls}>{statusLabel}</span>
+                  </div>
+
+                  <div className={styles.mobileCardBody}>
+                    <div className={styles.mobileCardStat}>
+                      <span className={styles.mobileCardStatLabel}>Focus</span>
+                      <span className={styles.mobileCardStatValue} style={{ color: lowF ? '#dc2626' : '#16a34a' }}>
+                        {row.focus_score !== null ? `${Math.round(row.focus_score)}%` : '—'}
+                      </span>
+                    </div>
+                    <div className={styles.mobileCardStat}>
+                      <span className={styles.mobileCardStatLabel}>Checkpoints</span>
+                      <span className={styles.mobileCardStatValue} style={{ color: allDone ? '#16a34a' : '#d97706' }}>
+                        {row.verified_checkpoints}/{cps.length}
+                      </span>
+                    </div>
+                    <div className={styles.mobileCardStat}>
+                      <span className={styles.mobileCardStatLabel}>Alerts</span>
+                      <span className={styles.mobileCardStatValue} style={{ color: row.proctor_events > 0 ? '#d97706' : '#64748b' }}>
+                        {row.proctor_events}
+                      </span>
+                    </div>
+                  </div>
+
+                  <div className={styles.mobileCardActions}>
+                    <button
+                      className={styles.secondaryBtn}
+                      style={{ minHeight: 44, borderRadius: 10, fontSize: 13, fontWeight: 700 }}
+                      onClick={() => setScreenViewId(row.student_id)}
+                    >
+                      🖥️ Watch Screen
+                    </button>
+                    <button
+                      className={styles.primaryBtn}
+                      style={{ minHeight: 44, borderRadius: 10, fontSize: 13, fontWeight: 700 }}
+                      onClick={() => router.push(`/instructor/sessions/${sessionId}/student/${row.student_id}`)}
+                    >
+                      Dossier 360° →
+                    </button>
+                  </div>
+                </div>
+              );
+            })}
+            {filteredGrid.length === 0 && (
+              <div style={{ textAlign: 'center', color: '#9891a6', padding: 32, background: '#f8fafc', borderRadius: 16 }}>
+                {grid.length === 0 ? 'No students enrolled in this session.' : 'No students match your search.'}
+              </div>
+            )}
           </div>
 
           <p className={styles.sectionSub} style={{ marginTop: 14, fontSize: 12 }}>
@@ -1169,9 +1251,9 @@ export default function ConductorPage() {
           connection is never torn down on a tab switch. The whole section
           scrolls vertically so blocks keep a comfortable height instead of
           being squeezed into the viewport.                                    */}
-      <div style={{ display: tab === 'video' ? 'flex' : 'none', gap: 14, flex: 1, minHeight: 0, overflowY: 'auto', overflowX: 'hidden', alignItems: 'flex-start', paddingBottom: 4 }}>
+      <div className={chatStyles.videoFlexContainer} style={{ display: tab === 'video' ? 'flex' : 'none' }}>
           {/* ── Left column: custom conference (stage + tiles + controls) ── */}
-          <div style={{ flex: 1, display: 'flex', flexDirection: 'column', minWidth: 0, minHeight: 640 }}>
+          <div className={chatStyles.videoMainCol}>
             {videoToken && LIVEKIT_URL ? (
               <LiveKitRoom serverUrl={LIVEKIT_URL} token={videoToken} connect audio video
                 style={{ flex: 1, height: '100%', background: 'transparent' }}
@@ -1287,7 +1369,7 @@ export default function ConductorPage() {
                 <div className={chatStyles.timelineResizeBar} />
               </div>
 
-              <div style={{ width: videoSidebarWidth, flexShrink: 0, display: 'flex', flexDirection: 'column', gap: 14, position: 'sticky', top: 0, alignSelf: 'flex-start' }}>
+              <div className={chatStyles.videoSidebarCol} style={{ width: videoSidebarWidth }}>
                 {/* Mini bar to minimize the whole panel */}
                 <div style={{ display: 'flex', justifyContent: 'flex-end' }}>
                   <button

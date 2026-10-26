@@ -896,3 +896,10 @@
 @media (max-width: 640px) {
   .contentGrid, .infoGrid, .securityGrid { grid-template-columns: 1fr !important; }
 }
+
+/* ══ Touch targets (≤768px): finger-sized controls — desktop untouched ══ */
+@media (max-width: 768px) {
+  .tabItem, .fieldInput, .changePhotoBtn, .updatePasswordBtn, .enableTwoFactorBtn, .disableTwoFactorBtn, .cancelBtn, .eyeBtn { min-height: 44px; }
+  .actionItem { min-height: 56px; }
+  .modalCloseBtn { width: 44px; height: 44px; }
+}

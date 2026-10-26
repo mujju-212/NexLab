@@ -1103,3 +1103,9 @@
   .tableContainer, .tableWrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .tableContainer table, .tableWrapper table { min-width: 720px; }
 }
+
+/* ══ Touch targets (≤768px): finger-sized controls — desktop untouched ══ */
+@media (max-width: 768px) {
+  .applyBtn, .clearBtn, .exportBtn, .dateRangeBtn, .moreBtn, .pageBtn { min-height: 44px; }
+  .searchInput, .filterSelect { min-height: 44px; }
+}

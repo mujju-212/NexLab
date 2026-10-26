@@ -876,12 +876,32 @@
     align-items: flex-start;
   }
 
-  .heroStats {
-    width: 100%;
-  }
-
   .heroStatCard {
     flex: 1;
     min-width: 140px;
+  }
+}
+
+@media (max-width: 640px) {
+  .pageContainer {
+    padding: 12px 8px 80px;
+  }
+  .headerRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .viewAsBtn {
+    width: 100%;
+    justify-content: center;
+  }
+  .heroStats {
+    display: grid !important;
+    grid-template-columns: repeat(2, minmax(0, 1fr)) !important;
+    gap: 8px !important;
+  }
+  .heroStatCard {
+    min-width: 0 !important;
+    padding: 10px 12px !important;
   }
 }

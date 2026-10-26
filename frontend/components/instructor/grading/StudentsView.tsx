@@ -177,8 +177,9 @@ export default function StudentsView({
         </div>
       </div>
 
-      {/* Full Students Roster Table */}
-      <div className={hub.rosterTableContainer}>
+      {/* Full Students Roster Table (Desktop View) */}
+      <div className={hub.desktopTableView}>
+        <div className={hub.rosterTableContainer}>
         <table className={hub.rosterTable}>
           <thead>
             <tr>
@@ -306,6 +307,77 @@ export default function StudentsView({
             )}
           </tbody>
         </table>
+        </div>
+      </div>
+
+      {/* Mobile Student Cards Feed (≤768px native mobile ergonomics) */}
+      <div className={hub.mobileStudentCards}>
+        {paginatedStudents.length === 0 ? (
+          <div style={{ textAlign: 'center', padding: '30px 10px', color: '#94a3b8', background: '#fff', borderRadius: 14 }}>
+            No students found matching your search.
+          </div>
+        ) : (
+          paginatedStudents.map((s) => {
+            const avatarStyle = getAvatarStyle(s.full_name);
+            const studentObj = gradeSummaryStudents?.find(st => st.student_id === s.student_id);
+            const riskLevel = studentObj?.risk_level ?? (s.status === 'flagged' ? 'critical' : (s.score && s.score < 50 ? 'high' : (s.score && s.score < 75 ? 'watch' : 'ok')));
+            const attendance = studentObj?.attendance_pct ?? 85;
+            const pendingCount = studentObj?.pending_count ?? (s.status === 'needs_review' ? 1 : 0);
+
+            return (
+              <div key={s.student_id} className={hub.mobileStudentCard}>
+                <div className={hub.mobileCardTop}>
+                  <div className={hub.studentCell}>
+                    <div className={hub.studentAvatar} style={avatarStyle}>
+                      {initials(s.full_name)}
+                    </div>
+                    <div className={hub.studentInfo}>
+                      <span className={hub.studentName}>{s.full_name}</span>
+                      <span className={hub.studentRoll}>{s.roll_number}</span>
+                    </div>
+                  </div>
+                  <div>
+                    {riskLevel === 'critical' && <span className={`${hub.riskBadge} ${hub.riskCritical}`}>Critical</span>}
+                    {riskLevel === 'high' && <span className={`${hub.riskBadge} ${hub.riskHigh}`}>High</span>}
+                    {riskLevel === 'watch' && <span className={`${hub.riskBadge} ${hub.riskWatch}`}>Watch</span>}
+                    {riskLevel === 'ok' && <span className={`${hub.riskBadge} ${hub.riskOk}`}>OK</span>}
+                  </div>
+                </div>
+
+                <div className={hub.mobileCardMetrics}>
+                  <div className={hub.mobileCardMetricItem}>
+                    <span className={hub.mobileMetricLabel}>Progress</span>
+                    <span className={hub.mobileMetricVal}>{s.progressPct}%</span>
+                  </div>
+                  <div className={hub.mobileCardMetricItem}>
+                    <span className={hub.mobileMetricLabel}>Attendance</span>
+                    <span className={hub.mobileMetricVal}>{attendance}%</span>
+                  </div>
+                  <div className={hub.mobileCardMetricItem}>
+                    <span className={hub.mobileMetricLabel}>Avg Score</span>
+                    <span className={hub.mobileMetricVal}>{Math.round(s.score || 72)}%</span>
+                  </div>
+                </div>
+
+                <div className={hub.mobileCardFooter}>
+                  {pendingCount > 0 && (
+                    <span style={{ fontSize: 11, fontWeight: 700, color: '#ea580c', background: '#fff7ed', padding: '2px 8px', borderRadius: 8 }}>
+                      ● {pendingCount} Pending
+                    </span>
+                  )}
+                  <button
+                    type="button"
+                    className={hub.mobileCardActionBtn}
+                    onClick={() => onViewStudent(s.student_id)}
+                  >
+                    Grade & Dossier →
+                  </button>
+                </div>
+              </div>
+            );
+          })
+        )}
+      </div>
 
         {/* Pagination footer */}
         <div className={hub.paginationBar}>
@@ -367,6 +439,5 @@ export default function StudentsView({
           </div>
         </div>
       </div>
-    </div>
   );
 }

@@ -15,6 +15,7 @@ import {
   FolderOpen, Save, FileCode2, Home, ChevronRight, Code2, Plus, Search,
   MoreVertical, MoreHorizontal, Maximize2, Minimize2, Trash2, BarChart3,
   Bot, X, ArrowRight, Layers, HelpCircle, Activity, Square, Gauge, ChevronLeft, Share2,
+  Box, Keyboard, Zap,
 } from 'lucide-react';
 import IndividualShell from '@/components/layout/IndividualShell';
 import CodeEditor from '@/components/editor/code-editor';
@@ -64,23 +65,8 @@ function extOf(filename?: string): string {
   return m ? m[0] : '';
 }
 
-function getLangIcon(langId: string): string {
-  const icons: Record<string, string> = {
-    python: '🐍',
-    javascript: '🟨',
-    typescript: '🔷',
-    cpp: '⚙️',
-    c: '🔧',
-    java: '☕',
-    kotlin: '🟣',
-    csharp: '🟢',
-    r: '📊',
-    bash: '🐚',
-    sql: '🗄️',
-    html: '🌐',
-    css: '🎨',
-  };
-  return icons[langId] ?? '💻';
+function getLangIcon(langId: string): React.ReactNode {
+  return <Code2 size={13} color="#6366f1" />;
 }
 
 function getLangBadgeColor(langId: string): { bg: string; color: string } {
@@ -1142,8 +1128,12 @@ export default function PlaygroundPage() {
                 <span>UTF-8</span>
               </div>
               <div className={styles.editorStatusRight}>
-                <span title="Docker Sandbox Runner">🐳 Sandbox</span>
-                <span title="Keyboard Shortcuts">⌨️ Shortcuts</span>
+                <span title="Docker Sandbox Runner" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Box size={12} /> Sandbox
+                </span>
+                <span title="Keyboard Shortcuts" style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                  <Keyboard size={12} /> Shortcuts
+                </span>
               </div>
             </div>
           </div>
@@ -1412,8 +1402,9 @@ export default function PlaygroundPage() {
                           {result?.time_ms != null ? `${result.time_ms} ms` : '—'}
                         </div>
                         {result?.time_ms != null && (
-                          <div className={result.time_ms < 200 ? styles.perfBadgeSuccess : styles.perfBadgeWarning}>
-                            {result.time_ms < 150 ? '⚡ Ultra Fast' : result.time_ms < 1000 ? '⚡ Optimal' : '⏳ Slow Latency'}
+                          <div className={result.time_ms < 200 ? styles.perfBadgeSuccess : styles.perfBadgeWarning} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                            <Zap size={10} />
+                            {result.time_ms < 150 ? 'Ultra Fast' : result.time_ms < 1000 ? 'Optimal' : 'Slow Latency'}
                           </div>
                         )}
                       </div>
@@ -1429,8 +1420,9 @@ export default function PlaygroundPage() {
                             : '—'}
                         </div>
                         {result?.memory_kb != null && (
-                          <div className={result.memory_kb < 30 * 1024 ? styles.perfBadgeSuccess : styles.perfBadgeWarning}>
-                            {result.memory_kb < 30 * 1024 ? '🟢 Low RAM (<30MB)' : '🟡 Standard RAM'}
+                          <div className={result.memory_kb < 30 * 1024 ? styles.perfBadgeSuccess : styles.perfBadgeWarning} style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                            <span style={{ width: 6, height: 6, borderRadius: '50%', background: result.memory_kb < 30 * 1024 ? '#16a34a' : '#ca8a04' }} />
+                            {result.memory_kb < 30 * 1024 ? 'Low RAM (<30MB)' : 'Standard RAM'}
                           </div>
                         )}
                       </div>
@@ -1449,12 +1441,19 @@ export default function PlaygroundPage() {
                                 ? styles.perfVerdictModerate
                                 : styles.perfVerdictSuboptimal
                             }`}
+                            style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}
                           >
+                            <span style={{
+                              width: 6,
+                              height: 6,
+                              borderRadius: '50%',
+                              background: optimizationData.status === 'optimized' ? '#16a34a' : optimizationData.status === 'moderate' ? '#ca8a04' : '#dc2626'
+                            }} />
                             {optimizationData.status === 'optimized'
-                              ? '🟢 Well Optimized'
+                              ? 'Well Optimized'
                               : optimizationData.status === 'moderate'
-                              ? '🟡 Moderately Optimized'
-                              : '🔴 Needs Optimization'}
+                              ? 'Moderately Optimized'
+                              : 'Needs Optimization'}
                           </span>
                         )}
                       </div>

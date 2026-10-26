@@ -95,6 +95,7 @@ export default function SessionsPage() {
   const [expFilter, setExpFilter] = useState('all');
   const [statusFilter, setStatusFilter] = useState('all');
   const [sortOrder, setSortOrder] = useState('newest');
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState(false);
 
   // Modal & Drawer states
   const [selectedDrawerSession, setSelectedDrawerSession] = useState<EnrichedSession | null>(null);
@@ -463,8 +464,26 @@ export default function SessionsPage() {
             </div>
           </div>
 
+          {/* Mobile Filter Scope Toggle Bar */}
+          <div
+            className={styles.mobileFilterBar}
+            onClick={() => setMobileFiltersOpen(prev => !prev)}
+          >
+            <span className={styles.mobileFilterBarText}>
+              <FilterIcon size={14} /> Search & Filters
+              {(sectionFilter !== 'all' || expFilter !== 'all' || statusFilter !== 'all' || searchQuery) && (
+                <span className={styles.mobileFilterBadge}>
+                  {(sectionFilter !== 'all' ? 1 : 0) + (expFilter !== 'all' ? 1 : 0) + (statusFilter !== 'all' ? 1 : 0) + (searchQuery ? 1 : 0)}
+                </span>
+              )}
+            </span>
+            <span style={{ fontSize: 12, fontWeight: 700, color: '#7c3aed' }}>
+              {mobileFiltersOpen ? 'Hide ▲' : 'Show Filters ▼'}
+            </span>
+          </div>
+
           {/* Search & Dropdown Row */}
-          <div className={styles.searchAndDropdownsRow}>
+          <div className={`${styles.searchAndDropdownsRow} ${mobileFiltersOpen ? styles.mobileFiltersOpen : ''}`}>
             <div className={styles.searchBox}>
               <Search size={16} color="#9ca3af" />
               <input

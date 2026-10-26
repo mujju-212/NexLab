@@ -796,3 +796,36 @@
     transform: translateY(0);
   }
 }
+
+/* ══════════════════════════════════════════════════════════════════════
+   NARROW SCREENS — collapsed tracks must shrink below content min-content.
+   Plain `1fr` = minmax(auto,1fr): a wide table or chart would force the
+   track (and its card) past the viewport. minmax(0,1fr) keeps them inside.
+   Kept at the end of the file so it wins the cascade over the rules above.
+   ══════════════════════════════════════════════════════════════════════ */
+@media (max-width: 768px) {
+  .trendRow,
+  .threeColGrid,
+  .bottomRow {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .kpiGrid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+  .card {
+    min-width: 0;
+  }
+  /* Bare tables scroll horizontally instead of widening their card */
+  .recentTable {
+    display: block;
+    width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@media (max-width: 520px) {
+  .kpiGrid {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

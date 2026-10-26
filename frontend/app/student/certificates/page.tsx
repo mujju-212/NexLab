@@ -195,6 +195,7 @@ export default function CertificatesPage() {
                 <p>Complete lab sessions and obtain teacher grades to generate verified experiment receipts.</p>
               </div>
             ) : (
+              <div className={styles.ledgerScroll}>
               <table className={styles.ledgerTable}>
                 <thead>
                   <tr>
@@ -244,6 +245,7 @@ export default function CertificatesPage() {
                   })}
                 </tbody>
               </table>
+              </div>
             )}
           </div>
         </>

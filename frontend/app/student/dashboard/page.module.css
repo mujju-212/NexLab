@@ -1207,13 +1207,33 @@
 
 @media (max-width: 600px) {
   .metricGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: repeat(2, 1fr);
+    gap: 10px;
+  }
+  .metricCard {
+    padding: 14px 12px;
+    min-height: 105px;
+    border-radius: 14px;
+  }
+  .metricValue {
+    font-size: 22px;
+  }
+  .metricLabel {
+    font-size: 11px;
   }
   .actionTilesRow {
     grid-template-columns: repeat(2, 1fr);
   }
   .studentName {
-    font-size: 23px;
+    font-size: 22px;
+  }
+  .welcomeCard {
+    padding: 18px 16px;
+    border-radius: 18px;
+  }
+  .panelCard {
+    padding: 16px 14px;
+    border-radius: 16px;
   }
   .progressTop {
     flex-direction: column;
@@ -1227,7 +1247,19 @@
     width: 100%;
     justify-content: center;
   }
+  .weekStrip {
+    overflow-x: auto;
+    scrollbar-width: none;
+    -webkit-overflow-scrolling: touch;
+  }
+  .weekStrip::-webkit-scrollbar {
+    display: none;
+  }
+  .dayPill {
+    min-width: 38px;
+  }
 }
+
 
 /* ═══════════════════════════════════════════════════════════════════════════
    EXAM SECTION

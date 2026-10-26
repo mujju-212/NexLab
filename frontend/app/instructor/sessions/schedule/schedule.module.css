@@ -1,0 +1,177 @@
+.wizardContainer {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.stepIndicatorBar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 20px;
+  overflow-x: auto;
+  padding-bottom: 6px;
+  -webkit-overflow-scrolling: touch;
+  scrollbar-width: none;
+}
+.stepIndicatorBar::-webkit-scrollbar {
+  display: none;
+}
+
+.stepPill {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 14px;
+  border-radius: 999px;
+  font-size: 13px;
+  font-weight: 700;
+  white-space: nowrap;
+  flex-shrink: 0;
+  transition: all 0.2s ease;
+}
+
+.stepBadge {
+  width: 20px;
+  height: 20px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+}
+
+.stepConnector {
+  width: 20px;
+  height: 2px;
+  flex-shrink: 0;
+  border-radius: 2px;
+}
+
+.twoColLayout {
+  display: grid;
+  grid-template-columns: 1.2fr 1fr;
+  gap: 22px;
+  align-items: start;
+}
+
+.threeColGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr;
+  gap: 16px;
+}
+
+.dateTimeGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 14px;
+}
+
+.cardSection {
+  background: #ffffff;
+  border-radius: 18px;
+  border: 1px solid #e5e7eb;
+  padding: 22px;
+}
+
+.previewCard {
+  background: linear-gradient(135deg, #1d1430, #2b1f42);
+  border-radius: 18px;
+  padding: 22px;
+  color: #e2d9f3;
+  position: sticky;
+  top: 90px;
+}
+
+.previewGrid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  font-size: 13px;
+}
+
+.navBar {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 12px;
+  margin-top: 26px;
+  padding-top: 16px;
+}
+
+.navBtnSecondary {
+  padding: 12px 24px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 700;
+  border: 1px solid #e5e7eb;
+  background: #ffffff;
+  color: #374151;
+  cursor: pointer;
+  min-height: 44px;
+}
+
+.navBtnPrimary {
+  padding: 12px 28px;
+  border-radius: 12px;
+  font-size: 14px;
+  font-weight: 800;
+  border: none;
+  background: linear-gradient(135deg, #7c3aed, #9333ea);
+  color: #ffffff;
+  cursor: pointer;
+  min-height: 44px;
+  box-shadow: 0 4px 14px rgba(124, 58, 237, 0.25);
+}
+
+@media (max-width: 768px) {
+  .twoColLayout {
+    grid-template-columns: 1fr;
+    gap: 16px;
+  }
+
+  .threeColGrid {
+    grid-template-columns: 1fr;
+    gap: 14px;
+  }
+
+  .dateTimeGrid {
+    grid-template-columns: 1fr;
+    gap: 12px;
+  }
+
+  .cardSection {
+    padding: 16px;
+    border-radius: 16px;
+  }
+
+  .previewCard {
+    position: static;
+    padding: 18px;
+    border-radius: 16px;
+  }
+
+  .previewGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+  }
+
+  .navBar {
+    position: sticky;
+    bottom: 68px;
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(12px);
+    border-top: 1px solid #e5e7eb;
+    margin: 20px -16px -16px;
+    padding: 12px 16px;
+    z-index: 20;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+  }
+
+  .navBtnSecondary,
+  .navBtnPrimary {
+    flex: 1;
+    text-align: center;
+    padding: 12px 14px;
+  }
+}

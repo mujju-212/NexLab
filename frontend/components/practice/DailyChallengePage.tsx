@@ -23,6 +23,8 @@ import {
   ArrowRight,
   Sun,
   X,
+  Calendar,
+  Crown,
 } from 'lucide-react';
 import styles from './DailyChallengePage.module.css';
 import { apiClient } from '@/services/api-client';
@@ -239,7 +241,7 @@ export default function DailyChallengePage({ baseRoute }: { baseRoute: string })
       <header className={styles.heroHeader}>
         <div className={styles.heroLeft}>
           <div className={styles.flameIconBox}>
-            🔥
+            <Flame size={24} color="#f97316" />
           </div>
           <div>
             <h1 className={styles.heroTitle}>Daily Challenge</h1>
@@ -283,7 +285,7 @@ export default function DailyChallengePage({ baseRoute }: { baseRoute: string })
 
           {/* Best Streak Pill */}
           <div className={styles.bestStreakPill}>
-            <span className={styles.bestStreakIcon}>🏆</span>
+            <span className={styles.bestStreakIcon}><Trophy size={16} color="#d97706" /></span>
             <div className={styles.bestStreakText}>
               <span className={styles.bestStreakLabel}>Best Streak</span>
               <span className={styles.bestStreakValue}>{bestStreak} days</span>
@@ -437,7 +439,7 @@ export default function DailyChallengePage({ baseRoute }: { baseRoute: string })
           <div>
             <div className={styles.calendarHeader}>
               <div className={styles.calendarTitleWrap}>
-                <div className={styles.calendarIconBadge}>📅</div>
+                <div className={styles.calendarIconBadge}><Calendar size={16} color="#6366f1" /></div>
                 <h3 className={styles.calendarTitle}>Challenge Calendar</h3>
               </div>
 
@@ -539,7 +541,7 @@ export default function DailyChallengePage({ baseRoute }: { baseRoute: string })
                 className={styles.sectionIconBadge}
                 style={{ background: 'rgba(239, 68, 68, 0.1)', color: '#dc2626' }}
               >
-                🔥
+                <Flame size={16} color="#dc2626" />
               </div>
               <div className={styles.sectionTitleWrap}>
                 <h3 className={styles.sectionTitle}>Streak Progress</h3>
@@ -602,7 +604,7 @@ export default function DailyChallengePage({ baseRoute }: { baseRoute: string })
                 className={styles.sectionIconBadge}
                 style={{ background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed' }}
               >
-                🎁
+                <Gift size={16} color="#7c3aed" />
               </div>
               <div className={styles.sectionTitleWrap}>
                 <h3 className={styles.sectionTitle}>Rewards This Week</h3>
@@ -617,8 +619,8 @@ export default function DailyChallengePage({ baseRoute }: { baseRoute: string })
             {weeklyRewards.map((reward) => (
               <div key={reward.streak} className={styles.rewardRow}>
                 <div className={styles.rewardRowLeft}>
-                  <span className={styles.rewardIcon}>
-                    {reward.icon === 'crown' ? '👑' : '🔥'}
+                  <span className={styles.rewardIcon} style={{ display: 'flex', alignItems: 'center' }}>
+                    {reward.icon === 'crown' ? <Crown size={15} color="#eab308" /> : <Flame size={15} color="#f97316" />}
                   </span>
                   <span>{reward.title}</span>
                 </div>
@@ -636,7 +638,7 @@ export default function DailyChallengePage({ baseRoute }: { baseRoute: string })
                 className={styles.sectionIconBadge}
                 style={{ background: 'rgba(124, 58, 237, 0.1)', color: '#7c3aed' }}
               >
-                🕒
+                <Clock size={16} color="#7c3aed" />
               </div>
               <div className={styles.sectionTitleWrap}>
                 <h3 className={styles.sectionTitle}>Recent Daily Challenges</h3>

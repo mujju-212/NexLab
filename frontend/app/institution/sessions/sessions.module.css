@@ -4877,3 +4877,99 @@
   .tabsBar::-webkit-scrollbar { display: none; }
   .tabItem { flex: 0 0 auto; white-space: nowrap; scroll-snap-align: start; }
 }
+
+/* ══ Touch targets (≤768px): finger-sized controls — desktop untouched ══ */
+@media (max-width: 768px) {
+  .btnCreatePlan, .btnQuickAction, .btnRefresh, .btnStartSession, .btnSubmit, .btnToday, .btnExport, .btnExportUpcoming, .btnExportHistory,
+  .btnUpcomingAction, .btnUpcomingCancel, .btnUpcomingMore, .btnPlanAction, .btnCardAction, .btnCardEnd, .btnScheduleSlot,
+  .btnFilterApply, .btnFilterClear, .btnDrawerNext, .btnDrawerSubmit, .btnDrawerCancel, .btnViewAllFree, .btnViewAllLogs,
+  .btnViewAllSummary, .btnViewNextDetails, .btnImportTemplate, .btnHistoryClearAll,
+  .dayChip, .calendarSessionChip, .drawerCloseBtn { min-height: 44px; }
+  .dayChip, .calendarSessionChip { min-width: 44px; }
+  .drawerCloseBtn { width: 44px; height: 44px; }
+  .drawerInput { min-height: 44px; }
+}
+
+/* ══ Mobile nav & toolbar (≤768px): scrollable app-style tab rail + wrapping actions ══ */
+@media (max-width: 768px) {
+  .tabsBar {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+    gap: 6px;
+    padding-bottom: 10px;
+    margin-bottom: 12px;
+    scrollbar-color: transparent transparent;
+  }
+  .tabsBar::-webkit-scrollbar { display: none; }
+  .tabItem {
+    flex: 0 0 auto;
+    white-space: nowrap;
+    padding: 11px 15px;
+    border-radius: 999px;
+    background: #f6f4fb;
+    color: #5b5470;
+    font-weight: 700;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tabItemActive {
+    background: linear-gradient(135deg, #7c3aed 0%, #6366f1 100%);
+    color: #fff;
+  }
+  .sectionActions {
+    flex-wrap: wrap;
+    gap: 8px;
+  }
+  .sectionActions .searchBox {
+    width: 100%;
+    min-height: 44px;
+    order: 10;
+  }
+  .viewToggleBtn { min-height: 40px; }
+}
+
+/* Planner & history wide tables must scroll horizontally on phones, never clip */
+@media (max-width: 768px) {
+  .plannerTableCard,
+  .activityTableWrap,
+  .activityTable {
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch;
+  }
+  .activityTable { min-width: 480px; }
+}
+
+@media (max-width: 768px) {
+  /* min-content of the nowrap table otherwise blows past the flex column */
+  .historyTableCol { max-width: 100%; overflow: hidden; }
+  .historyTableCard { overflow-x: auto !important; -webkit-overflow-scrolling: touch; }
+  .historyTable { min-width: 720px; }
+}
+
+/* Upcoming list rows: stack into an app-native card on phones */
+@media (max-width: 768px) {
+  .upcomingSessionRow {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding: 12px 14px;
+  }
+  /* Time + subject fill the first line, widowed instructor goes below */
+  .upcomingTimeCol { min-width: 72px; }
+  .upcomingSubjCol { min-width: 0; flex: 1 1 auto; }
+  .upcomingSubjTitle { white-space: normal; font-size: 14px; }
+  .upcomingInstructorCol {
+    width: 100%;
+    min-width: 0;
+    justify-content: flex-start;
+    border-top: 1px dashed #e2e8f0;
+    padding-top: 10px;
+  }
+  .upcomingInstructorName { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .upcomingInstructorMeta { flex-wrap: wrap; row-gap: 2px; }
+  /* Countdown badge + actions line up on the same wrapped row */
+  .upcomingCountdownBadge { margin-left: auto; }
+  .upcomingActionsCol { width: 100%; margin-left: 92px; padding-top: 2px; }
+  .btnUpcomingAction,
+  .btnUpcomingCancel,
+  .btnUpcomingMore { flex: 1; justify-content: center; }
+}

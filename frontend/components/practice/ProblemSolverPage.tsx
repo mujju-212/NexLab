@@ -16,7 +16,8 @@ import { useState, useEffect, useRef } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   ArrowLeft, ChevronLeft, ChevronRight, ChevronDown, ChevronUp, RotateCcw,
-  Play, Send, Lightbulb, CheckCircle2, XCircle, Star, X
+  Play, Send, Lightbulb, CheckCircle2, XCircle, Star, X,
+  AlertCircle, Zap
 } from 'lucide-react';
 import styles from './ProblemSolver.module.css';
 import { apiClient } from '@/services/api-client';
@@ -766,8 +767,16 @@ export default function ProblemSolverPage({ slug, baseRoute }: ProblemSolverPage
                   {/* Submit result banner */}
                   {submitResult && (
                     <div className={`${styles.resultBanner} ${submitResult.status === 'Accepted' ? styles.resultBannerAccepted : styles.resultBannerWrong}`}>
-                      <div style={{ fontSize: '1.05rem', fontWeight: 800, fontFamily: 'Space Grotesk, sans-serif', marginBottom: '.5rem' }}>
-                        {submitResult.status === 'Accepted' ? '🎉 Accepted!' : `✗ ${submitResult.status}`}
+                      <div style={{ fontSize: '1.05rem', fontWeight: 800, fontFamily: 'Space Grotesk, sans-serif', marginBottom: '.5rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                        {submitResult.status === 'Accepted' ? (
+                          <>
+                            <CheckCircle2 size={18} color="#16a34a" /> Accepted!
+                          </>
+                        ) : (
+                          <>
+                            <XCircle size={18} color="#dc2626" /> {submitResult.status}
+                          </>
+                        )}
                       </div>
                       <div className={styles.resultStats}>
                         <span className={styles.resultStat}>
@@ -814,12 +823,13 @@ export default function ProblemSolverPage({ slug, baseRoute }: ProblemSolverPage
                           <div className={styles.caseHeader}>
                             <span className={styles.caseNum}>Case {i + 1}</span>
                             {r.passed === null ? (
-                              <span style={{ fontSize: '.75rem', fontWeight: 700, color: '#6b7280', background: 'rgba(107,114,128,.1)', borderRadius: '6px', padding: '2px 8px' }}>
-                                ⚡ Executed
+                              <span style={{ fontSize: '.75rem', fontWeight: 700, color: '#6b7280', background: 'rgba(107,114,128,.1)', borderRadius: '6px', padding: '2px 8px', display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                <Zap size={11} color="#6b7280" /> Executed
                               </span>
                             ) : (
-                              <span className={r.passed ? styles.casePassed : styles.caseFailed}>
-                                {r.passed ? '✓ Passed' : '✗ Failed'}
+                              <span className={r.passed ? styles.casePassed : styles.caseFailed} style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}>
+                                {r.passed ? <CheckCircle2 size={12} color="#16a34a" /> : <XCircle size={12} color="#dc2626" />}
+                                {r.passed ? 'Passed' : 'Failed'}
                               </span>
                             )}
                           </div>
@@ -863,13 +873,13 @@ export default function ProblemSolverPage({ slug, baseRoute }: ProblemSolverPage
 
                   {/* Error states */}
                   {runError && (
-                    <div style={{ background: 'rgba(220,38,38,.07)', border: '1px solid rgba(220,38,38,.2)', borderRadius: '10px', padding: '.7rem 1rem', color: '#dc2626', fontSize: '.8rem', fontWeight: 700, marginTop: '.5rem' }}>
-                      ⚠ Run error: {runError}
+                    <div style={{ background: 'rgba(220,38,38,.07)', border: '1px solid rgba(220,38,38,.2)', borderRadius: '10px', padding: '.7rem 1rem', color: '#dc2626', fontSize: '.8rem', fontWeight: 700, marginTop: '.5rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <AlertCircle size={14} /> Run error: {runError}
                     </div>
                   )}
                   {submitError && (
-                    <div style={{ background: 'rgba(220,38,38,.07)', border: '1px solid rgba(220,38,38,.2)', borderRadius: '10px', padding: '.7rem 1rem', color: '#dc2626', fontSize: '.8rem', fontWeight: 700, marginTop: '.5rem' }}>
-                      ⚠ Submit error: {submitError}
+                    <div style={{ background: 'rgba(220,38,38,.07)', border: '1px solid rgba(220,38,38,.2)', borderRadius: '10px', padding: '.7rem 1rem', color: '#dc2626', fontSize: '.8rem', fontWeight: 700, marginTop: '.5rem', display: 'flex', alignItems: 'center', gap: 6 }}>
+                      <AlertCircle size={14} /> Submit error: {submitError}
                     </div>
                   )}
 

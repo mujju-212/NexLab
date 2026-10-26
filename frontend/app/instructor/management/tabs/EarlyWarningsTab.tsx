@@ -194,115 +194,189 @@ export const EarlyWarningsTab: React.FC<EarlyWarningsTabProps> = ({
         </div>
       </div>
 
-      {/* ── EARLY WARNINGS DATA TABLE ─────────────────────────────────── */}
-      <div className={styles.tableWrapper}>
-        <table className={styles.dataTable}>
-          <thead>
-            <tr>
-              <th style={{ width: 44, textAlign: 'center' }}>#</th>
-              <th>Student</th>
-              <th>Risk</th>
-              <th>Warning Signals</th>
-              <th>Details</th>
-              <th>Trend</th>
-              <th style={{ textAlign: 'right' }}>Actions</th>
-            </tr>
-          </thead>
-          <tbody>
-            {displayList.map((s: any, idx: number) => {
-              const band = s.risk_band || s.status_band || 'High';
-              const signals = s.signals || [s.primary_reason || 'Downward grade trend'];
-              const details = s.details || (s.primary_reason ? `Risk driver: ${s.primary_reason}` : 'Recent score downward slope.');
-              const trendPoints = s.trend || (s.trend_points ? s.trend_points.filter((p: any) => p != null) : [75, 70, 65, 58, 52]);
+      {/* ── EARLY WARNINGS DATA TABLE (Desktop) ─────────────────────────── */}
+      <div className={styles.desktopTableView}>
+        <div className={styles.tableWrapper}>
+          <table className={styles.dataTable}>
+            <thead>
+              <tr>
+                <th style={{ width: 44, textAlign: 'center' }}>#</th>
+                <th>Student</th>
+                <th>Risk</th>
+                <th>Warning Signals</th>
+                <th>Details</th>
+                <th>Trend</th>
+                <th style={{ textAlign: 'right' }}>Actions</th>
+              </tr>
+            </thead>
+            <tbody>
+              {displayList.map((s: any, idx: number) => {
+                const band = s.risk_band || s.status_band || 'High';
+                const signals = s.signals || [s.primary_reason || 'Downward grade trend'];
+                const details = s.details || (s.primary_reason ? `Risk driver: ${s.primary_reason}` : 'Recent score downward slope.');
+                const trendPoints = s.trend || (s.trend_points ? s.trend_points.filter((p: any) => p != null) : [75, 70, 65, 58, 52]);
 
-              return (
-                <tr key={s.student_id || idx}>
-                  <td style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.78rem' }}>
-                    {idx + 1}
-                  </td>
+                return (
+                  <tr key={s.student_id || idx}>
+                    <td style={{ textAlign: 'center', color: '#94a3b8', fontSize: '0.78rem' }}>
+                      {idx + 1}
+                    </td>
 
-                  {/* Student Cell */}
-                  <td>
-                    <div className={styles.studentCell}>
-                      <div className={styles.studentAvatar}>
-                        {(s.student_name || s.full_name || 'S').slice(0, 2).toUpperCase()}
+                    {/* Student Cell */}
+                    <td>
+                      <div className={styles.studentCell}>
+                        <div className={styles.studentAvatar}>
+                          {(s.student_name || s.full_name || 'S').slice(0, 2).toUpperCase()}
+                        </div>
+                        <div className={styles.studentMeta}>
+                          <span
+                            className={styles.studentName}
+                            style={{ cursor: 'pointer' }}
+                            onClick={() => s.student_id && onSelectStudent(s.student_id)}
+                          >
+                            {s.student_name || s.full_name || 'Student'}
+                          </span>
+                          <span className={styles.studentRoll}>
+                            {s.roll_number || '—'}
+                          </span>
+                        </div>
                       </div>
-                      <div className={styles.studentMeta}>
-                        <span
-                          className={styles.studentName}
-                          style={{ cursor: 'pointer' }}
-                          onClick={() => s.student_id && onSelectStudent(s.student_id)}
-                        >
-                          {s.student_name || s.full_name || 'Student'}
-                        </span>
-                        <span className={styles.studentRoll}>
-                          {s.roll_number || '—'}
-                        </span>
+                    </td>
+
+                    {/* Risk Badge */}
+                    <td>
+                      <span
+                        className={`${styles.riskPill} ${
+                          band.toLowerCase() === 'critical'
+                            ? styles.riskCritical
+                            : (band.toLowerCase() === 'high' ? styles.riskHigh : styles.riskWatch)
+                        }`}
+                      >
+                        {band}
+                      </span>
+                    </td>
+
+                    {/* Warning Signals (Tags) */}
+                    <td>
+                      <div className={styles.signalTagList}>
+                        {signals.map((sig: string, sIdx: number) => (
+                          <span
+                            key={sIdx}
+                            className={`${styles.signalTag} ${
+                              sig.toLowerCase().includes('quiz') || sig.toLowerCase().includes('lab')
+                                ? styles.signalTagWarning
+                                : ''
+                            }`}
+                          >
+                            {sig}
+                          </span>
+                        ))}
                       </div>
-                    </div>
-                  </td>
+                    </td>
 
-                  {/* Risk Badge */}
-                  <td>
-                    <span
-                      className={`${styles.riskPill} ${
-                        band.toLowerCase() === 'critical'
-                          ? styles.riskCritical
-                          : (band.toLowerCase() === 'high' ? styles.riskHigh : styles.riskWatch)
-                      }`}
-                    >
-                      {band}
+                    {/* Details */}
+                    <td>
+                      <span style={{ fontSize: '0.76rem', color: '#475569' }}>
+                        {details}
+                      </span>
+                    </td>
+
+                    {/* Trend Sparkline */}
+                    <td>
+                      <Sparkline
+                        points={trendPoints}
+                        color={band.toLowerCase() === 'critical' ? '#dc2626' : (band.toLowerCase() === 'high' ? '#ea580c' : '#ca8a04')}
+                      />
+                    </td>
+
+                    {/* Actions */}
+                    <td style={{ textAlign: 'right' }}>
+                      <button
+                        type="button"
+                        className={styles.btnActionView}
+                        onClick={() => s.student_id && onSelectStudent(s.student_id)}
+                      >
+                        View
+                      </button>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {/* ── MOBILE EARLY WARNING CARDS (≤768px native mobile ergonomics) ── */}
+      <div className={styles.mobileStudentCards}>
+        {displayList.map((s: any, idx: number) => {
+          const band = s.risk_band || s.status_band || 'High';
+          const signals = s.signals || [s.primary_reason || 'Downward grade trend'];
+          const details = s.details || (s.primary_reason ? `Risk driver: ${s.primary_reason}` : 'Recent score downward slope.');
+          const trendPoints = s.trend || (s.trend_points ? s.trend_points.filter((p: any) => p != null) : [75, 70, 65, 58, 52]);
+
+          return (
+            <div key={s.student_id || idx} className={styles.mobileStudentCard}>
+              <div className={styles.mobileCardTop}>
+                <div className={styles.studentCell}>
+                  <div className={styles.studentAvatar}>
+                    {(s.student_name || s.full_name || 'S').slice(0, 2).toUpperCase()}
+                  </div>
+                  <div className={styles.studentMeta}>
+                    <span className={styles.studentName}>
+                      {s.student_name || s.full_name || 'Student'}
                     </span>
-                  </td>
+                    <span className={styles.studentRoll}>{s.roll_number || '—'}</span>
+                  </div>
+                </div>
+                <span
+                  className={`${styles.riskPill} ${
+                    band.toLowerCase() === 'critical'
+                      ? styles.riskCritical
+                      : (band.toLowerCase() === 'high' ? styles.riskHigh : styles.riskWatch)
+                  }`}
+                >
+                  {band}
+                </span>
+              </div>
 
-                  {/* Warning Signals (Tags) */}
-                  <td>
-                    <div className={styles.signalTagList}>
-                      {signals.map((sig: string, sIdx: number) => (
-                        <span
-                          key={sIdx}
-                          className={`${styles.signalTag} ${
-                            sig.toLowerCase().includes('quiz') || sig.toLowerCase().includes('lab')
-                              ? styles.signalTagWarning
-                              : ''
-                          }`}
-                        >
-                          {sig}
-                        </span>
-                      ))}
-                    </div>
-                  </td>
+              {/* Signals */}
+              <div className={styles.signalTagList}>
+                {signals.map((sig: string, sIdx: number) => (
+                  <span
+                    key={sIdx}
+                    className={`${styles.signalTag} ${
+                      sig.toLowerCase().includes('quiz') || sig.toLowerCase().includes('lab')
+                        ? styles.signalTagWarning
+                        : ''
+                    }`}
+                  >
+                    {sig}
+                  </span>
+                ))}
+              </div>
 
-                  {/* Details */}
-                  <td>
-                    <span style={{ fontSize: '0.76rem', color: '#475569' }}>
-                      {details}
-                    </span>
-                  </td>
+              {/* Details & Trend */}
+              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, background: '#f8fafc', padding: '8px 10px', borderRadius: 10 }}>
+                <span style={{ fontSize: '0.74rem', color: '#475569', flex: 1 }}>{details}</span>
+                <Sparkline
+                  points={trendPoints}
+                  color={band.toLowerCase() === 'critical' ? '#dc2626' : (band.toLowerCase() === 'high' ? '#ea580c' : '#ca8a04')}
+                />
+              </div>
 
-                  {/* Trend Sparkline */}
-                  <td>
-                    <Sparkline
-                      points={trendPoints}
-                      color={band.toLowerCase() === 'critical' ? '#dc2626' : (band.toLowerCase() === 'high' ? '#ea580c' : '#ca8a04')}
-                    />
-                  </td>
-
-                  {/* Actions */}
-                  <td style={{ textAlign: 'right' }}>
-                    <button
-                      type="button"
-                      className={styles.btnActionView}
-                      onClick={() => s.student_id && onSelectStudent(s.student_id)}
-                    >
-                      View
-                    </button>
-                  </td>
-                </tr>
-              );
-            })}
-          </tbody>
-        </table>
+              <div className={styles.mobileCardFooter}>
+                <button
+                  type="button"
+                  className={styles.mobileCardActionBtn}
+                  onClick={() => s.student_id && onSelectStudent(s.student_id)}
+                >
+                  Dossier 360° →
+                </button>
+              </div>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

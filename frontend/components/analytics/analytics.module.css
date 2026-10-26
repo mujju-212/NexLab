@@ -1248,8 +1248,8 @@
 
 /* ── Mobile (≤640px): app-style single-column layout ─────────────────────── */
 @media (max-width: 640px) {
-  .kpiGrid, .riskKpiGrid, .funnelKpiGrid, .aiUsageKpiGrid { grid-template-columns: repeat(2, 1fr) !important; gap: 10px; }
-  .twoColGrid, .threeColChartsGrid, .funnelThreeColGrid, .aiUsageMiddleGrid, .aiUsageBottomGrid { grid-template-columns: 1fr !important; }
+  .kpiGrid, .riskKpiGrid, .funnelKpiGrid, .aiUsageKpiGrid { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; gap: 10px; }
+  .twoColGrid, .threeColChartsGrid, .funnelThreeColGrid, .aiUsageMiddleGrid, .aiUsageBottomGrid { grid-template-columns: minmax(0, 1fr) !important; }
   .tableContainer, .tableWrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .tableContainer table, .tableWrapper table { min-width: 680px; }
 }
@@ -1257,7 +1257,7 @@
 /* Inline-styled comparison rows (grid-template-columns set inline in the page)
    must still collapse on phones — !important class rule beats inline styles. */
 @media (max-width: 640px) {
-  .collapseCompareRow { grid-template-columns: 1fr !important; }
+  .collapseCompareRow { grid-template-columns: minmax(0, 1fr) !important; }
 }
 @media (max-width: 640px) {
   .instructorKpiRow { grid-template-columns: repeat(2, minmax(0, 1fr)) !important; }
@@ -1298,4 +1298,10 @@
 @media (max-width: 640px) {
   /* Odd-count KPI rows: last card spans full width instead of leaving a hole */
   .instructorKpiRow > div:last-child:nth-child(odd) { grid-column: 1 / -1; }
+}
+
+/* ══ Touch targets (≤768px): finger-sized controls — desktop untouched ══ */
+@media (max-width: 768px) {
+  .primaryBtn, .outlineBtn, .actionBtn, .exportReportBtn, .filterSelect, .funnelViewBtn, .funnelMoreBtn, .btnMore, .btnView { min-height: 44px; }
+  .rosterSearchInput, .rosterTable { font-size: 13px; }
 }

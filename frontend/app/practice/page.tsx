@@ -9,8 +9,9 @@ import styles from './practice.content.module.css';
 import {
   BookOpen, Code2, Trophy, Search, RefreshCw, ChevronRight,
   BarChart2, LayoutGrid, Sparkles, ChevronDown, Check,
-  Layers, Database, FileText
+  Layers, Database, FileText, X
 } from 'lucide-react';
+import { CoursesCatalogSkeleton } from '@/components/practice/PracticeSkeletons';
 
 /* ── Difficulty styling map ── */
 const DIFF_CONFIG = {
@@ -481,6 +482,14 @@ export default function PracticePage() {
 
   const hasActiveFilters = search || diffFilter !== 'all' || categoryFilter !== 'all' || langFilter !== 'all' || sortBy !== 'popular';
 
+  if (loading) {
+    return (
+      <IndividualShell activePage="Courses">
+        <CoursesCatalogSkeleton />
+      </IndividualShell>
+    );
+  }
+
   return (
     <IndividualShell activePage="Courses">
       <div className={styles.pageWrapper}>
@@ -534,9 +543,10 @@ export default function PracticePage() {
               {search && (
                 <button
                   onClick={() => setSearch('')}
-                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', fontSize: 13, padding: '0 4px' }}
+                  style={{ background: 'none', border: 'none', color: '#94a3b8', cursor: 'pointer', display: 'flex', alignItems: 'center', padding: '0 4px' }}
+                  aria-label="Clear search"
                 >
-                  ✕
+                  <X size={13} />
                 </button>
               )}
             </div>

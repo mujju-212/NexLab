@@ -144,6 +144,7 @@ export default function InstructorDashboard() {
   // Interactive calendar state
   const [selectedDate, setSelectedDate] = useState<Date>(() => new Date());
   const [weekOffset, setWeekOffset] = useState<number>(0);
+  const [mobileTab, setMobileTab] = useState<'sessions' | 'feed' | 'analytics'>('sessions');
 
   useEffect(() => {
     if (error) {
@@ -316,361 +317,696 @@ export default function InstructorDashboard() {
 
           </div>
 
-          {/* 3. Middle Section: Upcoming Sessions + Recent Activity */}
-          <div className={styles.middleGrid}>
-
-            {/* Upcoming Sessions */}
-            <div className={styles.panelCard}>
-              <div className={styles.panelHeader}>
-                <div className={styles.panelTitleGroup}>
-                  <Calendar size={18} className={styles.panelTitleIcon} />
-                  <h2>Upcoming Sessions</h2>
-                </div>
-                <div className={styles.panelHeaderActions}>
-                  <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/sessions')}>
-                    View all →
-                  </button>
-                  <button className={styles.newSessionBtn} onClick={() => router.push('/instructor/sessions')}>
-                    <Plus size={14} /> New Session
-                  </button>
+          {/* ── Native Mobile App Dashboard Controls ── */}
+          {stats.active_session_count > 0 && (
+            <div
+              className={styles.mobileActiveSessionBanner}
+              onClick={() => router.push('/instructor/sessions')}
+            >
+              <div style={{ display: 'flex', alignItems: 'center', gap: 10 }}>
+                <span style={{ fontSize: 20 }}>🔴</span>
+                <div>
+                  <div style={{ fontWeight: 800, fontSize: 13.5 }}>Live Lab Active</div>
+                  <div style={{ fontSize: 11, opacity: 0.9 }}>{stats.active_session_count} session running right now</div>
                 </div>
               </div>
+              <button style={{ background: '#fff', color: '#059669', border: 'none', borderRadius: 8, padding: '6px 12px', fontWeight: 800, fontSize: 11.5, cursor: 'pointer' }}>
+                Conductor →
+              </button>
+            </div>
+          )}
 
-              <div className={styles.sessionList}>
-                {upcomingSessions.length === 0 && !loading && (
-                  <div className={styles.emptyNotice}>No scheduled sessions yet. Click + New Session to schedule one.</div>
-                )}
-                {upcomingSessions.slice(0, 3).map((session, idx) => (
-                  <div
-                    key={session.id || idx}
-                    className={styles.sessionItem}
-                    onClick={() => router.push(session.status === 'active' ? `/instructor/live-lab?session=${session.id}` : '/instructor/sessions')}
-                  >
-                    <div className={styles.sessionDateBadge}>
-                      <span className={styles.dateBadgeMonth}>{fmtDateMonth(session.scheduled_at)}</span>
-                      <span className={styles.dateBadgeDay}>{fmtDateDay(session.scheduled_at)}</span>
-                    </div>
-
-                    <div className={styles.sessionDetails}>
-                      <h3 className={styles.sessionTitle}>{session.experiment_title || session.title || 'Interactive Lab'}</h3>
-                      <p className={styles.sessionMeta}>
-                        {fmtTimeRange(session.scheduled_at, session.duration_minutes)} | {session.student_count || 0} students
-                      </p>
-                    </div>
-
-                    <div className={styles.sessionEnd}>
-                      <span className={styles.upcomingPill}>
-                        {session.status === 'active' ? 'Live' : 'Upcoming'}
-                      </span>
-                      <button className={styles.moreOptionsBtn} onClick={(e) => { e.stopPropagation(); router.push('/instructor/sessions'); }} title="More options">
-                        <MoreVertical size={16} />
-                      </button>
-                    </div>
-                  </div>
-                ))}
+          {/* Mobile Quick Action Buttons Row */}
+          <div className={styles.mobileQuickActionRow}>
+            <div className={styles.mobileQuickActionBtn} onClick={() => router.push('/instructor/sessions')}>
+              <div className={styles.mobileQuickIcon} style={{ background: '#f3e8ff', color: '#7c3aed' }}>
+                <Video size={18} />
               </div>
+              <span className={styles.mobileQuickLabel}>Live Lab</span>
             </div>
 
-            {/* Recent Activity */}
-            <div className={styles.panelCard}>
-              <div className={styles.panelHeader}>
-                <div className={styles.panelTitleGroup}>
-                  <Activity size={18} className={styles.panelTitleIcon} />
-                  <h2>Recent Activity</h2>
-                </div>
-                <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/analytics')}>
-                  View all →
-                </button>
+            <div className={styles.mobileQuickActionBtn} onClick={() => router.push('/instructor/sessions/schedule')}>
+              <div className={styles.mobileQuickIcon} style={{ background: '#e0f2fe', color: '#0284c7' }}>
+                <Calendar size={18} />
               </div>
-
-              <div className={styles.activityList}>
-                {recentActivity.length === 0 && !loading && (
-                  <div className={styles.emptyNotice}>No recent events logged in the last 7 days.</div>
-                )}
-                {recentActivity.slice(0, 5).map((ev, idx) => {
-                  let iconBg = '#f3e8ff';
-                  let iconColor = '#7c3aed';
-                  let IconComp = Activity;
-
-                  if (ev.type === 'session_ended') {
-                    iconBg = '#f3e8ff';
-                    iconColor = '#7c3aed';
-                    IconComp = CheckCircle2;
-                  } else if (ev.type === 'plagiarism') {
-                    iconBg = '#fee2e2';
-                    iconColor = '#ef4444';
-                    IconComp = AlertTriangle;
-                  } else if (ev.type === 'final_submission') {
-                    iconBg = '#dcfce7';
-                    iconColor = '#10b981';
-                    IconComp = FileText;
-                  } else if (ev.type === 'all_checkpoints_passed') {
-                    iconBg = '#dbeafe';
-                    iconColor = '#3b82f6';
-                    IconComp = UserCheck;
-                  } else if (ev.type === 'graded') {
-                    iconBg = '#e0e7ff';
-                    iconColor = '#6366f1';
-                    IconComp = ClipboardCheck;
-                  }
-
-                  return (
-                    <div
-                      key={idx}
-                      className={styles.activityItem}
-                      onClick={() => router.push(ev.link || '/instructor/dashboard')}
-                    >
-                      <div className={styles.activityIconWrap} style={{ background: iconBg, color: iconColor }}>
-                        <IconComp size={15} />
-                      </div>
-                      <div className={styles.activityBody}>
-                        <div className={styles.activityTitle}>{ev.title}</div>
-                        <div className={styles.activityDetail}>{ev.detail}</div>
-                      </div>
-                      <div className={styles.activityTime}>{timeAgo(ev.at)}</div>
-                    </div>
-                  );
-                })}
-              </div>
+              <span className={styles.mobileQuickLabel}>Schedule</span>
             </div>
 
+            <div className={styles.mobileQuickActionBtn} onClick={() => router.push('/instructor/grading')}>
+              <div className={styles.mobileQuickIcon} style={{ background: '#fef3c7', color: '#d97706' }}>
+                <ClipboardCheck size={18} />
+              </div>
+              {stats.pending_grading_count > 0 && (
+                <span className={styles.mobileQuickBadge}>{stats.pending_grading_count}</span>
+              )}
+              <span className={styles.mobileQuickLabel}>Grading</span>
+            </div>
+
+            <div className={styles.mobileQuickActionBtn} onClick={() => router.push('/instructor/reports')}>
+              <div className={styles.mobileQuickIcon} style={{ background: '#dcfce7', color: '#16a34a' }}>
+                <BarChart2 size={18} />
+              </div>
+              <span className={styles.mobileQuickLabel}>Reports</span>
+            </div>
           </div>
 
-          {/* 4. Bottom Row (3 Columns): Concept Mastery, Student Performance, Recent Submissions */}
-          <div className={styles.bottomGrid}>
+          {/* Mobile Segmented Switcher */}
+          <div className={styles.mobileSegmentedControl}>
+            <button
+              className={`${styles.mobileSegmentBtn} ${mobileTab === 'sessions' ? styles.mobileSegmentActive : ''}`}
+              onClick={() => setMobileTab('sessions')}
+            >
+              <Calendar size={13} /> Sessions
+            </button>
+            <button
+              className={`${styles.mobileSegmentBtn} ${mobileTab === 'feed' ? styles.mobileSegmentActive : ''}`}
+              onClick={() => setMobileTab('feed')}
+            >
+              <Activity size={13} /> Feed {stats.pending_grading_count > 0 ? `(${stats.pending_grading_count})` : ''}
+            </button>
+            <button
+              className={`${styles.mobileSegmentBtn} ${mobileTab === 'analytics' ? styles.mobileSegmentActive : ''}`}
+              onClick={() => setMobileTab('analytics')}
+            >
+              <BarChart2 size={13} /> Analytics
+            </button>
+          </div>
 
-            {/* Col 1: Concept Mastery Snapshot */}
-            <div className={styles.panelCard}>
-              <div className={styles.panelHeader}>
-                <div className={styles.panelTitleGroup}>
-                  <BarChart2 size={18} className={styles.panelTitleIcon} />
-                  <h2>Concept Mastery Snapshot</h2>
-                </div>
-                <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/analytics?tab=mastery')}>
-                  View full analytics →
-                </button>
-              </div>
+          {/* ── MOBILE ONLY TAB CONTENT ── */}
+          <div className={styles.mobileOnlyLayout}>
+            {mobileTab === 'sessions' && (
+              <>
+                {/* Mobile Calendar Day Selector */}
+                <div className={styles.panelCard}>
+                  <div className={styles.calendarHeader}>
+                    <div className={styles.calendarTitleGroup}>
+                      <Calendar size={16} className={styles.panelTitleIcon} />
+                      <h2 style={{ fontSize: 14 }}>Schedule Picker</h2>
+                    </div>
+                    <button
+                      className={styles.todayBtn}
+                      onClick={() => {
+                        setWeekOffset(0);
+                        setSelectedDate(new Date());
+                      }}
+                    >
+                      Today
+                    </button>
+                  </div>
 
-              <div className={styles.conceptList}>
-                {conceptMastery.length === 0 && !loading && (
-                  <div className={styles.emptyNotice}>No concept mastery recorded yet.</div>
-                )}
-                {conceptMastery.map((cm, idx) => (
-                  <div
-                    key={idx}
-                    className={styles.conceptRow}
-                    onClick={() => router.push('/instructor/analytics?tab=mastery')}
-                    title={`${cm.concept}: ${Math.round(cm.score)}% average score${cm.student_count ? ` (${cm.student_count} evaluations)` : ''} - Click to view detailed analysis`}
-                  >
-                    <span className={styles.conceptName} title={cm.concept}>{cm.concept}</span>
-                    <div className={styles.conceptTrack}>
+                  <div className={styles.calendarMonthRow}>
+                    <button
+                      className={styles.calNavBtn}
+                      aria-label="Previous Week"
+                      onClick={() => setWeekOffset(prev => prev - 1)}
+                    >
+                      <ChevronLeft size={16} />
+                    </button>
+                    <span className={styles.monthLabel}>
+                      {calendarWeek[3]?.fullDate.toLocaleDateString('en-US', { month: 'short', year: 'numeric' })}
+                    </span>
+                    <button
+                      className={styles.calNavBtn}
+                      aria-label="Next Week"
+                      onClick={() => setWeekOffset(prev => prev + 1)}
+                    >
+                      <ChevronRight size={16} />
+                    </button>
+                  </div>
+
+                  <div className={styles.calDaysGrid}>
+                    {calendarWeek.map((item) => (
                       <div
-                        className={styles.conceptFill}
-                        style={{
-                          width: `${Math.min(cm.score, 100)}%`,
-                          background: cm.color || 'linear-gradient(90deg, #7c3aed, #a855f7)',
-                        }}
-                      />
-                    </div>
-                    <span className={styles.conceptPct}>{Math.round(cm.score)}%</span>
+                        key={item.day + item.date}
+                        className={`${styles.calDayCol} ${item.isSelected ? styles.calDayActive : ''}`}
+                        onClick={() => setSelectedDate(item.fullDate)}
+                      >
+                        <span className={styles.calDayName}>{item.day}</span>
+                        <span className={styles.calDayNum}>{item.date}</span>
+                      </div>
+                    ))}
                   </div>
-                ))}
-              </div>
-            </div>
 
-            {/* Col 2: Student Performance Donut */}
-            <div className={styles.panelCard}>
-              <div className={styles.panelHeader}>
-                <div className={styles.panelTitleGroup}>
-                  <Cloud size={18} className={styles.panelTitleIcon} />
-                  <h2>Student Performance</h2>
-                </div>
-                <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/analytics?tab=students')}>
-                  View cohort →
-                </button>
-              </div>
-
-              <div className={styles.donutContent}>
-                <div
-                  className={styles.donutChartWrap}
-                  onClick={() => router.push('/instructor/analytics?tab=students')}
-                  title="Click to view detailed student breakdown"
-                >
-                  <svg className={styles.donutSvg} viewBox="0 0 100 100">
-                    <circle cx="50" cy="50" r="40" className={styles.donutTrack} />
-                    {/* Excellent */}
-                    {donutValues.lenExc > 0 && (
-                      <circle
-                        cx="50" cy="50" r="40"
-                        className={styles.donutSegment}
-                        stroke="#10b981"
-                        strokeDasharray={`${donutValues.lenExc} ${donutValues.c}`}
-                        strokeDashoffset={donutValues.offExc}
-                      />
-                    )}
-                    {/* Good */}
-                    {donutValues.lenGood > 0 && (
-                      <circle
-                        cx="50" cy="50" r="40"
-                        className={styles.donutSegment}
-                        stroke="#06b6d4"
-                        strokeDasharray={`${donutValues.lenGood} ${donutValues.c}`}
-                        strokeDashoffset={donutValues.offGood}
-                      />
-                    )}
-                    {/* Needs Support */}
-                    {donutValues.lenNeeds > 0 && (
-                      <circle
-                        cx="50" cy="50" r="40"
-                        className={styles.donutSegment}
-                        stroke="#f59e0b"
-                        strokeDasharray={`${donutValues.lenNeeds} ${donutValues.c}`}
-                        strokeDashoffset={donutValues.offNeeds}
-                      />
-                    )}
-                    {/* At Risk */}
-                    {donutValues.lenRisk > 0 && (
-                      <circle
-                        cx="50" cy="50" r="40"
-                        className={styles.donutSegment}
-                        stroke="#ef4444"
-                        strokeDasharray={`${donutValues.lenRisk} ${donutValues.c}`}
-                        strokeDashoffset={donutValues.offRisk}
-                      />
-                    )}
-                  </svg>
-                  <div className={styles.donutCenter}>
-                    <span className={styles.donutNumber}>{performance.total}</span>
-                    <span className={styles.donutLabel}>Total</span>
-                  </div>
-                </div>
-
-                <div className={styles.donutLegend}>
-                  <div
-                    className={styles.legendItem}
-                    onClick={() => router.push('/instructor/analytics?tab=students')}
-                    title="View excellent performing students"
-                  >
-                    <span className={styles.legendDot} style={{ background: '#10b981' }} />
-                    <span className={styles.legendLabel}>Excellent ({performance.excellent})</span>
-                  </div>
-                  <div
-                    className={styles.legendItem}
-                    onClick={() => router.push('/instructor/analytics?tab=students')}
-                    title="View good performing students"
-                  >
-                    <span className={styles.legendDot} style={{ background: '#06b6d4' }} />
-                    <span className={styles.legendLabel}>Good ({performance.good})</span>
-                  </div>
-                  <div
-                    className={styles.legendItem}
-                    onClick={() => router.push('/instructor/analytics?tab=students')}
-                    title="View students needing support"
-                  >
-                    <span className={styles.legendDot} style={{ background: '#f59e0b' }} />
-                    <span className={styles.legendLabel}>Needs Support ({performance.needs_support})</span>
-                  </div>
-                  <div
-                    className={styles.legendItem}
-                    onClick={() => router.push('/instructor/analytics?tab=students')}
-                    title="View at-risk students"
-                  >
-                    <span className={styles.legendDot} style={{ background: '#ef4444' }} />
-                    <span className={styles.legendLabel}>At Risk ({performance.at_risk})</span>
-                  </div>
-                </div>
-              </div>
-
-              {performance.total > 0 ? (
-                <div className={styles.insightCallout}>
-                  <div className={styles.insightIcon}>💡</div>
-                  <div className={styles.insightText}>
-                    <strong>{performance.performing_well_pct}% of your students are performing well!</strong>
-                    <p>
-                      {performance.at_risk > 0 ? (
-                        <>
-                          <span>{performance.at_risk} student{performance.at_risk === 1 ? '' : 's'} may require intervention. </span>
-                          <button
-                            className={styles.insightActionBtn}
-                            onClick={() => router.push('/instructor/analytics?tab=students')}
+                  <div className={styles.scheduleTimeline}>
+                    {selectedDaySessions.length > 0 ? (
+                      selectedDaySessions.map((s, idx) => {
+                        const colors = [styles.pillPurple, styles.pillBlue, styles.pillGreen];
+                        const colorClass = colors[idx % colors.length];
+                        const startTime = s.scheduled_at
+                          ? new Date(s.scheduled_at).toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' })
+                          : '10:00 AM';
+                        return (
+                          <div
+                            key={s.id || idx}
+                            className={`${styles.schedulePill} ${colorClass}`}
+                            onClick={() => router.push(s.status === 'active' ? `/instructor/sessions/${s.id}/live` : '/instructor/sessions')}
                           >
-                            View at-risk →
-                          </button>
-                        </>
-                      ) : (
-                        'Cohort is actively progressing across experiments.'
-                      )}
-                    </p>
+                            <span className={styles.scheduleTime}>{startTime}</span>
+                            <span className={styles.scheduleName}>{s.title || s.experiment_title || s.subject_name || 'Lab Session'}</span>
+                          </div>
+                        );
+                      })
+                    ) : (
+                      <div style={{ padding: '12px 10px', background: '#f8fafc', borderRadius: 10, textAlign: 'center', border: '1px dashed #e2e8f0' }}>
+                        <p style={{ margin: 0, fontSize: 11.5, color: '#64748b' }}>No sessions scheduled for this day.</p>
+                      </div>
+                    )}
                   </div>
                 </div>
-              ) : (
-                <div className={styles.insightCallout}>
-                  <div className={styles.insightIcon}>ℹ️</div>
-                  <div className={styles.insightText}>
-                    <strong>Awaiting cohort submissions</strong>
-                    <p>Performance analytics will populate once students complete code attempts.</p>
-                  </div>
-                </div>
-              )}
-            </div>
 
-            {/* Col 3: Recent Submissions */}
-            <div className={styles.panelCard}>
-              <div className={styles.panelHeader}>
-                <div className={styles.panelTitleGroup}>
-                  <FileText size={18} className={styles.panelTitleIcon} />
-                  <h2>Recent Submissions</h2>
+                {/* Upcoming Sessions Card */}
+                <div className={styles.panelCard}>
+                  <div className={styles.panelHeader}>
+                    <div className={styles.panelTitleGroup}>
+                      <Calendar size={18} className={styles.panelTitleIcon} />
+                      <h2>Upcoming Sessions</h2>
+                    </div>
+                    <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/sessions')}>
+                      View all →
+                    </button>
+                  </div>
+
+                  <div className={styles.sessionList}>
+                    {upcomingSessions.length === 0 && !loading && (
+                      <div className={styles.emptyNotice}>No scheduled sessions yet.</div>
+                    )}
+                    {upcomingSessions.slice(0, 4).map((session, idx) => (
+                      <div
+                        key={session.id || idx}
+                        className={styles.sessionItem}
+                        onClick={() => router.push(session.status === 'active' ? `/instructor/sessions/${session.id}/live` : '/instructor/sessions')}
+                      >
+                        <div className={styles.sessionDateBadge}>
+                          <span className={styles.dateBadgeMonth}>{fmtDateMonth(session.scheduled_at)}</span>
+                          <span className={styles.dateBadgeDay}>{fmtDateDay(session.scheduled_at)}</span>
+                        </div>
+                        <div className={styles.sessionDetails}>
+                          <h3 className={styles.sessionTitle}>{session.experiment_title || session.title || 'Interactive Lab'}</h3>
+                          <p className={styles.sessionMeta}>
+                            {fmtTimeRange(session.scheduled_at, session.duration_minutes)} | {session.student_count || 0} students
+                          </p>
+                        </div>
+                        <div className={styles.sessionEnd}>
+                          <span className={styles.upcomingPill}>
+                            {session.status === 'active' ? 'Live' : 'Upcoming'}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
                 </div>
-                <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/grading')}>
-                  View all →
-                </button>
+              </>
+            )}
+
+            {mobileTab === 'feed' && (
+              <>
+                {/* Recent Submissions to Grade */}
+                <div className={styles.panelCard}>
+                  <div className={styles.panelHeader}>
+                    <div className={styles.panelTitleGroup}>
+                      <FileText size={18} className={styles.panelTitleIcon} />
+                      <h2>Recent Submissions</h2>
+                    </div>
+                    <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/grading')}>
+                      Grade Queue →
+                    </button>
+                  </div>
+
+                  <div className={styles.submissionList}>
+                    {recentSubmissions.length === 0 && !loading && (
+                      <div className={styles.emptyNotice}>No submissions logged yet.</div>
+                    )}
+                    {recentSubmissions.slice(0, 5).map((sub, idx) => (
+                      <div
+                        key={sub.id || idx}
+                        className={styles.submissionItem}
+                        onClick={() => router.push('/instructor/grading')}
+                      >
+                        <div className={styles.subIconWrap}>
+                          <FileText size={16} color="#7c3aed" />
+                        </div>
+                        <div className={styles.subDetails}>
+                          <h3 className={styles.subTitle}>{sub.experiment_title}</h3>
+                          <p className={styles.subStudent}>{sub.student_name}</p>
+                        </div>
+                        <div className={styles.subEnd}>
+                          {sub.test_cases_total > 0 && (
+                            <span className={`${styles.subScorePill} ${sub.test_cases_passed === sub.test_cases_total ? styles.scoreGreen : styles.scoreAmber}`}>
+                              {sub.test_cases_passed}/{sub.test_cases_total}
+                            </span>
+                          )}
+                          <span className={styles.subTime}>{timeAgo(sub.submitted_at)}</span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+
+                {/* Recent Activity */}
+                <div className={styles.panelCard}>
+                  <div className={styles.panelHeader}>
+                    <div className={styles.panelTitleGroup}>
+                      <Activity size={18} className={styles.panelTitleIcon} />
+                      <h2>Recent Activity</h2>
+                    </div>
+                    <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/analytics')}>
+                      View all →
+                    </button>
+                  </div>
+
+                  <div className={styles.activityList}>
+                    {recentActivity.length === 0 && !loading && (
+                      <div className={styles.emptyNotice}>No recent events logged.</div>
+                    )}
+                    {recentActivity.slice(0, 5).map((ev, idx) => {
+                      let iconBg = '#f3e8ff';
+                      let iconColor = '#7c3aed';
+                      let IconComp = Activity;
+
+                      if (ev.type === 'session_ended') { iconBg = '#f3e8ff'; iconColor = '#7c3aed'; IconComp = CheckCircle2; }
+                      else if (ev.type === 'plagiarism') { iconBg = '#fee2e2'; iconColor = '#ef4444'; IconComp = AlertTriangle; }
+                      else if (ev.type === 'final_submission') { iconBg = '#dcfce7'; iconColor = '#10b981'; IconComp = FileText; }
+                      else if (ev.type === 'all_checkpoints_passed') { iconBg = '#dbeafe'; iconColor = '#3b82f6'; IconComp = UserCheck; }
+                      else if (ev.type === 'graded') { iconBg = '#e0e7ff'; iconColor = '#6366f1'; IconComp = ClipboardCheck; }
+
+                      return (
+                        <div
+                          key={idx}
+                          className={styles.activityItem}
+                          onClick={() => router.push(ev.link || '/instructor/dashboard')}
+                        >
+                          <div className={styles.activityIconWrap} style={{ background: iconBg, color: iconColor }}>
+                            <IconComp size={15} />
+                          </div>
+                          <div className={styles.activityBody}>
+                            <div className={styles.activityTitle}>{ev.title}</div>
+                            <div className={styles.activityDetail}>{ev.detail}</div>
+                          </div>
+                          <div className={styles.activityTime}>{timeAgo(ev.at)}</div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </>
+            )}
+
+            {mobileTab === 'analytics' && (
+              <>
+                {/* Student Performance Donut */}
+                <div className={styles.panelCard}>
+                  <div className={styles.panelHeader}>
+                    <div className={styles.panelTitleGroup}>
+                      <Cloud size={18} className={styles.panelTitleIcon} />
+                      <h2>Student Performance</h2>
+                    </div>
+                    <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/analytics?tab=students')}>
+                      View cohort →
+                    </button>
+                  </div>
+
+                  <div className={styles.donutContent}>
+                    <div
+                      className={styles.donutChartWrap}
+                      onClick={() => router.push('/instructor/analytics?tab=students')}
+                    >
+                      <svg className={styles.donutSvg} viewBox="0 0 100 100">
+                        <circle cx="50" cy="50" r="40" className={styles.donutTrack} />
+                        {donutValues.lenExc > 0 && (
+                          <circle cx="50" cy="50" r="40" className={styles.donutSegment} stroke="#10b981" strokeDasharray={`${donutValues.lenExc} ${donutValues.c}`} strokeDashoffset={donutValues.offExc} />
+                        )}
+                        {donutValues.lenGood > 0 && (
+                          <circle cx="50" cy="50" r="40" className={styles.donutSegment} stroke="#06b6d4" strokeDasharray={`${donutValues.lenGood} ${donutValues.c}`} strokeDashoffset={donutValues.offGood} />
+                        )}
+                        {donutValues.lenNeeds > 0 && (
+                          <circle cx="50" cy="50" r="40" className={styles.donutSegment} stroke="#f59e0b" strokeDasharray={`${donutValues.lenNeeds} ${donutValues.c}`} strokeDashoffset={donutValues.offNeeds} />
+                        )}
+                        {donutValues.lenRisk > 0 && (
+                          <circle cx="50" cy="50" r="40" className={styles.donutSegment} stroke="#ef4444" strokeDasharray={`${donutValues.lenRisk} ${donutValues.c}`} strokeDashoffset={donutValues.offRisk} />
+                        )}
+                      </svg>
+                      <div className={styles.donutCenter}>
+                        <span className={styles.donutNumber}>{performance.total}</span>
+                        <span className={styles.donutLabel}>Total</span>
+                      </div>
+                    </div>
+
+                    <div className={styles.donutLegend}>
+                      <div className={styles.legendItem} onClick={() => router.push('/instructor/analytics?tab=students')}>
+                        <span className={styles.legendDot} style={{ background: '#10b981' }} />
+                        <span className={styles.legendLabel}>Excellent ({performance.excellent})</span>
+                      </div>
+                      <div className={styles.legendItem} onClick={() => router.push('/instructor/analytics?tab=students')}>
+                        <span className={styles.legendDot} style={{ background: '#06b6d4' }} />
+                        <span className={styles.legendLabel}>Good ({performance.good})</span>
+                      </div>
+                      <div className={styles.legendItem} onClick={() => router.push('/instructor/analytics?tab=students')}>
+                        <span className={styles.legendDot} style={{ background: '#f59e0b' }} />
+                        <span className={styles.legendLabel}>Needs Support ({performance.needs_support})</span>
+                      </div>
+                      <div className={styles.legendItem} onClick={() => router.push('/instructor/analytics?tab=students')}>
+                        <span className={styles.legendDot} style={{ background: '#ef4444' }} />
+                        <span className={styles.legendLabel}>At Risk ({performance.at_risk})</span>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* Concept Mastery Snapshot */}
+                <div className={styles.panelCard}>
+                  <div className={styles.panelHeader}>
+                    <div className={styles.panelTitleGroup}>
+                      <BarChart2 size={18} className={styles.panelTitleIcon} />
+                      <h2>Concept Mastery Snapshot</h2>
+                    </div>
+                    <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/analytics?tab=mastery')}>
+                      Full analytics →
+                    </button>
+                  </div>
+
+                  <div className={styles.conceptList}>
+                    {conceptMastery.length === 0 && !loading && (
+                      <div className={styles.emptyNotice}>No concept mastery recorded yet.</div>
+                    )}
+                    {conceptMastery.map((cm, idx) => (
+                      <div
+                        key={idx}
+                        className={styles.conceptRow}
+                        onClick={() => router.push('/instructor/analytics?tab=mastery')}
+                      >
+                        <span className={styles.conceptName} title={cm.concept}>{cm.concept}</span>
+                        <div className={styles.conceptTrack}>
+                          <div
+                            className={styles.conceptFill}
+                            style={{
+                              width: `${Math.min(cm.score, 100)}%`,
+                              background: cm.color || 'linear-gradient(90deg, #7c3aed, #a855f7)',
+                            }}
+                          />
+                        </div>
+                        <span className={styles.conceptPct}>{Math.round(cm.score)}%</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </>
+            )}
+          </div>
+
+          {/* ── DESKTOP ONLY MULTI-COLUMN LAYOUT ── */}
+          <div className={styles.desktopOnlyLayout}>
+            {/* 3. Middle Section: Upcoming Sessions + Recent Activity */}
+            <div className={styles.middleGrid}>
+
+              {/* Upcoming Sessions */}
+              <div className={styles.panelCard}>
+                <div className={styles.panelHeader}>
+                  <div className={styles.panelTitleGroup}>
+                    <Calendar size={18} className={styles.panelTitleIcon} />
+                    <h2>Upcoming Sessions</h2>
+                  </div>
+                  <div className={styles.panelHeaderActions}>
+                    <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/sessions')}>
+                      View all →
+                    </button>
+                    <button className={styles.newSessionBtn} onClick={() => router.push('/instructor/sessions')}>
+                      <Plus size={14} /> New Session
+                    </button>
+                  </div>
+                </div>
+
+                <div className={styles.sessionList}>
+                  {upcomingSessions.length === 0 && !loading && (
+                    <div className={styles.emptyNotice}>No scheduled sessions yet. Click + New Session to schedule one.</div>
+                  )}
+                  {upcomingSessions.slice(0, 3).map((session, idx) => (
+                    <div
+                      key={session.id || idx}
+                      className={styles.sessionItem}
+                      onClick={() => router.push(session.status === 'active' ? `/instructor/sessions/${session.id}/live` : '/instructor/sessions')}
+                    >
+                      <div className={styles.sessionDateBadge}>
+                        <span className={styles.dateBadgeMonth}>{fmtDateMonth(session.scheduled_at)}</span>
+                        <span className={styles.dateBadgeDay}>{fmtDateDay(session.scheduled_at)}</span>
+                      </div>
+
+                      <div className={styles.sessionDetails}>
+                        <h3 className={styles.sessionTitle}>{session.experiment_title || session.title || 'Interactive Lab'}</h3>
+                        <p className={styles.sessionMeta}>
+                          {fmtTimeRange(session.scheduled_at, session.duration_minutes)} | {session.student_count || 0} students
+                        </p>
+                      </div>
+
+                      <div className={styles.sessionEnd}>
+                        <span className={styles.upcomingPill}>
+                          {session.status === 'active' ? 'Live' : 'Upcoming'}
+                        </span>
+                        <button className={styles.moreOptionsBtn} onClick={(e) => { e.stopPropagation(); router.push('/instructor/sessions'); }} title="More options">
+                          <MoreVertical size={16} />
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
 
-              <div className={styles.submissionList}>
-                {recentSubmissions.length === 0 && !loading && (
-                  <div className={styles.emptyNotice}>No submissions logged yet.</div>
-                )}
-                {recentSubmissions.slice(0, 5).map((sub, idx) => (
+              {/* Recent Activity */}
+              <div className={styles.panelCard}>
+                <div className={styles.panelHeader}>
+                  <div className={styles.panelTitleGroup}>
+                    <Activity size={18} className={styles.panelTitleIcon} />
+                    <h2>Recent Activity</h2>
+                  </div>
+                  <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/analytics')}>
+                    View all →
+                  </button>
+                </div>
+
+                <div className={styles.activityList}>
+                  {recentActivity.length === 0 && !loading && (
+                    <div className={styles.emptyNotice}>No recent events logged in the last 7 days.</div>
+                  )}
+                  {recentActivity.slice(0, 5).map((ev, idx) => {
+                    let iconBg = '#f3e8ff';
+                    let iconColor = '#7c3aed';
+                    let IconComp = Activity;
+
+                    if (ev.type === 'session_ended') { iconBg = '#f3e8ff'; iconColor = '#7c3aed'; IconComp = CheckCircle2; }
+                    else if (ev.type === 'plagiarism') { iconBg = '#fee2e2'; iconColor = '#ef4444'; IconComp = AlertTriangle; }
+                    else if (ev.type === 'final_submission') { iconBg = '#dcfce7'; iconColor = '#10b981'; IconComp = FileText; }
+                    else if (ev.type === 'all_checkpoints_passed') { iconBg = '#dbeafe'; iconColor = '#3b82f6'; IconComp = UserCheck; }
+                    else if (ev.type === 'graded') { iconBg = '#e0e7ff'; iconColor = '#6366f1'; IconComp = ClipboardCheck; }
+
+                    return (
+                      <div
+                        key={idx}
+                        className={styles.activityItem}
+                        onClick={() => router.push(ev.link || '/instructor/dashboard')}
+                      >
+                        <div className={styles.activityIconWrap} style={{ background: iconBg, color: iconColor }}>
+                          <IconComp size={15} />
+                        </div>
+                        <div className={styles.activityBody}>
+                          <div className={styles.activityTitle}>{ev.title}</div>
+                          <div className={styles.activityDetail}>{ev.detail}</div>
+                        </div>
+                        <div className={styles.activityTime}>{timeAgo(ev.at)}</div>
+                      </div>
+                    );
+                  })}
+                </div>
+              </div>
+
+            </div>
+
+            {/* 4. Bottom Row (3 Columns): Concept Mastery, Student Performance, Recent Submissions */}
+            <div className={styles.bottomGrid}>
+
+              {/* Col 1: Concept Mastery Snapshot */}
+              <div className={styles.panelCard}>
+                <div className={styles.panelHeader}>
+                  <div className={styles.panelTitleGroup}>
+                    <BarChart2 size={18} className={styles.panelTitleIcon} />
+                    <h2>Concept Mastery Snapshot</h2>
+                  </div>
+                  <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/analytics?tab=mastery')}>
+                    View full analytics →
+                  </button>
+                </div>
+
+                <div className={styles.conceptList}>
+                  {conceptMastery.length === 0 && !loading && (
+                    <div className={styles.emptyNotice}>No concept mastery recorded yet.</div>
+                  )}
+                  {conceptMastery.map((cm, idx) => (
+                    <div
+                      key={idx}
+                      className={styles.conceptRow}
+                      onClick={() => router.push('/instructor/analytics?tab=mastery')}
+                      title={`${cm.concept}: ${Math.round(cm.score)}% average score`}
+                    >
+                      <span className={styles.conceptName} title={cm.concept}>{cm.concept}</span>
+                      <div className={styles.conceptTrack}>
+                        <div
+                          className={styles.conceptFill}
+                          style={{
+                            width: `${Math.min(cm.score, 100)}%`,
+                            background: cm.color || 'linear-gradient(90deg, #7c3aed, #a855f7)',
+                          }}
+                        />
+                      </div>
+                      <span className={styles.conceptPct}>{Math.round(cm.score)}%</span>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+              {/* Col 2: Student Performance Donut */}
+              <div className={styles.panelCard}>
+                <div className={styles.panelHeader}>
+                  <div className={styles.panelTitleGroup}>
+                    <Cloud size={18} className={styles.panelTitleIcon} />
+                    <h2>Student Performance</h2>
+                  </div>
+                  <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/analytics?tab=students')}>
+                    View cohort →
+                  </button>
+                </div>
+
+                <div className={styles.donutContent}>
                   <div
-                    key={sub.id || idx}
-                    className={styles.submissionItem}
-                    onClick={() => router.push('/instructor/grading')}
-                    title={`Grade ${sub.student_name}'s submission for ${sub.experiment_title}`}
+                    className={styles.donutChartWrap}
+                    onClick={() => router.push('/instructor/analytics?tab=students')}
+                    title="Click to view detailed student breakdown"
                   >
-                    <div className={styles.subIconWrap}>
-                      <FileText size={16} color="#7c3aed" />
-                    </div>
-                    <div className={styles.subDetails}>
-                      <h3 className={styles.subTitle}>{sub.experiment_title}</h3>
-                      <p className={styles.subStudent}>{sub.student_name}</p>
-                    </div>
-                    <div className={styles.subEnd}>
-                      {sub.test_cases_total > 0 && (
-                        <span className={`${styles.subScorePill} ${sub.test_cases_passed === sub.test_cases_total ? styles.scoreGreen : styles.scoreAmber}`}>
-                          {sub.test_cases_passed}/{sub.test_cases_total}
-                        </span>
+                    <svg className={styles.donutSvg} viewBox="0 0 100 100">
+                      <circle cx="50" cy="50" r="40" className={styles.donutTrack} />
+                      {donutValues.lenExc > 0 && (
+                        <circle cx="50" cy="50" r="40" className={styles.donutSegment} stroke="#10b981" strokeDasharray={`${donutValues.lenExc} ${donutValues.c}`} strokeDashoffset={donutValues.offExc} />
                       )}
-                      {sub.is_graded && sub.grade !== null && (
-                        <span className={styles.subScorePill} style={{ background: '#ecfdf5', color: '#059669' }}>
-                          {sub.grade} pts
-                        </span>
+                      {donutValues.lenGood > 0 && (
+                        <circle cx="50" cy="50" r="40" className={styles.donutSegment} stroke="#06b6d4" strokeDasharray={`${donutValues.lenGood} ${donutValues.c}`} strokeDashoffset={donutValues.offGood} />
                       )}
-                      <span className={styles.subTime}>{timeAgo(sub.submitted_at)}</span>
-                      <button className={styles.subMoreBtn} onClick={(e) => { e.stopPropagation(); router.push('/instructor/grading'); }} title="Open grading">
-                        <MoreVertical size={14} />
-                      </button>
+                      {donutValues.lenNeeds > 0 && (
+                        <circle cx="50" cy="50" r="40" className={styles.donutSegment} stroke="#f59e0b" strokeDasharray={`${donutValues.lenNeeds} ${donutValues.c}`} strokeDashoffset={donutValues.offNeeds} />
+                      )}
+                      {donutValues.lenRisk > 0 && (
+                        <circle cx="50" cy="50" r="40" className={styles.donutSegment} stroke="#ef4444" strokeDasharray={`${donutValues.lenRisk} ${donutValues.c}`} strokeDashoffset={donutValues.offRisk} />
+                      )}
+                    </svg>
+                    <div className={styles.donutCenter}>
+                      <span className={styles.donutNumber}>{performance.total}</span>
+                      <span className={styles.donutLabel}>Total</span>
                     </div>
                   </div>
-                ))}
-              </div>
-            </div>
 
+                  <div className={styles.donutLegend}>
+                    <div className={styles.legendItem} onClick={() => router.push('/instructor/analytics?tab=students')}>
+                      <span className={styles.legendDot} style={{ background: '#10b981' }} />
+                      <span className={styles.legendLabel}>Excellent ({performance.excellent})</span>
+                    </div>
+                    <div className={styles.legendItem} onClick={() => router.push('/instructor/analytics?tab=students')}>
+                      <span className={styles.legendDot} style={{ background: '#06b6d4' }} />
+                      <span className={styles.legendLabel}>Good ({performance.good})</span>
+                    </div>
+                    <div className={styles.legendItem} onClick={() => router.push('/instructor/analytics?tab=students')}>
+                      <span className={styles.legendDot} style={{ background: '#f59e0b' }} />
+                      <span className={styles.legendLabel}>Needs Support ({performance.needs_support})</span>
+                    </div>
+                    <div className={styles.legendItem} onClick={() => router.push('/instructor/analytics?tab=students')}>
+                      <span className={styles.legendDot} style={{ background: '#ef4444' }} />
+                      <span className={styles.legendLabel}>At Risk ({performance.at_risk})</span>
+                    </div>
+                  </div>
+                </div>
+
+                {performance.total > 0 ? (
+                  <div className={styles.insightCallout}>
+                    <div className={styles.insightIcon}>💡</div>
+                    <div className={styles.insightText}>
+                      <strong>{performance.performing_well_pct}% of your students are performing well!</strong>
+                      <p>
+                        {performance.at_risk > 0 ? (
+                          <>
+                            <span>{performance.at_risk} student{performance.at_risk === 1 ? '' : 's'} may require intervention. </span>
+                            <button
+                              className={styles.insightActionBtn}
+                              onClick={() => router.push('/instructor/analytics?tab=students')}
+                            >
+                              View at-risk →
+                            </button>
+                          </>
+                        ) : (
+                          'Cohort is actively progressing across experiments.'
+                        )}
+                      </p>
+                    </div>
+                  </div>
+                ) : (
+                  <div className={styles.insightCallout}>
+                    <div className={styles.insightIcon}>ℹ️</div>
+                    <div className={styles.insightText}>
+                      <strong>Awaiting cohort submissions</strong>
+                      <p>Performance analytics will populate once students complete code attempts.</p>
+                    </div>
+                  </div>
+                )}
+              </div>
+
+              {/* Col 3: Recent Submissions */}
+              <div className={styles.panelCard}>
+                <div className={styles.panelHeader}>
+                  <div className={styles.panelTitleGroup}>
+                    <FileText size={18} className={styles.panelTitleIcon} />
+                    <h2>Recent Submissions</h2>
+                  </div>
+                  <button className={styles.viewAllBtn} onClick={() => router.push('/instructor/grading')}>
+                    View all →
+                  </button>
+                </div>
+
+                <div className={styles.submissionList}>
+                  {recentSubmissions.length === 0 && !loading && (
+                    <div className={styles.emptyNotice}>No submissions logged yet.</div>
+                  )}
+                  {recentSubmissions.slice(0, 5).map((sub, idx) => (
+                    <div
+                      key={sub.id || idx}
+                      className={styles.submissionItem}
+                      onClick={() => router.push('/instructor/grading')}
+                    >
+                      <div className={styles.subIconWrap}>
+                        <FileText size={16} color="#7c3aed" />
+                      </div>
+                      <div className={styles.subDetails}>
+                        <h3 className={styles.subTitle}>{sub.experiment_title}</h3>
+                        <p className={styles.subStudent}>{sub.student_name}</p>
+                      </div>
+                      <div className={styles.subEnd}>
+                        {sub.test_cases_total > 0 && (
+                          <span className={`${styles.subScorePill} ${sub.test_cases_passed === sub.test_cases_total ? styles.scoreGreen : styles.scoreAmber}`}>
+                            {sub.test_cases_passed}/{sub.test_cases_total}
+                          </span>
+                        )}
+                        {sub.is_graded && sub.grade !== null && (
+                          <span className={styles.subScorePill} style={{ background: '#ecfdf5', color: '#059669' }}>
+                            {sub.grade} pts
+                          </span>
+                        )}
+                        <span className={styles.subTime}>{timeAgo(sub.submitted_at)}</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              </div>
+
+            </div>
           </div>
 
         </div>
 
-        {/* ── Right Rail / Sidebar Widget Column ─────────────────────────── */}
-        <div className={styles.rightRail}>
+        {/* ── Right Rail / Sidebar Widget Column (Desktop Only) ──────────────── */}
+        <div className={`${styles.rightRail} ${styles.desktopOnlyLayout}`}>
 
           {/* 1. Calendar Widget */}
           <div className={styles.panelCard}>

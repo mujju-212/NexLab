@@ -37,6 +37,9 @@ import {
   GraduationCap,
   TrendingUp,
   FlaskConical,
+  Lock,
+  MessageSquare,
+  Zap,
 } from 'lucide-react';
 import {
   aiService,
@@ -351,8 +354,8 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
 
   // Resolve effective role from prop -> authStore -> URL path
   const effectiveRole = useMemo(() => {
-    if (roleOverride) return roleOverride;
-    if (user?.role) return user.role;
+    if (roleOverride) return roleOverride === 'platform_admin' ? 'admin' : roleOverride;
+    if (user?.role) return user.role === 'platform_admin' ? 'admin' : user.role;
     if (pathname?.startsWith('/student')) return 'student';
     if (pathname?.startsWith('/practice')) return 'platform_user';
     if (pathname?.startsWith('/instructor')) return 'instructor';
@@ -466,16 +469,20 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
   const [hasActiveOverlay, setHasActiveOverlay] = useState(false);
 
   useEffect(() => {
+    let rafId: number | null = null;
     const checkOverlays = () => {
       if (typeof document === 'undefined') return;
       const elements = document.querySelectorAll(
         '[class*="drawerOverlay"], [class*="modalOverlay"], [class*="confirmOverlay"], [class*="aiOverlay"], [class*="certModalOverlay"], [class*="drawerBackdrop"], [data-modal-overlay="true"], [role="dialog"], [aria-modal="true"]'
       );
+      if (elements.length === 0) {
+        setHasActiveOverlay(false);
+        return;
+      }
       for (let i = 0; i < elements.length; i++) {
-        const el = elements[i];
+        const el = elements[i] as HTMLElement;
         if (el.closest('[class*="copilotContainer"]')) continue;
-        const style = window.getComputedStyle(el);
-        if (style.display !== 'none' && style.visibility !== 'hidden') {
+        if (el.offsetParent !== null || el.getAttribute('aria-modal') === 'true' || el.getAttribute('role') === 'dialog') {
           setHasActiveOverlay(true);
           return;
         }
@@ -483,16 +490,14 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
       setHasActiveOverlay(false);
     };
 
-    checkOverlays();
+    const throttledCheck = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(checkOverlays);
+    };
 
-    const t1 = setTimeout(checkOverlays, 60);
-    const t2 = setTimeout(checkOverlays, 200);
+    throttledCheck();
 
-    const observer = new MutationObserver(() => {
-      checkOverlays();
-      setTimeout(checkOverlays, 60);
-    });
-
+    const observer = new MutationObserver(throttledCheck);
     observer.observe(document.body, {
       childList: true,
       subtree: true,
@@ -500,15 +505,14 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
       attributeFilter: ['class', 'style'],
     });
 
-    window.addEventListener('animationend', checkOverlays);
-    window.addEventListener('transitionend', checkOverlays);
+    window.addEventListener('animationend', throttledCheck, { passive: true });
+    window.addEventListener('transitionend', throttledCheck, { passive: true });
 
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
+      if (rafId) cancelAnimationFrame(rafId);
       observer.disconnect();
-      window.removeEventListener('animationend', checkOverlays);
-      window.removeEventListener('transitionend', checkOverlays);
+      window.removeEventListener('animationend', throttledCheck);
+      window.removeEventListener('transitionend', throttledCheck);
     };
   }, [pathname]);
 
@@ -769,7 +773,7 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
             id: errId,
             session_id: activeSessionId || '',
             role: 'system',
-            content: `⚠️ ${errorMsg}`,
+            content: `Error: ${errorMsg}`,
             mode,
             created_at: new Date().toISOString(),
           },
@@ -880,7 +884,7 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                 ...m,
                 applied: true,
                 pending_action: null,
-                content: `${m.content}\n\n---\n\n**✓ Action Executed**\n\n${formatActionResult(res.result)}`,
+                content: `${m.content}\n\n---\n\n**Action Executed**\n\n${formatActionResult(res.result)}`,
               }
             : m
         )
@@ -953,7 +957,7 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                 </div>
                 <div className={styles.subtitle}>
                   {mode === 'chat' ? roleCfg.chatSubtitle : roleCfg.agentSubtitle}
-                  <span style={{ marginLeft: 8, opacity: 0.6, fontSize: 10, fontFamily: 'monospace' }}>
+                  <span className={styles.shortcutBadge}>
                     Ctrl+K
                   </span>
                 </div>
@@ -964,6 +968,7 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                   onClick={() => setShowHistorySidebar(!showHistorySidebar)}
                   className={`${styles.iconBtn} ${showHistorySidebar ? styles.activeIconBtn : ''}`}
                   title="Conversation History"
+                  aria-label="Conversation History"
                 >
                   <History size={16} />
                 </button>
@@ -971,17 +976,19 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                   onClick={() => setShowDocsModal(true)}
                   className={`${styles.iconBtn} ${attachedDoc ? styles.activeIconBtn : ''}`}
                   title="RAG Document Library (.pdf, .docx, .xlsx, .csv, .md)"
+                  aria-label="RAG Document Library"
                 >
                   <FileText size={16} />
                 </button>
                 <button
                   onClick={() => setIsExpanded(!isExpanded)}
-                  className={styles.iconBtn}
+                  className={`${styles.iconBtn} ${styles.expandBtn}`}
                   title={isExpanded ? 'Compact View' : 'Expand Studio'}
+                  aria-label={isExpanded ? 'Compact View' : 'Expand Studio'}
                 >
                   {isExpanded ? <Minimize2 size={16} /> : <Maximize2 size={16} />}
                 </button>
-                <button onClick={() => setOpen(false)} className={styles.iconBtn} title="Close">
+                <button onClick={() => setOpen(false)} className={styles.iconBtn} title="Close" aria-label="Close">
                   <X size={17} />
                 </button>
               </div>
@@ -1006,21 +1013,11 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                 </button>
               </div>
             ) : (
-              <div
-                style={{
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'space-between',
-                  padding: '6px 14px',
-                  background: 'rgba(124, 58, 237, 0.08)',
-                  borderTop: '1px solid rgba(124, 58, 237, 0.14)',
-                  fontSize: 11,
-                  color: '#6d28d9',
-                  fontWeight: 600,
-                }}
-              >
-                <span>🔒 Socratic Learning Contract Active — Guided Hints &amp; Study Tools</span>
-                <span style={{ opacity: 0.75 }}>{livePageContext.route}</span>
+              <div className={styles.socraticBanner}>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <Lock size={12} /> Socratic Learning Contract Active — Guided Hints &amp; Study Tools
+                </span>
+                <span className={styles.socraticRoute}>{livePageContext.route}</span>
               </div>
             )}
           </div>
@@ -1029,7 +1026,13 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
           <div className={styles.bodyContainer}>
             {/* History Sidebar */}
             {showHistorySidebar && (
-              <div className={styles.historySidebar}>
+              <>
+                <div
+                  className={styles.historyBackdrop}
+                  onClick={() => setShowHistorySidebar(false)}
+                  aria-hidden="true"
+                />
+                <div className={styles.historySidebar}>
                 <div className={styles.sidebarHeader}>
                   <span className={styles.sidebarTitle}>Past Chats</span>
                   <button onClick={() => setShowHistorySidebar(false)} className={styles.iconBtn}>
@@ -1112,8 +1115,17 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                                 className={
                                   (s.mode || 'chat') === 'agent' ? styles.agentModeBadge : styles.chatModeBadge
                                 }
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                               >
-                                {(s.mode || 'chat') === 'agent' ? '⚡ AGENT' : '💬 KNOWLEDGE'}
+                                {(s.mode || 'chat') === 'agent' ? (
+                                  <>
+                                    <Sparkles size={10} /> AGENT
+                                  </>
+                                ) : (
+                                  <>
+                                    <MessageSquare size={10} /> KNOWLEDGE
+                                  </>
+                                )}
                               </span>
                             </div>
                           </>
@@ -1146,6 +1158,7 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                   ))}
                 </div>
               </div>
+              </>
             )}
 
             {/* Multi-Format Document Management Drawer */}
@@ -1228,7 +1241,7 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                               : {}
                           }
                         >
-                          {attachedDoc?.id === doc.id ? '✓ Attached' : 'Attach for RAG'}
+                          {attachedDoc?.id === doc.id ? 'Attached' : 'Attach for RAG'}
                         </button>
                         <button
                           onClick={() => handleDeleteDocument(doc.id)}
@@ -1278,8 +1291,8 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                     <div className={styles.suggestionGrid}>
                       {activeSuggestions.map((s, idx) => (
                         <button key={idx} onClick={() => sendMessage(s.text)} className={styles.suggestionChip}>
-                          {s.icon}
-                          <span>{s.text}</span>
+                          <span className={styles.suggestionIconWrap}>{s.icon}</span>
+                          <span className={styles.suggestionText}>{s.text}</span>
                         </button>
                       ))}
                     </div>
@@ -1298,12 +1311,22 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                         : styles.assistantMessageRow
                     }`}
                   >
+                    {/* Assistant identity badge */}
+                    {m.role === 'assistant' && (
+                      <div className={styles.assistantHeader}>
+                        <div className={styles.assistantAvatar}>
+                          <Sparkles size={11} strokeWidth={2.5} />
+                        </div>
+                        <span className={styles.assistantName}>{roleCfg.title}</span>
+                      </div>
+                    )}
+
                     {/* Tool Badges */}
                     {m.tool_calls && m.tool_calls.length > 0 && (
                       <div className={styles.toolBadgesContainer}>
                         {m.tool_calls.map((tc, tcIdx) => (
                           <div key={tcIdx} className={styles.toolBadge}>
-                            <span>⚡</span>
+                            <Zap size={11} color="#eab308" />
                             <span>{tc.tool}</span>
                           </div>
                         ))}

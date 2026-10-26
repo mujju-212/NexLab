@@ -1204,14 +1204,37 @@
   .kpiValue { font-size: 1.35rem !important; }
   .kpiDelta, .kpiGrowth { font-size: 10px !important; gap: 3px !important; }
 
-  /* Hero: compact greeting card — shrink the illustration, tighten spacing */
-  .heroBanner { padding: 18px 16px 0 !important; min-height: 0 !important; }
-  .heroBuildingWrap, .heroBuildingImg { height: 96px !important; }
-  .heroQuoteSection { padding-bottom: 14px !important; }
+  /* Hero: two-column app header — greeting left, illustration anchored right;
+     the quote drops to a slim second row instead of stacking three full-width blocks */
+  .dashContainer { gap: 14px !important; }
+  .heroBanner {
+    display: grid !important;
+    grid-template:
+      'content building' auto
+      'quote    building' auto / 1fr auto !important;
+    column-gap: 10px !important;
+    padding: 16px 6px 0 16px !important;
+    min-height: 0 !important;
+  }
+  .heroBanner > .heroContent { grid-area: content; padding-bottom: 12px !important; }
+  .heroBanner > .heroBuildingWrap { grid-area: building; align-self: end; max-width: 118px !important; }
+  .heroBanner > .heroQuoteSection { grid-area: quote; padding-bottom: 16px !important; max-width: none !important; }
+  .heroTitle { font-size: 23px !important; margin-bottom: 4px !important; }
+  .heroTagline { font-size: 12.5px !important; }
+  .heroBuildingWrap, .heroBuildingImg { height: 92px !important; }
+  .heroBuildingImg { max-width: 118px !important; }
+
+  /* Date card: slim informational band, not a jumbo card */
+  .dateCard { padding: 14px 16px !important; gap: 8px !important; }
 
   /* Desktop multi-column rows become single-column app sections */
   .topRow, .middleRow, .bottomRow, .bottomStrip { display: flex !important; flex-direction: column !important; }
-  .chartCard { width: 100% !important; }
+  .chartCard { width: 100% !important; padding: 16px !important; border-radius: 16px !important; }
+
+  /* Plan banner + storage strip: content-first, tappable full-width buttons */
+  .planBanner, .storageCard { padding: 14px 16px !important; flex-wrap: wrap !important; gap: 10px !important; }
+  .planButton, .storageManageBtn { min-height: 40px !important; }
+  .planButton { margin-top: 2px !important; }
 
   /* Quick actions: two thumb-friendly columns */
   .quickActionsGrid, .quickGrid { display: grid !important; grid-template-columns: repeat(2, 1fr) !important; gap: 8px !important; }
@@ -1219,4 +1242,11 @@
 
   /* Period selects never overflow their card */
   .chartCard select { max-width: 100% !important; }
+}
+
+/* ══ Touch targets (≤768px) — shared module: finger-sized controls, desktop untouched ══ */
+@media (max-width: 768px) {
+  .btnPrimary, .btnSecondary, .btnDanger, .filterSelect, .searchInput, .tab, .planButton, .storageManageBtn { min-height: 44px; }
+  .input, .select, .textarea { min-height: 44px; }
+  .refreshBtn { width: 44px; height: 44px; }
 }

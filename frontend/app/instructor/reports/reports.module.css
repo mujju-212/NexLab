@@ -1064,6 +1064,64 @@ input:checked + .slider:before {
   color: #0f172a;
 }
 
+/* ── Mobile Layout Polish (≤768px and ≤640px) ────────────────────────────── */
+@media (max-width: 768px) {
+  .headerRow {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 12px;
+  }
+  .filterBarCard, .mainCard {
+    padding: 14px 12px;
+    border-radius: 14px;
+  }
+  .filterGrid {
+    grid-template-columns: 1fr !important;
+    gap: 10px;
+  }
+  .controlsBar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: 10px;
+  }
+  .searchBox {
+    width: 100% !important;
+  }
+  .tableWrapper {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .tableWrapper table {
+    min-width: 650px;
+  }
+}
+
+@media (max-width: 640px) {
+  .tabCardsRow {
+    display: flex !important;
+    overflow-x: auto !important;
+    -webkit-overflow-scrolling: touch !important;
+    scrollbar-width: none !important;
+    gap: 10px !important;
+    padding-bottom: 4px;
+  }
+  .tabCard {
+    flex: 0 0 240px !important;
+    padding: 12px 14px !important;
+    border-radius: 14px !important;
+  }
+  .tabIconBox {
+    width: 36px !important;
+    height: 36px !important;
+  }
+  .tabTitle {
+    font-size: 13px !important;
+  }
+  .tabSub {
+    font-size: 11px !important;
+  }
+}
+
 /* ── Print Media Query ────────────────────────────────────────────────────── */
 @media print {
   /* body/nav/aside-level print styling lives in app/globals.css (module

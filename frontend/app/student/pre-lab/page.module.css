@@ -1447,8 +1447,21 @@
     justify-content: space-between;
   }
   .mainGrid {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
+  /* Let the collapsed column shrink below content min-content — long code
+     blocks, tables and headers must scroll/wrap, never widen the track. */
+  .mainGrid > * { min-width: 0; }
+  .leftCol { min-width: 0; }
+  .moduleCard { min-width: 0; overflow: hidden; }
+  /* Module content ships raw <pre><code> blocks — scroll them, don't widen */
+  .mainGrid :global(pre),
+  .fullscreenContainer :global(pre) {
+    max-width: 100%;
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+  .timelineContainer { max-height: none; }
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1812,4 +1825,50 @@
   background: #f8fafc;
   border: 1px solid #e2e8f0;
 }
+
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE DESIGN (MOBILE & TABLET)
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+@media (max-width: 768px) {
+  .topNavRow {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 10px;
+  }
+
+  .topLeftNav {
+    width: 100%;
+    justify-content: space-between;
+  }
+
+  .topActions {
+    width: 100%;
+    justify-content: flex-start;
+    flex-wrap: wrap;
+  }
+
+  .labGuideBtn {
+    flex: 1;
+    justify-content: center;
+  }
+
+  .linkReferenceCard {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 12px;
+    padding: 14px 16px;
+  }
+
+  .openLinkBtn {
+    width: 100%;
+    justify-content: center;
+    box-sizing: border-box;
+  }
+
+  .vivaCard {
+    padding: 14px 14px;
+  }
+}
+
 

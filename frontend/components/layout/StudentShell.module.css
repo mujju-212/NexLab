@@ -1,13 +1,22 @@
+/* ═══════════════════════════════════════════════════════════════════════════
+   STUDENT SHELL — UNIFIED DESKTOP & MOBILE ARCHITECTURE
+   Desktop (≥861px): Full-featured SaaS dashboard with collapsible sidebar,
+   global search bar, user profile chip, promo card, and expansive layouts.
+   Mobile (≤860px): Native mobile app experience with bottom thumb navigation,
+   mobile app header, search drawer, and slide-out navigation menu.
+   ═══════════════════════════════════════════════════════════════════════════ */
+
 /* ── Stage ───────────────────────────────────────────────────────────────── */
 .stage {
   position: relative;
   min-height: 100vh;
+  min-height: 100dvh;
   background: #f1f3f9;
   background: radial-gradient(at 10% 10%, #fdf4ff 0%, transparent 40%),
               radial-gradient(at 90% 15%, #eff6ff 0%, transparent 45%),
               radial-gradient(at 50% 95%, #f5f3ff 0%, transparent 50%),
               #f1f3f9;
-  overflow: clip; /* clip visual overflow of blobs without creating a scroll trap */
+  overflow: clip;
   padding: 24px;
   font-family: 'Plus Jakarta Sans', 'Inter', system-ui, -apple-system, sans-serif;
   color: #0f172a;
@@ -37,7 +46,16 @@
   overflow: hidden;
 }
 
-/* ── Sidebar ─────────────────────────────────────────────────────────────── */
+.appPanelImmersive {
+  position: relative;
+  display: flex;
+  min-height: 100vh;
+  min-height: 100dvh;
+  background: #ffffff;
+  overflow: hidden;
+}
+
+/* ── Sidebar (Desktop sidebar & Mobile slide-out drawer) ──────────────────── */
 .sidebar {
   width: 270px;
   flex-shrink: 0;
@@ -70,6 +88,12 @@
   margin-bottom: 4px;
 }
 
+.sidebarTopActions {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
 .logo {
   display: flex;
   align-items: center;
@@ -95,6 +119,25 @@
   background: #ede9fe;
   color: #7c3aed;
   border-color: #ddd6fe;
+}
+
+.drawerCloseBtn {
+  display: none;
+  width: 32px;
+  height: 32px;
+  border: 1px solid #e2e8f0;
+  background: #f8fafc;
+  color: #475569;
+  border-radius: 9px;
+  cursor: pointer;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.15s ease;
+}
+.drawerCloseBtn:hover {
+  background: #fee2e2;
+  color: #dc2626;
+  border-color: #fca5a5;
 }
 
 .navLabel {
@@ -154,64 +197,70 @@
 .navItemActive .navIcon {
   color: #7c3aed !important;
 }
-
 .navItemActive::before {
-  content: "";
+  content: '';
   position: absolute;
   left: 0;
-  top: 7px;
-  bottom: 7px;
+  top: 18%;
+  bottom: 18%;
   width: 3.5px;
-  border-radius: 0 4px 4px 0;
   background: #7c3aed;
+  border-radius: 0 4px 4px 0;
 }
 
 .navItemLogout {
-  color: #64748b;
+  color: #ef4444;
+}
+.navItemLogout .navIcon {
+  color: #ef4444;
 }
 .navItemLogout:hover {
-  background: #fef2f2 !important;
-  color: #ef4444 !important;
+  background: #fef2f2;
+  color: #dc2626;
 }
 .navItemLogout:hover .navIcon {
-  color: #ef4444 !important;
+  color: #dc2626;
 }
 
 .bottomGroup {
-  margin-top: 10px;
-  padding-top: 10px;
+  margin-top: auto;
+  padding-top: 12px;
   border-top: 1px solid #f1f5f9;
 }
 
-/* ── Sidebar Promo Card ──────────────────────────────────────────────────── */
+/* ── 3D Promo Banner Card ────────────────────────────────────────────────── */
 .promoBanner {
-  margin-top: auto;
-  margin-bottom: 4px;
-  background: linear-gradient(135deg, #f5f3ff 0%, #ede9fe 100%);
-  border: 1px solid #ddd6fe;
+  margin-top: 12px;
+  background: linear-gradient(135deg, #faf5ff 0%, #f3e8ff 100%);
+  border: 1px solid #e9d5ff;
   border-radius: 16px;
-  padding: 12px;
+  padding: 12px 14px;
   display: flex;
-  gap: 10px;
   align-items: center;
+  gap: 10px;
   cursor: pointer;
-  transition: all 0.2s ease;
+  transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
   box-shadow: 0 4px 12px rgba(124, 58, 237, 0.06);
 }
 .promoBanner:hover {
   transform: translateY(-1.5px);
+  border-color: #d8b4fe;
   box-shadow: 0 8px 20px rgba(124, 58, 237, 0.12);
-  border-color: #c4b5fd;
 }
 
 .promoCube {
-  width: 40px;
-  height: 40px;
+  width: 38px;
+  height: 38px;
   border-radius: 10px;
   overflow: hidden;
   flex-shrink: 0;
-  box-shadow: 0 4px 8px rgba(0,0,0,0.08);
+  background: #ffffff;
+  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.06);
+  display: flex;
+  align-items: center;
+  justify-content: center;
 }
+
 .promoCubeImg {
   width: 100%;
   height: 100%;
@@ -222,85 +271,103 @@
   flex: 1;
   min-width: 0;
 }
+
 .promoTitle {
   margin: 0;
-  font-size: 11.5px;
-  font-weight: 700;
-  color: #6b21a8;
-  line-height: 1.2;
-}
-.promoSub {
-  margin: 0 0 2px;
   font-size: 12px;
   font-weight: 800;
-  color: #581c87;
-  line-height: 1.2;
+  color: #6b21a8;
+  letter-spacing: -0.01em;
 }
-.promoDesc {
+
+.promoSub {
   margin: 0;
-  font-size: 10px;
+  font-size: 11px;
+  font-weight: 700;
   color: #7c3aed;
+}
+
+.promoDesc {
+  margin: 2px 0 0;
+  font-size: 10.5px;
+  color: #7e22ce;
   opacity: 0.85;
-  white-space: normal;
-  line-height: 1.2;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 
 .promoArrowBtn {
-  width: 26px;
-  height: 26px;
+  width: 22px;
+  height: 22px;
   border-radius: 50%;
-  background: #7c3aed;
-  color: #ffffff;
+  background: #ffffff;
+  color: #7c3aed;
   display: flex;
   align-items: center;
   justify-content: center;
   flex-shrink: 0;
-  box-shadow: 0 2px 6px rgba(124, 58, 237, 0.3);
-  transition: transform 0.15s ease;
-}
-.promoBanner:hover .promoArrowBtn {
-  transform: scale(1.08);
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.06);
 }
 
-/* ── Content ─────────────────────────────────────────────────────────────── */
+/* ── Content Area ────────────────────────────────────────────────────────── */
 .content {
   flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  padding: 24px 30px 32px;
   overflow-y: auto;
-  padding: 24px 32px 36px;
+  overflow-x: hidden;
   background: transparent;
 }
 
+.contentImmersive {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  overflow-y: auto;
+  overflow-x: hidden;
+  background: transparent;
+}
+
+.pageScrollArea {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ── Top Header ──────────────────────────────────────────────────────────── */
 .contentHeader {
   display: flex;
   align-items: center;
   justify-content: space-between;
-  margin-bottom: 22px;
   gap: 16px;
+  margin-bottom: 24px;
+  position: relative;
+  z-index: 40;
 }
 
-.headerLeft {
+.headerLeftDesktop {
+  display: flex;
+  align-items: center;
   flex: 1;
-  max-width: 520px;
+  max-width: 480px;
+}
+
+.headerLeftMobile {
+  display: none;
+  align-items: center;
+  gap: 10px;
+}
+
+.mobileBrandLogo {
+  display: flex;
+  align-items: center;
 }
 
 .searchBar {
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  background: #ffffff;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 8.5px 16px;
   width: 100%;
-  color: #64748b;
-  font-size: 13.5px;
-  font-weight: 500;
-  box-shadow: 0 2px 6px rgba(0, 0, 0, 0.02);
-  transition: all 0.18s ease;
-}
-.searchBar:hover, .searchBar:focus-within {
-  border-color: #c4b5fd;
-  box-shadow: 0 4px 12px rgba(124, 58, 237, 0.08);
 }
 
 .headerRight {
@@ -329,6 +396,11 @@
   border-color: #cbd5e1;
   color: #0f172a;
 }
+
+.mobileSearchTrigger {
+  display: none;
+}
+
 .notifDot {
   position: absolute;
   top: 7px;
@@ -372,26 +444,23 @@
   box-shadow: 0 2px 6px rgba(124, 58, 237, 0.25);
 }
 
-.profileName {
-  font-size: 13.5px;
-  font-weight: 700;
-  color: #0f172a;
+.mobileSearchDrawer {
+  display: none;
+  padding: 0 0 14px;
+  animation: slideDown 0.2s ease;
 }
 
-.profileChevron {
-  color: #94a3b8;
-  transition: transform 0.15s ease;
-}
-.profileChip:hover .profileChevron {
-  color: #64748b;
+@keyframes slideDown {
+  from { opacity: 0; transform: translateY(-8px); }
+  to { opacity: 1; transform: translateY(0); }
 }
 
-/* ── Page Hero ─────────────────────────────────────────────────────────────*/
-.pageHero { margin-bottom: 24px; }
+/* ── Page Hero ───────────────────────────────────────────────────────────── */
+.pageHero { margin-bottom: 22px; }
 .pageTitle { margin: 0 0 4px; font-size: 24px; font-weight: 800; color: #0f172a; letter-spacing: -0.02em; }
 .pageSubtitle { margin: 0; font-size: 13.5px; color: #64748b; font-weight: 500; }
 
-/* ── Mobile-only elements (hidden on desktop) ──────────────────────── */
+/* ── Mobile menu button & drawer ─────────────────────────────────────────── */
 .mobileMenuBtn {
   display: none;
   width: 38px;
@@ -404,58 +473,210 @@
   justify-content: center;
   cursor: pointer;
   flex-shrink: 0;
+  transition: all 0.15s ease;
 }
 .mobileMenuBtn:hover { background: #f8fafc; }
-.drawerBackdrop { display: none; }
+
+.drawerBackdrop {
+  display: none;
+  position: fixed;
+  inset: 0;
+  z-index: 200;
+  background: rgba(15, 23, 42, 0.45);
+  backdrop-filter: blur(4px);
+  -webkit-backdrop-filter: blur(4px);
+  animation: drawerFadeIn 0.2s ease;
+}
+
 @keyframes drawerFadeIn { from { opacity: 0; } to { opacity: 1; } }
 
-/* ── Scrollbar ───────────────────────────────────────────────────────────── */
+/* ── Bottom tab bar (Mobile only) ────────────────────────────────────────── */
+.tabBar {
+  display: none; /* hidden on desktop! */
+}
+
+/* ── Scrollbars ──────────────────────────────────────────────────────────── */
 .sidebar::-webkit-scrollbar, .content::-webkit-scrollbar { width: 6px; }
 .sidebar::-webkit-scrollbar-thumb, .content::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
 
-/* ══ Responsive — tablet ═════════════════════════════════════════════ */
-@media (max-width: 1080px) {
+/* ═══════════════════════════════════════════════════════════════════════════
+   RESPONSIVE BREAKPOINTS
+   ═══════════════════════════════════════════════════════════════════════════ */
+
+/* Tablet (861px - 1080px) */
+@media (max-width: 1080px) and (min-width: 861px) {
   .stage { padding: 16px; }
   .appPanel { height: calc(100vh - 32px); border-radius: 20px; }
   .content { padding: 20px 22px 28px; }
-  .headerLeft { max-width: 360px; }
+  .headerLeftDesktop { max-width: 360px; }
 }
 
-/* ══ Responsive — mobile ═════════════════════════════════════════════ */
+/* Mobile View (≤860px) — activates mobile app experience */
 @media (max-width: 860px) {
-  .stage { padding: 8px; }
-  .appPanel { height: calc(100vh - 16px); height: calc(100dvh - 16px); border-radius: 16px; }
+  .stage {
+    padding: 0;
+    min-height: 100dvh;
+    background: #f8fafc;
+  }
 
-  .sidebar {
-    position: fixed; top: 0; left: 0; bottom: 0; z-index: 210;
-    width: 270px !important; padding: 20px 14px 16px !important;
+  .appPanel {
+    height: 100dvh;
+    border-radius: 0;
+    border: none;
+    box-shadow: none;
     background: #ffffff;
-    box-shadow: 20px 0 60px rgba(15, 23, 42, 0.15);
+  }
+
+  /* Slide-out mobile drawer */
+  .sidebar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    bottom: 0;
+    z-index: 220;
+    width: 285px !important;
+    padding: 20px 16px 24px !important;
+    background: #ffffff;
+    box-shadow: 20px 0 60px rgba(15, 23, 42, 0.18);
     transform: translateX(-105%);
     transition: transform 0.28s cubic-bezier(0.3, 0.8, 0.3, 1);
   }
-  .sidebarDrawerOpen { transform: translateX(0); }
 
-  .sidebarCollapsed .label, .sidebarCollapsed .navLabel, .sidebarCollapsed .promoText { display: block; }
-  .sidebarCollapsed .promoArrowBtn { display: flex; }
-  .sidebarCollapsed .navItem { justify-content: flex-start; padding: 8.5px 12px; }
-  .sidebarCollapsed .sidebarTop { justify-content: space-between; }
-  .sidebarCollapsed .promoBanner { justify-content: flex-start; padding: 12px; }
-  .sidebarCollapsed .navItemActive::before { display: block; }
-  .collapseBtn { display: none; }
-
-  .drawerBackdrop {
-    display: block; position: fixed; inset: 0; z-index: 200;
-    background: rgba(15, 23, 42, 0.4); backdrop-filter: blur(4px);
-    animation: drawerFadeIn 0.2s ease;
+  .sidebarDrawerOpen {
+    transform: translateX(0);
   }
 
-  .content { padding: 16px 14px 24px; }
-  .contentHeader { gap: 10px; margin-bottom: 16px; }
-  .mobileMenuBtn { display: flex; }
-  .headerLeft { display: none; }
-  .headerRight { margin-left: auto; gap: 8px; }
-  .profileName { display: none; }
-  .profileChevron { display: none; }
-  .profileChip { padding: 4px; }
+  .drawerCloseBtn {
+    display: flex;
+  }
+
+  .collapseBtn {
+    display: none;
+  }
+
+  .drawerBackdrop {
+    display: block;
+  }
+
+  /* Content area with bottom tab bar padding */
+  .content {
+    padding: 14px 14px calc(68px + env(safe-area-inset-bottom, 0px) + 20px);
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .contentHeader {
+    margin-bottom: 16px;
+    gap: 8px;
+  }
+
+  .headerLeftDesktop {
+    display: none;
+  }
+
+  .headerLeftMobile {
+    display: flex;
+  }
+
+  .mobileMenuBtn {
+    display: flex;
+  }
+
+  .mobileSearchTrigger {
+    display: flex;
+  }
+
+  .mobileSearchDrawer {
+    display: block;
+  }
+
+  .profileChip {
+    padding: 4px;
+  }
+
+  .profileChip :global(.shellProfileName),
+  .profileChip :global(svg:last-child) {
+    display: none;
+  }
+
+  .pageHero {
+    margin-bottom: 16px;
+  }
+  .pageTitle {
+    font-size: 20px;
+  }
+  .pageSubtitle {
+    font-size: 12.5px;
+  }
+
+  /* ── Mobile Bottom Tab Bar ────────────────────────────────────────────── */
+  .tabBar {
+    position: fixed;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: calc(58px + env(safe-area-inset-bottom, 0px));
+    padding-bottom: env(safe-area-inset-bottom, 0px);
+    background: rgba(255, 255, 255, 0.96);
+    backdrop-filter: blur(20px) saturate(180%);
+    -webkit-backdrop-filter: blur(20px) saturate(180%);
+    border-top: 1px solid rgba(226, 232, 240, 0.9);
+    display: flex;
+    align-items: stretch;
+    z-index: 100;
+    box-shadow: 0 -3px 18px rgba(15, 23, 42, 0.06);
+  }
+
+  .tabItem {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 2px;
+    padding: 6px 0 6px;
+    text-decoration: none;
+    color: #64748b;
+    transition: transform 0.12s ease;
+    user-select: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+  .tabItem:active {
+    transform: scale(0.93);
+  }
+
+  .tabIconWrap {
+    position: relative;
+    width: 44px;
+    height: 28px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    border-radius: 999px;
+    transition: background 0.18s ease;
+  }
+
+  .tabItemActive {
+    color: #7c3aed;
+  }
+  .tabItemActive .tabIconWrap {
+    background: #f3e8ff;
+  }
+
+  .tabDot {
+    position: absolute;
+    bottom: 1px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 4px;
+    height: 4px;
+    border-radius: 999px;
+    background: #7c3aed;
+  }
+
+  .tabLabel {
+    font-size: 10.5px;
+    font-weight: 700;
+    letter-spacing: -0.01em;
+  }
 }
