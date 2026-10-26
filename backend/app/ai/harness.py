@@ -873,69 +873,69 @@ def run_harness_turn(prompt: str, institution_id: str, user_id: str, role: str,
                 planner_concluded_no_tool = True
                 break
 
-        entry = role_tools.get(tool_name)
-        if not entry:
+            entry = role_tools.get(tool_name)
+            if not entry:
+                planner_history.append({'role': 'assistant', 'content': text})
+                planner_history.append({'role': 'user', 'content': f"Unknown tool '{tool_name}'. Choose from the routed tools list."})
+                continue
+
+            fn = entry[0]
+            args = plan.get('args') if isinstance(plan.get('args'), dict) else {}
+
+            # Safety: a request to create a NEW experiment must never fall through to
+            # a tool that mutates whichever existing experiment happens to be latest.
+            # Stop the planner loop here and force the dedicated builder below with
+            # deterministically extracted arguments (re-prompting a weak fallback
+            # model in a loop only burned the remaining turns).
+            successful_experiment_build = any(
+                c.get('tool') == 'build_complete_experiment_suite' and not c.get('error')
+                for c in tool_calls
+            )
+            if create_experiment_intent and not successful_experiment_build and tool_name != 'build_complete_experiment_suite':
+                forced_experiment_build = True
+                break
+
+            _emit_ai_event(user_id, 'ai:tool_start', {'tool': tool_name, 'args': args, 'session_id': session_id})
+            try:
+                result = fn(**args)
+                call_record = {'tool': tool_name, 'args': args, 'result': result}
+
+                if tool_name in CONFIRM_ACTION_NAMES or (isinstance(result, dict) and result.get('requires_confirmation')):
+                    pending_action = result.get('draft') or result
+                    _emit_ai_event(user_id, 'ai:confirm_action', {'pending_action': pending_action, 'session_id': session_id})
+                    _emit_ai_event(user_id, 'ai:action_card', {'pending_action': pending_action, 'session_id': session_id})
+
+                if isinstance(result, dict) and result.get('generated_document'):
+                    generated_doc = result.get('generated_document')
+
+                if tool_name == 'search_uploaded_documents' and isinstance(result, dict):
+                    for src in result.get('sources', []):
+                        sources.append({'type': 'document', 'filename': src.get('filename'), 'page': src.get('page'), 'text': src.get('text')})
+                elif tool_name == 'search_web' and isinstance(result, dict):
+                    for w in result.get('results', []):
+                        sources.append({'type': 'web', 'title': w.get('title'), 'url': w.get('url'), 'snippet': w.get('snippet')})
+            except AgentToolError as exc:
+                call_record = {'tool': tool_name, 'args': args, 'error': str(exc)}
+            except Exception as exc:
+                log.warning("[harness.tool] %s failed: %s", tool_name, exc)
+                call_record = {'tool': tool_name, 'args': args, 'error': f"Tool error: {str(exc)}"}
+
+            _emit_ai_event(user_id, 'ai:tool_result', {'tool': tool_name, 'session_id': session_id})
+            tool_calls.append(call_record)
+
             planner_history.append({'role': 'assistant', 'content': text})
-            planner_history.append({'role': 'user', 'content': f"Unknown tool '{tool_name}'. Choose from the routed tools list."})
-            continue
+            planner_history.append({
+                'role': 'user',
+                'content': (
+                    f"Observation from {tool_name}:\n{_truncate(call_record.get('result') or call_record.get('error'))}\n\n"
+                    "If additional steps are needed to fulfill the user's request, call the next tool; "
+                    "otherwise reply {\"tool\": null, \"reason\": \"done\"}."
+                ),
+            })
 
-        fn = entry[0]
-        args = plan.get('args') if isinstance(plan.get('args'), dict) else {}
-
-        # Safety: a request to create a NEW experiment must never fall through to
-        # a tool that mutates whichever existing experiment happens to be latest.
-        # Stop the planner loop here and force the dedicated builder below with
-        # deterministically extracted arguments (re-prompting a weak fallback
-        # model in a loop only burned the remaining turns).
-        successful_experiment_build = any(
-            c.get('tool') == 'build_complete_experiment_suite' and not c.get('error')
-            for c in tool_calls
-        )
-        if create_experiment_intent and not successful_experiment_build and tool_name != 'build_complete_experiment_suite':
-            forced_experiment_build = True
-            break
-
-        _emit_ai_event(user_id, 'ai:tool_start', {'tool': tool_name, 'args': args, 'session_id': session_id})
-        try:
-            result = fn(**args)
-            call_record = {'tool': tool_name, 'args': args, 'result': result}
-
-            if tool_name in CONFIRM_ACTION_NAMES or (isinstance(result, dict) and result.get('requires_confirmation')):
-                pending_action = result.get('draft') or result
-                _emit_ai_event(user_id, 'ai:confirm_action', {'pending_action': pending_action, 'session_id': session_id})
-                _emit_ai_event(user_id, 'ai:action_card', {'pending_action': pending_action, 'session_id': session_id})
-
-            if isinstance(result, dict) and result.get('generated_document'):
-                generated_doc = result.get('generated_document')
-
-            if tool_name == 'search_uploaded_documents' and isinstance(result, dict):
-                for src in result.get('sources', []):
-                    sources.append({'type': 'document', 'filename': src.get('filename'), 'page': src.get('page'), 'text': src.get('text')})
-            elif tool_name == 'search_web' and isinstance(result, dict):
-                for w in result.get('results', []):
-                    sources.append({'type': 'web', 'title': w.get('title'), 'url': w.get('url'), 'snippet': w.get('snippet')})
-        except AgentToolError as exc:
-            call_record = {'tool': tool_name, 'args': args, 'error': str(exc)}
-        except Exception as exc:
-            log.warning("[harness.tool] %s failed: %s", tool_name, exc)
-            call_record = {'tool': tool_name, 'args': args, 'error': f"Tool error: {str(exc)}"}
-
-        _emit_ai_event(user_id, 'ai:tool_result', {'tool': tool_name, 'session_id': session_id})
-        tool_calls.append(call_record)
-
-        planner_history.append({'role': 'assistant', 'content': text})
-        planner_history.append({
-            'role': 'user',
-            'content': (
-                f"Observation from {tool_name}:\n{_truncate(call_record.get('result') or call_record.get('error'))}\n\n"
-                "If additional steps are needed to fulfill the user's request, call the next tool; "
-                "otherwise reply {\"tool\": null, \"reason\": \"done\"}."
-            ),
-        })
-
-        # Only break early if a destructive operation requires user confirmation
-        if pending_action:
-            break
+            # Only break early if a destructive operation requires user confirmation
+            if pending_action:
+                break
 
     # 5a. Forced experiment build: the user explicitly asked for a NEW experiment
     # and the planner misrouted. Execute the dedicated builder once with
@@ -966,7 +966,7 @@ def run_harness_turn(prompt: str, institution_id: str, user_id: str, role: str,
     # 5. Deterministic fallback is allowed only when the planner answered but
     # omitted a tool call. Never create records using keyword/default guesses
     # when no provider produced a plan.
-    if not tool_calls and not planner_unavailable:
+    if not tool_calls and not planner_unavailable and not planner_concluded_no_tool and not is_pure_convo:
         fallback_calls = _run_deterministic_autonomous_fallback(prompt, role_key, role_tools)
         for fc in fallback_calls:
             tool_calls.append(fc)
