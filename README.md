@@ -51,7 +51,7 @@ Academic year → departments → batches → sections → subjects, user lifecy
 billing, security/audit views — and an AI copilot with **30 tools** (11 reads, 12 actions,
 7 autonomous workflows like campus setup and executive reports).
 
-### 👩‍ Instructor — build, run, grade
+### 👩‍‍🏫 Instructor — build, run, grade
 Create experiments with content pages, quizzes, checkpoints and a weighted rubric;
 schedule lab sessions; run them live (broadcast, polls, one-to-one messages, extend,
 force-submit); auto-grade submissions; hold vivas; publish exams. The copilot carries
@@ -59,7 +59,7 @@ force-submit); auto-grade submissions; hold vivas; publish exams. The copilot ca
 `autonomous_bulk_autograde` and section analytics. Analytics tabs: overview, students,
 experiments, engagement, mastery, rankings, integrity, trends, AI usage.
 
-### 🧑‍ Student — practice, submit, improve
+### 🧑‍‍🎓 Student — practice, submit, improve
 Join live labs (screen share on join), write and submit code in Python/C/C++/Java,
 get Socratic hints (3 escalating levels, each with a grade cost), track grades,
 exams, viva results, concept mastery, weak concepts and a full personal analytics
@@ -115,6 +115,7 @@ they recompute from the raw rows.
 ./setup.sh --seed      # Postgres 17 (:5433) + deps + schema + demo seeds + node
 pip install groq==0.26.0
 cd backend && python bootstrap_superadmin.py superadmin@nexlab.io 'SuperAdmin@2026' "Platform Super Admin"
+cd ..   # the rest runs from the repo root
 # start the servers (or use up.sh, which keeps both alive):
 #   backend :5000 (Flask + Socket.IO)   ·   frontend :3000 (Next.js)
 python walkthrough.py       # 34/34 — SKIT institution via the real API
@@ -141,9 +142,8 @@ procedure (drop the DB, repeat, done).
 
 `backend/database/seed_complete_demo.py` builds a **complete, realistic two months**
 (2026-08-26 → 2026-10-26) for the SKIT tenant: 16 students with skill tiers that drive
-attendance, attempt trajectories, exam accuracy and focus; 8 completed + 2 upcoming lab
-sessions; ~175 code attempts with per-test-case results; vivas; a published mid-term exam
-with attempts and retries; announcements, notifications, ~80 AI-usage rows, proctoring
+attendance, attempt trajectories, exam accuracy and focus; 13 lab sessions (8 completed + 5 scheduled); 174 code attempts with per-test-case results; vivas; a published mid-term exam
+with attempts and retries; announcements, notifications, 79 AI-usage rows, proctoring
 events, interventions, a plagiarism cluster, concept mastery — and 3 free-tier platform
 users with two months of practice history. It finishes by running the platform's **own**
 nightly snapshot jobs, so every derived number is a genuine computation.
