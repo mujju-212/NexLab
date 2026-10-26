@@ -1133,3 +1133,9 @@
   .workspaceGrid { grid-template-columns: minmax(0, 1fr) !important; }
   .workspaceCard { min-width: 0 !important; max-width: 100% !important; overflow-x: hidden; }
 }
+
+/* ══ Touch targets (≤768px): finger-sized controls — desktop untouched ══ */
+@media (max-width: 768px) {
+  .btnPrimary, .btnSecondary, .tabBtn, .searchInput, .selectInput, .fieldInput, .pageBtn, .btnIcon { min-height: 44px; }
+  .accordionActions button { min-height: 40px; }
+}

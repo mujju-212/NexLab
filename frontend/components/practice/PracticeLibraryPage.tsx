@@ -37,7 +37,11 @@ import {
   ExternalLink,
   BookOpen,
   Code2,
+  Puzzle,
+  Folder,
+  FolderOpen,
 } from 'lucide-react';
+import { LibrarySkeleton } from './PracticeSkeletons';
 import styles from './PracticeLibrary.module.css';
 import { apiClient } from '@/services/api-client';
 import {
@@ -317,7 +321,7 @@ const renderTopicIcon = (topic: string) => {
     );
   }
   if (t.includes('backtrack')) {
-    return <span style={{ color: '#f97316', fontWeight: 800, fontSize: '1.1rem' }}>🧩</span>;
+    return <Puzzle size={22} color="#f97316" strokeWidth={2.2} />;
   }
   if (t.includes('binary search') || t.includes('search')) {
     return (
@@ -627,11 +631,7 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
   }, [topics]);
 
   if (loading) {
-    return (
-      <div style={{ padding: '4rem', textAlign: 'center', color: '#64748b', fontWeight: 600 }}>
-        Loading Practice Library…
-      </div>
-    );
+    return <LibrarySkeleton />;
   }
 
   return (
@@ -983,7 +983,7 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
                         goToStudyPlan(plan.slug);
                       }}
                     >
-                      <span>{plan.completed ? '✓ Completed' : plan.enrolled ? 'Continue' : 'Start Plan'}</span>
+                      <span>{plan.completed ? 'Completed' : plan.enrolled ? 'Continue' : 'Start Plan'}</span>
                       <ChevronRight size={13} />
                     </button>
                   </div>
@@ -1132,7 +1132,9 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
                     if (detail) setSelectedColl(detail);
                   }}
                 >
-                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0f172a' }}>📁 {c.title}</p>
+                  <p style={{ margin: 0, fontSize: 14, fontWeight: 700, color: '#0f172a', display: 'flex', alignItems: 'center', gap: 6 }}>
+                    <Folder size={15} color="#4f46e5" /> {c.title}
+                  </p>
                   <p style={{ margin: '4px 0 0', fontSize: 12, color: '#64748b' }}>{c.item_count} problem(s)</p>
                 </div>
               ))}
@@ -1150,7 +1152,9 @@ function PracticeLibraryInner({ baseRoute }: { baseRoute: string }) {
               }}
             >
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 }}>
-                <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800 }}>📂 {selectedColl.collection.title}</h4>
+                <h4 style={{ margin: 0, fontSize: 15, fontWeight: 800, display: 'flex', alignItems: 'center', gap: 6 }}>
+                  <FolderOpen size={17} color="#4f46e5" /> {selectedColl.collection.title}
+                </h4>
                 <button
                   className={styles.resetBtn}
                   onClick={() => setSelectedColl(null)}

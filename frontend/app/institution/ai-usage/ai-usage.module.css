@@ -1475,3 +1475,10 @@ input:disabled + .slider {
   .navPillBar::-webkit-scrollbar { display: none; }
   .navPill { flex: 0 0 auto; white-space: nowrap; scroll-snap-align: start; }
 }
+
+/* ══ Touch targets (≤768px): finger-sized controls — desktop untouched ══ */
+@media (max-width: 768px) {
+  .btnPrimary, .btnSecondary, .actionBtn, .cardAction, .exportBtn, .chartSelect, .filterPill, .navPill, .pageBtn, .copyBtn { min-height: 44px; }
+  .iconBtn { width: 44px; height: 44px; }
+  .quickActionItem { min-height: 56px; }
+}

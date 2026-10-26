@@ -118,11 +118,39 @@ export interface Progress {
   records: Array<{ exercise_id: string; course_id: string; status: string; best_score: number; xp_earned: number }>;
 }
 
+interface CacheEntry<T> {
+  data: T;
+  timestamp: number;
+}
+const memoryCache = new Map<string, CacheEntry<any>>();
+const CACHE_TTL_MS = 35_000; // 35 seconds
+
+function getCached<T>(key: string): T | null {
+  const entry = memoryCache.get(key);
+  if (entry && Date.now() - entry.timestamp < CACHE_TTL_MS) {
+    return entry.data;
+  }
+  return null;
+}
+
+function setCached<T>(key: string, data: T): T {
+  memoryCache.set(key, { data, timestamp: Date.now() });
+  return data;
+}
+
+export function invalidatePlatformCache(): void {
+  memoryCache.clear();
+}
+
 export const platformUserService = {
   // Public — no auth needed
   async listCourses(params?: { difficulty?: string; language?: string; tag?: string }) {
+    const cacheKey = `courses_${JSON.stringify(params || {})}`;
+    const cached = getCached<PlatformCourse[]>(cacheKey);
+    if (cached) return cached;
+
     const { data } = await apiClient.get<{ courses: PlatformCourse[] }>('/platform-user/courses', { params });
-    return data.courses;
+    return setCached(cacheKey, data.courses);
   },
 
   async getCourse(courseId: string): Promise<{
@@ -131,8 +159,12 @@ export const platformUserService = {
     user_progress?: CourseUserProgress;
     topics_summary?: TopicSummaryItem[];
   }> {
+    const cacheKey = `course_${courseId}`;
+    const cached = getCached<any>(cacheKey);
+    if (cached) return cached;
+
     const { data } = await apiClient.get(`/platform-user/courses/${courseId}`);
-    return data;
+    return setCached(cacheKey, data);
   },
 
   async getExercise(exerciseId: string): Promise<PlatformExercise> {
@@ -148,22 +180,29 @@ export const platformUserService = {
 
   async submitCode(exerciseId: string, code: string, language: string): Promise<SubmitResult> {
     const { data } = await apiClient.post<SubmitResult>(`/platform-user/exercises/${exerciseId}/submit`, { code, language });
+    invalidatePlatformCache();
     return data;
   },
 
   async submitMcq(exerciseId: string, answer: string): Promise<McqSubmitResult> {
     const { data } = await apiClient.post<McqSubmitResult>(`/platform-user/exercises/${exerciseId}/answer`, { answer });
+    invalidatePlatformCache();
     return data;
   },
 
   async completeSimulation(exerciseId: string): Promise<CompletionResult> {
     const { data } = await apiClient.post<CompletionResult>(`/platform-user/exercises/${exerciseId}/complete`);
+    invalidatePlatformCache();
     return data;
   },
 
   async getProgress(): Promise<Progress> {
+    const cacheKey = 'user_progress';
+    const cached = getCached<Progress>(cacheKey);
+    if (cached) return cached;
+
     const { data } = await apiClient.get<Progress>('/platform-user/progress');
-    return data;
+    return setCached(cacheKey, data);
   },
 
   async getCourseProgress(courseId: string) {
@@ -178,8 +217,12 @@ export const platformUserService = {
 
   // ── Free Analytics Redesign (Track 2 Unified Platform) ───────────────────
   async getPlatformOverview(): Promise<PlatformAnalyticsOverview> {
+    const cacheKey = 'analytics_overview';
+    const cached = getCached<PlatformAnalyticsOverview>(cacheKey);
+    if (cached) return cached;
+
     const { data } = await apiClient.get<PlatformAnalyticsOverview>('/platform-user/analytics/overview');
-    return data;
+    return setCached(cacheKey, data);
   },
 
   async getStanding(): Promise<PlatformStanding> {

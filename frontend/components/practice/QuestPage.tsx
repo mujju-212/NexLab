@@ -110,22 +110,31 @@ interface LbEntry {
   is_me: boolean;
 }
 
-const BADGE_CATALOG = [
-  { id: 'first_solve', emoji: '🎯', name: 'First Steps', desc: 'Solve your first problem' },
-  { id: 'streak_7', emoji: '🔥', name: 'Week Warrior', desc: 'Maintain a 7-day streak' },
-  { id: 'streak_30', emoji: '🌟', name: 'Month Master', desc: 'Maintain a 30-day streak' },
+
+
+interface BadgeCatalogItem {
+  id: string;
+  emoji: string;
+  name: string;
+  desc: string;
+}
+
+const BADGE_CATALOG: BadgeCatalogItem[] = [
+  { id: 'first_solve', emoji: '🌱', name: 'First Steps', desc: 'Solve your first problem' },
+  { id: 'streak_7', emoji: '🔥', name: 'Week Warrior', desc: '7-day streak' },
+  { id: 'streak_30', emoji: '🔥', name: 'Month Master', desc: '30-day streak' },
   { id: 'easy_10', emoji: '✅', name: 'Easy Mode', desc: 'Solve 10 Easy problems' },
   { id: 'medium_10', emoji: '⚡', name: 'Rising Star', desc: 'Solve 10 Medium problems' },
   { id: 'hard_5', emoji: '💎', name: 'Diamond Coder', desc: 'Solve 5 Hard problems' },
+  { id: 'nexlab75', emoji: '🎯', name: 'NexLab 75', desc: 'Complete NexLab 75' },
+  { id: 'beginner_path', emoji: '🌱', name: 'Beginner Badge', desc: 'Complete Beginner Path' },
+  { id: 'dp_mastery', emoji: '🧠', name: 'DP Expert', desc: 'Complete DP Mastery' },
+  { id: 'trees_graphs', emoji: '🌳', name: 'Tree Climber', desc: 'Complete Trees & Graphs' },
+  { id: 'sql_50', emoji: '🗄️', name: 'SQL Pro', desc: 'Complete SQL 50' },
+  { id: 'interview_ready', emoji: '💼', name: 'Interview Ready', desc: 'Complete Interview Ready' },
   { id: 'centurion', emoji: '💯', name: 'Centurion', desc: 'Solve 100 problems' },
   { id: 'speed_demon', emoji: '⚡', name: 'Speed Demon', desc: 'Submit & accepted under 5 min' },
-  { id: 'top_10', emoji: '🏆', name: 'Top 10', desc: 'Top 10 on the institution leaderboard' },
-  { id: 'nexlab75', emoji: '🎯', name: 'NexLab 75', desc: 'Complete the NexLab 75 plan' },
-  { id: 'beginner_path', emoji: '🌱', name: 'Beginner Badge', desc: 'Complete Beginner Path plan' },
-  { id: 'dp_mastery', emoji: '🧠', name: 'DP Expert', desc: 'Complete DP Mastery plan' },
-  { id: 'trees_graphs', emoji: '🌳', name: 'Tree Climber', desc: 'Complete Trees & Graphs plan' },
-  { id: 'sql_50', emoji: '🗄️', name: 'SQL Pro', desc: 'Complete SQL 50 plan' },
-  { id: 'interview_ready', emoji: '💼', name: 'Interview Ready', desc: 'Complete Interview Ready plan' },
+  { id: 'top_10', emoji: '🏆', name: 'Top 10', desc: 'Top 10 in institution leaderboard' },
 ];
 
 export default function QuestPage({ baseRoute }: { baseRoute: string }) {
@@ -204,7 +213,7 @@ export default function QuestPage({ baseRoute }: { baseRoute: string }) {
     try {
       const res = await apiClient.post('/practice/quest/claim', { quest_key: questKey });
       if (res.data.success) {
-        setToastMsg(`🎉 Quest completed! +${res.data.xp_awarded} XP added to your total!`);
+        setToastMsg(`Quest completed! +${res.data.xp_awarded} XP added to your total!`);
         setTimeout(() => setToastMsg(null), 4000);
         // Refresh dashboard data to reflect claimed state & new XP
         loadDashboard();
@@ -856,13 +865,22 @@ export default function QuestPage({ baseRoute }: { baseRoute: string }) {
                       <th style={{ padding: '10px 12px' }}>Player</th>
                       <th style={{ padding: '10px 12px' }}>Level</th>
                       <th style={{ padding: '10px 12px', textAlign: 'right' }}>Solved</th>
-                      <th style={{ padding: '10px 12px', textAlign: 'right' }}>🔥 Streak</th>
+                      <th style={{ padding: '10px 12px', textAlign: 'right' }}>
+                        <Flame size={13} color="#ea580c" style={{ display: 'inline', verticalAlign: 'text-bottom', marginRight: 4 }} />
+                        Streak
+                      </th>
                       <th style={{ padding: '10px 12px', textAlign: 'right' }}>Total XP</th>
                     </tr>
                   </thead>
                   <tbody>
                     {board.map((e) => {
-                      const medal = e.rank === 1 ? '🥇' : e.rank === 2 ? '🥈' : e.rank === 3 ? '🥉' : `#${e.rank}`;
+                      const medal = e.rank === 1 ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: '50%', background: '#fef3c7', color: '#b45309', fontWeight: 800, fontSize: 11 }}>1</span>
+                      ) : e.rank === 2 ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: '50%', background: '#f1f5f9', color: '#475569', fontWeight: 800, fontSize: 11 }}>2</span>
+                      ) : e.rank === 3 ? (
+                        <span style={{ display: 'inline-flex', alignItems: 'center', justifyContent: 'center', width: 22, height: 22, borderRadius: '50%', background: '#ffedd5', color: '#c2410c', fontWeight: 800, fontSize: 11 }}>3</span>
+                      ) : `#${e.rank}`;
                       return (
                         <tr
                           key={e.student_id}

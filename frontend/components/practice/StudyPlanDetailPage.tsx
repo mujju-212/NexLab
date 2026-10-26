@@ -26,6 +26,7 @@ import {
   Check,
   Flame,
   FileText,
+  Target,
 } from 'lucide-react';
 import styles from './StudyPlanDetailPage.module.css';
 import { apiClient } from '@/services/api-client';
@@ -288,7 +289,7 @@ export default function StudyPlanDetailPage({
       {isCompleted && (
         <div className={styles.completedBanner}>
           <div className={styles.completedBannerLeft}>
-            <span className={styles.completedTrophy}>🏆</span>
+            <span className={styles.completedTrophy}><Trophy size={28} color="#b45309" /></span>
             <div>
               <h3 className={styles.completedTitle}>Plan Completed! Outstanding Work!</h3>
               <p className={styles.completedSub}>
@@ -315,7 +316,7 @@ export default function StudyPlanDetailPage({
         <div className={styles.heroLeft}>
           <div className={styles.heroHeaderRow}>
             <div className={styles.heroIconBox}>
-              {plan.icon || '🎯'}
+              <Target size={26} color="#7c3aed" />
             </div>
             <div className={styles.heroTitleCol}>
               <div className={styles.heroTagRow}>

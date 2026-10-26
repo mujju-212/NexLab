@@ -26,7 +26,14 @@ import {
   ThumbsUp,
   Users,
   Code2,
+  Trophy,
+  Layers,
+  Type,
+  Cpu,
+  GitFork,
+  Lightbulb,
 } from 'lucide-react';
+import { DashboardSkeleton } from '@/components/practice/PracticeSkeletons';
 import styles from './page.module.css';
 
 interface QuestXPData {
@@ -113,7 +120,13 @@ export default function IndividualDashboardPage() {
       .finally(() => setLoading(false));
   }, [user]);
 
-  if (!isAuthenticated || !user) return null;
+  if (!isReady || !isAuthenticated || !user || loading) {
+    return (
+      <IndividualShell activePage="dashboard">
+        <DashboardSkeleton />
+      </IndividualShell>
+    );
+  }
 
   const firstName = user.full_name?.split(' ')[0] || 'Learner';
   const totalXp = questXP?.total_xp ?? progress?.total_xp ?? 0;
@@ -167,19 +180,12 @@ export default function IndividualDashboardPage() {
   return (
     <IndividualShell activePage="dashboard">
       <div className={styles.dashboardContainer}>
-        {loading ? (
-          <div className={styles.loadingBox}>
-            <Loader2 size={24} className={styles.spinner} />
-            <span>Loading your personalized dashboard…</span>
-          </div>
-        ) : (
-          <>
-            {/* ── 1. Hero Header Card ─────────────────────────────────────── */}
-            <div className={styles.heroCard}>
-              <div className={styles.heroLeft}>
-                <h1 className={styles.heroTitle}>
-                  Welcome back, {firstName} <span style={{ display: 'inline-block' }}>👋</span>
-                </h1>
+        {/* ── 1. Hero Header Card ─────────────────────────────────────── */}
+        <div className={styles.heroCard}>
+          <div className={styles.heroLeft}>
+            <h1 className={styles.heroTitle}>
+              Welcome back, {firstName}
+            </h1>
                 <p className={styles.heroSubtitle}>
                   Keep the momentum going — pick up where you left off or explore something new.
                 </p>
@@ -303,8 +309,8 @@ export default function IndividualDashboardPage() {
 
                   {/* Lightbulb Badge */}
                   <g transform="translate(198, 48)">
-                    <circle cx="10" cy="10" r="10" fill="#fef3c7" />
-                    <text x="5" y="14" fontSize="11">💡</text>
+                    <circle cx="10" cy="10" r="10" fill="#fef3c7" stroke="#f59e0b" strokeWidth="1" />
+                    <path d="M10 6a3 3 0 0 0-3 3c0 1.2.7 1.9 1.4 2.4v1.6h3.2V11.4c.7-.5 1.4-1.2 1.4-2.4a3 3 0 0 0-3-3z" fill="#d97706" />
                   </g>
 
                   {/* Vertical Slogan on Right */}
@@ -316,10 +322,16 @@ export default function IndividualDashboardPage() {
               </div>
             </div>
 
-            {/* ── 2. Practice Library Banner (No LeetCode / CodeChef mention) ── */}
+            {/* ── Sections with real data (analytics may be empty on new accounts) ── */}
+          {overview && (
+          <>
+
+          {/* ── 2. Practice Library Banner (No LeetCode / CodeChef mention) ── */}
             <div className={styles.libraryBanner}>
               <div className={styles.bannerLeft}>
-                <div className={styles.trophyBox}>🏆</div>
+                <div className={styles.trophyBox}>
+                  <Trophy size={18} strokeWidth={2.2} color="#b45309" />
+                </div>
                 <div>
                   <div className={styles.bannerLabel}>PRACTICE LIBRARY</div>
                   <h2 className={styles.bannerHeading}>Curated Coding Challenges</h2>
@@ -590,7 +602,7 @@ export default function IndividualDashboardPage() {
                   {/* Arrays */}
                   <div className={styles.topicRow}>
                     <div className={styles.topicIconBox} style={{ background: '#eff6ff', color: '#2563eb' }}>
-                      📊
+                      <Layers size={16} strokeWidth={2.2} />
                     </div>
                     <span className={styles.topicLabel}>Arrays</span>
                     <div className={styles.topicTrack}>
@@ -602,7 +614,7 @@ export default function IndividualDashboardPage() {
                   {/* String */}
                   <div className={styles.topicRow}>
                     <div className={styles.topicIconBox} style={{ background: '#ecfdf5', color: '#059669' }}>
-                      🔤
+                      <Type size={16} strokeWidth={2.2} />
                     </div>
                     <span className={styles.topicLabel}>String</span>
                     <div className={styles.topicTrack}>
@@ -614,7 +626,7 @@ export default function IndividualDashboardPage() {
                   {/* Dynamic Programming */}
                   <div className={styles.topicRow}>
                     <div className={styles.topicIconBox} style={{ background: '#fffbeb', color: '#d97706' }}>
-                      🧠
+                      <Cpu size={16} strokeWidth={2.2} />
                     </div>
                     <span className={styles.topicLabel}>Dynamic Programming</span>
                     <div className={styles.topicTrack}>
@@ -626,7 +638,7 @@ export default function IndividualDashboardPage() {
                   {/* Trees */}
                   <div className={styles.topicRow}>
                     <div className={styles.topicIconBox} style={{ background: '#f5f3ff', color: '#7c3aed' }}>
-                      🌳
+                      <GitFork size={16} strokeWidth={2.2} />
                     </div>
                     <span className={styles.topicLabel}>Trees</span>
                     <div className={styles.topicTrack}>

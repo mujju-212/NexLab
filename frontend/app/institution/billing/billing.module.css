@@ -1357,3 +1357,9 @@
   .tableContainer, .tableWrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .tableContainer table, .tableWrapper table { min-width: 680px; }
 }
+
+/* ══ Touch targets (≤768px): finger-sized controls — desktop untouched ══ */
+@media (max-width: 768px) {
+  .tabItem, .cycleToggleBtn, .selectPlanBtn, .downloadInvoiceBtn, .managePlanBtn, .addCardBtn, .contactSalesBtn, .saveModalBtn, .currentPlanBtn, .editBtn, .cancelBtn { min-height: 44px; }
+  .modalCloseBtn { width: 44px; height: 44px; }
+}

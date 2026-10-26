@@ -1146,3 +1146,10 @@
   .topicsGrid { grid-template-columns: repeat(2, 1fr) !important; }
   .tableContainer, .tableWrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
 }
+
+/* ══ Touch targets (≤768px): finger-sized controls — desktop untouched ══ */
+@media (max-width: 768px) {
+  .tabItem, .channelBtn, .searchSubmitBtn, .contactSupportBtn, .rateBtn, .cancelBtn, .saveModalBtn, .chatSendBtn { min-height: 44px; }
+  .textInput, .searchInput { min-height: 44px; }
+  .modalCloseBtn { width: 44px; height: 44px; }
+}

@@ -48,7 +48,21 @@ export default function CoursePage() {
     }
   }, [courseId]);
 
-  if (!isReady) return null;
+  if (!isReady) {
+    return (
+      <IndividualShell
+        activePage="courses"
+        breadcrumbs={[
+          { label: 'Practice', href: '/practice' },
+          { label: 'Courses', href: '/practice' },
+        ]}
+      >
+        <div style={{ minHeight: '360px', display: 'flex', alignItems: 'center', justifyContent: 'center', color: '#64748b' }}>
+          Loading course…
+        </div>
+      </IndividualShell>
+    );
+  }
 
   return (
     <IndividualShell

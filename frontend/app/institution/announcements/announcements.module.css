@@ -1264,3 +1264,10 @@
   .tableContainer, .tableWrapper { overflow-x: auto; -webkit-overflow-scrolling: touch; }
   .tableContainer table, .tableWrapper table { min-width: 680px; }
 }
+
+/* ══ Touch targets (≤768px): finger-sized controls — desktop untouched ══ */
+@media (max-width: 768px) {
+  .chipBtn, .filterBtn, .sendBtn, .draftBtn, .settingsBtn, .tabBtn, .statActionBtn, .roleToggleBtn { min-height: 44px; }
+  .searchInput, .selectInput { min-height: 44px; }
+  .actionIconBtn { width: 44px; height: 44px; }
+}

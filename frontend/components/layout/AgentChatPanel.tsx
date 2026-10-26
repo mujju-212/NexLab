@@ -37,6 +37,9 @@ import {
   GraduationCap,
   TrendingUp,
   FlaskConical,
+  Lock,
+  MessageSquare,
+  Zap,
 } from 'lucide-react';
 import {
   aiService,
@@ -466,16 +469,20 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
   const [hasActiveOverlay, setHasActiveOverlay] = useState(false);
 
   useEffect(() => {
+    let rafId: number | null = null;
     const checkOverlays = () => {
       if (typeof document === 'undefined') return;
       const elements = document.querySelectorAll(
         '[class*="drawerOverlay"], [class*="modalOverlay"], [class*="confirmOverlay"], [class*="aiOverlay"], [class*="certModalOverlay"], [class*="drawerBackdrop"], [data-modal-overlay="true"], [role="dialog"], [aria-modal="true"]'
       );
+      if (elements.length === 0) {
+        setHasActiveOverlay(false);
+        return;
+      }
       for (let i = 0; i < elements.length; i++) {
-        const el = elements[i];
+        const el = elements[i] as HTMLElement;
         if (el.closest('[class*="copilotContainer"]')) continue;
-        const style = window.getComputedStyle(el);
-        if (style.display !== 'none' && style.visibility !== 'hidden') {
+        if (el.offsetParent !== null || el.getAttribute('aria-modal') === 'true' || el.getAttribute('role') === 'dialog') {
           setHasActiveOverlay(true);
           return;
         }
@@ -483,16 +490,14 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
       setHasActiveOverlay(false);
     };
 
-    checkOverlays();
+    const throttledCheck = () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      rafId = requestAnimationFrame(checkOverlays);
+    };
 
-    const t1 = setTimeout(checkOverlays, 60);
-    const t2 = setTimeout(checkOverlays, 200);
+    throttledCheck();
 
-    const observer = new MutationObserver(() => {
-      checkOverlays();
-      setTimeout(checkOverlays, 60);
-    });
-
+    const observer = new MutationObserver(throttledCheck);
     observer.observe(document.body, {
       childList: true,
       subtree: true,
@@ -500,15 +505,14 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
       attributeFilter: ['class', 'style'],
     });
 
-    window.addEventListener('animationend', checkOverlays);
-    window.addEventListener('transitionend', checkOverlays);
+    window.addEventListener('animationend', throttledCheck, { passive: true });
+    window.addEventListener('transitionend', throttledCheck, { passive: true });
 
     return () => {
-      clearTimeout(t1);
-      clearTimeout(t2);
+      if (rafId) cancelAnimationFrame(rafId);
       observer.disconnect();
-      window.removeEventListener('animationend', checkOverlays);
-      window.removeEventListener('transitionend', checkOverlays);
+      window.removeEventListener('animationend', throttledCheck);
+      window.removeEventListener('transitionend', throttledCheck);
     };
   }, [pathname]);
 
@@ -767,7 +771,7 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
             id: `err-${Date.now()}`,
             session_id: activeSessionId || '',
             role: 'system',
-            content: `⚠️ ${errorMsg}`,
+            content: `Error: ${errorMsg}`,
             mode,
             created_at: new Date().toISOString(),
           },
@@ -825,7 +829,7 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                 ...m,
                 applied: true,
                 pending_action: null,
-                content: `${m.content}\n\n---\n\n**✓ Action Executed**\n\n${formatActionResult(res.result)}`,
+                content: `${m.content}\n\n---\n\n**Action Executed**\n\n${formatActionResult(res.result)}`,
               }
             : m
         )
@@ -955,7 +959,9 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
               </div>
             ) : (
               <div className={styles.socraticBanner}>
-                <span>🔒 Socratic Learning Contract Active — Guided Hints &amp; Study Tools</span>
+                <span style={{ display: 'inline-flex', alignItems: 'center', gap: 5 }}>
+                  <Lock size={12} /> Socratic Learning Contract Active — Guided Hints &amp; Study Tools
+                </span>
                 <span className={styles.socraticRoute}>{livePageContext.route}</span>
               </div>
             )}
@@ -1054,8 +1060,17 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                                 className={
                                   (s.mode || 'chat') === 'agent' ? styles.agentModeBadge : styles.chatModeBadge
                                 }
+                                style={{ display: 'inline-flex', alignItems: 'center', gap: 4 }}
                               >
-                                {(s.mode || 'chat') === 'agent' ? '⚡ AGENT' : '💬 KNOWLEDGE'}
+                                {(s.mode || 'chat') === 'agent' ? (
+                                  <>
+                                    <Sparkles size={10} /> AGENT
+                                  </>
+                                ) : (
+                                  <>
+                                    <MessageSquare size={10} /> KNOWLEDGE
+                                  </>
+                                )}
                               </span>
                             </div>
                           </>
@@ -1171,7 +1186,7 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                               : {}
                           }
                         >
-                          {attachedDoc?.id === doc.id ? '✓ Attached' : 'Attach for RAG'}
+                          {attachedDoc?.id === doc.id ? 'Attached' : 'Attach for RAG'}
                         </button>
                         <button
                           onClick={() => handleDeleteDocument(doc.id)}
@@ -1256,7 +1271,7 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
                       <div className={styles.toolBadgesContainer}>
                         {m.tool_calls.map((tc, tcIdx) => (
                           <div key={tcIdx} className={styles.toolBadge}>
-                            <span>⚡</span>
+                            <Zap size={11} color="#eab308" />
                             <span>{tc.tool}</span>
                           </div>
                         ))}

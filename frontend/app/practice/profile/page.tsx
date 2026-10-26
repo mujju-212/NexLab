@@ -15,8 +15,10 @@ import {
   Camera, Globe, Calendar, Link as LinkIcon,
   Clock, XCircle, ShieldCheck, CreditCard, Check,
   Download, Sliders, ChevronRight, Copy, FileText,
-  CheckCheck, Edit3, X, Laptop, Award
+  CheckCheck, Edit3, X, Laptop, Award,
+  Sprout, Flame, Gem, Timer, ShieldAlert
 } from 'lucide-react';
+import { ProfileSkeleton } from '@/components/practice/PracticeSkeletons';
 import Cookies from 'js-cookie';
 
 type TabKey = 'Overview' | 'Achievements' | 'Activity' | 'Preferences' | 'Security' | 'Billing';
@@ -301,15 +303,38 @@ export default function ProfilePage() {
 
   // Badge DEFINITIONS (display catalog) — earned state comes only from the API.
   const BADGE_DEFS = [
-    { id: 'first_solve', icon: '🌱', title: 'First Steps', desc: 'Solve your first problem' },
-    { id: 'streak_7', icon: '🔥', title: 'Week Warrior', desc: 'Maintain a 7-day streak' },
-    { id: 'streak_30', icon: '🔥', title: 'Month Master', desc: 'Maintain a 30-day streak' },
-    { id: 'easy_10', icon: '✅', title: 'Easy Mode', desc: 'Solve 10 Easy problems' },
-    { id: 'medium_10', icon: '⚡', title: 'Rising Star', desc: 'Solve 10 Medium problems' },
-    { id: 'hard_5', icon: '💎', title: 'Diamond Coder', desc: 'Solve 5 Hard problems' },
-    { id: 'centurion', icon: '💯', title: 'Centurion', desc: 'Solve 100 problems' },
-    { id: 'speed_demon', icon: '⚡', title: 'Speed Demon', desc: 'Accepted under 5 minutes' },
+    { id: 'first_solve', title: 'First Steps', desc: 'Solve your first problem' },
+    { id: 'streak_7', title: 'Week Warrior', desc: 'Maintain a 7-day streak' },
+    { id: 'streak_30', title: 'Month Master', desc: 'Maintain a 30-day streak' },
+    { id: 'easy_10', title: 'Easy Mode', desc: 'Solve 10 Easy problems' },
+    { id: 'medium_10', title: 'Rising Star', desc: 'Solve 10 Medium problems' },
+    { id: 'hard_5', title: 'Diamond Coder', desc: 'Solve 5 Hard problems' },
+    { id: 'centurion', title: 'Centurion', desc: 'Solve 100 problems' },
+    { id: 'speed_demon', title: 'Speed Demon', desc: 'Accepted under 5 minutes' },
   ];
+
+  const getBadgeIcon = (id: string, earned: boolean) => {
+    switch (id) {
+      case 'first_solve':
+        return <Sprout size={22} color={earned ? '#16a34a' : '#94a3b8'} />;
+      case 'streak_7':
+        return <Flame size={22} color={earned ? '#f97316' : '#94a3b8'} />;
+      case 'streak_30':
+        return <Flame size={22} color={earned ? '#dc2626' : '#94a3b8'} />;
+      case 'easy_10':
+        return <CheckCircle2 size={22} color={earned ? '#059669' : '#94a3b8'} />;
+      case 'medium_10':
+        return <Zap size={22} color={earned ? '#eab308' : '#94a3b8'} />;
+      case 'hard_5':
+        return <Gem size={22} color={earned ? '#8b5cf6' : '#94a3b8'} />;
+      case 'centurion':
+        return <Award size={22} color={earned ? '#4f46e5' : '#94a3b8'} />;
+      case 'speed_demon':
+        return <Timer size={22} color={earned ? '#06b6d4' : '#94a3b8'} />;
+      default:
+        return <Trophy size={22} color={earned ? '#6366f1' : '#94a3b8'} />;
+    }
+  };
   const earnedBadges = analytics?.standing?.badges || [];
   type EarnedBadge = { badge_id: string; earned_at?: string | null };
   const earnedList: EarnedBadge[] = earnedBadges;
@@ -376,7 +401,13 @@ export default function ProfilePage() {
     );
   };
 
-  if (!isAuthenticated || !user) return null;
+  if (!isReady || !isAuthenticated || !user) {
+    return (
+      <IndividualShell activePage="Profile">
+        <ProfileSkeleton />
+      </IndividualShell>
+    );
+  }
 
   return (
     <IndividualShell activePage="Profile">
@@ -911,7 +942,7 @@ export default function ProfilePage() {
                       className={styles.badgeCard}
                       style={{ opacity: earned ? 1 : 0.6, background: earned ? '#ffffff' : '#fafafa' }}
                     >
-                      <div className={styles.badgeIconBox}>{b.icon}</div>
+                      <div className={styles.badgeIconBox}>{getBadgeIcon(b.id, earned)}</div>
                       <div>
                         <h4 className={styles.badgeTitle}>{b.title}</h4>
                         <p className={styles.badgeDesc}>{b.desc}</p>
@@ -1317,11 +1348,27 @@ export default function ProfilePage() {
                 <p style={{ fontSize: 13, color: '#4b5563', lineHeight: 1.5, margin: 0 }}>
                   Two-factor authentication adds an extra layer of protection by requiring your password and a verification code sent to your registered email during logins.
                 </p>
-                <div style={{ marginTop: 14 }}>
-                  <span className={`${styles.roleBadge} ${twoFactorEnabled ? '' : ''}`}>
-                    {twoFactorEnabled ? '🛡️ 2FA Currently Active' : '⚪ 2FA Disabled'}
+                  <span
+                    className={styles.roleBadge}
+                    style={{
+                      display: 'inline-flex',
+                      alignItems: 'center',
+                      gap: 6,
+                      background: twoFactorEnabled ? '#ecfdf5' : '#f1f5f9',
+                      color: twoFactorEnabled ? '#059669' : '#475569',
+                      borderColor: twoFactorEnabled ? '#a7f3d0' : '#cbd5e1',
+                    }}
+                  >
+                    {twoFactorEnabled ? (
+                      <>
+                        <ShieldCheck size={14} color="#059669" /> 2FA Currently Active
+                      </>
+                    ) : (
+                      <>
+                        <ShieldAlert size={14} color="#64748b" /> 2FA Disabled
+                      </>
+                    )}
                   </span>
-                </div>
               </div>
 
               <div className={styles.sectionCard}>

@@ -15,6 +15,7 @@ import {
   ExternalLink,
 } from 'lucide-react';
 import IndividualShell from '@/components/layout/IndividualShell';
+import { ProgressSkeleton } from '@/components/practice/PracticeSkeletons';
 import {
   PlatformOverviewTab,
   PlatformLadderTab,
@@ -115,17 +116,7 @@ function ProgressPageContent() {
   if (!mounted || !isAuthenticated || !user) {
     return (
       <IndividualShell activePage="progress">
-        <div
-          style={{
-            minHeight: '360px',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            color: '#64748b',
-          }}
-        >
-          Loading Growth Profile…
-        </div>
+        <ProgressSkeleton />
       </IndividualShell>
     );
   }
@@ -195,20 +186,7 @@ function ProgressPageContent() {
 
         {/* ══ CONTENT STATES ══ */}
         {overviewLoading ? (
-          <div
-            style={{
-              minHeight: '360px',
-              display: 'flex',
-              flexDirection: 'column',
-              alignItems: 'center',
-              justifyContent: 'center',
-              gap: '1rem',
-              color: '#64748b',
-            }}
-          >
-            <RefreshCw size={28} className={styles.spinIcon} style={{ animation: 'spin 1s linear infinite' }} />
-            <span style={{ fontSize: '0.95rem', fontWeight: 600 }}>Loading your platform growth profile…</span>
-          </div>
+          <ProgressSkeleton />
         ) : overviewError || !overview ? (
           <div
             style={{

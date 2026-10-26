@@ -870,3 +870,9 @@
 @media (max-width: 900px) {
   .pageGrid { grid-template-columns: minmax(0, 1fr); }
 }
+
+/* ══ Touch targets (≤768px): finger-sized controls — desktop untouched ══ */
+@media (max-width: 768px) {
+  .tabItem, .resetBtn, .sendTestBtn, .savePreferencesBtn, .testChannelTab { min-height: 44px; }
+  .testInput, .checkboxInput { min-height: 22px; }
+}
