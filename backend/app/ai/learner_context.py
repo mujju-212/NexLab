@@ -108,11 +108,18 @@ def _admin_snapshot(user) -> str:
     from sqlalchemy import text
     total = User.query.count()
     insts = Institution.query.count()
-    dau = db.session.execute(text("""
-        SELECT value FROM platform_metrics_daily
-        WHERE metric='dau' AND institution_id='platform'
-        ORDER BY day DESC LIMIT 1
-    """)).scalar()
+    # platform_metrics_daily is created by migrate_admin_p3.py; if it is
+    # missing, degrade gracefully instead of aborting the request transaction
+    # (a failing raw query poisons every later commit in this request).
+    dau = None
+    try:
+        dau = db.session.execute(text("""
+            SELECT value FROM platform_metrics_daily
+            WHERE metric='dau' AND institution_id='platform'
+            ORDER BY day DESC LIMIT 1
+        """)).scalar()
+    except Exception:
+        db.session.rollback()
     return (f"PLATFORM CONTEXT — {user.full_name} (Platform Admin):\n"
             f"- {total} users across {insts} institutions"
             + (f" · latest snapshot DAU {int(float(dau))}" if dau is not None else ""))
@@ -147,6 +154,15 @@ def build_role_context(user) -> str:
             return _admin_snapshot(user)
     except Exception:
         # The context engine must NEVER break a tutor turn — degrade silently.
+        # CRITICAL: roll back any aborted transaction. If a raw SQL statement
+        # above failed, the Postgres transaction is aborted; without a rollback
+        # every later commit in this request would silently discard the
+        # caller's uncommitted work (e.g. the chat session row) and end with
+        # a foreign-key violation.
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
         return ''
     return ''
 

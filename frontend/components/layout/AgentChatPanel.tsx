@@ -758,13 +758,15 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
             : err?.response?.status === 429
             ? 'Daily AI token limit reached. Resets at midnight UTC.'
             : isTimeout
-            ? 'The AI assistant took longer than expected. Click this thread in History in a moment to view the completed response.'
+            ? 'The AI task is still running in the background. I will check back and show the result as soon as it is saved.'
             : err?.response?.data?.error || 'Could not communicate with the AI assistant.';
 
+        const errId = `err-${Date.now()}`;
         setMessages(prev => [
-          ...prev,
+          ...prev.filter(m => m.id !== tempUserMsg.id),
+          tempUserMsg,
           {
-            id: `err-${Date.now()}`,
+            id: errId,
             session_id: activeSessionId || '',
             role: 'system',
             content: `⚠️ ${errorMsg}`,
@@ -772,6 +774,59 @@ export default function AgentChatPanel({ roleOverride, pageContext }: AgentChatP
             created_at: new Date().toISOString(),
           },
         ]);
+
+        // Long agent tasks (e.g. building a complete experiment) can outlive the
+        // HTTP wait even though the backend finishes and persists the answer.
+        // Poll the session a few times and render the saved assistant message.
+        if (isTimeout) {
+          const sentAt = tempUserMsg.created_at;
+          const startedAt = Date.now();
+          const foundSessionId = activeSessionIdRef.current || activeSessionId || null;
+          const renderAssistant = (msg: any, sid: string) => {
+            const incoming: HarnessChatMessage = { ...msg, id: msg.id || `polled-${Date.now()}`, session_id: sid };
+            setMessages(prev => (prev.some(m => m.id === incoming.id) ? prev : [...prev, incoming]));
+            setMessages(prev => prev.filter(m => m.id !== errId));
+            activeSessionIdRef.current = sid;
+            setActiveSessionId(sid);
+            activeSessionByMode.current[mode] = sid;
+            loadSessions(false);
+          };
+          const poll = async () => {
+            try {
+              if (foundSessionId) {
+                const data = await aiService.getHarnessSession(foundSessionId);
+                const lastAssistant = [...(data.messages || [])].reverse().find(m => m.role === 'assistant');
+                if (lastAssistant && (lastAssistant as any).created_at && (lastAssistant as any).created_at >= sentAt) {
+                  renderAssistant(lastAssistant, foundSessionId);
+                  return true;
+                }
+              } else {
+                // New conversation: the session id only exists server-side.
+                // Find a session that was updated after this message was sent.
+                const list: HarnessChatSession[] = await aiService.listHarnessSessions();
+                const fresh = list
+                  .filter(s => new Date(s.updated_at || s.created_at || 0).getTime() >= new Date(sentAt).getTime())
+                  .sort((a, b) => new Date(b.updated_at || 0).getTime() - new Date(a.updated_at || 0).getTime())[0];
+                if (fresh) {
+                  const data = await aiService.getHarnessSession(fresh.id);
+                  const lastAssistant = [...(data.messages || [])].reverse().find(m => m.role === 'assistant');
+                  const matchUser = (data.messages || []).some(m => m.role === 'user' && m.content === text);
+                  if (lastAssistant && matchUser && (lastAssistant as any).created_at && (lastAssistant as any).created_at >= sentAt) {
+                    renderAssistant(lastAssistant, fresh.id);
+                    return true;
+                  }
+                }
+              }
+            } catch {
+              /* keep polling */
+            }
+            if (Date.now() - startedAt < 240_000) {
+              setTimeout(poll, 15_000);
+            }
+            return false;
+          };
+          setTimeout(poll, 5_000);
+        }
       } finally {
         setBusy(false);
       }

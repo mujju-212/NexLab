@@ -1436,17 +1436,104 @@ Guidelines:
 5. Never invent or estimate data. If data is not present in observations, say so directly."""
 
 
+def _loads_lenient(span: str):
+    """json.loads that tolerates raw control characters inside string literals.
+
+    Models frequently emit real newlines/quotes inside JSON strings; strict
+    parsing rejects the whole (otherwise complete) document.
+    """
+    try:
+        return json.loads(span)
+    except (ValueError, TypeError):
+        try:
+            return json.loads(span, strict=False)
+        except (ValueError, TypeError):
+            return None
+
+
+def _balanced_object_spans(text: str) -> list:
+    """Return every top-level balanced ``{...}`` span in ``text``.
+
+    String-aware: braces inside JSON string literals (or escaped quotes) do not
+    affect the depth counter, so embedded HTML/CSS/JS with ``{`` is safe.
+    """
+    spans = []
+    depth = 0
+    start = -1
+    in_str = False
+    esc = False
+    for i, ch in enumerate(text):
+        if in_str:
+            if esc:
+                esc = False
+            elif ch == '\\':
+                esc = True
+            elif ch == '"':
+                in_str = False
+            continue
+        if ch == '"':
+            in_str = True
+        elif ch == '{':
+            if depth == 0:
+                start = i
+            depth += 1
+        elif ch == '}':
+            if depth > 0:
+                depth -= 1
+                if depth == 0 and start != -1:
+                    spans.append(text[start:i + 1])
+                    start = -1
+    return spans
+
+
 def _extract_json(text: str) -> dict:
+    """Extract a JSON object from model output.
+
+    Reasoning models frequently emit a planning preamble (sometimes including a
+    *schema* object with placeholder values) before the real answer, and the
+    real answer is the LAST complete object. We therefore collect every balanced
+    object span and return the last one that parses as a dict, preferring the
+    largest when the tail is truncated. The legacy greedy match is the final
+    fallback.
+    """
     if not text:
         return {}
+    candidates = _balanced_object_spans(text)
+    if candidates:
+        # Parse every candidate; remember the last parseable dict (the model's
+        # final answer) and the largest parseable dict (guard against a
+        # truncated tail or a placeholder-schema last span).
+        last_ok = None
+        largest_span, largest = None, None
+        for span in candidates:
+            parsed = _loads_lenient(span)
+            if parsed is None:
+                continue
+            if not isinstance(parsed, dict):
+                continue
+            last_ok = parsed
+            if largest_span is None or len(span) > len(largest_span):
+                largest_span, largest = span, parsed
+        # Prefer the last successful object (the model's final answer).
+        if last_ok is not None:
+            # If the last object looks like a placeholder schema (values are
+            # literally "..." or "[...]"), prefer the largest real object.
+            def _is_schema(obj):
+                vals = list(obj.values())
+                if not vals:
+                    return False
+                suspicious = sum(1 for v in vals if isinstance(v, str) and v.strip() in ('...', '... ', '[...]', '[]'))
+                return suspicious >= max(1, len(vals) // 2)
+            if not _is_schema(last_ok) or largest is None:
+                return last_ok
+            return largest
+        if largest is not None:
+            return largest
     match = re.search(r'\{.*\}', text, re.DOTALL)
     if not match:
         return {}
-    try:
-        parsed = json.loads(match.group())
-        return parsed if isinstance(parsed, dict) else {}
-    except (ValueError, TypeError):
-        return {}
+    parsed = _loads_lenient(match.group())
+    return parsed if isinstance(parsed, dict) else {}
 
 
 def _truncate(obj) -> str:

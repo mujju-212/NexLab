@@ -957,6 +957,7 @@ def create_chat_session():
     data = request.get_json(silent=True) or {}
     title = (data.get('title') or '').strip() or 'New Conversation'
     mode = data.get('mode') or 'chat'
+    page_context = data.get('page_context') if isinstance(data.get('page_context'), dict) else {}
     from app.models.user import User
     current_user = User.query.get(g.user_id)
     if not current_user:
@@ -1186,7 +1187,9 @@ def send_chat_message():
     # Auto-compact memory when conversation reaches threshold
     maybe_compact_session_memory(session, g.institution_id, g.user_id, g.role)
 
-    # Smart title generation after first exchange
+    # Keep chat-title generation local: another provider round-trip after a
+    # completed answer made every first turn slower and could exceed the UI
+    # request timeout. The prompt-derived title is sufficient for navigation.
     msg_count = session.messages.count()
     needs_smart_title = (
         msg_count <= 2 or
@@ -1194,34 +1197,9 @@ def send_chat_message():
         session.title in ('New Chat', 'New Conversation')
     )
     if needs_smart_title:
-        ai_title_applied = False
-        try:
-            from app.ai.gate import guarded_ai_call
-            title_text, _, is_fb, _ = guarded_ai_call(
-                'chat' if g.role in ('student', 'platform_user') else 'agent',
-                institution_id=g.institution_id,
-                user_id=g.user_id,
-                role=g.role,
-                messages=[
-                    {'role': 'system', 'content': 'Generate a concise 3 to 5 word title summarizing this user request. Reply ONLY with the title. Do not include quotes or punctuation at the end.'},
-                    {'role': 'user', 'content': f"User prompt: {prompt[:250]}"},
-                ],
-                pool='fast',
-                max_tokens=25,
-                temperature=0.3,
-            )
-            if title_text and not is_fb:
-                cleaned = title_text.strip().strip('"`').rstrip('.?!')
-                if 2 < len(cleaned) <= 80 and not cleaned.lower().startswith('title:'):
-                    session.title = cleaned
-                    ai_title_applied = True
-        except Exception as e:
-            current_app.logger.warning(f"Smart title generation error: {e}")
-
-        if not ai_title_applied:
-            smart_fallback = _generate_smart_fallback_title(prompt)
-            if smart_fallback:
-                session.title = smart_fallback
+        smart_fallback = _generate_smart_fallback_title(prompt)
+        if smart_fallback:
+            session.title = smart_fallback
 
     db.session.commit()
 
@@ -1263,7 +1241,7 @@ def execute_chat_action():
             action_payload=action_payload,
             institution_id=g.institution_id,
             user_id=g.user_id,
-            role=g.role,
+            role='admin' if g.role == 'platform_admin' else g.role,
         )
 
         if message_id:

@@ -10,9 +10,9 @@ Pools can be overridden at runtime via env vars (comma-separated):
     GROQ_POOL_FAST=openai/gpt-oss-20b,openai/gpt-oss-120b,qwen/qwen3.6-27b
     GROQ_POOL_QUALITY=openai/gpt-oss-120b,openai/gpt-oss-20b,qwen/qwen3.6-27b
 
-Last-resort fallback: when every Groq model in the pool is on
-cooldown, the call is served by Google Gemini instead (if
-GEMINI_API_KEY is configured), so AI features never go dark.
+When the primary provider is unavailable, calls rotate through Groq and then
+configured OpenRouter and Gemini fallbacks. If every configured provider is
+unavailable, the client returns no answer; callers must handle that explicitly.
 """
 import os
 import time
@@ -36,7 +36,12 @@ DEFAULT_POOLS = {
     ],
 }
 
+# Models that accept `reasoning_format` on Groq. Groq's API rejects the
+# `reasoning_effort` kwarg for these (their error suggests `reasoning_format`
+# instead), so only the format flag is sent here.
 REASONING_MODELS = {'qwen/qwen3.8-27b'}
+# Models that additionally accept `reasoning_effort`.
+REASONING_EFFORT_MODELS = set()
 
 # OpenRouter Free Models Pool (100% verified active sub-second models)
 
@@ -148,10 +153,16 @@ def _gemini_fallback(messages: list, max_tokens: int, temperature: float):
     return None, None
 
 
-def _openrouter_fallback(messages: list, max_tokens: int, temperature: float):
+def _openrouter_fallback(messages: list, max_tokens: int, temperature: float,
+                         json_mode: bool = False, reasoning_effort: str = None):
     """
     Serve request via OpenRouter API using active free models with automatic model rotation.
     Returns (text, model_id) or (None, None).
+
+    json_mode=True forces the response to be a single JSON object (used for the
+    planner and content-generation calls, which parse strict JSON).
+    reasoning_effort caps hidden/visible thinking on reasoning models; 'low'
+    cuts long generations roughly in half without hurting document quality.
     """
     import requests
     api_key = current_app.config.get('OPENROUTER_API_KEY') or os.environ.get('OPENROUTER_API_KEY', '')
@@ -166,15 +177,30 @@ def _openrouter_fallback(messages: list, max_tokens: int, temperature: float):
         "X-Title": "NexLab Studio"
     }
 
-    for model in OPENROUTER_MODELS:
+    # Connect fast, but allow long generations (experiment-suite content can be
+    # several thousand tokens on free models) without a read-timeout kill.
+    models = list(OPENROUTER_MODELS)
+    if max_tokens >= 2000:
+        # Big generations: try the fast non-reasoning models first. The free
+        # reasoning model spends most of the budget on hidden thinking and can
+        # take many minutes for a single large JSON document.
+        models = [m for m in models if 'reasoning' not in m] + \
+                 [m for m in models if 'reasoning' in m]
+    read_timeout = 120 if max_tokens >= 2000 else 45
+    for model in models:
         payload = {
             "model": model,
             "messages": messages,
             "max_tokens": max_tokens,
             "temperature": temperature
         }
+        if json_mode:
+            payload["response_format"] = {"type": "json_object"}
+        effort = reasoning_effort or ('low' if json_mode else None)
+        if effort:
+            payload["reasoning"] = {"effort": effort}
         try:
-            resp = requests.post(url, headers=headers, json=payload, timeout=10)
+            resp = requests.post(url, headers=headers, json=payload, timeout=(10, read_timeout))
             if resp.status_code == 200:
                 data = resp.json()
                 choices = data.get('choices', [])
@@ -184,8 +210,12 @@ def _openrouter_fallback(messages: list, max_tokens: int, temperature: float):
                     if text and text.strip():
                         current_app.logger.warning(f"Groq pool exhausted — served by OpenRouter ({model})")
                         return text.strip(), f"openrouter:{model}"
-            elif resp.status_code in (429, 404, 400):
-                continue
+                else:
+                    current_app.logger.warning(f"OpenRouter {model} returned 200 with no choices")
+            elif resp.status_code == 429:
+                current_app.logger.warning(f"OpenRouter {model} rate-limited (429); trying next model")
+            elif resp.status_code in (404, 400):
+                current_app.logger.warning(f"OpenRouter {model} unavailable (HTTP {resp.status_code}); trying next model")
         except Exception as e:
             current_app.logger.error(f"OpenRouter fallback error on {model}: {e}")
 
@@ -198,11 +228,13 @@ def _openrouter_fallback(messages: list, max_tokens: int, temperature: float):
 # DeepSeek endpoint is the reliable spine of the chain.
 
 DEEPSEEK_BASE_URL = os.environ.get('DEEPSEEK_BASE_URL', 'https://api.hcnsec.cn/v1')
-DEEPSEEK_API_KEY = os.environ.get(
-    'DEEPSEEK_API_KEY',
-    'sk-WmpU2f5x4HZjiLjtqNxeOequHiixiqWp42hlKHBv3MBbYzqY')
+# Never embed a provider credential in source. If missing, the DeepSeek leg is skipped.
+DEEPSEEK_API_KEY = os.environ.get('DEEPSEEK_API_KEY', '')
 DEEPSEEK_MODEL_FAST = os.environ.get('DEEPSEEK_MODEL_FAST', 'DeepSeek-V4-Flash')
 DEEPSEEK_MODEL_QUALITY = os.environ.get('DEEPSEEK_MODEL_QUALITY', 'DeepSeek-V4-Pro')
+# Fail over promptly when this endpoint stalls; the prior 90-second wait made
+# browser requests time out before the configured fallback providers could reply.
+DEEPSEEK_TIMEOUT_SECONDS = max(5, int(os.environ.get('DEEPSEEK_TIMEOUT_SECONDS', '15')))
 
 
 def deepseek_chat(messages: list, pool: str = 'fast', max_tokens: int = 1200,
@@ -216,6 +248,15 @@ def deepseek_chat(messages: list, pool: str = 'fast', max_tokens: int = 1200,
     if not DEEPSEEK_API_KEY or not DEEPSEEK_BASE_URL:
         return None, None, True, None
     model = DEEPSEEK_MODEL_QUALITY if pool == 'quality' else DEEPSEEK_MODEL_FAST
+    # Small calls fail over fast; large generations (planner context, content
+    # authoring) legitimately need a longer read window on a slow-but-healthy
+    # endpoint, so scale the read timeout with the requested output size while
+    # keeping a hard bound when the endpoint is truly stalled.
+    read_timeout = DEEPSEEK_TIMEOUT_SECONDS
+    if max_tokens >= 1500:
+        # Large generations need a longer window on a slow-but-healthy endpoint,
+        # but the floor is capped so a stalled endpoint still fails over quickly.
+        read_timeout = max(read_timeout, 20)
     try:
         resp = _rq.post(
             f'{DEEPSEEK_BASE_URL.rstrip("/")}/chat/completions',
@@ -223,7 +264,7 @@ def deepseek_chat(messages: list, pool: str = 'fast', max_tokens: int = 1200,
                      'Content-Type': 'application/json'},
             json={'model': model, 'messages': messages,
                   'max_tokens': max_tokens, 'temperature': temperature},
-            timeout=90,
+            timeout=(10, read_timeout),
         )
         if resp.status_code != 200:
             current_app.logger.warning(
@@ -247,7 +288,8 @@ def deepseek_chat(messages: list, pool: str = 'fast', max_tokens: int = 1200,
 
 
 def groq_chat(messages: list, pool: str = 'fast',
-              max_tokens: int = 200, temperature: float = 0.3):
+              max_tokens: int = 200, temperature: float = 0.3,
+              json_mode: bool = False, reasoning_effort: str = None):
     """
     Chat completion with model rotation.
 
@@ -275,12 +317,14 @@ def groq_chat(messages: list, pool: str = 'fast',
         from groq import Groq, RateLimitError, APIStatusError
     except ImportError:
         current_app.logger.warning('[ai] groq SDK not installed — skipping to fallback')
-        return _fallback_or_none(messages, max_tokens, temperature)
+        return _fallback_or_none(messages, max_tokens, temperature,
+                                 json_mode=json_mode, reasoning_effort=reasoning_effort)
 
     api_key = current_app.config.get('GROQ_API_KEY')
     if not api_key:
         current_app.logger.warning('[ai] GROQ_API_KEY not configured — skipping to fallback')
-        return _fallback_or_none(messages, max_tokens, temperature)
+        return _fallback_or_none(messages, max_tokens, temperature,
+                                 json_mode=json_mode, reasoning_effort=reasoning_effort)
 
     client = Groq(api_key=api_key)
     pool_models = get_pool(pool)
@@ -291,62 +335,82 @@ def groq_chat(messages: list, pool: str = 'fast',
         if model is None:
             break
         tried.add(model)
-        try:
-            params = {
-                'model': model,
-                'messages': messages,
-                'max_tokens': max_tokens,
-                'temperature': temperature,
-            }
-            # Reasoning models otherwise spend the whole (often tiny) token
-            # budget on hidden thinking and return empty content. Cap the
-            # reasoning at 'low' and keep the <think> block out of content.
-            if model in REASONING_MODELS:
-                params['reasoning_effort'] = 'low'
-                params['reasoning_format'] = 'hidden'
-            resp = client.chat.completions.create(**params)
-            msg_obj = resp.choices[0].message
-            content = getattr(msg_obj, 'content', None) or ''
-            if not content.strip() and getattr(msg_obj, 'reasoning_content', None):
-                content = msg_obj.reasoning_content
-            if content is not None and content.strip():
-                # Capture token usage from the provider response
-                usage = resp.usage
-                usage_dict = {
-                    'prompt_tokens':     getattr(usage, 'prompt_tokens', 0) or 0,
-                    'completion_tokens': getattr(usage, 'completion_tokens', 0) or 0,
-                    'total_tokens':      getattr(usage, 'total_tokens', 0) or 0,
-                } if usage is not None else None
-                return content, model, False, usage_dict
-            # empty reply (e.g. reasoning tokens ate a tiny budget) →
-            # treat as soft failure and try the next model
-            current_app.logger.warning(
-                f"Groq model {model} returned empty reply, rotating"
-            )
-        except RateLimitError:
-            # token / request limit exceeded → rotate to the next model
-            _mark_down(model, COOLDOWN_RATE_LIMIT)
-        except APIStatusError as e:
-            status = getattr(e, 'status_code', None)
-            if status == 429:
+        # Two attempts: if the model rejects the reasoning params (400),
+        # retry the SAME model once without them instead of rotating it out.
+        for _attempt in range(2):
+            try:
+                params = {
+                    'model': model,
+                    'messages': messages,
+                    'max_tokens': max_tokens,
+                    'temperature': temperature,
+                }
+                if _attempt == 0:
+                    # Reasoning models otherwise spend the whole (often tiny)
+                    # token budget on hidden thinking and return empty content.
+                    # Keep the <think> block out of content.
+                    if model in REASONING_MODELS:
+                        params['reasoning_format'] = 'hidden'
+                    if model in REASONING_EFFORT_MODELS:
+                        params['reasoning_effort'] = 'low'
+                resp = client.chat.completions.create(**params)
+                msg_obj = resp.choices[0].message
+                content = getattr(msg_obj, 'content', None) or ''
+                if not content.strip() and getattr(msg_obj, 'reasoning_content', None):
+                    content = msg_obj.reasoning_content
+                if content is not None and content.strip():
+                    # Capture token usage from the provider response
+                    usage = resp.usage
+                    usage_dict = {
+                        'prompt_tokens':     getattr(usage, 'prompt_tokens', 0) or 0,
+                        'completion_tokens': getattr(usage, 'completion_tokens', 0) or 0,
+                        'total_tokens':      getattr(usage, 'total_tokens', 0) or 0,
+                    } if usage is not None else None
+                    return content, model, False, usage_dict
+                # empty reply (e.g. reasoning tokens ate a tiny budget) →
+                # treat as soft failure and try the next model
+                current_app.logger.warning(
+                    f"Groq model {model} returned empty reply, rotating"
+                )
+                break
+            except RateLimitError:
+                # token / request limit exceeded → rotate to the next model
                 _mark_down(model, COOLDOWN_RATE_LIMIT)
-            elif status in (400, 404):
-                _mark_down(model, COOLDOWN_BAD_MODEL)
-            else:
-                current_app.logger.error(f"Groq API error {status} on {model}: {e}")
+                break
+            except APIStatusError as e:
+                status = getattr(e, 'status_code', None)
+                if status == 429:
+                    _mark_down(model, COOLDOWN_RATE_LIMIT)
+                elif status in (400, 404):
+                    if (status == 400 and _attempt == 0
+                            and 'reasoning' in str(e).lower()):
+                        # Model rejected the reasoning kwarg — retry without it.
+                        current_app.logger.warning(
+                            f"Groq model {model} rejected reasoning params — "
+                            f"retrying without them"
+                        )
+                        continue
+                    _mark_down(model, COOLDOWN_BAD_MODEL)
+                else:
+                    current_app.logger.error(f"Groq API error {status} on {model}: {e}")
+                    _mark_down(model, COOLDOWN_SERVER_ERR)
+                break
+            except Exception as e:
+                current_app.logger.error(f"Groq call failed on {model}: {e}")
                 _mark_down(model, COOLDOWN_SERVER_ERR)
-        except Exception as e:
-            current_app.logger.error(f"Groq call failed on {model}: {e}")
-            _mark_down(model, COOLDOWN_SERVER_ERR)
+                break
 
     # ── Entire Groq pool exhausted → last-resort Gemini fallback ─────────
-    return _fallback_or_none(messages, max_tokens, temperature)
+    return _fallback_or_none(messages, max_tokens, temperature,
+                             json_mode=json_mode, reasoning_effort=reasoning_effort)
 
 
-def _fallback_or_none(messages: list, max_tokens: int, temperature: float):
-    """OpenRouter, Gemini & Studio AI Engine fallback chain."""
+def _fallback_or_none(messages: list, max_tokens: int, temperature: float,
+                      json_mode: bool = False, reasoning_effort: str = None):
+    """Try remaining configured providers; return no answer when all are unavailable."""
     # 1. Try OpenRouter pool first
-    text, or_model = _openrouter_fallback(messages, max_tokens, temperature)
+    text, or_model = _openrouter_fallback(messages, max_tokens, temperature,
+                                          json_mode=json_mode, reasoning_effort=reasoning_effort)
     if text is not None:
         return text, or_model, False, _estimate_usage(messages, text)
 
@@ -355,66 +419,7 @@ def _fallback_or_none(messages: list, max_tokens: int, temperature: float):
     if text is not None:
         return text, f'gemini:{gemini_model}', False, _estimate_usage(messages, text)
 
-    # Dynamic Studio AI Engine Fallback Generator when remote API keys are offline/403
-    full_prompt = ' '.join(str(m.get('content', '')) for m in messages).lower()
-
-    if 'json' in full_prompt or 'assignment' in full_prompt or 'notes' in full_prompt or 'code' in full_prompt or 'quiz' in full_prompt or 'viva' in full_prompt:
-        fallback_json = {}
-        if 'assignment' in full_prompt:
-            fallback_json['assignment'] = {
-                'title': 'Stack Data Structure Implementation',
-                'instructions': '## Stack Implementation Assignment\n\nImplement a `Stack` class in Python supporting `push`, `pop`, `peek`, and `is_empty` operations verified by 5 automated test cases.\n\n### Requirements:\n- `push(item)`: Add item\n- `pop()`: Remove top element (raise `IndexError` if empty)\n- `peek()`: View top element\n- `is_empty()`: Check if empty',
-                'language': 'python',
-                'starter_code': 'class Stack:\n    def __init__(self):\n        self._items = []\n\n    def push(self, item):\n        pass\n\n    def pop(self):\n        pass\n\n    def peek(self):\n        pass\n\n    def is_empty(self):\n        pass\n',
-                'pass_threshold': 60,
-                'test_cases': [
-                    {"input": "s = Stack(); s.push(10); print(s.pop())", "expected": "10", "hidden": False, "weight": 1},
-                    {"input": "s = Stack(); s.push(5); s.push(20); print(s.peek())", "expected": "20", "hidden": False, "weight": 1},
-                    {"input": "s = Stack(); print(s.is_empty())", "expected": "True", "hidden": True, "weight": 1},
-                    {"input": "s = Stack(); s.pop()", "expected": "IndexError", "hidden": True, "weight": 1},
-                    {"input": "s = Stack()\nfor i in range(5): s.push(i)\nprint(s.pop(), s.pop())", "expected": "4 3", "hidden": True, "weight": 1}
-                ]
-            }
-        if 'notes' in full_prompt:
-            fallback_json['notes'] = {
-                'markdown': '## Pre-lab Notes: Data Structures & Stack Memory\n\nA stack operates on the **Last-In, First-Out (LIFO)** principle. Primary operations run in **O(1)** time complexity when backed by dynamic array allocations.\n\n- **Push**: Adds an element onto the top of the stack.\n- **Pop**: Removes the top element from the stack.\n- **Peek**: Inspects the top element without mutating state.'
-            }
-        if 'code' in full_prompt and 'assignment' not in full_prompt:
-            fallback_json['code_snippets'] = [
-                {
-                    'title': 'Python Stack Operations Example',
-                    'language': 'python',
-                    'description': 'Basic demonstration of push, pop, and peek operations on a stack.',
-                    'code': 'class Stack:\n    def __init__(self):\n        self.items = []\n    def push(self, item):\n        self.items.append(item)\n    def pop(self):\n        return self.items.pop() if self.items else None\n\ns = Stack()\ns.push(10)\ns.push(20)\nprint("Popped:", s.pop())'
-                }
-            ]
-        if 'quiz' in full_prompt or 'quiz_questions' in full_prompt:
-            fallback_json['quiz_questions'] = [
-                {
-                    'question': 'Which principle governs the insertion and deletion order of a Stack?',
-                    'options': ['First-In, First-Out (FIFO)', 'Last-In, First-Out (LIFO)', 'Random Access', 'Priority Queue Order'],
-                    'correct_index': 1,
-                    'explanation': 'Stacks enforce LIFO semantics where the most recently pushed item is popped first.'
-                },
-                {
-                    'question': 'What is the average time complexity of push and pop operations on a stack?',
-                    'options': ['O(N)', 'O(log N)', 'O(1)', 'O(N^2)'],
-                    'correct_index': 2,
-                    'explanation': 'Push and pop perform constant-time O(1) operations.'
-                }
-            ]
-        if 'viva' in full_prompt or 'viva_questions' in full_prompt:
-            fallback_json['viva_questions'] = [
-                {
-                    'question': 'How does call stack memory management relate to the stack data structure?',
-                    'expected_answer': 'Function call frames are pushed onto the call stack when invoked and popped when returning.'
-                }
-            ]
-
-        import json as _json
-        res_str = _json.dumps(fallback_json)
-        return res_str, 'studio-ai-engine', False, _estimate_usage(messages, res_str)
-
+    # No canned or synthetic response: callers must handle provider outage explicitly.
     return None, None, True, None
 
 

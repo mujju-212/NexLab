@@ -53,6 +53,8 @@ cd "$ROOT/backend"
 # the whole schema), so we build tables from the models — the project's own
 # migrate_missing_columns.py helper does exactly this.
 python3 migrate_missing_columns.py
+# Raw-SQL tables that db.create_all() cannot build (idempotent):
+python3 migrate_admin_p3.py   # platform_metrics_daily (platform admin metrics)
 export PGPASSWORD=vlabpass
 for t in free_courses free_exercises practice_problems; do
   psql -h 127.0.0.1 -p 5433 -U postgres -d virtuallab -q \

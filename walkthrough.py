@@ -92,6 +92,9 @@ d = check("POST /api/admin/institutions", r, expect=201,
 if not d:
     sys.exit(1)
 INST = d["institution"]["id"]
+# The API generates its own random temp password (it does not accept a
+# client-supplied admin_password), so capture the real one from the response.
+TEMP_ADM = d.get("temp_password") or d.get("admin_user", {}).get("temp_password")
 
 r = requests.get(f"{API}/admin/institutions", headers=H(SA))
 check("GET /api/admin/institutions", r)
@@ -102,7 +105,7 @@ check("GET /api/platform/.../onboarding (fresh checklist)", r,
 
 # ─────────────────────────────────────────────────────────────────────────────
 step(3, "Institution admin first login (forced password change)")
-r = login("admin@skit.edu.in", "Welcome@2026")
+r = login("admin@skit.edu.in", TEMP_ADM)
 d = check("POST /api/auth/login (institution_admin)", r,
           show=["user.must_change_password", "user.role"])
 if not d:
@@ -110,7 +113,7 @@ if not d:
 IA_TEMP = d["token"]
 
 r = requests.post(f"{API}/auth/change-password", headers=H(IA_TEMP), json={
-    "current_password": "Welcome@2026",
+    "current_password": TEMP_ADM,
     "new_password": "SkitAdmin@2026",
 })
 d = check("POST /api/auth/change-password", r, show=["message"])

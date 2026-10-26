@@ -2680,6 +2680,73 @@ def analytics_attendance():
     }), 200
 
 
+@institution_ext_bp.route('/analytics/spark', methods=['GET'])
+@require_role('institution_admin')
+def analytics_spark():
+    """
+    Institution-wide SPARK 5D behavioral score aggregation from student_rankings:
+    per-student dimension scores (mastery/engagement/effort/efficiency/consistency),
+    weighted final score, rank position, and institution averages.
+    """
+    from app.models.knowledge import StudentRanking
+    from app.models.academic import SectionSubject
+
+    start, end = _date_window(30)
+    student_filter = request.args.get('student_id')
+    dept_id = request.args.get('department_id')
+    sec_id = request.args.get('section_id')
+
+    q = (db.session.query(StudentRanking, User)
+         .join(User, StudentRanking.student_id == User.id)
+         .filter(StudentRanking.institution_id == g.institution_id,
+                 StudentRanking.updated_at >= start,
+                 StudentRanking.updated_at <= end))
+    if student_filter:
+        q = q.filter(StudentRanking.student_id == student_filter)
+
+    ss_filter = q.join(SectionSubject, StudentRanking.section_subject_id == SectionSubject.id)
+    if dept_id:
+        ss_filter = ss_filter.filter(SectionSubject.department_id == dept_id)
+    if sec_id:
+        ss_filter = ss_filter.filter(SectionSubject.section_id == sec_id)
+
+    rows = ss_filter.order_by(StudentRanking.rank_score.desc()).all()
+
+    students = []
+    for rk, u in rows:
+        students.append({
+            'student_id': rk.student_id,
+            'name': u.full_name,
+            'roll_number': u.roll_number,
+            'mastery': round(float(rk.mastery_score or 0), 1),
+            'engagement': round(float(rk.engagement_score or 0), 1),
+            'effort': round(float(rk.effort_score or 0), 1),
+            'efficiency': round(float(rk.efficiency_score or 0), 1),
+            'consistency': round(float(rk.consistency_score or 0), 1),
+            'overall': round(float(rk.rank_score or 0), 1),
+            'rank_position': rk.rank_position,
+        })
+
+    def _avg(key):
+        vals = [s[key] for s in students]
+        return round(sum(vals) / len(vals), 1) if vals else None
+
+    return jsonify({
+        'total_rankings': len(students),
+        'unique_students': len({s['student_id'] for s in students}),
+        'institution_avg': {
+            'overall': _avg('overall'),
+            'mastery': _avg('mastery'),
+            'engagement': _avg('engagement'),
+            'effort': _avg('effort'),
+            'efficiency': _avg('efficiency'),
+            'consistency': _avg('consistency'),
+        },
+        'students': students[:25],
+        'period': {'from': start.isoformat(), 'to': end.isoformat()},
+    }), 200
+
+
 # ── 3. Behavior & Proctoring / Integrity Analytics ───────────────────────────
 
 @institution_ext_bp.route('/analytics/behavior', methods=['GET'])

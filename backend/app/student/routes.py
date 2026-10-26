@@ -1918,7 +1918,7 @@ def submit_viva(module_id):
     if not isinstance(answers, dict):
         return jsonify({'error': 'answers must be an object keyed by question index.'}), 400
 
-    from app.ai.groq_client import groq_chat
+    from app.ai.gate import guarded_ai_call, AIDisabled, AIQuotaExceeded
     import json as _json
     import re as _re
 
@@ -1949,8 +1949,7 @@ def submit_viva(module_id):
             {'role': 'user', 'content': user_msg},
         ]
         try:
-            from app.ai.gate import guarded_ai_call
-            response, _, _, _ = guarded_ai_call(
+            response, _, is_fallback, _ = guarded_ai_call(
                 feature='viva',
                 institution_id=g.institution_id,
                 user_id=g.user_id,
@@ -1960,20 +1959,24 @@ def submit_viva(module_id):
                 max_tokens=80,
                 temperature=0.1,
             )
-            match = _re.search(r'\{.*\}', response or '', _re.DOTALL)
-            parsed = _json.loads(match.group()) if match else {}
-            q_score = int(parsed.get('score', 5))
+            if is_fallback or not response:
+                return jsonify({'error': 'Automated viva evaluation is temporarily unavailable.'}), 503
+            match = _re.search(r'\{.*\}', response, _re.DOTALL)
+            if not match:
+                return jsonify({'error': 'Automated viva evaluation returned an invalid result.'}), 503
+            parsed = _json.loads(match.group())
+            if not isinstance(parsed, dict) or 'score' not in parsed:
+                return jsonify({'error': 'Automated viva evaluation returned an invalid result.'}), 503
+            q_score = int(parsed['score'])
             feedback = str(parsed.get('feedback', ''))[:300]
+        except AIDisabled as exc:
+            return jsonify({'error': exc.reason}), 403
+        except AIQuotaExceeded as exc:
+            return jsonify({'error': exc.reason, 'quota': exc.quota, 'used': exc.used}), 429
         except Exception:
-            try:
-                response, _, _, _ = groq_chat(messages, pool='fast', max_tokens=80, temperature=0.1)
-                match = _re.search(r'\{.*\}', response or '', _re.DOTALL)
-                parsed = _json.loads(match.group()) if match else {}
-                q_score = int(parsed.get('score', 5))
-                feedback = str(parsed.get('feedback', ''))[:300]
-            except Exception:
-                q_score = 5
-                feedback = 'Could not evaluate automatically.'
+            # Do not bypass the AI policy gate or silently award a neutral score
+            # when automated evaluation is unavailable.
+            return jsonify({'error': 'Automated viva evaluation is temporarily unavailable.'}), 503
         q_score = max(0, min(10, q_score))
         total_score += q_score
         per_question.append({'index': i, 'score': q_score, 'feedback': feedback})
