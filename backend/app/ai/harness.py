@@ -597,7 +597,7 @@ def _run_deterministic_autonomous_fallback(prompt: str, role_key: str, role_tool
             _call('query_submissions_and_plagiarism')
         elif any(w in p_lower for w in ('error', 'mistake', 'bug', 'fail')):
             _call('get_common_errors')
-        else:
+        elif any(w in p_lower for w in ('analytic', 'stat', 'metric', 'attendance', 'at-risk', 'student list')):
             _call('get_section_analytics')
 
     elif role_key == 'institution_admin':
@@ -632,7 +632,7 @@ def _run_deterministic_autonomous_fallback(prompt: str, role_key: str, role_tool
             _call('query_academic_catalog_deep')
         elif any(w in p_lower for w in ('report', 'naac', 'nba', '/report')):
             _call('generate_executive_report', report_type='naac_nba_accreditation' if 'naac' in p_lower or 'nba' in p_lower else 'executive_summary')
-        else:
+        elif any(w in p_lower for w in ('analytic', 'stat', 'metric', 'domain', 'grade')):
             _call('query_analytics_domain', domain='grades')
 
     elif role_key == 'student':
@@ -654,7 +654,7 @@ def _run_deterministic_autonomous_fallback(prompt: str, role_key: str, role_tool
             _call('get_upcoming_sessions_and_exams')
         elif any(w in p_lower for w in ('hint', 'stuck', 'clue')):
             _call('get_socratic_hint')
-        else:
+        elif any(w in p_lower for w in ('code', 'analyze', 'review', 'check code')):
             _call('analyze_my_code')
 
     elif role_key == 'platform_user':
@@ -666,7 +666,7 @@ def _run_deterministic_autonomous_fallback(prompt: str, role_key: str, role_tool
             _call('enroll_and_build_study_plan')
         elif any(w in p_lower for w in ('recommend', 'next', 'problem')):
             _call('recommend_next_problem')
-        else:
+        elif any(w in p_lower for w in ('stat', 'practice', 'progress', 'score')):
             _call('get_my_practice_stats')
 
     elif role_key == 'admin':
@@ -678,7 +678,7 @@ def _run_deterministic_autonomous_fallback(prompt: str, role_key: str, role_tool
             _call('autonomous_create_platform_course_or_contest', entity_type='contest' if 'contest' in p_lower else 'platform_course', title=title)
         elif any(w in p_lower for w in ('list institution', 'institutions', 'tenants')):
             _call('list_platform_institutions')
-        else:
+        elif any(w in p_lower for w in ('overview', 'platform', 'stats', 'system')):
             _call('get_platform_overview')
 
     return executed
@@ -830,38 +830,48 @@ def run_harness_turn(prompt: str, institution_id: str, user_id: str, role: str,
 
     gate_feature = 'chat' if role_key in ('student', 'platform_user') else 'agent'
 
+    # Fast path for conversational greetings or capabilities inquiries in chat mode
+    is_pure_convo = False
+    if mode == 'chat' and not matched_cmd and not doc_id and not web_search_enabled:
+        trimmed_p = p_lower.strip(' ?.!/,')
+        if trimmed_p in (
+            'hi', 'hello', 'hey', 'greetings', 'help', 'wt can u do', 'what can you do',
+            'what can u do', 'what are your capabilities', 'who are you', 'how can you help me',
+            'tell me about yourself'
+        ) or (len(trimmed_p.split()) <= 4 and any(w in trimmed_p for w in ('what can', 'wt can', 'how can you', 'who are you'))):
+            is_pure_convo = True
+
+    planner_concluded_no_tool = False
+
     # 4. Claw-Code Multi-Turn QueryEngine Loop (Up to 6 Chained Tool Calls!)
-    for _turn in range(ENGINE_CONFIG.max_turns):
-        if usage_summary.total_tokens >= ENGINE_CONFIG.max_budget_tokens:
-            break
+    if not is_pure_convo:
+        turn_limit = 2 if mode == 'chat' else ENGINE_CONFIG.max_turns
+        for _turn in range(turn_limit):
+            if usage_summary.total_tokens >= ENGINE_CONFIG.max_budget_tokens:
+                break
 
-        text, _model, is_fallback, usage = guarded_ai_call(
-            gate_feature,
-            institution_id=institution_id,
-            user_id=user_id,
-            role=role_key,
-            messages=planner_history,
-            pool='quality',
-            # A plan is a small {"tool", "args"} JSON; a tight budget keeps
-            # generation fast and cheap (a stalled 2048-token request on a slow
-            # provider costs far more than a 512-token one).
-            max_tokens=512,
-            temperature=0.1,
-            # Low reasoning effort keeps tool-planning fast and the JSON plan
-            # intact (json_mode/response_format breaks reasoning separation on
-            # the free fallback model); the lenient extractor parses the plan.
-            reasoning_effort='low',
-        )
-        usage_summary = usage_summary.add(usage)
+            text, _model, is_fallback, usage = guarded_ai_call(
+                gate_feature,
+                institution_id=institution_id,
+                user_id=user_id,
+                role=role_key,
+                messages=planner_history,
+                pool='quality',
+                max_tokens=512,
+                temperature=0.1,
+                reasoning_effort='low',
+            )
+            usage_summary = usage_summary.add(usage)
 
-        if is_fallback or not text:
-            planner_unavailable = True
-            break
+            if is_fallback or not text:
+                planner_unavailable = True
+                break
 
-        plan = _extract_json(text)
-        tool_name = plan.get('tool')
-        if not tool_name:
-            break
+            plan = _extract_json(text)
+            tool_name = plan.get('tool')
+            if not tool_name:
+                planner_concluded_no_tool = True
+                break
 
         entry = role_tools.get(tool_name)
         if not entry:
