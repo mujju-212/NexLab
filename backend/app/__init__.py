@@ -272,27 +272,8 @@ def create_app(config_name=None):
     def health():
         return {'status': 'ok', 'service': 'virtual-lab-api'}, 200
 
-    # ── Test UI route (dev only) ───────────────────────────────────────────
-    import os as _os
-    @app.route('/test')
-    def test_ui():
-        from flask import send_file
-        ui_path = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'test_ui.html')
-        return send_file(ui_path)
-
-    @app.route('/student-test')
-    def student_test():
-        from flask import send_file
-        p = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'test_live_student.html')
-        return send_file(p)
-
-    @app.route('/instructor-test')
-    def instructor_test():
-        from flask import send_file
-        p = _os.path.join(_os.path.dirname(_os.path.dirname(__file__)), 'test_live_instructor.html')
-        return send_file(p)
-
     # ── Serve workspace (platform courses) as static files ────────────────────
+    import os as _os
     @app.route('/workspace/')
     @app.route('/workspace/<path:filename>')
     def serve_workspace(filename='index.html'):
