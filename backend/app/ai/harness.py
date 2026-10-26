@@ -626,6 +626,10 @@ def _run_deterministic_autonomous_fallback(prompt: str, role_key: str, role_tool
         elif any(w in p_lower for w in ('create experiment', 'build experiment', '/experiment', 'crea experiment', 'crea teh', 'create topic')):
             title = _extract_quoted_or_tail(prompt, 'Algorithms & Data Structures Lab')
             _call('build_complete_experiment_suite', title=title)
+        elif any(w in p_lower for w in ('student count', 'how many student', 'total student', 'enrolled student', 'user count', 'users count', 'number of student')):
+            _call('search_users_directory', role='student')
+        elif any(w in p_lower for w in ('structure', 'campus', 'departments', 'sections', 'batches')):
+            _call('query_academic_structure')
         elif any(w in p_lower for w in ('audit', 'security')):
             _call('query_audit_and_security_logs')
         elif any(w in p_lower for w in ('catalog', 'unassigned', 'hierarchy')):

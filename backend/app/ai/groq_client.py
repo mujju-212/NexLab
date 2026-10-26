@@ -46,12 +46,12 @@ REASONING_EFFORT_MODELS = set()
 # OpenRouter Free Models Pool (100% verified active sub-second models)
 
 OPENROUTER_MODELS = [
-    'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',  # 0.32s ultra-fast
-    'cohere/north-mini-code:free',                          # 0.73s coding specialized
-    'minimax/minimax-m3:free',                              # 1.29s fast chat
-    'minimax/minimax-m2.7:free',                            # 1.54s general chat
-    'inclusionai/ling-3.0-flash-fin:free',                  # 2.55s financial/general
+    'liquid/lfm-2.5-2.6b:free',                             # fast general chat
+    'nvidia/nemotron-3.5-lightning:free',                  # fast reasoning/general
+    'cohere/north-mini-code:free',                         # coding specialized
+    'nvidia/nemotron-3-nano-omni-30b-a3b-reasoning:free',  # fallback
 ]
+
 
 # Cooldowns applied per failure type (seconds)
 COOLDOWN_RATE_LIMIT = 60     # 429: token / request limit — rest a minute

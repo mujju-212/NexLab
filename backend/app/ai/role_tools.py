@@ -3348,7 +3348,15 @@ def admin_query_academic_catalog_deep(**_):
         if cnt == 0:
             empty_sections.append({'id': sec.id, 'name': sec.name, 'max_students': sec.max_students})
 
+    total_students = User.query.filter_by(institution_id=iid, role='student').count()
+    total_instructors = User.query.filter_by(institution_id=iid, role='instructor').count()
+    total_enrolled = db.session.query(SectionStudent).join(Section, SectionStudent.section_id == Section.id).filter(Section.institution_id == iid).count()
+
     return {
+        'summary': f"Institution has {total_students} student accounts ({total_enrolled} enrolled in sections), {total_instructors} instructors, {len(depts)} departments, and {len(sections)} sections.",
+        'total_students': total_students,
+        'total_enrolled_students': total_enrolled,
+        'total_instructors': total_instructors,
         'academic_years': [y.to_dict() for y in years],
         'departments': [d.to_dict() for d in depts],
         'batches': [b.to_dict() for b in batches],

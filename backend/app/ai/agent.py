@@ -491,6 +491,11 @@ def tool_query_academic_structure(department_name: str = None, **_):
     if not inst_id:
         raise AgentToolError('Missing institution context')
 
+    total_students = User.query.filter_by(institution_id=inst_id, role='student').count()
+    total_instructors = User.query.filter_by(institution_id=inst_id, role='instructor').count()
+    total_sections = Section.query.filter_by(institution_id=inst_id).count()
+    total_enrolled = db.session.query(SectionStudent).join(Section, SectionStudent.section_id == Section.id).filter(Section.institution_id == inst_id).count()
+
     depts_q = Department.query.filter_by(institution_id=inst_id, is_active=True)
     if department_name:
         depts_q = depts_q.filter(Department.name.ilike(f"%{department_name.strip()}%"))
@@ -499,7 +504,10 @@ def tool_query_academic_structure(department_name: str = None, **_):
     structure = []
     for d in departments:
         # Batches & sections
-        batches = Batch.query.filter_by(institution_id=inst_id).all()
+        batches_q = Batch.query.filter_by(institution_id=inst_id)
+        if hasattr(Batch, 'department_id'):
+            batches_q = batches_q.filter(or_(Batch.department_id == d.id, Batch.department_id.is_(None)))
+        batches = batches_q.all()
         dept_sections = []
         for b in batches:
             secs = Section.query.filter_by(batch_id=b.id, institution_id=inst_id).all()
@@ -532,7 +540,12 @@ def tool_query_academic_structure(department_name: str = None, **_):
         })
 
     return {
+        'summary': f"Institution has {total_students} student accounts ({total_enrolled} enrolled in sections), {total_instructors} instructors, {len(departments)} departments, and {total_sections} sections.",
+        'total_students': total_students,
+        'total_enrolled_students': total_enrolled,
+        'total_instructors': total_instructors,
         'total_departments': len(departments),
+        'total_sections': total_sections,
         'departments': structure,
     }
 

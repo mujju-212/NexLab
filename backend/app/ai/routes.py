@@ -1146,6 +1146,12 @@ def send_chat_message():
     except AgentQuotaExceeded as e:
         db.session.rollback()
         return jsonify({'error': e.reason}), 429
+    except Exception as exc:
+        db.session.rollback()
+        import logging
+        logging.getLogger(__name__).error("AI Harness turn execution error: %s", exc, exc_info=True)
+        return jsonify({'error': f'AI Assistant error: {str(exc)}'}), 500
+
 
     # Record Assistant Message
     assistant_msg = AdminChatMessage(
