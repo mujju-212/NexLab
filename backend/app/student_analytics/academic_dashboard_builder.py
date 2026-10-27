@@ -346,7 +346,11 @@ def build_academic_dashboard_payload(
             weekly_overall_buckets[w_idx].append(val)
             exp = exp_cache.get(g.experiment_id)
             if exp:
-                s_c = _normalize_subject_code(exp.subject.code if getattr(exp, 'subject', None) else 'DSA')
+                # Bucket under the subject's RAW code — the trend series are
+                # keyed by the same raw codes from subject_performance_list, so
+                # a normalized key here ('CS3401' → 'DSA') never matched and
+                # every subject line rendered empty.
+                s_c = (exp.subject.code if getattr(exp, 'subject', None) else None) or 'DSA'
                 subject_weekly_buckets[s_c][w_idx].append(val)
 
     # P3: weeks with no graded work are gaps (None) — they used to be filled
