@@ -542,3 +542,180 @@ def playground_run():
     result['label']    = f"{spec['label']} {spec['version']}"
     result['engine']   = 'docker'
     return jsonify(result), 200
+
+
+def _clean_and_parse_json(raw: str):
+    if not raw:
+        return None
+    text = raw.strip()
+    if text.startswith('```'):
+        lines = text.split('\n')
+        if lines[0].startswith('```'):
+            lines = lines[1:]
+        if lines and lines[-1].strip().startswith('```'):
+            lines = lines[:-1]
+        text = '\n'.join(lines).strip()
+    import json
+    try:
+        return json.loads(text)
+    except Exception:
+        start = text.find('{')
+        end = text.rfind('}')
+        if start != -1 and end != -1 and end > start:
+            try:
+                return json.loads(text[start:end+1])
+            except Exception:
+                pass
+    return None
+
+
+def _generate_ai_execution_trace(code: str, language: str, stdin: str = '', actual_stdout: str = '', compile_error: str = ''):
+    if compile_error:
+        return {'steps': [], 'tail': '', 'error': compile_error, 'success': False}
+
+    from app.ai.groq_client import groq_chat
+
+    numbered_code = "\n".join(f"{i+1:2d} | {line}" for i, line in enumerate(code.split("\n")))
+
+    system_prompt = (
+        "You are an expert compiler and runtime debugger execution tracer for an educational CS IDE.\n"
+        "Your task is to generate a step-by-step runtime execution trace of code in any language (such as C, C++, Java, JavaScript, TypeScript, C#, Python, etc.).\n\n"
+        "You must output ONLY a valid JSON object matching this schema:\n"
+        "{\n"
+        '  "steps": [\n'
+        "    {\n"
+        '      "line": <1-based integer line number currently being executed in the user code>,\n'
+        '      "event": "line" | "call" | "return",\n'
+        '      "out": "<new stdout text emitted on this specific step, or empty string>",\n'
+        '      "scopes": [\n'
+        "        {\n"
+        '          "name": "<function name or \'main\' or \'Global\'>",\n'
+        '          "vars": {\n'
+        '            "<var_name>": "<string representation of current value>"\n'
+        "          }\n"
+        "        }\n"
+        "      ],\n"
+        '      "ret": <string return value if event is \'return\', otherwise null>,\n'
+        '      "explanation": "<short clear 1-sentence plain-English explanation of what happens on this step>"\n'
+        "    }\n"
+        "  ],\n"
+        '  "tail": ""\n'
+        "}\n\n"
+        "Rules:\n"
+        "1. 'line' must match the line numbers in the provided code.\n"
+        "2. Trace strictly in order of execution (control flow, loops, conditions, method calls).\n"
+        "3. 'out' must ONLY contain the new text printed during that step. The concatenated sequence of all 'out' deltas must match the actual output.\n"
+        "4. Maximum steps: 60. If loops run for many iterations, trace the first 10-15 iterations and then finish with the final return step.\n"
+        "5. Keep variable string values compact and readable (e.g. '1', '\"NexLab\"', '[1, 2]').\n"
+        "6. Output ONLY raw JSON, with no markdown fences or introductory comments."
+    )
+
+    user_prompt = (
+        f"Language: {language}\n\n"
+        f"Source Code:\n{numbered_code}\n\n"
+        f"Standard Input (stdin):\n{stdin or '(none)'}\n\n"
+        f"Actual Program Output:\n{actual_stdout or '(no output)'}\n\n"
+        "Generate the complete execution trace JSON now:"
+    )
+
+    messages = [
+        {"role": "system", "content": system_prompt},
+        {"role": "user", "content": user_prompt}
+    ]
+
+    try:
+        content, model, is_fallback, _ = groq_chat(
+            messages, pool="fast", max_tokens=2500, temperature=0.1, json_mode=True
+        )
+        parsed = _clean_and_parse_json(content) if content else None
+        if parsed and isinstance(parsed.get('steps'), list) and len(parsed['steps']) > 0:
+            steps = []
+            for s in parsed['steps']:
+                if not isinstance(s, dict):
+                    continue
+                line = s.get('line')
+                if not isinstance(line, int):
+                    try:
+                        line = int(line)
+                    except (ValueError, TypeError):
+                        continue
+                scopes = s.get('scopes') if isinstance(s.get('scopes'), list) else []
+                clean_scopes = []
+                for sc in scopes:
+                    if isinstance(sc, dict):
+                        clean_scopes.append({
+                            'name': str(sc.get('name') or 'Scope'),
+                            'vars': {str(k): str(v) for k, v in (sc.get('vars') or {}).items()} if isinstance(sc.get('vars'), dict) else {}
+                        })
+                steps.append({
+                    'line': line,
+                    'event': s.get('event') if s.get('event') in ('line', 'call', 'return') else 'line',
+                    'out': str(s.get('out') or ''),
+                    'scopes': clean_scopes,
+                    'ret': str(s.get('ret')) if s.get('ret') is not None else None,
+                    'explanation': str(s.get('explanation') or ''),
+                })
+            if steps:
+                return {'steps': steps, 'tail': str(parsed.get('tail') or ''), 'success': True}
+    except Exception as e:
+        current_app.logger.warning(f"AI trace generation error: {e}")
+
+    return {
+        'steps': [],
+        'tail': '',
+        'error': 'Could not generate visualizer trace for this code. Please try again.',
+        'success': False
+    }
+
+
+@execution_bp.route('/trace', methods=['POST', 'OPTIONS'])
+@require_auth
+@limiter.limit("20 per minute")
+def playground_trace():
+    if request.method == 'OPTIONS':
+        return '', 204
+    """
+    Generate step-through execution trace for any supported programming language.
+    Executes in sandbox (when enabled) to capture real compile errors and stdout,
+    then generates a synchronized step-through trace state.
+    """
+    data        = request.get_json(silent=True) or {}
+    code        = data.get('code') or ''
+    stdin       = data.get('stdin') or ''
+    language    = data.get('language') or 'python'
+    packages    = data.get('packages')
+    extra_files = data.get('files') or data.get('extra_files')
+
+    spec = resolve_language(language)
+    if not spec:
+        return jsonify({'error': f'Unsupported language: {language}'}), 400
+    if spec['engine'] == 'browser':
+        return jsonify({'error': 'Browser languages run client-side only.'}), 400
+    if not code.strip():
+        return jsonify({'error': 'Nothing to visualize — editor is empty.'}), 400
+    if len(code) > MAX_CODE_CHARS:
+        return jsonify({'error': f'Source is too large (limit {MAX_CODE_CHARS:,} characters).'}), 413
+    if len(stdin) > MAX_STDIN_CHARS:
+        return jsonify({'error': f'Input is too large (limit {MAX_STDIN_CHARS:,} characters).'}), 413
+
+    actual_stdout = ''
+    compile_err = ''
+
+    # If Docker runner is available, execute to obtain real stdout or compilation errors
+    if execution_is_enabled():
+        result, error = _run_docker(code, spec['id'], stdin, g.user_id, packages=packages, extra_files=extra_files)
+        if error:
+            return error
+        if result:
+            if result.get('is_compile_error') or result.get('compile_output'):
+                compile_err = result.get('compile_output') or result.get('stderr') or 'Compilation error'
+            actual_stdout = result.get('stdout') or ''
+
+    trace_data = _generate_ai_execution_trace(
+        code=code,
+        language=spec['id'],
+        stdin=stdin,
+        actual_stdout=actual_stdout,
+        compile_error=compile_err,
+    )
+    return jsonify(trace_data), 200

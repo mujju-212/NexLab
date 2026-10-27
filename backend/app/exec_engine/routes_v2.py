@@ -17,7 +17,7 @@ exec_v2_bp = Blueprint('exec_v2', __name__)
 
 # Images backing the Docker language specs — used for the health endpoint
 _DOCKER_IMAGES = [
-    'python:3.14-slim',
+    'nexlab/python:3.12',
     'gcc:16',
     'r-base:latest',
     'nexlab/csharp:10',
