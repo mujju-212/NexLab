@@ -272,6 +272,7 @@ def mark_onboarding_complete(iid):
         }), 409
     inst.onboarding_status = 'active'
     inst.onboarding_completed_at = datetime.utcnow()
+    inst.onboarded_at = inst.onboarding_completed_at
     _audit_platform('admin.institution.onboarding_complete', 'institution', inst.id,
                     'Marked institution onboarding complete.', severity='medium')
     db.session.commit()
@@ -284,6 +285,7 @@ def reset_onboarding(iid):
     inst = Institution.query.get_or_404(iid)
     inst.onboarding_status = 'pending'
     inst.onboarding_completed_at = None
+    inst.onboarded_at = None
     _audit_platform('admin.institution.onboarding_reset', 'institution', inst.id,
                     'Reset institution onboarding to pending.', severity='medium')
     db.session.commit()
