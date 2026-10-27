@@ -19,7 +19,9 @@ class Institution(db.Model):
     website         = db.Column(db.Text)                # must start with http:// or https://
     plan            = db.Column(db.String(20), default='free')   # free | pro | enterprise
     is_active       = db.Column(db.Boolean, default=True)
-    onboarded_at    = db.Column(db.DateTime, default=datetime.utcnow)
+    # Timestamp is stamped when onboarding COMPLETES, not at creation —
+    # a fresh tenant has no users/experiments yet and must show as pending.
+    onboarded_at    = db.Column(db.DateTime)
 
     # ── Billing ──────────────────────────────────────────────────────────
     plan_updated_at        = db.Column(db.DateTime)
@@ -32,8 +34,8 @@ class Institution(db.Model):
     billing_contact_person = db.Column(db.String(100), default='Institution Admin')
 
     # ── Onboarding workflow ───────────────────────────────────────────────
-    # status: pending | active | suspended
-    onboarding_status       = db.Column(db.String(20), default='active')
+    # status: pending | active | suspended — new tenants start 'pending'
+    onboarding_status       = db.Column(db.String(20), default='pending')
     onboarding_completed_at = db.Column(db.DateTime)
     # checklist flags (set true as each step is done)
     has_users               = db.Column(db.Boolean, default=False)
