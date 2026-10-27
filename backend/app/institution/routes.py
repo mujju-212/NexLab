@@ -332,7 +332,9 @@ def create_user():
         return jsonify({'error': "role must be 'student', 'instructor' or 'institution_admin'"}), 400
 
     # department_id must belong to this institution when supplied.
-    department_id = data.get('department_id')
+    # Frontend sends '' when the admin leaves the department blank — treat any
+    # empty/whitespace value as NULL, otherwise the INSERT violates the FK.
+    department_id = (data.get('department_id') or '').strip() or None
     if department_id:
         if not Department.query.filter_by(
                 id=department_id, institution_id=g.institution_id).first():
@@ -368,7 +370,7 @@ def create_user():
         year_of_study=data.get('year_of_study'),
         semester=data.get('semester'),
         phone=data.get('phone'),
-        location=data.get('location') or 'Bengaluru, Karnataka',
+        location=(data.get('location') or '').strip() or None,
     )
     db.session.add(user)
     db.session.flush()
@@ -1405,8 +1407,10 @@ def _ss_dict(ss, section=None, subject=None):
         'subject_code':        subject.code if subject else None,
         'instructor_id':       ss.instructor_id,
         'instructor_name':     lead.full_name if lead else None,
+        'instructor_email':    lead.email if lead else None,
         'co_instructor_id':    ss.co_instructor_id,
         'co_instructor_name':  co.full_name if co else None,
+        'co_instructor_email': co.email if co else None,
         'created_at':          ss.created_at.isoformat() if ss.created_at else None,
     }
 
@@ -1635,8 +1639,10 @@ def list_section_subjects():
             'subject_code':        sub.code if sub else None,
             'instructor_id':       ss.instructor_id,
             'instructor_name':     lead.full_name if lead else None,
+            'instructor_email':    lead.email if lead else None,
             'co_instructor_id':    ss.co_instructor_id,
             'co_instructor_name':  co.full_name if co else None,
+            'co_instructor_email': co.email if co else None,
             'created_at':          ss.created_at.isoformat() if ss.created_at else None,
         })
     return jsonify({'section_subjects': result}), 200
@@ -2481,14 +2487,63 @@ def get_audit_log_stats():
             'action': most_common_action[0][0] if most_common_action else 'Login',
             'count': most_common_action[0][1] if most_common_action else 0,
         },
-        'peak_activity_time': peak_time_window,
+        'peak_activity_time': {'range': peak_time_window},
         'top_module': {
             'module': by_module[0]['module'] if by_module else 'Sessions',
             'count': by_module[0]['count'] if by_module else 0,
         },
     }
 
+    # Growth string for the KPI card — honest when there is no prior period.
+    if prev_events > 0:
+        growth_str = f"{'↑' if total_events >= prev_events else '↓'} {abs(growth_pct)}% from last month"
+    else:
+        growth_str = 'No previous-period data'
+
+    # The dashboard shape the audit-log page consumes (flat keys above are
+    # kept for backward compatibility with older callers).
+    activity_overview = [
+        {'date': d['date'], 'day': d['label'], 'count': d['count']}
+        for d in daily_series
+    ]
+    module_palette = ['#7c3aed', '#2563eb', '#0d9488', '#ea580c', '#db2777', '#475569', '#9333ea', '#0891b2']
+    events_by_module = [
+        {
+            'module': m['module'],
+            'count': m['count'],
+            'color': module_palette[i % len(module_palette)],
+        }
+        for i, m in enumerate(by_module)
+    ]
+    recent_critical_events = [
+        {
+            'id': r['id'],
+            'title': r['title'],
+            'actor': r['actor_name'],
+            'actor_id': None,
+            'created_at': r['timestamp'],
+            'formatted_time': r['timestamp'],
+            'module': (r.get('action') or 'general').replace('_', ' ').capitalize(),
+            'detail': r['title'],
+        }
+        for r in recent_critical
+    ]
+    kpis = {
+        'total_events': total_events,
+        'total_events_change': growth_str,
+        'active_users': active_users,
+        'active_users_subtitle': 'Performed actions',
+        'modules_affected': modules_count,
+        'modules_subtitle': 'Affected',
+        'critical_events': critical_events,
+        'critical_events_badge': 'Requires attention' if critical_events else 'All clear',
+    }
+
     return jsonify({
+        'kpis': kpis,
+        'activity_overview': activity_overview,
+        'events_by_module': events_by_module,
+        'recent_critical_events': recent_critical_events,
         'total_events': total_events,
         'events_growth_pct': growth_pct,
         'active_users': active_users,
@@ -3069,7 +3124,7 @@ def students_at_risk():
         if band_filter and band_filter.lower() != 'all':
             if band.lower() != band_filter.lower():
                 continue
-        elif score < threshold:
+        elif score is None or score < threshold:
             continue
 
         results.append({
@@ -3176,7 +3231,10 @@ def section_comparison():
         sec_grades = [atomic_map[sid]['grade_avg']['value'] for sid in sids if atomic_map.get(sid, {}).get('grade_avg', {}).get('value') is not None]
         sec_atts = [atomic_map[sid]['attendance_rate']['value'] for sid in sids if atomic_map.get(sid, {}).get('attendance_rate', {}).get('value') is not None]
         sec_focus = [atomic_map[sid]['focus_avg']['value'] for sid in sids if atomic_map.get(sid, {}).get('focus_avg', {}).get('value') is not None]
-        sec_risks = [student_risk_map[sid]['risk_score'] for sid in sids if sid in student_risk_map]
+        sec_risks = [
+            student_risk_map[sid]['risk_score'] for sid in sids
+            if sid in student_risk_map and isinstance(student_risk_map[sid].get('risk_score'), (int, float))
+        ]
         crit_high_count = sum(1 for sid in sids if student_risk_map.get(sid, {}).get('is_at_risk'))
 
         avg_g = round(sum(sec_grades) / len(sec_grades), 1) if sec_grades else None
@@ -3590,7 +3648,10 @@ def analytics_benchmark():
             grades = [atomic[s]['grade_avg']['value'] for s in sids if atomic[s]['grade_avg']['value'] > 0]
             atts = [atomic[s]['attendance_rate']['value'] for s in sids]
             focus = [atomic[s]['focus_avg']['value'] for s in sids if atomic[s]['focus_avg']['value'] is not None]
-            risks = [compute_student_risk(atomic[s], cfg)['risk_score'] for s in sids]
+            risks = [
+                compute_student_risk(atomic[s], cfg)['risk_score'] for s in sids
+                if s in atomic and isinstance(compute_student_risk(atomic[s], cfg).get('risk_score'), (int, float))
+            ]
 
             entities.append({
                 'id': d.id,
@@ -4892,7 +4953,10 @@ def student_360_profile(student_id):
 
     # Completion calculation — Experiment uses is_published, not is_active.
     total_experiments = Experiment.query.filter_by(institution_id=iid, is_published=True).count()
-    completed_experiments = len(grades_data)
+    # A student can hold multiple grade rows (per attempt / component) for the
+    # same experiment — count DISTINCT experiments so "X of Y labs passed" can
+    # never exceed Y.
+    completed_experiments = len({g['experiment_id'] for g in grades_data if g.get('experiment_id')})
     completion_pct = round((completed_experiments / total_experiments * 100), 1) if total_experiments > 0 else 0.0
 
     return jsonify({

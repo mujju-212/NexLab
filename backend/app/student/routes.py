@@ -141,6 +141,8 @@ def my_subjects():
     from app.models.experiment import Experiment
     from app.models.grading import Grade
     from app.models.submission import CodeAttempt
+    from app.models.exam import ExamAttempt
+    from collections import defaultdict
 
     enrollments = SectionStudent.query.filter_by(student_id=g.user_id).all()
     section_ids = [e.section_id for e in enrollments]
@@ -151,52 +153,55 @@ def my_subjects():
     ).all() if section_ids else []
 
     result = []
-    for ss in section_subjects:
-        subject = Subject.query.get(ss.subject_id)
-        if not subject:
-            continue
+    if section_subjects:
+        subject_ids = [ss.subject_id for ss in section_subjects]
+        subjects_map = {s.id: s for s in Subject.query.filter(Subject.id.in_(subject_ids)).all()}
 
-        exps = Experiment.query.filter_by(
-            subject_id=subject.id,
-            institution_id=g.institution_id,
-            is_published=True
+        # Batch fetch all experiments for all subjects in 1 query
+        all_exps = Experiment.query.filter(
+            Experiment.subject_id.in_(subject_ids),
+            Experiment.institution_id == g.institution_id,
+            Experiment.is_published == True
         ).order_by(Experiment.exp_number).all()
-        exp_ids = [e.id for e in exps]
 
-        grades = {g_row.experiment_id: g_row for g_row in Grade.query.filter(
+        exps_by_subject = defaultdict(list)
+        all_exp_ids = []
+        for e in all_exps:
+            exps_by_subject[e.subject_id].append(e)
+            all_exp_ids.append(e.id)
+
+        # Batch fetch grades, attempts, exams, and modules across all experiments at once
+        grades_map = {g_row.experiment_id: g_row for g_row in Grade.query.filter(
             Grade.student_id == g.user_id,
-            Grade.experiment_id.in_(exp_ids)
-        ).all()} if exp_ids else {}
+            Grade.experiment_id.in_(all_exp_ids)
+        ).all()} if all_exp_ids else {}
 
-        attempts = CodeAttempt.query.filter(
+        all_attempts = CodeAttempt.query.filter(
             CodeAttempt.student_id == g.user_id,
-            CodeAttempt.experiment_id.in_(exp_ids)
-        ).all() if exp_ids else []
+            CodeAttempt.experiment_id.in_(all_exp_ids)
+        ).all() if all_exp_ids else []
 
         final_attempts = {
-            a.experiment_id: a for a in attempts
+            a.experiment_id: a for a in all_attempts
             if a.is_final_submission or (a.test_cases_passed and a.test_cases_passed == a.test_cases_total)
         }
-        any_attempts = {a.experiment_id: a for a in attempts}
+        any_attempts = {a.experiment_id: a for a in all_attempts}
 
-        from app.models.exam import ExamAttempt
-        from collections import defaultdict
-
-        exam_attempts = ExamAttempt.query.filter(
+        all_exam_attempts = ExamAttempt.query.filter(
             ExamAttempt.student_id == g.user_id,
-            ExamAttempt.experiment_id.in_(exp_ids)
-        ).all() if exp_ids else []
-        submitted_exams = {ea.experiment_id for ea in exam_attempts if ea.status == 'submitted'}
-        in_progress_exams = {ea.experiment_id for ea in exam_attempts if ea.status != 'submitted'}
+            ExamAttempt.experiment_id.in_(all_exp_ids)
+        ).all() if all_exp_ids else []
+        submitted_exams = {ea.experiment_id for ea in all_exam_attempts if ea.status == 'submitted'}
+        in_progress_exams = {ea.experiment_id for ea in all_exam_attempts if ea.status != 'submitted'}
 
-        exp_modules = ContentModule.query.filter(
-            ContentModule.experiment_id.in_(exp_ids)
-        ).all() if exp_ids else []
+        all_exp_modules = ContentModule.query.filter(
+            ContentModule.experiment_id.in_(all_exp_ids)
+        ).all() if all_exp_ids else []
         exp_mod_map = defaultdict(list)
-        for m in exp_modules:
+        for m in all_exp_modules:
             exp_mod_map[m.experiment_id].append(m.id)
 
-        all_mod_ids = [m.id for m in exp_modules]
+        all_mod_ids = [m.id for m in all_exp_modules]
         progress_rows = ContentProgress.query.filter(
             ContentProgress.student_id == g.user_id,
             ContentProgress.module_id.in_(all_mod_ids)
@@ -204,47 +209,53 @@ def my_subjects():
         completed_mod_set = {p.module_id for p in progress_rows if p.completed}
         any_mod_set = {p.module_id for p in progress_rows}
 
-        completed_count = 0
-        in_progress_count = 0
-        all_tags = []
-        for e in exps:
-            if e.concept_tags and isinstance(e.concept_tags, list):
-                for t in e.concept_tags:
-                    if t and t not in all_tags:
-                        all_tags.append(t)
-            e_mods = exp_mod_map.get(e.id, [])
-            all_mods_done = bool(e_mods and all(mid in completed_mod_set for mid in e_mods))
-            any_mods_touched = bool(e_mods and any(mid in any_mod_set for mid in e_mods))
+        for ss in section_subjects:
+            subject = subjects_map.get(ss.subject_id)
+            if not subject:
+                continue
 
-            if e.id in grades or e.id in final_attempts or e.id in submitted_exams or all_mods_done:
-                completed_count += 1
-            elif e.id in any_attempts or e.id in in_progress_exams or any_mods_touched:
-                in_progress_count += 1
+            exps = exps_by_subject.get(subject.id, [])
+            completed_count = 0
+            in_progress_count = 0
+            all_tags = []
+            for e in exps:
+                if e.concept_tags and isinstance(e.concept_tags, list):
+                    for t in e.concept_tags:
+                        if t and t not in all_tags:
+                            all_tags.append(t)
+                e_mods = exp_mod_map.get(e.id, [])
+                all_mods_done = bool(e_mods and all(mid in completed_mod_set for mid in e_mods))
+                any_mods_touched = bool(e_mods and any(mid in any_mod_set for mid in e_mods))
 
-        total_exps = len(exps)
-        pct = round((completed_count / total_exps) * 100) if total_exps > 0 else 0
-        if total_exps > 0 and completed_count >= total_exps:
-            sub_status = 'completed'
-        elif completed_count > 0 or in_progress_count > 0:
-            sub_status = 'in_progress'
-        else:
-            sub_status = 'not_started'
+                if e.id in grades_map or e.id in final_attempts or e.id in submitted_exams or all_mods_done:
+                    completed_count += 1
+                elif e.id in any_attempts or e.id in in_progress_exams or any_mods_touched:
+                    in_progress_count += 1
 
-        result.append({
-            'section_subject_id': ss.id,
-            'subject_id': ss.subject_id,
-            'subject_name': subject.name,
-            'subject_code': subject.code or '',
-            'icon': getattr(subject, 'icon', None) or 'datastruct',
-            'subject_icon': getattr(subject, 'icon', None) or 'datastruct',
-            'description': subject.description or '',
-            'instructor_id': ss.instructor_id,
-            'total_experiments': total_exps,
-            'completed_experiments': completed_count,
-            'progress_percentage': pct,
-            'status': sub_status,
-            'concept_tags': all_tags[:8],
-        })
+            total_exps = len(exps)
+            pct = round((completed_count / total_exps) * 100) if total_exps > 0 else 0
+            if total_exps > 0 and completed_count >= total_exps:
+                sub_status = 'completed'
+            elif completed_count > 0 or in_progress_count > 0:
+                sub_status = 'in_progress'
+            else:
+                sub_status = 'not_started'
+
+            result.append({
+                'section_subject_id': ss.id,
+                'subject_id': ss.subject_id,
+                'subject_name': subject.name,
+                'subject_code': subject.code or '',
+                'icon': getattr(subject, 'icon', None) or 'datastruct',
+                'subject_icon': getattr(subject, 'icon', None) or 'datastruct',
+                'description': subject.description or '',
+                'instructor_id': ss.instructor_id,
+                'total_experiments': total_exps,
+                'completed_experiments': completed_count,
+                'progress_percentage': pct,
+                'status': sub_status,
+                'concept_tags': all_tags[:8],
+            })
 
     if not result:
         fallback_subs = []
@@ -999,7 +1010,13 @@ def check_gate(session_id):
     # 'active' past its end time must not keep handing out room access.
     from datetime import timedelta as _td
     now_utc = datetime.utcnow()
-    starts_at = session.scheduled_at
+    # A session started early (status='active' with started_at set) opens its
+    # live window from the ACTUAL start — using scheduled_at here would lock
+    # students out of a session the instructor already began ("Start Early").
+    if session.status == 'active' and session.started_at:
+        starts_at = session.started_at
+    else:
+        starts_at = session.scheduled_at
     ends_at = (starts_at + _td(minutes=session.duration_minutes or 60)) if starts_at else None
     window_open = True
     window_state = 'open'
@@ -1012,6 +1029,11 @@ def check_gate(session_id):
             window_state = 'closed'
 
     can_join_live = session.status == 'active' and window_open
+
+    # Screen share is only compulsory when the session actually monitors the
+    # student (focus ML or lockdown). A session the instructor scheduled with
+    # proctoring off must not demand the student's screen to enter.
+    screen_share_required = bool(session.focus_ml_enabled or session.lockdown_enabled)
 
     # Mint the room token before creating attendance. If LiveKit is unavailable,
     # fail closed: a student must not be admitted without compulsory screen share.
@@ -1051,6 +1073,7 @@ def check_gate(session_id):
         'livekit_url':      current_app.config.get('LIVEKIT_URL', '') if can_join_live else '',
         'focus_ml_enabled': session.focus_ml_enabled,
         'lockdown_enabled': session.lockdown_enabled,
+        'screen_share_required': screen_share_required,
         'session_status':   session.status,
         'can_join_live':    can_join_live,
         'window_state':     window_state,
