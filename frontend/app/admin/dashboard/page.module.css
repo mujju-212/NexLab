@@ -159,5 +159,12 @@
   .welcomeMeta { gap: 8px; }
 }
 @media (max-width: 400px) {
-  .statGrid4 { grid-template-columns: 1fr; }
+  /* stay 2-col on small phones, compact the cards instead of stacking */
+  .statGrid4 { grid-template-columns: repeat(2,1fr); gap: 10px; }
+  .statCard { padding: 12px 13px 11px; }
+  .statIcon { width: 30px; height: 30px; border-radius: 10px; margin-bottom: 9px; }
+  .statLabel { font-size: 11px; margin-bottom: 5px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .statRow { gap: 6px; }
+  .statValue { font-size: 17px; }
+  .statSub { font-size: 10px; margin-top: 3px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 }
