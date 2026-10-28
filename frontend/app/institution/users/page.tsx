@@ -5,6 +5,7 @@ import { useSearchParams, useRouter } from 'next/navigation';
 import Image from 'next/image';
 import { keepPreviousData, useQuery, useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { confirmDialog } from '@/components/ui/confirm';
 import { toast } from '@/components/ui/toast';
 import {
   institutionService,
@@ -255,7 +256,7 @@ export default function UsersPage() {
   const handleBulkAction = async (action: 'activate' | 'deactivate' | 'force_logout') => {
     if (selectedIds.length === 0) return;
     const label = { activate: 'reactivate', deactivate: 'deactivate', force_logout: 'force logout' }[action];
-    if (!window.confirm(`Are you sure you want to ${label} ${selectedIds.length} user(s)?`)) return;
+    if (!(await confirmDialog({ title: `${label[0].toUpperCase() + label.slice(1)} ${selectedIds.length} user(s)?`, message: 'This applies to every selected user.', confirmLabel: label[0].toUpperCase() + label.slice(1), danger: action !== 'activate' }))) return;
 
     setBulkBusy(true);
     try {
@@ -540,9 +541,6 @@ export default function UsersPage() {
               <p className={styles.kpiValue}>{loading ? '—' : (stats?.total_users ?? counts.all)}</p>
               <p className={styles.kpiLabel}>Total Users</p>
               <div className={styles.kpiMeta}>
-                {stats?.total_users_growth && stats.total_users_growth !== '0%' && (
-                  <span className={styles.kpiGrowth}>↑ {stats.total_users_growth}</span>
-                )}
                 <span className={styles.kpiDelta}>{stats?.total_users_delta ?? (counts.all === 0 ? 'No users yet' : '0 this month')}</span>
               </div>
             </div>
@@ -560,9 +558,6 @@ export default function UsersPage() {
               <p className={styles.kpiValue}>{loading ? '—' : (stats?.students ?? counts.student)}</p>
               <p className={styles.kpiLabel}>Students</p>
               <div className={styles.kpiMeta}>
-                {stats?.students_growth && stats.students_growth !== '0%' && (
-                  <span className={styles.kpiGrowth}>↑ {stats.students_growth}</span>
-                )}
                 <span className={styles.kpiDelta}>{stats?.students_delta ?? (counts.student === 0 ? 'No students enrolled' : '0 this month')}</span>
               </div>
             </div>
@@ -580,9 +575,6 @@ export default function UsersPage() {
               <p className={styles.kpiValue}>{loading ? '—' : (stats?.instructors ?? counts.instructor)}</p>
               <p className={styles.kpiLabel}>Instructors</p>
               <div className={styles.kpiMeta}>
-                {stats?.instructors_growth && stats.instructors_growth !== '0%' && (
-                  <span className={styles.kpiGrowth}>↑ {stats.instructors_growth}</span>
-                )}
                 <span className={styles.kpiDelta}>{stats?.instructors_delta ?? (counts.instructor === 0 ? 'No instructors yet' : '0 this month')}</span>
               </div>
             </div>
@@ -854,6 +846,8 @@ export default function UsersPage() {
                               <td>
                                 {u.role === 'student' ? (
                                   <span className={styles.roleBadgeStudent}>Student</span>
+                                ) : u.role === 'institution_admin' ? (
+                                  <span className={styles.roleBadgeAdmin}>Admin</span>
                                 ) : (
                                   <span className={styles.roleBadgeInstructor}>Instructor</span>
                                 )}
@@ -1068,7 +1062,7 @@ export default function UsersPage() {
                 {filteredUsers.length > 0 && (
                   <div className={styles.paginationRow}>
                     <span>
-                      Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, filteredUsers.length)} of {filteredUsers.length} users
+                      Showing {(page - 1) * PAGE_SIZE + 1}–{Math.min(page * PAGE_SIZE, totalCount)} of {totalCount} users
                     </span>
 
                     <div className={styles.pageControls}>

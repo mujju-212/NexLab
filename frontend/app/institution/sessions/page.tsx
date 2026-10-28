@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useRef, useState } from 'rea
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { confirmDialog } from '@/components/ui/confirm';
 import { apiClient } from '@/services/api-client';
 import {
   institutionService,
@@ -1390,7 +1391,7 @@ function SessionsPageContent() {
   };
 
   const handleDeleteHistorySession = async (sessionId: string) => {
-    if (!confirm('Are you sure you want to delete this session from history? This action cannot be undone.')) return;
+    if (!(await confirmDialog({ title: 'Delete session from history?', message: 'The session record and its analytics will be removed. This cannot be undone.', confirmLabel: 'Delete', danger: true }))) return;
     try {
       await institutionService.deleteSession(sessionId);
       toast3('Session removed from history');
@@ -1625,7 +1626,7 @@ function SessionsPageContent() {
   };
 
   const handleDeletePlan = async (p: RecurringPlan) => {
-    if (!confirm(`Are you sure you want to delete "${p.name}"?`)) return;
+    if (!(await confirmDialog({ title: 'Delete recurring plan?', message: `"${p.name}" will no longer be scheduled automatically.`, confirmLabel: 'Delete', danger: true }))) return;
     try {
       await institutionService.deleteRecurringPlan(p.id);
       toast3(`Plan "${p.name}" deleted`);
@@ -1734,7 +1735,7 @@ function SessionsPageContent() {
 
   // Terminate Live session
   const terminateSession = async (sessionId: string) => {
-    if (!window.confirm('Are you sure you want to end this live lab session?')) return;
+    if (!(await confirmDialog({ title: 'End this live session?', message: 'All students will be removed from the live room and the session will move to history.', confirmLabel: 'End session', danger: true }))) return;
     try {
       await institutionService.terminateSession(sessionId);
       toast3('Session ended successfully.');
@@ -2177,11 +2178,11 @@ function SessionsPageContent() {
                     <div className={liveStyles.kpiProgressBarTrack}>
                       <div
                         className={liveStyles.kpiProgressBarFill}
-                        style={{ width: `${Math.min(100, liveSummary?.students_online_percent ?? 82)}%` }}
+                        style={{ width: `${Math.min(100, Math.max(0, liveSummary?.students_online_percent ?? 0))}%` }}
                       />
                     </div>
                     <span className={liveStyles.kpiProgressPercent}>
-                      {Math.round(liveSummary?.students_online_percent ?? 82)}%
+                      {Math.round(liveSummary?.students_online_percent ?? 0)}%
                     </span>
                   </div>
                 </div>
@@ -5798,8 +5799,8 @@ function SessionsPageContent() {
                 <div className={liveStyles.historyKpiContent}>
                   <div className={liveStyles.historyKpiVal}>{historyStats.total_sessions}</div>
                   <div className={liveStyles.historyKpiLbl}>Total Sessions</div>
-                  <div className={liveStyles.historyKpiSubtext} style={{ color: '#16a34a' }}>
-                    ↑ +12% from last month
+                  <div className={liveStyles.historyKpiSubtext} style={{ color: '#64748b' }}>
+                    All time
                   </div>
                 </div>
               </div>

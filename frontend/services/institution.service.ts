@@ -1121,7 +1121,16 @@ export interface Student360Data {
     risk_band: 'critical' | 'high' | 'watch' | 'ok';
     is_at_risk: boolean;
     primary_reason: string;
-    risk_contributions: Record<string, { weight: number; value: number; penalty: number; contribution_pct: number }>;
+    // Backend (app/analytics/risk.py) returns plain penalty numbers here,
+    // plus per-component 0–100 values and normalized weights alongside.
+    risk_contributions: Record<string, number>;
+    components?: Record<string, number | null>;
+    weights?: Record<string, number>;
+    coverage?: number;
+    factors_used?: string[];
+    factors_missing?: string[];
+    primary_component?: string | null;
+    risk_delta?: number | null;
     trend_arrow?: string;
   };
   metrics: Record<string, { value: number | null; sample_size: number; is_sufficient: boolean }>;

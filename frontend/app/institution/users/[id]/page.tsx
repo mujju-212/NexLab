@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useMemo } from 'react';
 import { useParams, useRouter } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
@@ -26,11 +26,8 @@ export default function UserDetailPage() {
   const { id } = useParams<{ id: string }>();
   const router  = useRouter();
   const queryClient = useQueryClient();
-  const [user,     setUser]     = useState<InstitutionUser | null>(null);
-  const [sections, setSections] = useState<UserEnrolment[]>([]);
-  const [teaching, setTeaching] = useState<SectionSubjectDetail[]>([]);
-  const [sessions, setSessions] = useState<any[]>([]);
   const [toast,    setToast]    = useState<string | null>(null);
+  const [activeOverride, setActiveOverride] = useState<boolean | null>(null);
 
   // Password reset modal state
   const [showResetModal, setShowResetModal] = useState(false);
@@ -46,22 +43,37 @@ export default function UserDetailPage() {
   // One call returns the profile, section enrolments, and teaching load.
   // Shares the ['institution','users','record',id] cache key with the users
   // list drawer — opening a profile right after browsing the list is instant.
-  const { isPending: loading, isError } = useQuery({
+  const { data, isPending: loading, isError } = useQuery({
     queryKey: ['institution', 'users', 'record', id],
-    queryFn: async () => {
-      const rec = await institutionService.getUser(id);
-      setUser(rec.user);
-      setSections(rec.enrolments ?? []);
-      setTeaching(rec.teaching ?? []);
-      // Instructors also get their conducted-session history.
-      if (rec.user.role === 'instructor') {
-        try { setSessions(await institutionService.getInstructorSessions(id)); } catch { /* non-fatal */ }
-      }
-      return rec;
-    },
+    queryFn: () => institutionService.getUser(id),
     staleTime: 30 * 1000,
     retry: false,
   });
+
+  const isInstructor = data?.user?.role === 'instructor';
+  const { data: sessions = [] } = useQuery({
+    queryKey: ['institution', 'users', id, 'sessions'],
+    queryFn: async () => {
+      try {
+        return await institutionService.getInstructorSessions(id);
+      } catch {
+        return [];
+      }
+    },
+    enabled: Boolean(isInstructor),
+    staleTime: 30 * 1000,
+  });
+
+  const user = useMemo(() => {
+    if (!data?.user) return null;
+    if (activeOverride !== null) {
+      return { ...data.user, is_active: activeOverride };
+    }
+    return data.user;
+  }, [data?.user, activeOverride]);
+
+  const sections = data?.enrolments ?? [];
+  const teaching = data?.teaching ?? [];
 
   // A failed load (deleted/foreign user) bounces back to the list.
   useEffect(() => {
@@ -72,7 +84,7 @@ export default function UserDetailPage() {
     if (!user) return;
     try {
       await institutionService.toggleUserActive(user.id);
-      setUser(u => u ? { ...u, is_active: !u.is_active } : u);
+      setActiveOverride(!user.is_active);
       // keep list + record caches honest
       queryClient.invalidateQueries({ queryKey: ['institution', 'users'] });
       toast3(`${user.full_name} ${user.is_active ? 'deactivated' : 'activated'}.`);

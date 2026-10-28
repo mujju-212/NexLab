@@ -212,7 +212,17 @@ export default function Student360Page() {
           <RiskBreakdownBar
             title="Composite Risk Breakdown"
             subtitle="Weighted component penalties driving the student's risk profile"
-            components={risk.risk_contributions}
+            components={Object.entries(risk.risk_contributions ?? {})
+              // A factor with no sample must not render as "NaN/healthy" — it
+              // was never measured, so it doesn't belong in the breakdown.
+              .filter(([k, v]) => v != null && !['attendance_sample', 'attendance_thin'].includes(k))
+              .map(([k, penalty]) => ({
+                name: k.replace(/_/g, ' '),
+                weight: (risk.weights ?? {})[k] ?? 0,
+                value: (risk.components ?? {})[k] ?? 0,
+                penalty: penalty as number,
+                contribution_pct: Math.round(((penalty as number) / Math.max(1, risk.risk_score || 1)) * 100),
+              }))}
           />
         </div>
 
