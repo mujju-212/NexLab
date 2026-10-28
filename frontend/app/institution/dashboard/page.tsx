@@ -219,10 +219,7 @@ export default function InstitutionDashboardPage() {
                         {card.liveCount} live now
                       </span>
                     ) : (
-                      <>
-                        {card.growth && <span className={styles.kpiGrowth}>↑ {card.growth}</span>}
-                        <span className={styles.kpiDelta}>{card.delta}</span>
-                      </>
+                      <span className={styles.kpiDelta}>{card.delta}</span>
                     )}
                   </div>
                 </div>

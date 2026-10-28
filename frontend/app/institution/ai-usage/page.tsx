@@ -12,6 +12,7 @@ import {
   Eye, Copy, Check
 } from 'lucide-react';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { confirmDialog } from '@/components/ui/confirm';
 import { toast } from '@/components/ui/toast';
 import styles from './ai-usage.module.css';
 import {
@@ -340,7 +341,7 @@ export default function AIUsagePage() {
   };
 
   const handleResetUserQuota = async (userId: string, userName: string) => {
-    if (!confirm(`Are you sure you want to reset current usage for ${userName}?`)) return;
+    if (!(await confirmDialog({ title: 'Reset usage?', message: `Current-period AI usage for ${userName} will be reset to zero.`, confirmLabel: 'Reset', danger: true }))) return;
     try {
       await institutionService.resetUserQuota(userId);
       showToast(`Usage reset for ${userName}`);

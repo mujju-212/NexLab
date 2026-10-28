@@ -4,6 +4,7 @@ import { Suspense, useCallback, useEffect, useMemo, useState } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { confirmDialog } from '@/components/ui/confirm';
 import { toast } from '@/components/ui/toast';
 import {
   institutionService,
@@ -357,7 +358,7 @@ function AcademicPageContent() {
   };
 
   const handleDeleteDept = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete department "${name}"?`)) return;
+    if (!(await confirmDialog({ title: 'Delete department?', message: `"${name}" will be removed along with its subjects and assignments. This cannot be undone.`, confirmLabel: 'Delete', danger: true }))) return;
     try {
       await institutionService.deleteDepartment(id);
       showToast('Department deleted successfully.');
@@ -452,7 +453,7 @@ function AcademicPageContent() {
   };
 
   const handleDeleteSection = async (id: string, name: string) => {
-    if (!confirm(`Delete section "${name}"?`)) return;
+    if (!(await confirmDialog({ title: 'Delete section?', message: `"${name}" and its student enrollments will be removed. This cannot be undone.`, confirmLabel: 'Delete', danger: true }))) return;
     try {
       await institutionService.deleteSection(id);
       showToast('Section deleted successfully.');
@@ -542,7 +543,7 @@ function AcademicPageContent() {
   };
 
   const handleDeleteSubject = async (id: string, name: string) => {
-    if (!confirm(`Delete subject "${name}"?`)) return;
+    if (!(await confirmDialog({ title: 'Delete subject?', message: `"${name}" will be removed from all sections. This cannot be undone.`, confirmLabel: 'Delete', danger: true }))) return;
     try {
       await institutionService.deleteSubject(id);
       showToast('Subject deleted.');
@@ -833,7 +834,7 @@ function AcademicPageContent() {
   };
 
   const handleUnassignSubject = async (assignmentId: string) => {
-    if (!confirm('Remove this subject assignment from this section?')) return;
+    if (!(await confirmDialog({ title: 'Remove assignment?', message: 'This subject assignment will be removed from the section.', confirmLabel: 'Remove', danger: true }))) return;
     try {
       await institutionService.deleteSectionSubject(assignmentId);
       showToast('Assignment removed.');
@@ -1042,8 +1043,8 @@ function AcademicPageContent() {
                               <button
                                 className={styles.btnIcon}
                                 title="Delete Year"
-                                onClick={() => {
-                                  if (confirm(`Delete academic year ${yr.year_label}?`)) {
+                                onClick={async () => {
+                                  if (await confirmDialog({ title: 'Delete academic year?', message: `Year ${yr.year_label} and its batches will be removed. This cannot be undone.`, confirmLabel: 'Delete', danger: true })) {
                                     institutionService.deleteAcademicYear(yr.id)
                                       .then(() => { showToast('Academic year deleted'); loadAll(); })
                                       .catch(e => showToast(e?.response?.data?.error ?? 'Cannot delete', 'error'));
@@ -1117,8 +1118,8 @@ function AcademicPageContent() {
                                               <button
                                                 className={styles.btnIcon}
                                                 title="Delete Batch"
-                                                onClick={() => {
-                                                  if (confirm(`Delete batch ${b.name}?`)) {
+                                                onClick={async () => {
+                                                  if (await confirmDialog({ title: 'Delete batch?', message: `Batch "${b.name}" and its sections will be removed. This cannot be undone.`, confirmLabel: 'Delete', danger: true })) {
                                                     institutionService.deleteBatch(b.id)
                                                       .then(() => { showToast('Batch deleted'); loadAll(); })
                                                       .catch(e => showToast(e?.response?.data?.error ?? 'Cannot delete', 'error'));
@@ -1192,8 +1193,8 @@ function AcademicPageContent() {
                               <button
                                 className={styles.btnIcon}
                                 title="Delete Batch"
-                                onClick={() => {
-                                  if (confirm(`Delete batch ${b.name}?`)) {
+                                onClick={async () => {
+                                  if (await confirmDialog({ title: 'Delete batch?', message: `Batch "${b.name}" and its sections will be removed. This cannot be undone.`, confirmLabel: 'Delete', danger: true })) {
                                     institutionService.deleteBatch(b.id)
                                       .then(() => { showToast('Batch deleted'); loadAll(); })
                                       .catch(e => showToast(e?.response?.data?.error ?? 'Cannot delete', 'error'));
@@ -2254,7 +2255,7 @@ function AcademicPageContent() {
                             <div className={styles.popoverItemText}>
                               <span className={styles.popoverItemTitle}>Section {s.name}</span>
                               <span className={styles.popoverItemMeta}>
-                                {s.students_count || 0} students &bull; Max {s.max_students ?? 0}
+                                {s.students_count || 0} {((s.students_count || 0) === 1) ? 'student' : 'students'} &bull; Max {s.max_students ?? 0}
                               </span>
                             </div>
                             {s.id === enrollSectionId && <Check size={14} className={styles.popoverCheck} />}
@@ -2722,7 +2723,7 @@ function AcademicPageContent() {
                               </div>
                               <div>
                                 <div style={{ fontWeight: 700, fontSize: 12.5, color: '#1e1b4b' }}>{assign.instructor_name}</div>
-                                <div style={{ fontSize: 11, color: '#64748b' }}>{assign.instructor_email || 'instructor@nexlab.edu'}</div>
+                                <div style={{ fontSize: 11, color: '#64748b' }}>{assign.instructor_email || '—'}</div>
                               </div>
                             </div>
                           </td>

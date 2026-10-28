@@ -4,6 +4,7 @@ import { useEffect, useState, useMemo, useRef } from 'react';
 import Link from 'next/link';
 import { useQueryClient } from '@tanstack/react-query';
 import InstitutionShell from '@/components/layout/InstitutionShell';
+import { confirmDialog } from '@/components/ui/confirm';
 import { toast } from '@/components/ui/toast';
 import { institutionService } from '@/services/institution.service';
 import {
@@ -197,7 +198,8 @@ export default function AnnouncementsPage() {
     setActiveTab(tab);
     if (tab === 'scheduled') loadAnnouncements('scheduled');
     else if (tab === 'sent') loadAnnouncements('sent');
-    else if (tab === 'drafts') loadAnnouncements('drafts');
+    // API expects the singular status — the tab id is plural.
+    else if (tab === 'drafts') loadAnnouncements('draft');
     else loadAnnouncements('all');
   };
 
@@ -310,10 +312,12 @@ export default function AnnouncementsPage() {
         priority,
         category,
         target,
-        department_id: selectedDept || undefined,
-        academic_year: selectedYear ? Number(selectedYear) : undefined,
-        batch_id: selectedBatch || undefined,
-        section_id: selectedSection || undefined,
+        // Audience filters are only meaningful (and only accepted by the API)
+        // for the custom target — never leak the auto-prefilled year/batch.
+        department_id: target === 'custom' ? (selectedDept || undefined) : undefined,
+        academic_year: target === 'custom' && selectedYear ? Number(selectedYear) : undefined,
+        batch_id: target === 'custom' ? (selectedBatch || undefined) : undefined,
+        section_id: target === 'custom' ? (selectedSection || undefined) : undefined,
         attachment_name: attachment?.name,
         attachment_url: attachment?.url,
         attachment_size: attachment?.size,
@@ -336,8 +340,9 @@ export default function AnnouncementsPage() {
       setSendAtLocal('');
       loadStats(true);
       loadAnnouncements(undefined, true);
-    } catch {
-      showToast('Failed to create announcement. Please try again.');
+    } catch (err: unknown) {
+      const e = err as { response?: { data?: { error?: string } } };
+      showToast(e?.response?.data?.error || 'Failed to create announcement. Please try again.');
     } finally {
       setSending(false);
     }
@@ -345,7 +350,7 @@ export default function AnnouncementsPage() {
 
   // Delete Announcement
   const handleDelete = async (id: string, name: string) => {
-    if (!confirm(`Are you sure you want to delete "${name}"?`)) return;
+    if (!(await confirmDialog({ title: 'Delete announcement?', message: `"${name}" will be removed for all recipients. This cannot be undone.`, confirmLabel: 'Delete', danger: true }))) return;
     try {
       await institutionService.deleteAnnouncement(id);
       showToast('Announcement deleted.');
