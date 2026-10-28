@@ -1,9 +1,10 @@
 'use client';
 
 import { useCallback, useEffect, useState } from 'react';
-import { AlertTriangle, Loader2, Megaphone, RefreshCw, Send } from 'lucide-react';
+import { AlertTriangle, CheckCircle2, Loader2, Megaphone, RefreshCw, Send } from 'lucide-react';
 import AdminShell from '@/components/layout/AdminShell';
 import { adminService } from '@/services/admin.service';
+import styles from './page.module.css';
 
 type Announcement = { id: string; title: string; message: string; sent_to: number; actor_id: string | null; created_at: string | null };
 
@@ -55,48 +56,64 @@ export default function PlatformAnnouncementsPage() {
     } finally { setSending(false); }
   };
 
+  const sendDisabled = sending || loading || recipientCount === null || recipientCount === 0;
+
   return (
     <AdminShell activePage="Platform Announcements" title="Platform Announcements" subtitle="Send and review platform-wide admin notices">
-      <div style={{ maxWidth: 1000, margin: '0 auto', paddingBottom: 40 }}>
-        <header style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 16, marginBottom: 20, flexWrap: 'wrap' }}>
-          <div><h1 style={{ margin: 0, fontSize: 25, color: '#211a32' }}>Platform announcements</h1><p style={{ margin: '6px 0 0', color: '#716b80', fontSize: 13 }}>Recipients are active institution-admin accounts.</p></div>
-          <button type="button" onClick={() => void refresh()} disabled={loading} style={buttonStyle}><RefreshCw size={15} /> Refresh</button>
+      <div className={styles.pageWrap}>
+        <header className={styles.header}>
+          <div>
+            <h1 className={styles.pageTitle}>Platform announcements</h1>
+            <p className={styles.pageSub}>Recipients are active institution-admin accounts.</p>
+          </div>
+          <button type="button" onClick={() => void refresh()} disabled={loading} className={styles.btn}>
+            <RefreshCw size={15} /> Refresh
+          </button>
         </header>
 
-        <section style={{ background: 'rgba(255,255,255,.78)', border: '1px solid #ece9f2', borderRadius: 16, padding: 22, marginBottom: 24 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 9, marginBottom: 16, color: '#342b49' }}><Megaphone size={18} /><h2 style={{ margin: 0, fontSize: 16 }}>Compose notice</h2></div>
-          <label style={labelStyle}>Title <input value={title} maxLength={160} onChange={e => setTitle(e.target.value)} style={inputStyle} /></label>
-          <label style={{ ...labelStyle, marginTop: 12 }}>Message <textarea value={message} maxLength={5000} rows={5} onChange={e => setMessage(e.target.value)} style={{ ...inputStyle, resize: 'vertical' }} /></label>
-          <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', gap: 12, marginTop: 14, flexWrap: 'wrap' }}>
-            <span style={{ fontSize: 13, color: '#60596f' }}>
+        <section className={styles.card}>
+          <div className={styles.cardHeader}><Megaphone size={18} strokeWidth={1.9} /><h2>Compose notice</h2></div>
+          <label className={styles.field}>Title
+            <input value={title} maxLength={160} onChange={e => setTitle(e.target.value)} className={styles.input} />
+          </label>
+          <label className={styles.field}>Message
+            <textarea value={message} maxLength={5000} rows={5} onChange={e => setMessage(e.target.value)} className={styles.input} style={{ resize: 'vertical' }} />
+          </label>
+          <div className={styles.composeFooter}>
+            <span className={styles.recipientNote}>
               {recipientCount === null ? 'Recipient count unavailable' : <><strong>{recipientCount}</strong> active institution admin recipient(s) · count is rechecked when sending</>}
             </span>
-            <button type="button" disabled={sending || loading || recipientCount === null || recipientCount === 0} onClick={() => void send()} style={{ ...buttonStyle, background: '#5b3cc4', color: 'white', borderColor: '#5b3cc4', opacity: sending || loading || recipientCount === null || recipientCount === 0 ? .6 : 1 }}>
+            <button type="button" disabled={sendDisabled} onClick={() => void send()} className={styles.btnPrimary}>
               {sending ? <Loader2 size={15} className="spin" /> : <Send size={15} />} Send announcement
             </button>
           </div>
-          {recipientCount === 0 && <p style={{ margin: '10px 0 0', color: '#946200', fontSize: 12 }}>There are no active institution admins to receive this notice. It will not be sent to platform admins or students.</p>}
+          {recipientCount === 0 && <p className={styles.warnNote}>There are no active institution admins to receive this notice. It will not be sent to platform admins or students.</p>}
         </section>
 
-        {error && <div role="alert" style={{ padding: 12, marginBottom: 14, borderRadius: 10, background: '#fff0f0', color: '#a4262c', border: '1px solid #f5c4c4' }}><AlertTriangle size={15} style={{ verticalAlign: 'middle', marginRight: 7 }} />{error}</div>}
-        {notice && <div role="status" style={{ padding: 12, marginBottom: 14, borderRadius: 10, background: '#effaf2', color: '#216e39', border: '1px solid #c8ead0' }}>{notice}</div>}
+        {error && <div role="alert" className={styles.alert}><AlertTriangle size={15} />{error}</div>}
+        {notice && <div role="status" className={styles.success}><CheckCircle2 size={15} />{notice}</div>}
 
         <section>
-          <h2 style={{ fontSize: 17, margin: '0 0 12px', color: '#302a41' }}>Sent history</h2>
+          <h2 className={styles.sectionTitle}>Sent history</h2>
           {loading ? <p style={{ color: '#716b80' }}>Loading sent history…</p> : history.length === 0 ? (
-            <div style={{ background: 'rgba(255,255,255,.7)', border: '1px solid #ece9f2', borderRadius: 14, padding: 24, color: '#716b80', textAlign: 'center' }}>No platform announcements have been sent.</div>
-          ) : <div style={{ display: 'grid', gap: 10 }}>
-            {history.map(item => <article key={item.id} style={{ background: 'rgba(255,255,255,.78)', border: '1px solid #ece9f2', borderRadius: 14, padding: 16 }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', gap: 12, flexWrap: 'wrap' }}><strong style={{ color: '#302a41' }}>{item.title}</strong><span style={{ color: '#716b80', fontSize: 12 }}>{item.created_at ? new Date(item.created_at).toLocaleString() : '—'} · {item.sent_to} recipient(s)</span></div>
-              <p style={{ whiteSpace: 'pre-wrap', margin: '8px 0 0', color: '#5f596d', fontSize: 13 }}>{item.message}</p>
-            </article>)}
-          </div>}
+            <div className={styles.empty}>No platform announcements have been sent.</div>
+          ) : (
+            <div className={styles.historyList}>
+              {history.map(item => (
+                <article key={item.id} className={styles.historyItem}>
+                  <div className={styles.historyTop}>
+                    <strong className={styles.historyTitle}>{item.title}</strong>
+                    <span className={styles.historyMeta}>
+                      {item.created_at ? new Date(item.created_at).toLocaleString() : '—'} · {item.sent_to} recipient(s)
+                    </span>
+                  </div>
+                  <p className={styles.historyMsg}>{item.message}</p>
+                </article>
+              ))}
+            </div>
+          )}
         </section>
       </div>
     </AdminShell>
   );
 }
-
-const labelStyle: React.CSSProperties = { display: 'grid', gap: 6, color: '#514a60', fontWeight: 700, fontSize: 12 };
-const inputStyle: React.CSSProperties = { width: '100%', boxSizing: 'border-box', border: '1px solid #ddd8e8', borderRadius: 9, padding: '10px 11px', font: 'inherit', fontSize: 13, color: '#302a41', background: '#fff' };
-const buttonStyle: React.CSSProperties = { display: 'inline-flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '9px 13px', borderRadius: 9, border: '1px solid #ddd8e8', background: '#fff', color: '#433b55', cursor: 'pointer', fontWeight: 650, fontSize: 13 };
