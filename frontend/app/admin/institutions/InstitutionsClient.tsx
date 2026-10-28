@@ -6,7 +6,7 @@ import { adminService, type Institution, type CreateInstitutionDto } from '@/ser
 import AdminShell from '@/components/layout/AdminShell';
 import {
   Plus, Search, Building2, RefreshCw, CheckCircle2, XCircle,
-  ChevronRight, Shield, Zap, Crown, Eye, EyeOff, Copy, Check,
+  ChevronRight, ChevronLeft, Shield, Zap, Crown, Eye, EyeOff, Copy, Check,
   MoreVertical, Pencil, AlertTriangle, Users, FlaskConical
 } from 'lucide-react';
 import styles from './institutions.module.css';
@@ -359,6 +359,15 @@ export default function InstitutionsClient() {
     i.contact_email?.toLowerCase().includes(search.toLowerCase())
   );
 
+  // Pagination — full list stays in memory; we slice per page so 106 rows don't
+  // all render at once (the mobile bug: a mile-long unscrollable-feeling table).
+  const PER_PAGE = 10;
+  const [page, setPage] = useState(1);
+  useEffect(() => { setPage(1); }, [search]);
+  const pages = Math.max(1, Math.ceil(filtered.length / PER_PAGE));
+  const safePage = Math.min(page, pages);
+  const pageRows = filtered.slice((safePage - 1) * PER_PAGE, safePage * PER_PAGE);
+
   // Summary stats
   const total  = institutions.length;
   const active = institutions.filter(i => i.is_active).length;
@@ -431,17 +440,17 @@ export default function InstitutionsClient() {
             <thead>
               <tr>
                 <th>Institution</th>
-                <th>Code</th>
+                <th className={styles.colHideS}>Code</th>
                 <th>Plan</th>
-                <th>Admin Email</th>
+                <th className={styles.colHideS}>Admin Email</th>
                 <th>Status</th>
-                <th>Onboarding</th>
-                <th>Checklist</th>
+                <th className={styles.colHideS}>Onboarding</th>
+                <th className={styles.colHideS}>Checklist</th>
                 <th></th>
               </tr>
             </thead>
             <tbody>
-              {filtered.map(inst => {
+              {pageRows.map(inst => {
                 const plan = PLAN_META[inst.plan] ?? PLAN_META.free;
                 const PlanIcon = plan.icon;
                 const checklist = inst.checklist ?? {};
@@ -463,7 +472,7 @@ export default function InstitutionsClient() {
                     </td>
 
                     {/* Code */}
-                    <td><span className={styles.codePill}>{inst.code}</span></td>
+                    <td className={styles.colHideS}><span className={styles.codePill}>{inst.code}</span></td>
 
                     {/* Plan */}
                     <td>
@@ -473,7 +482,7 @@ export default function InstitutionsClient() {
                     </td>
 
                     {/* Admin Email */}
-                    <td className={styles.emailCell}>{inst.contact_email}</td>
+                    <td className={`${styles.emailCell} ${styles.colHideS}`}>{inst.contact_email}</td>
 
                     {/* Status */}
                     <td>
@@ -484,7 +493,7 @@ export default function InstitutionsClient() {
                     </td>
 
                     {/* Onboarding */}
-                    <td>
+                    <td className={styles.colHideS}>
                       <span className={
                         inst.onboarding_status === 'active'    ? styles.obActive :
                         inst.onboarding_status === 'pending'   ? styles.obPending : styles.obSuspended
@@ -494,7 +503,7 @@ export default function InstitutionsClient() {
                     </td>
 
                     {/* Checklist mini */}
-                    <td>
+                    <td className={styles.colHideS}>
                       <div className={styles.checkRow}>
                         <Users size={12} aria-label="Users" className={checklist.has_users ? styles.checkOk : styles.checkNo} />
                         <FlaskConical size={12} aria-label="Experiments" className={checklist.has_experiments ? styles.checkOk : styles.checkNo} />
@@ -538,6 +547,29 @@ export default function InstitutionsClient() {
               })}
             </tbody>
           </table>
+          {pages > 1 && (
+            <div className={styles.pager}>
+              <span className={styles.pagerInfo}>
+                {pageRows.length === 0 ? 0 : (safePage - 1) * PER_PAGE + 1}
+                –{(safePage - 1) * PER_PAGE + pageRows.length} of {filtered.length}
+              </span>
+              <button
+                className={styles.pagerBtn}
+                disabled={safePage <= 1}
+                onClick={() => setPage(p => Math.max(1, p - 1))}
+              >
+                <ChevronLeft size={13} strokeWidth={2.5} /> Prev
+              </button>
+              <span className={styles.pagerInfo}>Page {safePage} of {pages}</span>
+              <button
+                className={styles.pagerBtn}
+                disabled={safePage >= pages}
+                onClick={() => setPage(p => Math.min(pages, p + 1))}
+              >
+                Next <ChevronRight size={13} strokeWidth={2.5} />
+              </button>
+            </div>
+          )}
         </div>
       )}
 

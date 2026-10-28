@@ -143,7 +143,7 @@ export default function AnalyticsPage() {
           {sessionsTrend.length === 0 && !loading && (
             <p style={{ fontSize: 13, color: '#9891a6' }}>No sessions recorded in this window.</p>
           )}
-          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 140, padding: '8px 0' }}>
+          <div style={{ display: 'flex', alignItems: 'flex-end', gap: 6, height: 140, padding: '8px 0', overflowX: 'auto' }}>
             {sessionsTrend.map(t => (
               <div key={t.date} title={`${t.date}: ${t.sessions} sessions`}
                 style={{ flex: 1, minWidth: 10, maxWidth: 46, height: `${Math.max(4, (t.sessions / maxSessions) * 100)}%`, background: 'linear-gradient(180deg,#9333ea,#7c3aed)', borderRadius: '5px 5px 2px 2px' }} />

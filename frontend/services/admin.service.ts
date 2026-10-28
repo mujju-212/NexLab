@@ -58,10 +58,15 @@ export interface AuditLogEntry {
   id: string;
   actor_id: string;
   actor_name: string;
+  actor_email?: string | null;
+  actor_role?: string | null;
   action: string;
+  module?: string | null;
   target_type: string | null;
   target_id: string | null;
   detail: string | null;
+  ip_address?: string | null;
+  severity?: string | null;
   created_at: string | null;
 }
 
@@ -320,8 +325,14 @@ export const adminService = {
 
 
   // GET /api/platform/audit-logs
-  async getAuditLogs(params?: { institution_id?: string; days?: number; page?: number }) {
+  async getAuditLogs(params?: { institution_id?: string; actor_id?: string; action?: string; days?: number; page?: number }) {
     const { data } = await apiClient.get<{ total: number; page: number; pages: number; logs: AuditLogEntry[] }>('/platform/audit-logs', { params });
+    return data;
+  },
+
+  // GET /api/platform/audit-logs/summary — action frequency, last `days`
+  async getAuditLogSummary(days = 30): Promise<{ summary: Record<string, number> }> {
+    const { data } = await apiClient.get('/platform/audit-logs/summary', { params: { days } });
     return data;
   },
 };

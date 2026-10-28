@@ -5,7 +5,8 @@ import AdminShell from '@/components/layout/AdminShell';
 import { adminService, adminGovernanceService, type AuditLogEntry, type ImpersonationSessionRow, type ExportJobRow } from '@/services/admin.service';
 import {
   Shield, Users, Key, ClipboardList, Eye,
-  CheckCircle2, AlertTriangle, Loader2, ChevronLeft, ChevronRight
+  CheckCircle2, AlertTriangle, Loader2, ChevronLeft, ChevronRight,
+  FileText, LayoutGrid, X, ShieldAlert
 } from 'lucide-react';
 import styles from './page.module.css';
 
@@ -34,6 +35,27 @@ const ACTION_STYLE = (action: string) => {
   return <ClipboardList size={14} strokeWidth={2} color="#d946ef" />;
 };
 
+function actionLabel(action: string): string {
+  return action.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase());
+}
+
+function severityKey(severity?: string | null): string {
+  const sev = (severity || 'low').toLowerCase();
+  return sev === 'high' ? styles.sevHigh : sev === 'medium' ? styles.sevMedium : styles.sevLow;
+}
+
+function getInitials(name?: string): string {
+  if (!name) return 'U';
+  const parts = name.trim().split(/\s+/);
+  if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+  return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+}
+
+function formatDateTime(iso?: string | null): string {
+  if (!iso) return '—';
+  try { return new Date(iso).toLocaleString(); } catch { return iso; }
+}
+
 export default function SecurityPage() {
   const [tab, setTab] = useState<'roles' | 'audit' | 'governance' | 'auth'>('audit');
 
@@ -43,6 +65,10 @@ export default function SecurityPage() {
   const [total, setTotal] = useState(0);
   const [pages, setPages] = useState(0);
   const [logs, setLogs] = useState<AuditLogEntry[]>([]);
+  const [summary, setSummary] = useState<Record<string, number>>({});
+  const [actionFilter, setActionFilter] = useState('');
+  const [severityFilter, setSeverityFilter] = useState('');
+  const [selectedEvent, setSelectedEvent] = useState<AuditLogEntry | null>(null);
   const [impSessions, setImpSessions] = useState<ImpersonationSessionRow[]>([]);
   const [exportJobs, setExportJobs] = useState<ExportJobRow[]>([]);
   const [loading, setLoading] = useState(false);
@@ -55,17 +81,21 @@ export default function SecurityPage() {
       setLoading(true);
       setError(null);
       try {
-        const res = await adminService.getAuditLogs({ days, page });
-        setTotal(res.total);
-        setPages(res.pages);
-        setLogs(res.logs ?? []);
+        const [logRes, summaryRes] = await Promise.all([
+          adminService.getAuditLogs({ days, page, action: actionFilter || undefined }),
+          adminService.getAuditLogSummary(30),
+        ]);
+        setTotal(logRes.total);
+        setPages(logRes.pages);
+        setLogs(logRes.logs ?? []);
+        setSummary(summaryRes.summary ?? {});
       } catch {
         setError('Could not load audit logs.');
       } finally {
         setLoading(false);
       }
     })();
-  }, [tab, days, page]);
+  }, [tab, days, page, actionFilter]);
 
   useEffect(() => {
     if (tab !== 'governance') return;
@@ -114,6 +144,17 @@ export default function SecurityPage() {
       setDownloading(null);
     }
   };
+
+  // ── Derived audit data ─────────────────────────────────────────────────
+  const actionOptions = Object.keys(summary).sort((a, b) => summary[b] - summary[a]);
+  const totalActions30d = Object.values(summary).reduce((sum, n) => sum + n, 0);
+  const highSeverity = logs.filter(l => (l.severity || '').toLowerCase() === 'high').length;
+  const uniqueModules = new Set(logs.map(l => l.module || 'System'));
+  const activeActors = new Set(logs.map(l => l.actor_name)).size;
+
+  const visibleLogs = logs.filter(l =>
+    !severityFilter || (l.severity || 'low').toLowerCase() === severityFilter
+  );
 
   return (
     <AdminShell activePage="Security" title="Security & Access Control" subtitle="Role matrix, platform-wide audit trail and authentication details">
@@ -169,43 +210,137 @@ export default function SecurityPage() {
 
       {/* ── Audit Logs ────────────────────────────────────────────────── */}
       {tab === 'audit' && (
-        <div className={styles.tableWrap}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 12 }}>
-            {[7, 30, 90].map(d => (
-              <button key={d} className={`${styles.tab} ${days === d ? styles.tabActive : ''}`} onClick={() => { setDays(d); setPage(1); }}>
-                Last {d} days
-              </button>
-            ))}
+        <div className={styles.auditSection}>
+          {/* KPI strip */}
+          <div className={styles.auditKpiGrid}>
+            <div className={styles.auditKpi}>
+              <div className={styles.auditKpiIcon} style={{ background: '#f3e8ff', color: '#7c3aed' }}>
+                <FileText size={20} strokeWidth={1.9} />
+              </div>
+              <div>
+                <p className={styles.auditKpiValue}>{total.toLocaleString()}</p>
+                <p className={styles.auditKpiLabel}>Events in last {days} days</p>
+              </div>
+            </div>
+            <div className={styles.auditKpi}>
+              <div className={styles.auditKpiIcon} style={{ background: '#ecfdf5', color: '#059669' }}>
+                <LayoutGrid size={20} strokeWidth={1.9} />
+              </div>
+              <div>
+                <p className={styles.auditKpiValue}>{actionOptions.length.toLocaleString()}</p>
+                <p className={styles.auditKpiLabel}>Distinct actions (30d)</p>
+              </div>
+            </div>
+            <div className={styles.auditKpi}>
+              <div className={styles.auditKpiIcon} style={{ background: '#e0f2fe', color: '#0284c7' }}>
+                <Users size={20} strokeWidth={1.9} />
+              </div>
+              <div>
+                <p className={styles.auditKpiValue}>{activeActors}</p>
+                <p className={styles.auditKpiLabel}>Actors on this page</p>
+              </div>
+            </div>
+            <div className={styles.auditKpi}>
+              <div className={styles.auditKpiIcon} style={{ background: '#fef2f2', color: '#dc2626' }}>
+                <ShieldAlert size={20} strokeWidth={1.9} />
+              </div>
+              <div>
+                <p className={styles.auditKpiValue}>{highSeverity}</p>
+                <p className={styles.auditKpiLabel}>High severity on this page</p>
+              </div>
+            </div>
+          </div>
+
+          {/* Filters */}
+          <div className={styles.auditToolbar}>
+            <div className={styles.auditDayGroup}>
+              {[7, 30, 90].map(d => (
+                <button key={d} className={`${styles.tab} ${days === d ? styles.tabActive : ''}`} onClick={() => { setDays(d); setPage(1); }}>
+                  Last {d} days
+                </button>
+              ))}
+            </div>
+            <select
+              className={styles.auditSelect}
+              value={actionFilter}
+              onChange={e => setActionFilter(e.target.value)}
+            >
+              <option value="">All actions</option>
+              {actionOptions.map(a => (
+                <option key={a} value={a}>{actionLabel(a)} ({summary[a]})</option>
+              ))}
+            </select>
+            <select
+              className={styles.auditSelect}
+              value={severityFilter}
+              onChange={e => setSeverityFilter(e.target.value)}
+            >
+              <option value="">All severities</option>
+              <option value="high">High</option>
+              <option value="medium">Medium</option>
+              <option value="low">Low</option>
+            </select>
+            <button
+              className={styles.exportBtn}
+              disabled={downloading === 'audit'}
+              onClick={() => void saveDownload('audit', `nexlab_audit_${new Date().toISOString().slice(0, 10)}.csv`, () => adminGovernanceService.downloadAuditCsv(days))}
+            >
+              <ClipboardList size={14} strokeWidth={2} /> {downloading === 'audit' ? 'Exporting…' : 'Export CSV'}
+            </button>
           </div>
 
           {error && <p style={{ color: '#ef4444', fontSize: 13 }}>{error}</p>}
+          {actionFilter && (
+            <p style={{ margin: '0 0 10px', fontSize: 12.5, color: '#5b3cc4', fontWeight: 700 }}>
+              Filtered to <strong>{actionLabel(actionFilter)}</strong> — clear the filter to see the full window again ({totalActions30d.toLocaleString()} actions in the last 30 days).
+            </p>
+          )}
 
+          <div className={styles.tableWrap}>
           <table className={styles.table}>
             <thead>
-              <tr><th>Time (UTC)</th><th></th><th>Action</th><th>Actor</th><th>Detail</th></tr>
+              <tr><th>Date &amp; Time</th><th>Action</th><th>Actor</th><th>Module</th><th>Severity</th><th>Detail</th></tr>
             </thead>
             <tbody>
               {loading ? (
-                <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24 }}>
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24 }}>
                   <Loader2 size={18} strokeWidth={2} className="spin" color="#7c3aed" />
                 </td></tr>
-              ) : logs.length === 0 ? (
-                <tr><td colSpan={5} style={{ textAlign: 'center', padding: 24, color: '#9891a6', fontSize: 13 }}>
-                  No audit entries in the selected window.
+              ) : visibleLogs.length === 0 ? (
+                <tr><td colSpan={6} style={{ textAlign: 'center', padding: 24, color: '#9891a6', fontSize: 13 }}>
+                  No audit entries match the selected filters.
                 </td></tr>
-              ) : logs.map(log => (
-                <tr key={log.id}>
+              ) : visibleLogs.map(log => (
+                <tr key={log.id} className={styles.auditRow} onClick={() => setSelectedEvent(log)}>
                   <td style={{ fontFamily: 'JetBrains Mono,monospace', fontSize: 12, color: '#9891a6', whiteSpace: 'nowrap' }}>
-                    {log.created_at ? new Date(log.created_at).toLocaleString() : '—'}
+                    {formatDateTime(log.created_at)}
                   </td>
-                  <td>{ACTION_STYLE(log.action)}</td>
-                  <td><code className={styles.code}>{log.action}</code></td>
-                  <td>{log.actor_name}</td>
-                  <td style={{ fontSize: 13, color: '#64748b' }}>{log.detail ?? (log.target_type ? `${log.target_type} · ${log.target_id?.slice(0, 8)}…` : '—')}</td>
+                  <td>
+                    <span className={styles.auditAction}>
+                      {ACTION_STYLE(log.action)} <code className={styles.code}>{log.action}</code>
+                    </span>
+                  </td>
+                  <td>
+                    <span className={styles.auditActor}>
+                      <span className={styles.auditAvatar}>{getInitials(log.actor_name)}</span>
+                      <span>
+                        <span style={{ display: 'block' }}>{log.actor_name}</span>
+                        <span style={{ display: 'block', fontSize: 11, color: '#9891a6', fontWeight: 500 }}>
+                          {log.actor_email || (log.actor_role ? `${log.actor_role} · ` : '') + 'platform'}
+                        </span>
+                      </span>
+                    </span>
+                  </td>
+                  <td style={{ fontSize: 12.5, fontWeight: 600 }}>{log.module || 'System'}</td>
+                  <td><span className={`${styles.sevPill} ${severityKey(log.severity)}`}>{log.severity || 'low'}</span></td>
+                  <td style={{ fontSize: 13, color: '#64748b' }}>
+                    {log.detail ?? (log.target_type ? `${log.target_type} · ${log.target_id?.slice(0, 8)}…` : '—')}
+                  </td>
                 </tr>
               ))}
             </tbody>
           </table>
+          </div>
 
           <div className={styles.tableFooter}>
             <span>Showing page {page} of {pages} — {total} total entries</span>
@@ -278,6 +413,50 @@ export default function SecurityPage() {
                 ))}
               </tbody>
             </table>
+          </div>
+        </div>
+      )}
+
+      {/* ── Event detail modal ────────────────────────────────────────── */}
+      {selectedEvent && (
+        <div className={styles.auditModalBackdrop} onClick={() => setSelectedEvent(null)}>
+          <div className={styles.auditModal} onClick={e => e.stopPropagation()}>
+            <div className={styles.auditModalHead}>
+              <h3>Audit Event Details</h3>
+              <button className={styles.auditModalClose} onClick={() => setSelectedEvent(null)} aria-label="Close">
+                <X size={16} />
+              </button>
+            </div>
+            <div className={styles.auditModalBody}>
+              {([
+                ['Event ID', <code key="id" className={styles.code} style={{ fontSize: 11.5 }}>{selectedEvent.id}</code>],
+                ['Date & Time', formatDateTime(selectedEvent.created_at)],
+                ['Actor', `${selectedEvent.actor_name || 'System'}${selectedEvent.actor_email ? ` (${selectedEvent.actor_email})` : ''}`],
+                ['Action', <code key="a" className={styles.code}>{selectedEvent.action}</code>],
+                ['Module', selectedEvent.module || 'System'],
+                ['Severity', <span key="s" className={`${styles.sevPill} ${severityKey(selectedEvent.severity)}`}>{selectedEvent.severity || 'low'}</span>],
+                ['Client IP', selectedEvent.ip_address ? <code key="ip" className={styles.code}>{selectedEvent.ip_address}</code> : '—'],
+              ] as [string, React.ReactNode][]).map(([label, value]) => (
+                <div key={label} className={styles.auditDetailRow}>
+                  <span className={styles.auditDetailLabel}>{label}</span>
+                  <span className={styles.auditDetailValue}>{value}</span>
+                </div>
+              ))}
+              <div>
+                <span className={styles.auditDetailLabel}>Full detail</span>
+                <div className={styles.auditDetailBox}>
+                  {selectedEvent.detail || 'No detail recorded.'}
+                </div>
+              </div>
+              {selectedEvent.target_type && (
+                <div className={styles.auditDetailRow} style={{ border: 'none', paddingBottom: 0 }}>
+                  <span className={styles.auditDetailLabel}>Target</span>
+                  <span className={styles.auditDetailValue}>
+                    {selectedEvent.target_type} ({selectedEvent.target_id || 'N/A'})
+                  </span>
+                </div>
+              )}
+            </div>
           </div>
         </div>
       )}

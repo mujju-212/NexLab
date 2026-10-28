@@ -61,7 +61,12 @@
 @media (max-width: 900px) {
   .kpiGrid { grid-template-columns: 1fr; }
   .twoCol { grid-template-columns: 1fr; }
-  .aiGrid { grid-template-columns: repeat(2,1fr); }
+  .twoCol > .card { min-width: 0; }
+  .aiGrid { grid-template-columns: repeat(2,minmax(0,1fr)); }
+  .aiCard { min-width: 0; }
+  .aiPct, .aiLabel { overflow-wrap: anywhere; }
+  .deptRow { flex-wrap: wrap; }
+  .deptMeta { flex: 1 1 100%; }
   .topBar { flex-direction: column; align-items: stretch; gap: 12px; }
   .tabs { overflow-x: auto; }
   .tab { flex-shrink: 0; padding: 7px 13px; }
