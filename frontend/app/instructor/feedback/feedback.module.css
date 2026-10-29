@@ -1929,3 +1929,58 @@
 
 
 
+
+/* ── Native Mobile Filter Scope Bar (≤640px only) ───────────────────────── */
+.mobileScopeBar {
+  display: none;
+}
+
+@media (max-width: 640px) {
+  .mobileScopeBar {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 10px;
+    background: #ffffff;
+    border: 1px solid #e2e8f0;
+    border-radius: 14px;
+    padding: 10px 14px;
+    box-shadow: 0 1px 3px rgba(15, 23, 42, 0.04);
+    margin-bottom: 16px;
+  }
+
+  .mobileScopeText {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 12.5px;
+    font-weight: 600;
+    color: #334155;
+    min-width: 0;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    flex: 1;
+  }
+
+  .mobileScopeToggle {
+    padding: 7px 12px;
+    border-radius: 9px;
+    border: 1px solid #c4b5fd;
+    background: #faf5ff;
+    color: #6d28d9;
+    font-size: 12px;
+    font-weight: 700;
+    cursor: pointer;
+    flex-shrink: 0;
+    white-space: nowrap;
+  }
+
+  .filterCard {
+    display: none;
+  }
+
+  .filterCard.filterCardMobileOpen {
+    display: block;
+  }
+}

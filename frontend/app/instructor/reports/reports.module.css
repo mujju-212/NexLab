@@ -1149,3 +1149,34 @@ input:checked + .slider:before {
     font-size: 10px !important;
   }
 }
+
+/* ── Native mobile gradebook: sticky Student column so wide pan keeps names ── */
+@media (max-width: 768px) {
+  .gradebookTable th:nth-child(3),
+  .gradebookTable td:nth-child(3) {
+    position: sticky;
+    left: 64px;
+    background: #ffffff;
+    z-index: 2;
+    box-shadow: 2px 0 6px rgba(15, 23, 42, 0.07);
+    min-width: 118px;
+    max-width: 118px;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
+  .gradebookTable th:nth-child(3) {
+    background: #f8fafc;
+    z-index: 3;
+  }
+
+  .gradebookTable tr:hover td:nth-child(3),
+  .gradebookTable tr:hover td {
+    background: #faf5ff;
+  }
+
+  .tableWrapper {
+    -webkit-overflow-scrolling: touch;
+  }
+}

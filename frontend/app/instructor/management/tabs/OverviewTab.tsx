@@ -67,20 +67,17 @@ export const OverviewTab: React.FC<OverviewTabProps> = ({
         { name: 'On Track', value: okBand, percentage: 0, color: '#10b981' },
       ].filter((d) => d.value > 0);
 
-  // Performance Trend Data (from trendsData or fallback to historical grade buckets)
-  const lineData = trendsData?.experiment_performance_trend?.map((item: any) => ({
-    name: item.title || item.exp_label || `Lab ${item.exp_number}`,
-    classAvg: item.avg_score != null ? Math.round(item.avg_score) : null,
-    atRiskAvg: item.at_risk_avg != null
-      ? Math.round(item.at_risk_avg)
-      : (item.avg_score != null ? Math.max(20, Math.round(item.avg_score * 0.65)) : null),
-  })) || [
-    { name: 'Lab 1', classAvg: 78, atRiskAvg: 48 },
-    { name: 'Lab 2', classAvg: 74, atRiskAvg: 42 },
-    { name: 'Lab 3', classAvg: 80, atRiskAvg: 51 },
-    { name: 'Lab 4', classAvg: 71, atRiskAvg: 38 },
-    { name: 'Lab 5', classAvg: 76, atRiskAvg: 45 },
-  ];
+  // Performance Trend Data — backend sends {full_title, label, experiment_avg, ...}
+  // (older {title, exp_number, avg_score} fields no longer exist and rendered
+  // "Lab undefined" with an empty chart). No mock fallback, no invented
+  // at-risk series — only real values.
+  const lineData = (trendsData?.experiment_performance_trend ?? []).map((item: any, idx: number) => ({
+    name: item.full_title || item.title || item.label || `Lab ${idx + 1}`,
+    classAvg: item.experiment_avg != null
+      ? Math.round(item.experiment_avg)
+      : (item.avg_score != null ? Math.round(item.avg_score) : null),
+    atRiskAvg: item.at_risk_avg != null ? Math.round(item.at_risk_avg) : null,
+  }));
 
   // Recent 4 interventions
   const recentInterventions = interventions.slice(0, 4);

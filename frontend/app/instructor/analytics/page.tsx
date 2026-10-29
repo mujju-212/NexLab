@@ -1,6 +1,7 @@
 'use client';
 
 import React, { useState, useTransition, useMemo, Suspense } from 'react';
+import dynamic from 'next/dynamic';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import {
@@ -25,21 +26,15 @@ import {
   Sparkles,
   BookOpen,
   RotateCcw,
+  SlidersHorizontal,
+  X,
 } from 'lucide-react';
 
 import InstructorShell from '@/components/layout/InstructorShell';
 import styles from '../shared.module.css';
 import analyticsStyles from '@/components/analytics/analytics.module.css';
 import instructorStyles from './instructor-analytics.module.css';
-import { OverviewTab } from './OverviewTab';
-import { StudentsTab } from './StudentsTab';
-import { ExperimentsTab } from './ExperimentsTab';
-import { TrendsTab } from './TrendsTab';
-import { MasteryTab } from './MasteryTab';
-import { EngagementTab } from './EngagementTab';
-import { IntegrityTab } from './IntegrityTab';
-import { RankingsTab } from './RankingsTab';
-import { AIUsageTab } from './AIUsageTab';
+
 import { experienceService } from '@/services/experience.service';
 import { sessionService } from '@/services/session.service';
 import { analyticsService, LeaderboardRankItem, type InstructorOverviewData } from '@/services/analytics.service';
@@ -63,6 +58,34 @@ import {
   Student360Drawer,
 } from '@/components/analytics';
 import { exportCSV, riskBandLabel, riskColor } from '@/lib/analytics-utils';
+
+const OverviewTab = dynamic(() => import('./OverviewTab').then((m) => m.OverviewTab), {
+  loading: () => <LoadingState message="Loading overview..." />,
+});
+const StudentsTab = dynamic(() => import('./StudentsTab').then((m) => m.StudentsTab), {
+  loading: () => <LoadingState message="Loading student cohort risk matrix..." />,
+});
+const ExperimentsTab = dynamic(() => import('./ExperimentsTab').then((m) => m.ExperimentsTab), {
+  loading: () => <LoadingState message="Loading experiments overview..." />,
+});
+const TrendsTab = dynamic(() => import('./TrendsTab').then((m) => m.TrendsTab), {
+  loading: () => <LoadingState message="Loading longitudinal trends..." />,
+});
+const MasteryTab = dynamic(() => import('./MasteryTab').then((m) => m.MasteryTab), {
+  loading: () => <LoadingState message="Loading curriculum mastery..." />,
+});
+const EngagementTab = dynamic(() => import('./EngagementTab').then((m) => m.EngagementTab), {
+  loading: () => <LoadingState message="Loading engagement metrics..." />,
+});
+const IntegrityTab = dynamic(() => import('./IntegrityTab').then((m) => m.IntegrityTab), {
+  loading: () => <LoadingState message="Loading integrity confidence queue..." />,
+});
+const RankingsTab = dynamic(() => import('./RankingsTab').then((m) => m.RankingsTab), {
+  loading: () => <LoadingState message="Loading student rankings..." />,
+});
+const AIUsageTab = dynamic(() => import('./AIUsageTab').then((m) => m.AIUsageTab), {
+  loading: () => <LoadingState message="Loading AI usage and token consumption..." />,
+});
 
 type Tab =
   | 'today'
@@ -127,6 +150,7 @@ function AnalyticsDashboard() {
   const [selectedSectionFilter, setSelectedSectionFilter] = useState<string>('all');
   const [rankingScope, setRankingScope] = useState<string>('section');
   const [compareActive, setCompareActive] = useState<boolean>(false);
+  const [mobileFiltersOpen, setMobileFiltersOpen] = useState<boolean>(false);
 
   const showToast = (msg: string) => {
     setToast(msg);
@@ -760,6 +784,28 @@ function AnalyticsDashboard() {
     showToast('Analytics refreshed with latest session data.');
   };
 
+  // Native mobile scope bar: active-filter count + one-line scope summary
+  const activeAdvancedFilters = useMemo(() => {
+    let n = 0;
+    if (selectedAcademicYear !== 'all') n++;
+    if (selectedDepartment !== 'all') n++;
+    if (selectedSectionFilter !== 'all') n++;
+    if (selectedSubject) n++;
+    if (selectedExpId) n++;
+    return n;
+  }, [selectedAcademicYear, selectedDepartment, selectedSectionFilter, selectedSubject, selectedExpId]);
+
+  const scopeSummary = useMemo(() => {
+    const shorten = (t: string, n = 3) => t.split(' ').slice(0, n).join(' ');
+    const parts: string[] = [];
+    if (selectedAcademicYear !== 'all') parts.push(selectedAcademicYear);
+    if (selectedDepartment !== 'all') parts.push(selectedDepartment);
+    if (selectedSectionFilter !== 'all') parts.push(`Sec ${normSec(selectedSectionFilter)}`);
+    if (selectedSubject) parts.push(shorten(selectedSubject, 2));
+    if (selectedExpId) parts.push(shorten(availableExperiments.find((e) => e.id === selectedExpId)?.title || '1 Lab'));
+    return parts.length > 0 ? parts.join(' • ') : 'All Sections & Labs';
+  }, [selectedAcademicYear, selectedDepartment, selectedSectionFilter, selectedSubject, selectedExpId, availableExperiments]);
+
   return (
     <InstructorShell activePage={currentTab === 'students' ? 'Students' : 'Analytics'}>
       {/* Toast Notification */}
@@ -811,9 +857,30 @@ function AnalyticsDashboard() {
         )}
       </div>
 
-      {/* ── Cascading 4-Level Filter Hierarchy Toolbar ── */}
+      {/* ── Native Mobile Filter Scope Bar (phones) ── */}
       {currentTab !== 'students' && (
-        <div className={instructorStyles.cascadingToolbarCard}>
+        <>
+          <div className={instructorStyles.analyticsMobileScopeBar}>
+            <div className={instructorStyles.analyticsMobileScopeText} title={scopeSummary}>
+              <Sparkles size={12} style={{ color: '#7c3aed', flexShrink: 0 }} />
+              <span>{scopeSummary}</span>
+            </div>
+            <button
+              type="button"
+              className={instructorStyles.analyticsMobileToggleBtn}
+              onClick={() => setMobileFiltersOpen((prev) => !prev)}
+            >
+              {mobileFiltersOpen ? <X size={13} /> : <SlidersHorizontal size={13} />}
+              {mobileFiltersOpen ? 'Close' : `Filters${activeAdvancedFilters > 0 ? ` (${activeAdvancedFilters})` : ''}`}
+            </button>
+          </div>
+
+          {/* ── Cascading 4-Level Filter Hierarchy Toolbar ── */}
+          <div
+            className={`${instructorStyles.cascadingToolbarCard} ${
+              mobileFiltersOpen ? instructorStyles.analyticsFiltersOpen : ''
+            }`}
+          >
           {/* Main Tier: 5-Step Unified Pipeline Flow */}
           <div className={instructorStyles.cascadingPipelineGrid}>
             {/* LEVEL 1: Academic Year / Batch */}
@@ -1144,6 +1211,7 @@ function AnalyticsDashboard() {
             </div>
           </div>
         </div>
+        </>
       )}
 
       {/* ── 9-Tab Navigation Strip matching Reference UI ── */}

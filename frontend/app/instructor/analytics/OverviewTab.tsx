@@ -1016,7 +1016,7 @@ export function OverviewTab({
           </div>
 
           {/* Table Container */}
-          <div className={styles.tableContainer}>
+          <div className={`${styles.tableContainer} ${styles.worklistTableWrap}`}>
             <table className={styles.worklistTable}>
               <thead>
                 <tr>
@@ -1191,6 +1191,107 @@ export function OverviewTab({
                 )}
               </tbody>
             </table>
+          </div>
+
+          {/* Native Mobile Worklist Cards (≤768px only) */}
+          <div className={styles.worklistMobileCards}>
+            {paginatedStudents.length === 0 ? (
+              <div style={{ textAlign: 'center', padding: '28px 0', color: '#64748b', fontSize: 13 }}>
+                No students in this risk band. All students are on track!
+              </div>
+            ) : (
+              paginatedStudents.map((st) => {
+                const avatar = getAvatarColors(st.student_name, st.roll_number);
+                const initials = getInitials(st.student_name);
+                const isSelected = Boolean(selectedStudentIds[st.student_id]);
+                const score = st.score ?? st.risk_score ?? 50;
+                const scoreFillColor =
+                  st.risk_band === 'critical'
+                    ? '#ef4444'
+                    : st.risk_band === 'high'
+                    ? '#f97316'
+                    : '#f59e0b';
+                return (
+                  <div
+                    key={st.student_id}
+                    className={styles.worklistCard}
+                    onClick={() => onSelectStudent(st.student_id)}
+                    style={{ background: isSelected ? '#f5f3ff' : undefined }}
+                  >
+                    <div className={styles.worklistCardTop}>
+                      <div
+                        className={styles.studentAvatar}
+                        style={{ background: avatar.bg, color: avatar.text, width: 38, height: 38, fontSize: 13 }}
+                      >
+                        {initials}
+                      </div>
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div style={{ fontWeight: 600, fontSize: 14.5, color: '#0f172a', whiteSpace: 'nowrap', overflow: 'hidden', textOverflow: 'ellipsis' }}>
+                          {st.student_name}
+                        </div>
+                        <div style={{ fontSize: 11.5, color: '#94a3b8' }}>{st.roll_number}</div>
+                      </div>
+                      <div>
+                        {st.risk_band === 'critical' && <span className={styles.riskBadgeCritical}>Critical</span>}
+                        {st.risk_band === 'high' && <span className={styles.riskBadgeHigh}>High</span>}
+                        {st.risk_band === 'watch' && <span className={styles.riskBadgeWatch}>Watch</span>}
+                        {st.risk_band === 'ok' && <span className={styles.riskBadgeOk}>On Track</span>}
+                      </div>
+                    </div>
+                    <div className={styles.worklistCardBody}>
+                      <div className={styles.worklistCardRow}>
+                        <span className={styles.worklistCardLabel}>Risk Score</span>
+                        <span style={{ fontWeight: 700, color: '#0f172a' }}>{score}</span>
+                      </div>
+                      <div className={styles.worklistCardScore}>
+                        <div
+                          style={{
+                            height: '100%',
+                            width: `${Math.min(100, Math.max(10, score))}%`,
+                            background: scoreFillColor,
+                            borderRadius: 9999,
+                          }}
+                        />
+                      </div>
+                      {st.primary_warning_driver && (
+                        <div className={styles.worklistCardRow}>
+                          <span className={styles.worklistCardLabel}>Driver</span>
+                          <span className={styles.worklistCardWarning}>{st.primary_warning_driver}</span>
+                        </div>
+                      )}
+                      {st.suggested_action && (
+                        <div className={styles.worklistCardActions}>
+                          <button
+                            type="button"
+                            className={styles.actionBtn}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              if (onActionClick) onActionClick(st.suggested_action, st);
+                              else onSelectStudent(st.student_id);
+                            }}
+                            title={`Execute: ${st.suggested_action}`}
+                          >
+                            {st.suggested_action}
+                          </button>
+                          <button
+                            type="button"
+                            className={styles.moreBtn}
+                            title="Open Student 360 Drawer"
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onSelectStudent(st.student_id);
+                            }}
+                            style={{ flex: 0, minWidth: 52 }}
+                          >
+                            <MoreHorizontal size={16} />
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </div>
+                );
+              })
+            )}
           </div>
 
           {/* Pagination Controls Bar */}

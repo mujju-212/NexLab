@@ -26,52 +26,66 @@ export const AnalyticsTab: React.FC<AnalyticsTabProps> = ({
   overviewData,
   masteryData,
 }) => {
-  // 1. Performance Trend Data (Multi-line across Labs)
-  const perfData = trendsData?.experiment_performance_trend?.map((item: any) => ({
-    name: item.title || item.exp_label || `Lab ${item.exp_number}`,
-    classAvg: item.avg_score != null ? Math.round(item.avg_score) : null,
-    atRiskAvg: item.at_risk_avg != null
-      ? Math.round(item.at_risk_avg)
-      : (item.avg_score != null ? Math.max(20, Math.round(item.avg_score * 0.62)) : null),
-    topQuartile: item.avg_score != null ? Math.min(100, Math.round(item.avg_score * 1.18)) : null,
-  })) || [
-    { name: 'Lab 1', classAvg: 78, atRiskAvg: 48, topQuartile: 94 },
-    { name: 'Lab 2', classAvg: 72, atRiskAvg: 44, topQuartile: 92 },
-    { name: 'Lab 3', classAvg: 80, atRiskAvg: 52, topQuartile: 96 },
-    { name: 'Lab 4', classAvg: 70, atRiskAvg: 38, topQuartile: 90 },
-    { name: 'Lab 5', classAvg: 75, atRiskAvg: 46, topQuartile: 95 },
-  ];
+  // 1. Performance Trend Data — real backend fields only (full_title /
+  // experiment_avg). The old fabricated at-risk / top-quartile series and mock
+  // Lab 1–5 rows are gone: an empty dataset renders an empty chart, not lies.
+  const perfData = (trendsData?.experiment_performance_trend ?? []).map((item: any, idx: number) => ({
+    name: item.full_title || item.title || item.label || `Lab ${idx + 1}`,
+    classAvg: item.experiment_avg != null
+      ? Math.round(item.experiment_avg)
+      : (item.avg_score != null ? Math.round(item.avg_score) : null),
+    atRiskAvg: item.at_risk_avg != null ? Math.round(item.at_risk_avg) : null,
+    topQuartile: item.top_quartile != null ? Math.round(item.top_quartile) : null,
+  }));
 
   // 2. Attendance Trend Data (Bar chart across Labs)
-  const attendanceData = trendsData?.experiment_performance_trend?.map((item: any, idx: number) => ({
-    name: item.exp_label || `Lab ${idx + 1}`,
-    attendance: item.attendance_pct != null ? Math.round(item.attendance_pct) : [88, 85, 92, 82, 86][idx % 5],
-  })) || [
-    { name: 'Lab 1', attendance: 88 },
-    { name: 'Lab 2', attendance: 85 },
-    { name: 'Lab 3', attendance: 92 },
-    { name: 'Lab 4', attendance: 82 },
-    { name: 'Lab 5', attendance: 86 },
-  ];
+  const attendanceData = (trendsData?.experiment_performance_trend ?? []).map((item: any, idx: number) => ({
+    name: item.full_title || item.label || `Lab ${idx + 1}`,
+    attendance: item.attendance_pct != null ? Math.round(item.attendance_pct) : null,
+  }));
 
-  // 3. Grade Distribution (Histogram buckets: 0-20, 20-40, 40-60, 60-80, 80-100)
-  const gradeDistData = [
-    { bracket: '0-20', count: 6, fill: '#ef4444' },
-    { bracket: '20-40', count: 18, fill: '#f97316' },
-    { bracket: '40-60', count: 48, fill: '#f59e0b' },
-    { bracket: '60-80', count: 112, fill: '#3b82f6' },
-    { bracket: '80-100', count: 61, fill: '#10b981' },
-  ];
+  // 3 & 4. Real distributions computed from the students heatmap (per-student,
+  // per-experiment scores). The old hardcoded bucket/struggle mock arrays are gone.
+  const heatmapScores: Array<{ expLabel: string; score: number }> = [];
+  (trendsData?.students_heatmap ?? []).forEach((st: any) => {
+    (st.experiments ?? []).forEach((cell: any) => {
+      if (cell.score != null) {
+        heatmapScores.push({ expLabel: cell.exp_title || cell.exp_label || `Exp ${cell.exp_num}`, score: Number(cell.score) });
+      }
+    });
+  });
 
-  // 4. Concept Difficulty (Ranked horizontal bars)
-  const difficultyData = [
-    { concept: 'Dynamic Prog.', failRate: 75, fill: '#ef4444' },
-    { concept: 'Graphs', failRate: 62, fill: '#f97316' },
-    { concept: 'Stacks & Queues', failRate: 54, fill: '#f59e0b' },
-    { concept: 'Trees', failRate: 38, fill: '#6366f1' },
-    { concept: 'Linked Lists', failRate: 42, fill: '#3b82f6' },
-    { concept: 'Arrays', failRate: 22, fill: '#10b981' },
+  // Grade Distribution (Histogram buckets: 0-20, 20-40, 40-60, 60-80, 80-100)
+  const bucketDefs = [
+    { bracket: '0-20', min: 0, fill: '#ef4444' },
+    { bracket: '20-40', min: 20, fill: '#f97316' },
+    { bracket: '40-60', min: 40, fill: '#f59e0b' },
+    { bracket: '60-80', min: 60, fill: '#3b82f6' },
+    { bracket: '80-100', min: 80, fill: '#10b981' },
   ];
+  const gradeDistData = bucketDefs.map((b, i) => ({
+    bracket: b.bracket,
+    count: heatmapScores.filter(x => x.score >= b.min && x.score < (bucketDefs[i + 1]?.min ?? 101)).length,
+    fill: b.fill,
+  })).filter(b => heatmapScores.length > 0);
+
+  // Concept/Experiment difficulty — % of students scoring below 40 on each experiment
+  const byExperiment: Record<string, { total: number; struggling: number }> = {};
+  heatmapScores.forEach(({ expLabel, score }) => {
+    const bucket = (byExperiment[expLabel] ??= { total: 0, struggling: 0 });
+    bucket.total += 1;
+    if (score < 40) bucket.struggling += 1;
+  });
+  const strugglePalette = ['#ef4444', '#f97316', '#f59e0b', '#6366f1', '#3b82f6', '#10b981', '#9333ea', '#0891b2'];
+  const difficultyData = Object.entries(byExperiment)
+    .map(([concept, { total, struggling }]) => ({
+      concept,
+      failRate: Math.round((struggling / total) * 100),
+      fill: strugglePalette[0],
+    }))
+    .sort((a, b) => b.failRate - a.failRate)
+    .slice(0, 8)
+    .map((d, i) => ({ ...d, fill: strugglePalette[i % strugglePalette.length] }));
 
   return (
     <div className={styles.analyticsGrid}>

@@ -949,3 +949,30 @@
     grid-template-columns: 1fr !important;
   }
 }
+
+/* ── Phone-width hardening (≤768px) ─────────────────────────────────────── */
+@media (max-width: 768px) {
+  .section1Grid,
+  .section2Grid,
+  .section3Grid,
+  .section4Grid {
+    grid-template-columns: 1fr !important;
+    gap: 14px;
+  }
+
+  .card {
+    min-width: 0;
+    max-width: 100%;
+    overflow-x: hidden;
+  }
+
+  .profileMetaGrid {
+    grid-template-columns: 1fr 1fr;
+    gap: 10px 12px;
+  }
+
+  .tableContainer {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+}

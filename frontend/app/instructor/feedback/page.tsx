@@ -47,6 +47,7 @@ export default function StudentFeedbackHubPage() {
   const [selectedSessionType, setSelectedSessionType] = useState<string>('all');
   const [selectedExp, setSelectedExp] = useState<string>('all');
   const [selectedDateRange, setSelectedDateRange] = useState<string>('90d');
+  const [filtersOpen, setFiltersOpen] = useState(false);
 
   // Applied filters (triggered on "Apply Filters" button click)
   const [appliedFilters, setAppliedFilters] = useState({
@@ -403,8 +404,25 @@ export default function StudentFeedbackHubPage() {
           </div>
         </div>
 
+        {/* ═══ NATIVE MOBILE FILTER SCOPE BAR (≤640px only) ═══ */}
+        <div className={styles.mobileScopeBar}>
+          <span className={styles.mobileScopeText}>
+            <span style={{ color: '#7c3aed' }}>Scope:</span>
+            {selectedDept !== 'all' ? selectedDept : 'All Departments'}
+            {selectedSection !== 'all' ? ` · Sec ${selectedSection}` : ''}
+            {selectedSessionType !== 'all' ? ` · ${selectedSessionType === 'live' ? 'Live' : 'Completed'}` : ''}
+          </span>
+          <button
+            type="button"
+            className={styles.mobileScopeToggle}
+            onClick={() => setFiltersOpen(prev => !prev)}
+          >
+            {filtersOpen ? 'Close' : 'Filters'}
+          </button>
+        </div>
+
         {/* ═══ 2-ROW CASCADING FILTER CONTROLS BAR ═══ */}
-        <div className={styles.filterCard}>
+        <div className={`${styles.filterCard} ${filtersOpen ? styles.filterCardMobileOpen : ''}`}>
           {/* Row 1: Academic Hierarchy */}
           <div className={styles.filterGridRow1}>
             <div className={styles.filterField}>
