@@ -276,15 +276,8 @@ export default function SessionsPage() {
         const matchSection = (s.section_name || '').toLowerCase().includes(q);
         if (!matchTitle && !matchSubject && !matchSection) return false;
       }
-      if (sectionFilter !== 'all') {
-        if (sectionFilter === 'secA' && s.section_name !== 'A') return false;
-        if (sectionFilter === 'secB' && s.section_name !== 'B') return false;
-      }
-      if (expFilter !== 'all') {
-        const expTitle = (s.experiment_title || '').toLowerCase();
-        if (expFilter === 'python' && !expTitle.includes('python')) return false;
-        if (expFilter === 'ds' && !expTitle.includes('data') && !expTitle.includes('structure') && !expTitle.includes('stack') && !expTitle.includes('tree') && !expTitle.includes('list')) return false;
-      }
+      if (sectionFilter !== 'all' && s.section_name !== sectionFilter) return false;
+      if (expFilter !== 'all' && s.experiment_id !== expFilter) return false;
       if (statusFilter !== 'all') {
         if (s.status !== statusFilter) return false;
       }
@@ -295,6 +288,20 @@ export default function SessionsPage() {
       return sortOrder === 'oldest' ? dateA - dateB : dateB - dateA;
     });
   }, [sessions, searchQuery, sectionFilter, expFilter, statusFilter, sortOrder]);
+
+  // Filter options derived from the instructor's real sessions — no hardcoded
+  // section/experiment names.
+  const sectionOptions = useMemo(
+    () => Array.from(new Set(sessions.map(s => s.section_name).filter(Boolean))) as string[],
+    [sessions],
+  );
+  const experimentOptions = useMemo(() => {
+    const map = new Map<string, string>();
+    sessions.forEach(s => {
+      if (s.experiment_id) map.set(s.experiment_id, s.experiment_title || 'Untitled experiment');
+    });
+    return Array.from(map.entries());
+  }, [sessions]);
 
   const liveSessions = useMemo(() => filteredSessions.filter(s => s.status === 'active'), [filteredSessions]);
   const upcomingSessions = useMemo(() => filteredSessions.filter(s => s.status === 'scheduled'), [filteredSessions]);
@@ -364,7 +371,7 @@ export default function SessionsPage() {
             <div className={styles.metricVal}>{totalCount}</div>
             <div className={styles.metricBody}>
               <span className={styles.metricLabel}>Total Sessions</span>
-              <span className={`${styles.metricSub} ${styles.trendUp}`}>↑ 12% from last month</span>
+              <span className={styles.metricSub}>Across all your sections</span>
             </div>
           </div>
 
@@ -501,8 +508,9 @@ export default function SessionsPage() {
               onChange={e => setSectionFilter(e.target.value)}
             >
               <option value="all">Class / Section</option>
-              <option value="secA">Section A</option>
-              <option value="secB">Section B</option>
+              {sectionOptions.map(name => (
+                <option key={name} value={name}>Section {name}</option>
+              ))}
             </select>
 
             <select
@@ -511,8 +519,9 @@ export default function SessionsPage() {
               onChange={e => setExpFilter(e.target.value)}
             >
               <option value="all">Experiment</option>
-              <option value="python">Python Fundamentals</option>
-              <option value="ds">Data Structures</option>
+              {experimentOptions.map(([id, title]) => (
+                <option key={id} value={id}>{title}</option>
+              ))}
             </select>
 
             <select

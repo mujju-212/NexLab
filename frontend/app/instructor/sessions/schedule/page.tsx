@@ -67,6 +67,14 @@ function fmtDateTime(date: string, time: string) {
 }
 
 export default function ScheduleWizardPage() {
+  // Marks the page on <body> so the global copilot-FAB lift rule
+  // (globals.css, [data-schedule-wizard]) applies without an impure
+  // top-level :global selector in the CSS module.
+  useEffect(() => {
+    document.body.dataset.scheduleWizard = '1';
+    return () => { delete document.body.dataset.scheduleWizard; };
+  }, []);
+
   const router = useRouter();
   const [step, setStep] = useState(0);
   const [error, setError] = useState('');

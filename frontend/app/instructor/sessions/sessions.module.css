@@ -951,6 +951,24 @@
   overflow-x: auto;
 }
 
+/* Phone week calendar: keep 7-day week but let it swipe horizontally instead
+   of crushing every column into unreadable slivers */
+@media (max-width: 640px) {
+  .calendarGrid {
+    grid-template-columns: repeat(7, minmax(112px, 1fr));
+    scroll-snap-type: x proximity;
+    padding-bottom: 8px;
+  }
+  .calendarDayCol {
+    scroll-snap-align: start;
+    min-height: 300px;
+  }
+  .calendarSlotList > [class*='emptyDay'] {
+    font-size: 11px !important;
+    text-align: center;
+  }
+}
+
 .calendarDayCol {
   background: #f8fafc;
   border: 1px solid #f1f5f9;
@@ -1365,6 +1383,21 @@
     flex-wrap: wrap !important;
     gap: 4px !important;
   }
+  /* flex-basis 300px becomes a height basis once the card stacks — kill it */
+  .cardLeft {
+    flex: none !important;
+    min-width: 0 !important;
+    width: 100% !important;
+    gap: 12px !important;
+  }
+  .typeIconBox {
+    width: 42px !important;
+    height: 42px !important;
+    border-radius: 12px !important;
+  }
+  .cardMainInfo {
+    min-width: 0 !important;
+  }
   .middleStatsPanel {
     width: 100% !important;
     display: grid !important;
@@ -1415,3 +1448,18 @@
 
 
 
+
+/* ── Phone-width hardening: cap filter strip / view toggle (≤640px) ─────── */
+@media (max-width: 640px) {
+  .filterTabs {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+
+  .viewToggle {
+    width: 100% !important;
+    max-width: 100% !important;
+    min-width: 0 !important;
+  }
+}

@@ -156,17 +156,34 @@
     gap: 10px;
   }
 
-  .navBar {
-    position: sticky;
-    bottom: 68px;
-    background: rgba(255, 255, 255, 0.96);
-    backdrop-filter: blur(12px);
-    border-top: 1px solid #e5e7eb;
-    margin: 20px -16px -16px;
-    padding: 12px 16px;
-    z-index: 20;
-    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.04);
+  .stepPill {
+    padding: 7px 11px;
+    font-size: 12px;
   }
+  .stepConnector {
+    width: 14px;
+  }
+  /* Fixed wizard action bar — pinned directly on top of the bottom tab bar,
+     with clearance so page content never peeks between them */
+  .navBar {
+    position: fixed;
+    left: 0;
+    right: 0;
+    bottom: 68px;
+    background: #ffffff;
+    border-top: 1px solid #e5e7eb;
+    margin: 0;
+    padding: 12px 16px;
+    z-index: 60;
+    box-shadow: 0 -4px 16px rgba(0, 0, 0, 0.05);
+  }
+  .wizardContainer {
+    padding-bottom: 150px;
+  }
+
+  /* Lift the AI copilot FAB above the fixed wizard action bar on this page.
+     Moved to globals.css as [data-schedule-wizard] — a top-level :global
+     here is not a CSS-modules pure selector and breaks the build. */
 
   .navBtnSecondary,
   .navBtnPrimary {
