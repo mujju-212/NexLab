@@ -72,15 +72,30 @@ export default function OverviewView({
   onViewAnalytics,
   onViewAllActivity,
 }: OverviewViewProps) {
-  const publishedCount = gradeSummaryData?.subject?.published_count ?? 1;
-  const draftCount = gradeSummaryData?.subject?.draft_count ?? 2;
-  const publishedWeightage = gradeSummaryData?.subject?.published_weightage ?? 80;
-  const draftWeightage = gradeSummaryData?.subject?.draft_weightage ?? 0;
-  const notStartedCount = Math.max(0, (totalExperiments || 5) - publishedCount - draftCount);
+  // Honest zeros — no fabricated fallbacks when nothing is graded yet.
+  const subject = gradeSummaryData?.subject ?? {};
+  const publishedCount = subject.published_count ?? 0;
+  const draftCount = subject.draft_count ?? 0;
+  const publishedWeightage = subject.published_weightage ?? 0;
+  const draftWeightage = subject.draft_weightage ?? 0;
+  const totalAssessments = subject.total_assessments ?? totalExperiments ?? 0;
+  const notStartedCount = Math.max(0, totalAssessments - publishedCount - draftCount);
 
-  const totalExps = Math.max(1, totalExperiments || 5);
-  const pubPct = Math.max(15, Math.round((publishedCount / totalExps) * 100));
-  const draftPct = Math.max(20, Math.round((draftCount / totalExps) * 100));
+  const totalExps = Math.max(1, totalAssessments);
+  const pubPct = Math.min(100, Math.round((publishedCount / totalExps) * 100));
+  const draftPct = Math.max(0, Math.min(100 - pubPct, Math.round((draftCount / totalExps) * 100)));
+  const classAverage = gradeSummaryData?.stats?.class_average;
+
+  const distribution = gradeSummaryData?.stats?.distribution ?? {};
+  const distBars = [
+    { label: '0-40', count: distribution['0-40'] ?? 0, highlight: false },
+    { label: '40-60', count: distribution['40-60'] ?? 0, highlight: false },
+    { label: '60-75', count: distribution['60-75'] ?? 0, highlight: false },
+    { label: '75-90', count: distribution['75-90'] ?? 0, highlight: false },
+    { label: '90-100', count: distribution['90-100'] ?? 0, highlight: false },
+  ];
+  const distMax = Math.max(...distBars.map(b => b.count), 1);
+  const hasGrades = distBars.some(b => b.count > 0);
 
   return (
     <div className={hub.viewContainer}>
@@ -96,15 +111,12 @@ export default function OverviewView({
           </div>
           <div className={hub.kpiCardMainRow}>
             <span className={hub.kpiCardNumber}>
-              {gradeSummaryData?.stats?.class_average ?? classAvg}
+              {classAverage != null ? classAverage : '—'}
               <span className={hub.kpiCardUnit}> / 100</span>
-            </span>
-            <span className={`${hub.kpiCardBadge} ${hub.kpiBadgeGreen}`}>
-              +6%
             </span>
           </div>
           <span className={hub.kpiCardSubtext}>
-            Based on {counts.graded || 180} graded cells
+            Based on {counts.graded} graded cells
           </span>
         </div>
 
@@ -118,14 +130,11 @@ export default function OverviewView({
           </div>
           <div className={hub.kpiCardMainRow}>
             <span className={hub.kpiCardNumber}>
-              {gradeSummaryData?.stats?.graded_submissions ?? counts.graded ?? 724}
-            </span>
-            <span className={`${hub.kpiCardBadge} ${hub.kpiBadgeGreen}`}>
-              +58%
+              {gradeSummaryData?.stats?.graded_submissions ?? counts.graded ?? 0}
             </span>
           </div>
           <span className={hub.kpiCardSubtext}>
-            of {gradeSummaryData?.stats?.total_submissions ?? ((counts.total * (totalExperiments || 1)) || 1082)} total submissions
+            of {gradeSummaryData?.stats?.total_submissions ?? counts.total ?? 0} total submissions
           </span>
         </div>
 
@@ -139,10 +148,7 @@ export default function OverviewView({
           </div>
           <div className={hub.kpiCardMainRow}>
             <span className={hub.kpiCardNumber}>
-              {gradeSummaryData?.stats?.pending_submissions ?? counts.needsReview ?? 186}
-            </span>
-            <span className={`${hub.kpiCardBadge} ${hub.kpiBadgeAmber}`}>
-              +17%
+              {gradeSummaryData?.stats?.pending_submissions ?? counts.needsReview ?? 0}
             </span>
           </div>
           <span className={hub.kpiCardSubtext}>
@@ -160,10 +166,7 @@ export default function OverviewView({
           </div>
           <div className={hub.kpiCardMainRow}>
             <span className={hub.kpiCardNumber}>
-              {gradeSummaryData?.stats?.not_submitted_count ?? counts.notStarted ?? 150}
-            </span>
-            <span className={`${hub.kpiCardBadge} ${hub.kpiBadgeGray}`}>
-              -14%
+              {gradeSummaryData?.stats?.not_submitted_count ?? counts.notStarted ?? 0}
             </span>
           </div>
           <span className={hub.kpiCardSubtext}>
@@ -180,7 +183,7 @@ export default function OverviewView({
             <div>
               <div className={hub.cardHeading}>Assessment progress</div>
               <div className={hub.cardSubheading}>
-                {publishedCount} of {totalExperiments || 5} assessments published • {publishedWeightage} marks allocated
+                {publishedCount} of {totalAssessments} assessments published • {publishedWeightage} marks allocated
               </div>
             </div>
             <button
@@ -229,15 +232,12 @@ export default function OverviewView({
 
           {/* Vertical Bar Histogram */}
           <div className={hub.histogramBox}>
-            {[
-              { label: '0-40', count: gradeSummaryData?.stats?.distribution?.['0-40'] ?? 28, highlight: false },
-              { label: '40-60', count: gradeSummaryData?.stats?.distribution?.['40-60'] ?? 52, highlight: false },
-              { label: '60-75', count: gradeSummaryData?.stats?.distribution?.['60-75'] ?? 84, highlight: true },
-              { label: '75-90', count: gradeSummaryData?.stats?.distribution?.['75-90'] ?? 36, highlight: false },
-              { label: '90-100', count: gradeSummaryData?.stats?.distribution?.['90-100'] ?? 20, highlight: false },
-            ].map(b => {
-              const maxVal = 90;
-              const heightPct = Math.max(12, Math.round((b.count / maxVal) * 100));
+            {!hasGrades ? (
+              <div style={{ margin: 'auto', fontSize: 12.5, color: '#9891a6', fontWeight: 600 }}>
+                No grades recorded yet
+              </div>
+            ) : distBars.map(b => {
+              const heightPct = Math.max(4, Math.round((b.count / distMax) * 100));
               return (
                 <div key={b.label} className={hub.histogramCol}>
                   <span className={hub.histogramValue}>{b.count}</span>
@@ -269,14 +269,11 @@ export default function OverviewView({
           </div>
 
           <div className={hub.activityList}>
-            {(gradeSummaryData?.recent_activity && gradeSummaryData.recent_activity.length > 0
-              ? gradeSummaryData.recent_activity.slice(0, 4)
-              : [
-                  { id: '1', student_name: 'Aarav Gupta', action: 'graded Lab 1 - Sorting Algorithms', timestamp: new Date(Date.now() - 2 * 60000).toISOString() },
-                  { id: '2', student_name: 'Vihan Sharma', action: 'submitted Lab 2', timestamp: new Date(Date.now() - 12 * 60000).toISOString() },
-                  { id: '3', student_name: 'AI System', action: 'flagged 2 submissions for similarity', timestamp: new Date(Date.now() - 60 * 60000).toISOString() },
-                ]
-            ).map((act: any) => (
+            {(gradeSummaryData?.recent_activity ?? []).slice(0, 4).length === 0 ? (
+              <div style={{ padding: '18px 0', fontSize: 12.5, color: '#9891a6', fontWeight: 600 }}>
+                No activity yet — events appear as students submit and you grade.
+              </div>
+            ) : (gradeSummaryData.recent_activity.slice(0, 4)).map((act: any) => (
               <div key={act.id} className={hub.activityItem}>
                 <div
                   className={hub.activityAvatar}
@@ -307,16 +304,15 @@ export default function OverviewView({
             <div className={hub.insightTile}>
               <span className={hub.insightTileTitle}>Attendance (Live Labs)</span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span className={hub.insightTileNumber}>85%</span>
-                <span className={`${hub.kpiCardBadge} ${hub.kpiBadgeGreen}`} style={{ fontSize: 10 }}>+4%</span>
+                <span className={hub.insightTileNumber}>—</span>
               </div>
-              <span className={hub.insightTileSub}>Mean of {counts.total || 260} students</span>
+              <span className={hub.insightTileSub}>Mean of {counts.total} students</span>
             </div>
 
             <div className={hub.insightTile}>
               <span className={hub.insightTileTitle}>Average completion</span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span className={hub.insightTileNumber}>62%</span>
+                <span className={hub.insightTileNumber}>—</span>
               </div>
               <span className={hub.insightTileSub}>of all experiments</span>
             </div>
@@ -324,7 +320,7 @@ export default function OverviewView({
             <div className={hub.insightTile}>
               <span className={hub.insightTileTitle}>Avg. hint usage</span>
               <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
-                <span className={hub.insightTileNumber}>1.8</span>
+                <span className={hub.insightTileNumber}>—</span>
               </div>
               <span className={hub.insightTileSub}>per submission</span>
             </div>

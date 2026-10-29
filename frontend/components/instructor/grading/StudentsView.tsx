@@ -141,7 +141,7 @@ export default function StudentsView({
             value={selectedSection}
             onChange={e => { onSelectSection(e.target.value); setCurrentPage(1); }}
           >
-            <option value="all">All Sections ({availableSections.length || 15})</option>
+            <option value="all">All Sections ({availableSections.length})</option>
             {availableSections.map(s => (
               <option key={s.section_id} value={s.section_id}>Section {s.section_name}</option>
             ))}
@@ -218,7 +218,7 @@ export default function StudentsView({
                 const avatarStyle = getAvatarStyle(s.full_name);
                 const studentObj = gradeSummaryStudents?.find(st => st.student_id === s.student_id);
                 const riskLevel = studentObj?.risk_level ?? (s.status === 'flagged' ? 'critical' : (s.score && s.score < 50 ? 'high' : (s.score && s.score < 75 ? 'watch' : 'ok')));
-                const attendance = studentObj?.attendance_pct ?? 85;
+                const attendance = studentObj?.attendance_pct;
                 const pendingCount = studentObj?.pending_count ?? (s.status === 'needs_review' ? 1 : 0);
                 const lastActive = studentObj?.last_active ?? s.submission?.submitted_at;
 
@@ -271,10 +271,10 @@ export default function StudentsView({
                       </div>
                     </td>
                     <td style={{ fontWeight: 600, color: '#334155' }}>
-                      {attendance}%
+                      {attendance != null ? `${attendance}%` : '—'}
                     </td>
                     <td style={{ fontWeight: 700, color: '#0f172a' }}>
-                      {Math.round(s.score || 72)}%
+                      {s.score != null ? `${Math.round(s.score)}%` : '—'}
                     </td>
                     <td style={{ textAlign: 'center', fontWeight: 650, color: pendingCount > 0 ? '#ea580c' : '#94a3b8' }}>
                       {pendingCount}
@@ -321,7 +321,7 @@ export default function StudentsView({
             const avatarStyle = getAvatarStyle(s.full_name);
             const studentObj = gradeSummaryStudents?.find(st => st.student_id === s.student_id);
             const riskLevel = studentObj?.risk_level ?? (s.status === 'flagged' ? 'critical' : (s.score && s.score < 50 ? 'high' : (s.score && s.score < 75 ? 'watch' : 'ok')));
-            const attendance = studentObj?.attendance_pct ?? 85;
+            const attendance = studentObj?.attendance_pct;
             const pendingCount = studentObj?.pending_count ?? (s.status === 'needs_review' ? 1 : 0);
 
             return (
@@ -351,11 +351,11 @@ export default function StudentsView({
                   </div>
                   <div className={hub.mobileCardMetricItem}>
                     <span className={hub.mobileMetricLabel}>Attendance</span>
-                    <span className={hub.mobileMetricVal}>{attendance}%</span>
+                    <span className={hub.mobileMetricVal}>{attendance != null ? `${attendance}%` : '—'}</span>
                   </div>
                   <div className={hub.mobileCardMetricItem}>
                     <span className={hub.mobileMetricLabel}>Avg Score</span>
-                    <span className={hub.mobileMetricVal}>{Math.round(s.score || 72)}%</span>
+                    <span className={hub.mobileMetricVal}>{s.score != null ? `${Math.round(s.score)}%` : '—'}</span>
                   </div>
                 </div>
 

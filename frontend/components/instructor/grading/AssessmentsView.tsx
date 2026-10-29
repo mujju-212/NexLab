@@ -29,18 +29,10 @@ export default function AssessmentsView({
   onViewAssessment,
   onCreateAssessment,
 }: AssessmentsViewProps) {
-  const notStartedCount = Math.max(0, (experiments.length || 5) - publishedCount - draftCount);
+  const notStartedCount = Math.max(0, (experiments.length || 0) - publishedCount - draftCount);
 
-  const filteredExperiments = (experiments.length > 0
-    ? experiments
-    : [
-        { id: '1', exp_number: 1, title: 'Sorting Algorithms', weightage: 20, is_published: true, submitted_count: 180 },
-        { id: '2', exp_number: 2, title: 'Trees and BST', weightage: 0, is_published: false, submitted_count: 124 },
-        { id: '3', exp_number: 3, title: 'Graph Algorithms', weightage: 0, is_published: false, submitted_count: 0 },
-        { id: '4', exp_number: 4, title: 'Fundamentals Quiz', weightage: 0, is_published: false, submitted_count: 180 },
-        { id: '5', exp_number: 5, title: 'Final Project', weightage: 0, is_published: false, submitted_count: 0 },
-      ]
-  ).filter(exp => {
+  // Real data only — never substitute mock assessments when the list is empty.
+  const filteredExperiments = experiments.filter(exp => {
     if (searchQuery.trim()) {
       const q = searchQuery.toLowerCase();
       if (!exp.title.toLowerCase().includes(q)) return false;
@@ -61,7 +53,7 @@ export default function AssessmentsView({
             className={`${hub.statusFilterTab} ${statusTab === 'all' ? hub.statusFilterTabActive : ''}`}
             onClick={() => onSelectStatusTab('all')}
           >
-            All ({experiments.length || 5})
+            All ({experiments.length})
           </button>
           <button
             type="button"
@@ -112,8 +104,8 @@ export default function AssessmentsView({
         </div>
       </div>
 
-      {/* Assessments Table */}
-      <div className={hub.rosterTableContainer}>
+      {/* Assessments Table (desktop) */}
+      <div className={`${hub.rosterTableContainer} ${hub.assessDesktop}`}>
         <table className={hub.rosterTable}>
           <thead>
             <tr>
@@ -130,9 +122,9 @@ export default function AssessmentsView({
             {filteredExperiments.map((exp, idx) => {
               const isPub = Boolean(exp.is_published);
               const isDraft = !isPub && ((exp.submitted_count && exp.submitted_count > 0) || exp.exp_number <= 2);
-              const subCount = exp.submitted_count || (isPub ? 180 : (isDraft ? 124 : 0));
-              const totalTarget = totalStudents || 200;
-              const subPct = Math.round((subCount / totalTarget) * 100);
+              const subCount = exp.submitted_count || 0;
+              const totalTarget = totalStudents || 0;
+              const subPct = totalTarget > 0 ? Math.round((subCount / totalTarget) * 100) : 0;
 
               return (
                 <tr key={exp.id}>
@@ -222,6 +214,54 @@ export default function AssessmentsView({
             })}
           </tbody>
         </table>
+      </div>
+
+      {/* Mobile card list — native app feel on phones, hidden on desktop */}
+      <div className={hub.assessMobileList}>
+        {filteredExperiments.map((exp, idx) => {
+          const isPub = Boolean(exp.is_published);
+          const isDraft = !isPub && ((exp.submitted_count && exp.submitted_count > 0) || exp.exp_number <= 2);
+          const subCount = exp.submitted_count || 0;
+          const totalTarget = totalStudents || 0;
+          const subPct = totalTarget > 0 ? Math.round((subCount / totalTarget) * 100) : 0;
+          const typeLabel = exp.delivery_mode === 'exam' ? 'Exam' : (exp.exp_number === 4 ? 'Quiz' : (exp.exp_number === 5 ? 'Project' : 'Lab Experiment'));
+
+          return (
+            <div key={exp.id} className={hub.assessMobileCard}>
+              <div className={hub.assessMobileHead}>
+                <div className={`${hub.kpiCardIconBox} ${hub.kpiIconPurple}`}>
+                  <BookOpen size={15} />
+                </div>
+                <div className={hub.assessMobileTitleWrap}>
+                  <span className={hub.assessMobileTitle}>Lab {exp.exp_number} · {exp.title}</span>
+                  <span className={hub.assessMobileType}>{typeLabel} · {exp.weightage || 0} marks</span>
+                </div>
+                {isPub && <span className={hub.statusPillPublished}>● Published</span>}
+                {isDraft && <span className={hub.statusPillDraft}>● Draft</span>}
+                {!isPub && !isDraft && <span className={hub.statusPillNotStarted}>● Not started</span>}
+              </div>
+
+              <div className={hub.assessMobileSubRow}>
+                <span className={hub.assessMobileSubLabel}>Submissions</span>
+                <span className={hub.assessMobileSubValue}>{subCount}/{totalTarget} ({subPct}%)</span>
+              </div>
+              <div className={hub.tableProgressTrack} style={{ marginTop: -4 }}>
+                <div
+                  className={hub.tableProgressFill}
+                  style={{ width: `${subPct}%`, background: isPub ? '#7c3aed' : '#fbbf24' }}
+                />
+              </div>
+
+              <button
+                type="button"
+                className={hub.assessMobileAction}
+                onClick={() => (isPub ? onViewAssessment(exp.id) : (window.location.href = `/instructor/experiments/${exp.id}/edit`))}
+              >
+                {isPub ? 'View results' : (isDraft ? 'Continue editing' : 'Setup assessment')}
+              </button>
+            </div>
+          );
+        })}
       </div>
     </div>
   );

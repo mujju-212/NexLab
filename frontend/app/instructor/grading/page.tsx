@@ -945,7 +945,9 @@ export default function GradingPage() {
             >
               <option value="all">Full Subject Gradebook</option>
               {subjectExperiments.map(e => (
-                <option key={e.id} value={e.id}>Lab {e.exp_number} - {e.title}</option>
+                <option key={e.id} value={e.id}>
+                  {/^lab\s*\d+\s*[-–:]\s*/i.test(e.title || '') ? e.title : `Lab ${e.exp_number} - ${e.title}`}
+                </option>
               ))}
             </select>
           </div>
