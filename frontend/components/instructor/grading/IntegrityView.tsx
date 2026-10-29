@@ -48,12 +48,18 @@ export default function IntegrityView({
   const [integrityRiskFilter, setIntegrityRiskFilter] = useState<string>('all');
   const [integrityStatusFilter, setIntegrityStatusFilter] = useState<string>('all');
 
-  const defaultFlags = [
-    { id: 'f1', name: 'Aarav Gupta', roll: 'GV25-CS101', assessment: 'Lab 2 - Trees', sim: 92, risk: 'High', status: 'Under Review', matched: '3 students' },
-    { id: 'f2', name: 'Vihan Sharma', roll: 'GV25-CS108', assessment: 'Lab 3 - Graphs', sim: 78, risk: 'Medium', status: 'Pending', matched: '1 student' },
-    { id: 'f3', name: 'Aditya Nair', roll: 'GV25-CS211', assessment: 'Lab 2 - Trees', sim: 65, risk: 'Medium', status: 'Reviewed', matched: '2 students' },
-    { id: 'f4', name: 'Aanya Iyer', roll: 'GV25-CS211', assessment: 'Lab 1 - Sorting', sim: 88, risk: 'High', status: 'Under Review', matched: '4 students' },
-  ];
+  // Real flags from the backend — { id, student_a_name, student_a_roll,
+  // student_b_name, experiment_title, similarity_pct, status, detected_at }.
+  const rows = plagiarismFlags.map(f => ({
+    id: f.id,
+    name: f.student_a_name || 'Unknown',
+    roll: f.student_a_roll || '—',
+    assessment: f.experiment_title || '—',
+    sim: Math.round(Number(f.similarity_pct) || 0),
+    risk: Number(f.similarity_pct) > 80 ? 'High' : Number(f.similarity_pct) > 50 ? 'Medium' : 'Low',
+    status: f.status === 'pending' ? 'Pending' : f.status === 'cleared' ? 'Cleared' : 'Actioned',
+    matched: f.student_b_name ? `Matched with ${f.student_b_name}` : '—',
+  }));
 
   return (
     <div className={hub.viewContainer}>
@@ -116,13 +122,13 @@ export default function IntegrityView({
       <div className={hub.overviewKpiGrid}>
         <div className={hub.kpiCardV2}>
           <div className={hub.kpiCardTopRow}>
-            <span className={hub.kpiCardTitle}>Flagged submissions (6%)</span>
+            <span className={hub.kpiCardTitle}>Flagged submissions</span>
             <div className={`${hub.kpiCardIconBox} ${hub.kpiIconRed}`}>
               <FileText size={16} />
             </div>
           </div>
           <span className={hub.kpiCardNumber} style={{ color: '#dc2626' }}>
-            {plagiarismFlags.length || 12}
+            {plagiarismFlags.length}
           </span>
         </div>
 
@@ -134,7 +140,7 @@ export default function IntegrityView({
             </div>
           </div>
           <span className={hub.kpiCardNumber} style={{ color: '#dc2626' }}>
-            3
+            {plagiarismFlags.filter(f => Number(f.similarity_pct) > 80).length}
           </span>
         </div>
 
@@ -146,7 +152,7 @@ export default function IntegrityView({
             </div>
           </div>
           <span className={hub.kpiCardNumber} style={{ color: '#ea580c' }}>
-            7
+            {plagiarismFlags.filter(f => Number(f.similarity_pct) > 50 && Number(f.similarity_pct) <= 80).length}
           </span>
         </div>
 
@@ -158,7 +164,7 @@ export default function IntegrityView({
             </div>
           </div>
           <span className={hub.kpiCardNumber} style={{ color: '#7c3aed' }}>
-            2
+            {plagiarismFlags.filter(f => f.status === 'pending').length}
           </span>
         </div>
       </div>
@@ -182,7 +188,13 @@ export default function IntegrityView({
             </tr>
           </thead>
           <tbody>
-            {defaultFlags
+            {rows.length === 0 ? (
+              <tr>
+                <td colSpan={9} style={{ textAlign: 'center', padding: '26px 0', fontSize: 12.5, color: '#9891a6', fontWeight: 600 }}>
+                  No plagiarism flags — integrity checks are running after each session.
+                </td>
+              </tr>
+            ) : rows
               .filter(f => {
                 if (integritySearch.trim()) {
                   const q = integritySearch.toLowerCase();
@@ -220,12 +232,14 @@ export default function IntegrityView({
                   <td>
                     {flag.risk === 'High' ? (
                       <span className={`${hub.riskBadge} ${hub.riskCritical}`}>High</span>
-                    ) : (
+                    ) : flag.risk === 'Medium' ? (
                       <span className={`${hub.riskBadge} ${hub.riskHigh}`}>Medium</span>
+                    ) : (
+                      <span className={`${hub.riskBadge} ${hub.riskWatch}`}>Low</span>
                     )}
                   </td>
                   <td>
-                    <span className={`${hub.riskBadge} ${flag.status === 'Reviewed' ? hub.riskOk : (flag.status === 'Under Review' ? hub.riskWatch : hub.riskHigh)}`}>
+                    <span className={`${hub.riskBadge} ${flag.status === 'Actioned' ? hub.riskOk : (flag.status === 'Cleared' ? hub.riskWatch : hub.riskHigh)}`}>
                       {flag.status}
                     </span>
                   </td>

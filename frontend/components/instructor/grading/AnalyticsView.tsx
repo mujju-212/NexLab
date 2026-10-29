@@ -17,8 +17,18 @@ export default function AnalyticsView({
   totalStudents,
   onExportCSV,
 }: AnalyticsViewProps) {
-  const atRiskCount = stats?.at_risk_count ?? 28;
-  const atRiskPct = Math.round((atRiskCount / (totalStudents || 245)) * 100);
+  const atRiskCount = stats?.at_risk_count ?? 0;
+  const atRiskPct = totalStudents ? Math.round((atRiskCount / totalStudents) * 100) : 0;
+  const hasStats = stats?.class_average != null;
+  const distribution = stats?.distribution ?? {};
+  const distBars = [
+    { label: '0-40', count: distribution['0-40'] ?? 0, highlight: false },
+    { label: '40-60', count: distribution['40-60'] ?? 0, highlight: false },
+    { label: '60-75', count: distribution['60-75'] ?? 0, highlight: false },
+    { label: '75-90', count: distribution['75-90'] ?? 0, highlight: false },
+    { label: '90-100', count: distribution['90-100'] ?? 0, highlight: false },
+  ];
+  const distMax = Math.max(...distBars.map(b => b.count), 1);
 
   return (
     <div className={hub.viewContainer}>
@@ -29,9 +39,8 @@ export default function AnalyticsView({
           <span className={hub.kpiCardTitle}>Class average</span>
           <div style={{ display: 'flex', alignItems: 'baseline', gap: 6 }}>
             <span className={hub.kpiCardNumber}>
-              {stats?.class_average ?? classAvg}
+              {stats?.class_average != null ? stats.class_average : '—'}
             </span>
-            <span className={`${hub.kpiCardBadge} ${hub.kpiBadgeGreen}`}>+4%</span>
           </div>
         </div>
 
@@ -39,7 +48,7 @@ export default function AnalyticsView({
         <div className={hub.kpiCardV2}>
           <span className={hub.kpiCardTitle}>Median score</span>
           <span className={hub.kpiCardNumber}>
-            {stats?.median_score ?? 74.0}
+            {stats?.median_score != null ? stats.median_score : '—'}
           </span>
         </div>
 
@@ -47,7 +56,7 @@ export default function AnalyticsView({
         <div className={hub.kpiCardV2}>
           <span className={hub.kpiCardTitle}>Pass rate (&gt;=50)</span>
           <span className={hub.kpiCardNumber}>
-            {stats?.pass_rate ?? 88}%
+            {stats?.pass_rate != null ? `${stats.pass_rate}%` : '—'}
           </span>
         </div>
 
@@ -55,7 +64,7 @@ export default function AnalyticsView({
         <div className={hub.kpiCardV2}>
           <span className={hub.kpiCardTitle}>Top performers</span>
           <span className={hub.kpiCardNumber}>
-            {stats?.top_performers_count ?? 12}
+            {stats?.top_performers_count ?? 0}
             <span className={hub.kpiCardUnit}> (&gt;=90)</span>
           </span>
         </div>
@@ -86,18 +95,12 @@ export default function AnalyticsView({
         <div className={hub.whiteCard}>
           <div className={hub.cardHeading}>Grade distribution</div>
           <div className={hub.histogramBox} style={{ height: 160 }}>
-            {[
-              { label: '0-40', count: stats?.distribution?.['0-40'] ?? 28, highlight: false },
-              { label: '40-60', count: stats?.distribution?.['40-60'] ?? 52, highlight: false },
-              { label: '60-75', count: stats?.distribution?.['60-75'] ?? 84, highlight: true },
-              { label: '75-90', count: stats?.distribution?.['75-90'] ?? 36, highlight: false },
-              { label: '90-100', count: stats?.distribution?.['90-100'] ?? 20, highlight: false },
-            ].map(b => (
+            {distBars.map(b => (
               <div key={b.label} className={hub.histogramCol}>
                 <span className={hub.histogramValue}>{b.count}</span>
                 <div
                   className={`${hub.histogramBar} ${b.highlight ? hub.histogramBarHighlight : ''}`}
-                  style={{ height: `${Math.max(12, Math.round((b.count / 90) * 100))}%` }}
+                  style={{ height: `${Math.max(4, Math.round((b.count / distMax) * 100))}%` }}
                 />
                 <span className={hub.histogramLabel}>{b.label}</span>
               </div>

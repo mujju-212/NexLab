@@ -25,7 +25,6 @@ from datetime import datetime, timedelta, timezone
 import uuid
 import re
 import json
-import random
 import subprocess
 
 instructor_bp = Blueprint('instructor', __name__)
@@ -2098,12 +2097,12 @@ def subject_grade_summary(subject_id):
             'class_average_percent': exam_stats[x.id]['class_average_percent'],
         })
 
-    # Global aggregate stats
+    # Global aggregate stats — None (not a fake number) when nothing is graded yet
     valid_scores = [s['subject_percent'] for s in students_out if s['subject_percent'] is not None]
-    class_average = round(sum(valid_scores) / len(valid_scores), 1) if valid_scores else 72.4
+    class_average = round(sum(valid_scores) / len(valid_scores), 1) if valid_scores else None
     sorted_scores = sorted(valid_scores)
-    median_score = round(sorted_scores[len(sorted_scores) // 2], 1) if sorted_scores else 74.0
-    pass_rate = round((sum(1 for sc in valid_scores if sc >= 50) / len(valid_scores)) * 100, 1) if valid_scores else 88.0
+    median_score = round(sorted_scores[len(sorted_scores) // 2], 1) if sorted_scores else None
+    pass_rate = round((sum(1 for sc in valid_scores if sc >= 50) / len(valid_scores)) * 100, 1) if valid_scores else None
     top_performers = sum(1 for sc in valid_scores if sc >= 90)
     at_risk = sum(1 for s in students_out if s.get('risk_level') in ('critical', 'high'))
 
@@ -2160,6 +2159,7 @@ def subject_grade_summary(subject_id):
             'planned_total_weightage': round(planned_total_weightage, 2),
             'published_count': len(graded_exps) + len(standalone_exams),
             'draft_count': len(exps) - len(graded_exps),
+            'total_assessments': len(exps) + len(standalone_exams),
             'unallocated_marks': round(max(0.0, total_marks - total_weightage), 2),
             'over_allocation': total_weightage > total_marks,
         },
@@ -2565,7 +2565,28 @@ def plagiarism_flags():
     if exp_id:
         query = query.filter_by(experiment_id=exp_id)
     flags = query.filter_by(status='pending').all()
-    return jsonify({'flags': [f.to_dict() for f in flags]}), 200
+
+    # Enrich with names + experiment title so the Integrity view can render
+    # real rows instead of placeholders.
+    user_ids, exp_ids = set(), set()
+    for f in flags:
+        user_ids.update((f.student_a_id, f.student_b_id))
+        if f.experiment_id:
+            exp_ids.add(f.experiment_id)
+    users = {u.id: u for u in User.query.filter(User.id.in_(user_ids)).all()} if user_ids else {}
+    exps  = {e.id: e for e in Experiment.query.filter(Experiment.id.in_(exp_ids)).all()} if exp_ids else {}
+
+    out = []
+    for f in flags:
+        d = f.to_dict()
+        ua, ub = users.get(f.student_a_id), users.get(f.student_b_id)
+        exp = exps.get(f.experiment_id)
+        d['student_a_name'] = ua.full_name if ua else 'Unknown'
+        d['student_a_roll'] = ua.roll_number if ua else ''
+        d['student_b_name'] = ub.full_name if ub else 'Unknown'
+        d['experiment_title'] = exp.title if exp else 'Unknown'
+        out.append(d)
+    return jsonify({'flags': out}), 200
 
 
 @instructor_bp.route('/plagiarism-flags/<flag_id>', methods=['PATCH'])
@@ -2745,10 +2766,8 @@ def session_feedback_details(session_id):
     dept_id = (getattr(subj, 'department_id', None) if subj else None) or (getattr(batch, 'department_id', None) if batch else None)
     dept = Department.query.get(dept_id) if dept_id else None
 
-    # Enrolled students count in this section
-    enrolled_count = SectionStudent.query.filter_by(section_id=sec.id).count() if sec else 46
-    if enrolled_count == 0:
-        enrolled_count = 46
+    # Enrolled students count in this section (real count; no fake default)
+    enrolled_count = SectionStudent.query.filter_by(section_id=sec.id).count() if sec else 0
 
     # Feedbacks for this session
     rows = SessionFeedback.query.filter_by(
@@ -2760,10 +2779,11 @@ def session_feedback_details(session_id):
         vals = [getattr(f, field) for f in items if getattr(f, field) is not None]
         return round(sum(vals) / len(vals), 1) if vals else None
 
-    session_overall = _avg(rows, 'overall_rating') or 4.2
-    session_clarity = _avg(rows, 'experiment_clarity') or 4.1
-    session_pacing  = _avg(rows, 'session_pacing') or 3.8
-    session_ai      = _avg(rows, 'ai_hint_helpfulness') or 4.0
+    # No feedback yet → None (the UI renders an em dash), never a fake score
+    session_overall = _avg(rows, 'overall_rating')
+    session_clarity = _avg(rows, 'experiment_clarity')
+    session_pacing  = _avg(rows, 'session_pacing')
+    session_ai      = _avg(rows, 'ai_hint_helpfulness')
 
     # Rating distribution 1 to 5
     dist = {1: 0, 2: 0, 3: 0, 4: 0, 5: 0}
@@ -2902,12 +2922,12 @@ def session_feedback_details(session_id):
         'time_ago': _format_time_ago(f.submitted_at),
     } for f in rows]
 
-    # Attendance & test cases context
-    test_cases_count = TestCase.query.filter_by(experiment_id=exp.id).count() if exp else 4
+    # Attendance & test cases context — honest zeros, no fake defaults
+    test_cases_count = TestCase.query.filter_by(experiment_id=exp.id).count() if exp else 0
     attendance_count = SessionAttendance.query.filter_by(session_id=session_id).count()
-    turnout_pct = round((attendance_count / enrolled_count * 100)) if enrolled_count > 0 else 88
+    turnout_pct = round((attendance_count / enrolled_count * 100)) if enrolled_count > 0 else 0
 
-    sub_pct = round((total_resp / enrolled_count * 100)) if enrolled_count > 0 else 87
+    sub_pct = round((total_resp / enrolled_count * 100)) if enrolled_count > 0 else 0
 
     # Formatted schedule
     sched_dt = session.scheduled_at or datetime.utcnow()
@@ -2930,7 +2950,7 @@ def session_feedback_details(session_id):
     }
 
     instructor_user = User.query.get(ss.instructor_id) if (ss and ss.instructor_id) else None
-    instructor_name = instructor_user.full_name if instructor_user else "Prof. Sharma"
+    instructor_name = instructor_user.full_name if instructor_user else session.title or 'Instructor'
 
     learning_objectives = [
         "Understand the concept of graphs and shortest path algorithms including Dijkstra and Bellman-Ford.",
@@ -2949,7 +2969,7 @@ def session_feedback_details(session_id):
     exp_desc = (
         (exp.aim + ' ' + (exp.theory or ''))
         if (exp and exp.aim and len(exp.aim) > 30)
-        else "This lab explores graph representation and shortest path algorithms. Students implement and analyze Dijkstra's algorithm and Bellman-Ford algorithm, compare their performance, and apply these concepts to real-world network routing scenarios."
+        else ((exp.aim or '') if exp else (session.title or ''))
     )
 
     return jsonify({
@@ -2996,13 +3016,13 @@ def session_feedback_details(session_id):
         },
         'feedback': feedback_items,
         'context': {
-            'aim': exp.aim if exp else 'Comprehensive lab module on graph traversal and shortest path.',
-            'theory': exp.theory if exp else 'Theoretical analysis and algorithmic implementation.',
-            'problem_statement': exp.problem_statement if exp else 'Implement Dijkstra and BFS shortest path algorithm.',
+            'aim': exp.aim if exp else (session.title or ''),
+            'theory': exp.theory if exp else '',
+            'problem_statement': exp.problem_statement if exp else '',
             'difficulty_level': getattr(exp, 'difficulty_level', 2) or 2,
-            'test_cases_count': max(1, test_cases_count),
+            'test_cases_count': test_cases_count,
             'attendance_turnout_pct': turnout_pct,
-            'students_present': attendance_count if attendance_count > 0 else 42,
+            'students_present': attendance_count,
             'instructor_name': instructor_name,
             'live_conductor_status': 'Available',
             'description': exp_desc,
@@ -3202,41 +3222,31 @@ def feedback_overview():
         p = round((c / total_fbs * 100)) if total_fbs > 0 else 0
         dist_formatted[str(star)] = {'count': c, 'pct': p}
 
-    # Coverage metrics
-    comp_pct = round((total_fbs / total_enrolled * 100)) if total_enrolled > 0 else 87
+    # Coverage metrics — 0 (not a fake percentage) when nobody is enrolled
+    comp_pct = round((total_fbs / total_enrolled * 100)) if total_enrolled > 0 else 0
     not_sub = max(0, total_enrolled - total_fbs)
     not_sub_pct = max(0, 100 - comp_pct)
 
-    # Monthly trends (Feedback Trends line chart)
-    # Group feedbacks by month name
+    # Monthly trends (Feedback Trends line chart) — only months that actually
+    # have feedback. Fabricating baseline points (or worse, random jitter) for
+    # empty months presented invented ratings as real student sentiment.
     month_groups = {}
     for f in fb_rows:
         dt = f.submitted_at or datetime.utcnow()
         m_key = dt.strftime('%b')
         month_groups.setdefault(m_key, []).append(f)
 
-    # If we have real monthly groups, use them; otherwise produce 5 natural canonical months
-    month_order = ['Jul', 'Aug', 'Sep', 'Oct', 'Nov']
     trends = []
-    for m in month_order:
-        items = month_groups.get(m, [])
-        if items:
-            trends.append({
-                'period': m,
-                'overall': _avg(items, 'overall_rating') or 4.3,
-                'clarity': _avg(items, 'experiment_clarity') or 4.1,
-                'pacing': _avg(items, 'session_pacing') or 3.9,
-                'ai_help': _avg(items, 'ai_hint_helpfulness') or 4.2,
-            })
-        else:
-            # Baseline trend aligned with averages
-            trends.append({
-                'period': m,
-                'overall': round((_avg(fb_rows, 'overall_rating') or 4.3) + random.uniform(-0.15, 0.15), 1),
-                'clarity': round((_avg(fb_rows, 'experiment_clarity') or 4.1) + random.uniform(-0.15, 0.15), 1),
-                'pacing': round((_avg(fb_rows, 'session_pacing') or 3.9) + random.uniform(-0.15, 0.15), 1),
-                'ai_help': round((_avg(fb_rows, 'ai_hint_helpfulness') or 4.2) + random.uniform(-0.15, 0.15), 1),
-            })
+    for m, items in month_groups.items():
+        trends.append({
+            'period': m,
+            'overall': _avg(items, 'overall_rating'),
+            'clarity': _avg(items, 'experiment_clarity'),
+            'pacing': _avg(items, 'session_pacing'),
+            'ai_help': _avg(items, 'ai_hint_helpfulness'),
+        })
+    # Chronological order, most recent last
+    trends.sort(key=lambda t: datetime.strptime(t['period'], '%b'))
 
     # Sentiment breakdown
     pos_count = sum(1 for r in fb_rows if (r.overall_rating or 0) >= 4.5)
@@ -3267,15 +3277,16 @@ def feedback_overview():
             **meta,
         })
 
+    # Honest KPIs — None and no fabricated deltas when no feedback exists yet
     kpis = {
-        'overall_rating': _avg(fb_rows, 'overall_rating') or 4.3,
-        'overall_delta': '+6%',
-        'experiment_clarity': _avg(fb_rows, 'experiment_clarity') or 4.1,
-        'clarity_delta': '+6%',
-        'session_pacing': _avg(fb_rows, 'session_pacing') or 3.9,
-        'pacing_delta': '+5%',
-        'ai_hint_helpfulness': _avg(fb_rows, 'ai_hint_helpfulness') or 4.2,
-        'ai_delta': '+10%',
+        'overall_rating': _avg(fb_rows, 'overall_rating'),
+        'overall_delta': None,
+        'experiment_clarity': _avg(fb_rows, 'experiment_clarity'),
+        'clarity_delta': None,
+        'session_pacing': _avg(fb_rows, 'session_pacing'),
+        'pacing_delta': None,
+        'ai_hint_helpfulness': _avg(fb_rows, 'ai_hint_helpfulness'),
+        'ai_delta': None,
         'total_ratings': total_fbs,
     }
 
