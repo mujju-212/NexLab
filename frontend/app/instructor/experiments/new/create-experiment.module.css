@@ -302,6 +302,20 @@
   .gridTwo, .gridThree {
     grid-template-columns: 1fr;
   }
+
+  /* Save/Next command becomes a full-width primary touch target */
+  .nextTopBtn {
+    width: 100%;
+    justify-content: center;
+    min-height: 44px;
+  }
+
+  /* Stepper stacks vertically with smaller circles */
+  .stepperCard {
+    flex-wrap: wrap;
+    gap: 12px;
+    padding: 14px 16px;
+  }
 }
 
 .formGroup {

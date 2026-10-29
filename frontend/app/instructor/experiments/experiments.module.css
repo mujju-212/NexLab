@@ -921,6 +921,86 @@
   min-width: 140px;
 }
 
+/* Subject hero + nav tabs on phones */
+@media (max-width: 640px) {
+  .subjectHeroCard {
+    flex-direction: column;
+    padding: 16px;
+    gap: 14px;
+    border-radius: 16px;
+  }
+  .subjectHeroLeft {
+    min-width: 0;
+    gap: 14px;
+  }
+  .subjectHeroIconLarge {
+    width: 54px;
+    height: 54px;
+    border-radius: 16px;
+  }
+  .subjectHeroTitle {
+    font-size: 20px;
+    overflow-wrap: anywhere;
+  }
+  .subjectHeroQuote {
+    display: none; /* decorative flourish, not worth the space on phones */
+  }
+  .subjectHeroMetaRow {
+    flex-wrap: wrap;
+    gap: 10px;
+    font-size: 12px;
+  }
+  .subjectNavTabs {
+    flex-wrap: wrap;
+    gap: 10px;
+    padding-bottom: 10px;
+  }
+  .subjectTabList {
+    width: 100%;
+    gap: 16px;
+    overflow-x: auto;
+    scrollbar-width: none;
+  }
+  .subjectTabList::-webkit-scrollbar {
+    display: none;
+  }
+  .subjectTab {
+    font-size: 13px;
+    white-space: nowrap;
+    padding: 8px 2px;
+  }
+}
+
+/* Phone stack: full-width content, status row inline beneath */
+@media (max-width: 640px) {
+  .expCardDetailed {
+    flex-direction: column;
+    align-items: stretch;
+    padding: 14px;
+    gap: 10px;
+  }
+  .expGraphicBox {
+    width: 44px;
+    height: 44px;
+    border-radius: 12px;
+  }
+  .expMainContent {
+    width: 100%;
+  }
+  .expRightStats {
+    width: 100%;
+    min-width: 0;
+    flex-direction: row;
+    align-items: center;
+    justify-content: space-between;
+    gap: 8px;
+    flex-wrap: wrap;
+  }
+  .expPillsRow {
+    flex-wrap: wrap;
+  }
+}
+
 .expUsageText {
   font-size: 12px;
   color: #64748b;
