@@ -142,6 +142,7 @@ export interface GateResult {
   livekit_url:      string;          // wss://... or empty string
   focus_ml_enabled: boolean;
   lockdown_enabled: boolean;
+  screen_share_required?: boolean;  // absent (undefined) = legacy proctored session
   session_status:   string;
   can_join_live:    boolean;
 }

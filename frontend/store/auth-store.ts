@@ -43,35 +43,13 @@ interface AuthState {
   clearAuth: () => void;
 }
 
-function getInitialAuthState(): { user: User | null; isAuthenticated: boolean; hasHydrated: boolean } {
-  if (typeof window === 'undefined') {
-    return { user: null, isAuthenticated: false, hasHydrated: false };
-  }
-  try {
-    const token = Cookies.get('access_token') || localStorage.getItem('access_token');
-    const raw = localStorage.getItem('auth-store');
-    if (raw && token) {
-      const parsed = JSON.parse(raw);
-      if (parsed?.state?.user) {
-        return {
-          user: parsed.state.user,
-          isAuthenticated: true,
-          hasHydrated: true,
-        };
-      }
-    }
-  } catch {}
-  return { user: null, isAuthenticated: false, hasHydrated: false };
-}
-
-const initial = getInitialAuthState();
-
+// Ensure initial state is strictly identical on Server and Client to eliminate hydration mismatch and CLS
 export const useAuthStore = create<AuthState>()(
   persist(
     (set) => ({
-      user: initial.user,
-      isAuthenticated: initial.isAuthenticated,
-      hasHydrated: initial.hasHydrated,
+      user: null,
+      isAuthenticated: false,
+      hasHydrated: false,
       setHasHydrated: (val) => set({ hasHydrated: val }),
       setUser: (user) => set({ user, isAuthenticated: true }),
       clearAuth: () => {

@@ -177,3 +177,13 @@ button:active, [role="button"]:active {
 @media (prefers-reduced-motion: reduce) {
   button:active, [role="button"]:active { transform: none; }
 }
+
+/* Session Creation Wizard (instructor) — lift the AI copilot FAB above the
+   fixed wizard action bar. The page sets body[data-schedule-wizard] because a
+   top-level :global selector in schedule.module.css breaks the CSS-modules
+   build; it must live in a global stylesheet. */
+@media (max-width: 768px) {
+  body[data-schedule-wizard='1'] [class*='copilotContainer']:not([class*='copilotContainerOpen']) {
+    bottom: calc(152px + env(safe-area-inset-bottom)) !important;
+  }
+}

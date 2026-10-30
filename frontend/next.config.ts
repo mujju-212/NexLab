@@ -5,6 +5,22 @@ const BACKEND_URL = process.env.BACKEND_URL || 'http://127.0.0.1:5000';
 const API_URL = process.env.BACKEND_API_URL || `${BACKEND_URL}/api`;
 
 const nextConfig: NextConfig = {
+  experimental: {
+    optimizePackageImports: [
+      'lucide-react',
+      'recharts',
+      'date-fns',
+      '@radix-ui/react-dialog',
+      '@radix-ui/react-dropdown-menu',
+      '@radix-ui/react-select',
+      '@radix-ui/react-tabs',
+      '@radix-ui/react-toast',
+      '@radix-ui/react-tooltip',
+    ],
+  },
+  compiler: {
+    removeConsole: process.env.NODE_ENV === 'production' ? { exclude: ['error', 'warn'] } : false,
+  },
   // Minimal server output for the Docker image (docker/Dockerfile.frontend):
   // copies only used chunks + a tiny node server instead of node_modules.
   // Docker image (docker/Dockerfile.frontend) wants a standalone bundle in

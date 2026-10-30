@@ -421,7 +421,7 @@ The database seeder (`seed_complete_demo.py`) initializes a full two-month acade
 
 | Portal / Role | Email Address | Password | Context / Notes |
 |---|---|---|---|
-| **Platform Super Admin** | `superadmin@nexlab.io` | `SuperAdmin@2026` | Global multi-tenant administration & approvals |
+| **Platform Super Admin** | `admin@nexlab.io` | `Admin@123` | Global multi-tenant administration & approvals |
 | **Institution Admin** | `admin@skit.edu.in` | `SkitAdmin@2026` | SKIT engineering college tenant administrator |
 | **Lab Instructor** | `anitha.rao@skit.edu.in` | `Instructor@2026` | Senior Professor (DSA & Algorithms Lab) |
 | **Student (Baseline)** | `rahul.sharma@skit.edu.in` | `Student@2026` | Student enrolled in Semester 3 CSE Section A |
