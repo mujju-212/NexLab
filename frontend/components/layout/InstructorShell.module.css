@@ -581,6 +581,10 @@
   color: #6d28d9;
 }
 
+.mobileAvatarOnly {
+  /* visual impact only under ≤768px (see responsive block) */
+}
+
 /* ── Mobile More Sheet ─────────────────────────────────────────────────── */
 .sheetBackdrop {
   position: fixed;
@@ -735,6 +739,21 @@
     border: none;
     flex-direction: column;
     box-shadow: none;
+    /* iOS-style grouped-list surface — white cards pop on the tinted canvas */
+    background: #f5f4fa;
+  }
+
+  /* iOS large title treatment in the scrolling content */
+  .pageHero {
+    margin: 18px 2px 16px;
+  }
+  .pageTitle {
+    font-size: 26px;
+    font-weight: 800;
+    letter-spacing: -0.02em;
+  }
+  .pageSubtitle {
+    font-size: 13px;
   }
 
   .blob,
@@ -750,27 +769,49 @@
   .mobileAppBar {
     display: flex;
     align-items: center;
-    gap: 10px;
+    gap: 8px;
     position: sticky;
     top: 0;
     z-index: 80;
-    padding: 10px 14px;
-    background: rgba(255, 255, 255, 0.88);
+    padding: 10px 12px;
+    padding-top: calc(10px + env(safe-area-inset-top));
+    background: rgba(255, 255, 255, 0.92);
     backdrop-filter: blur(24px) saturate(160%);
     -webkit-backdrop-filter: blur(24px) saturate(160%);
-    border-bottom: 1px solid rgba(124, 58, 237, 0.12);
+    border-bottom: 1px solid rgba(124, 58, 237, 0.1);
+  }
+
+  .mobileBarBtn {
+    width: 40px;
+    height: 40px;
+    border-radius: 13px;
+  }
+
+  /* Avatar-only profile trigger in the phone app bar */
+  .mobileAvatarOnly > span,
+  .mobileAvatarOnly > svg {
+    display: none;
   }
 
   .mobileSearchRow {
     display: block;
-    padding: 8px 14px 2px;
+    padding: 10px 12px 4px;
   }
 
   .mobileSearchRow :global(.searchBar) {
     width: 100%;
   }
 
-  /* Fixed bottom bar for primary actions */
+  .mobileSearchRow :global(.searchBar input) {
+    font-size: 16px; /* ≥16px prevents iOS Safari zoom-on-focus */
+    height: 42px;
+  }
+
+  .mobileSearchRow :global(.searchBar kbd) {
+    display: none;
+  }
+
+  /* Fixed bottom bar for primary actions — iOS tab bar height + pill state */
   .bottomTabBar {
     display: flex;
     position: fixed;
@@ -781,9 +822,32 @@
     background: rgba(255, 255, 255, 0.96);
     backdrop-filter: blur(24px) saturate(160%);
     -webkit-backdrop-filter: blur(24px) saturate(160%);
-    border-top: 1px solid rgba(124, 58, 237, 0.14);
-    box-shadow: 0 -8px 30px -12px rgba(30, 20, 60, 0.18);
-    padding-bottom: env(safe-area-inset-bottom);
+    border-top: 1px solid rgba(124, 58, 237, 0.12);
+    box-shadow: 0 -8px 30px -12px rgba(30, 20, 60, 0.16);
+    padding: 6px 6px env(safe-area-inset-bottom);
+  }
+
+  .bottomTab {
+    padding: 4px 0;
+    font-size: 10.5px;
+  }
+
+  .bottomTab svg {
+    width: 38px;
+    height: 38px;
+    padding: 8px; /* cushions the 20px glyph into a 38px pill */
+    border-radius: 999px;
+    background: transparent;
+    box-sizing: border-box;
+    transition: background 0.2s ease, transform 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+  }
+
+  .bottomTab:active svg {
+    transform: scale(0.88);
+  }
+
+  .bottomTabActive svg {
+    background: rgba(124, 58, 237, 0.13);
   }
 
   /* Room for bottom tab bar so content never gets covered */
@@ -801,12 +865,30 @@
     right: 0;
     bottom: 0;
     z-index: 230;
-    max-height: 80vh;
+    max-height: 82dvh;
     background: #ffffff;
     border-radius: 22px 22px 0 0;
     box-shadow: 0 -18px 50px -12px rgba(30, 20, 60, 0.3);
-    animation: sheetUp 0.28s cubic-bezier(0.16, 1, 0.3, 1);
+    animation: sheetUp 0.32s cubic-bezier(0.16, 1, 0.3, 1);
     padding-bottom: env(safe-area-inset-bottom);
+  }
+
+  /* Grabber handle, like a real bottom sheet */
+  .moreSheet::before {
+    content: '';
+    display: block;
+    width: 42px;
+    height: 5px;
+    border-radius: 999px;
+    background: #ded9ec;
+    margin: 9px auto 0;
+    flex-shrink: 0;
+  }
+
+  .moreSheetItem {
+    min-height: 46px;
+    font-size: 14.5px;
+    border-radius: 14px;
   }
 
   .sidebar {
@@ -815,11 +897,12 @@
     left: 0;
     bottom: 0;
     z-index: 210;
-    width: 260px !important;
+    width: 284px !important;
     background: #ffffff;
+    border-radius: 0 24px 24px 0;
     box-shadow: 20px 0 50px rgba(76, 29, 149, 0.15);
     transform: translateX(-105%);
-    transition: transform 0.28s cubic-bezier(0.3, 0.8, 0.3, 1);
+    transition: transform 0.3s cubic-bezier(0.32, 0.72, 0, 1);
   }
 
   .sidebarDrawerOpen {

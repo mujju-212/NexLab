@@ -4,7 +4,7 @@ import { useCallback, useMemo, useState, useEffect } from 'react';
 import { useRouter } from 'next/navigation';
 import {
   LayoutDashboard, FlaskConical, PlayCircle, Radio,
-  ClipboardCheck, BarChart3,
+  ClipboardCheck, BarChart3, Code2,
   LogOut, Settings, Menu,
   FileText, HeartHandshake, Star, ShieldCheck, Megaphone, User,
   MoreHorizontal, X
@@ -16,12 +16,14 @@ import AgentChatPanel from './AgentChatPanel';
 import { AppToaster } from '@/components/ui/toast';
 import { experienceService } from '@/services/experience.service';
 import { authService } from '@/services/auth.service';
+import PasswordGate from './PasswordGate';
 import { useAuthStore } from '@/store/auth-store';
 
 const NAV_MAIN = [
   { id: 'Dashboard',       label: 'Dashboard',       Icon: LayoutDashboard, route: '/instructor/dashboard' },
   { id: 'Experiments',     label: 'Experiments & Exams', Icon: FlaskConical, route: '/instructor/experiments' },
   { id: 'Sessions',        label: 'Sessions',        Icon: PlayCircle,      route: '/instructor/sessions' },
+  { id: 'Compiler',        label: 'Compiler',        Icon: Code2,           route: '/instructor/compiler' },
   { id: 'Live Conductor',  label: 'Live Conductor',  Icon: Radio,           route: '/instructor/live-lab' },
   { id: 'Grading',         label: 'Grading & Hub',   Icon: ClipboardCheck,  route: '/instructor/grading' },
   { id: 'Analytics',       label: 'Analytics Pulse', Icon: BarChart3,       route: '/instructor/analytics' },
@@ -70,6 +72,7 @@ export default function InstructorShell({ activePage, children, title, subtitle,
       '/instructor/dashboard',
       '/instructor/experiments',
       '/instructor/sessions',
+      '/instructor/compiler',
       '/instructor/live-lab',
       '/instructor/grading',
       '/instructor/analytics',
@@ -109,6 +112,7 @@ export default function InstructorShell({ activePage, children, title, subtitle,
   const isItemActive = (id: string) => {
     if (id === activePage) return true;
     if (id === 'Dashboard' && (activePage === 'Dashboard' || activePage === 'Dashboard Home')) return true;
+    if (id === 'Compiler' && (activePage === 'Compiler' || activePage === 'Playground')) return true;
     if (id === 'Experiments' && (activePage === 'Experiments' || activePage === 'Exams' || activePage === 'Exam Management')) return true;
     if (id === 'Feedback' && (activePage === 'Feedback' || activePage === 'Student Feedback')) return true;
     if (id === 'Announcements' && activePage === 'Announcements') return true;
@@ -128,6 +132,11 @@ export default function InstructorShell({ activePage, children, title, subtitle,
     [user?.full_name],
   );
   const fullName = user?.full_name || '';
+
+  // Admin-issued temp password → block the entire shell until replaced.
+  if (user?.must_change_password) {
+    return <PasswordGate>{null}</PasswordGate>;
+  }
 
   return (
     <div className={styles.stage}>
@@ -279,9 +288,9 @@ export default function InstructorShell({ activePage, children, title, subtitle,
                 roleLabel="Instructor"
                 profileHref="/instructor/profile"
                 settingsHref="/instructor/settings"
-                buttonClass={styles.profileChip}
+                buttonClass={`${styles.profileChip} ${styles.mobileAvatarOnly}`}
                 avatarClass={styles.avatarLg}
-                avatarStyle={{ background: '#7c3aed', width: 32, height: 32, fontSize: 12 }}
+                avatarStyle={{ background: '#7c3aed', width: 34, height: 34, fontSize: 12 }}
                 onSignOut={() => go('Logout', '/login')}
               />
             </div>

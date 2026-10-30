@@ -17,6 +17,7 @@ import AgentChatPanel from './AgentChatPanel';
 import { AppToaster } from '@/components/ui/toast';
 import { studentService } from '@/services/student.service';
 import { authService } from '@/services/auth.service';
+import PasswordGate from './PasswordGate';
 import { useAuthStore } from '@/store/auth-store';
 
 const NAV_STUDENT = [
@@ -133,6 +134,11 @@ export default function StudentShell({ activePage, children, title, subtitle, ch
     if (tab.id === 'More' && (activePage === 'More' || pathname?.includes('/student/more'))) return true;
     return false;
   };
+
+  // Admin-issued temp password → block the entire shell until replaced.
+  if (user?.must_change_password) {
+    return <PasswordGate>{null}</PasswordGate>;
+  }
 
   return (
     <div className={styles.stage}>

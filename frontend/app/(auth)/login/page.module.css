@@ -23,6 +23,14 @@
   filter: blur(80px);
   pointer-events: none;
   animation: drift 20s ease-in-out infinite alternate;
+  will-change: transform;
+  transform: translate3d(0, 0, 0);
+}
+@media (max-width: 768px), (prefers-reduced-motion: reduce) {
+  .blob {
+    filter: blur(32px);
+    animation: none;
+  }
 }
 .blob1 {
   width: 520px;
@@ -49,8 +57,8 @@
   animation-delay: -12s;
 }
 @keyframes drift {
-  0% { transform: translate(0, 0) scale(1); }
-  100% { transform: translate(25px, 20px) scale(1.06); }
+  0% { transform: translate3d(0, 0, 0) scale(1); }
+  100% { transform: translate3d(25px, 20px, 0) scale(1.06); }
 }
 
 /* ── Main Container Glass Card ── */

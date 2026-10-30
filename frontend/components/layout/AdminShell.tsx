@@ -14,6 +14,7 @@ import AgentChatPanel from './AgentChatPanel';
 import { AppToaster } from '@/components/ui/toast';
 import { adminService } from '@/services/admin.service';
 import { authService } from '@/services/auth.service';
+import PasswordGate from './PasswordGate';
 import { useAuthStore } from '@/store/auth-store';
 
 const NAV_FAVORITES = [
@@ -62,6 +63,11 @@ export default function AdminShell({ activePage, children, title, subtitle }: Ad
   const navCls = (id: string, isLogout = false) =>
     [styles.navItem, id === activePage ? styles.navItemActive : '', isLogout ? styles.navItemLogout : '']
       .filter(Boolean).join(' ');
+
+  // Admin-issued temp password → block the entire shell until replaced.
+  if (user?.must_change_password) {
+    return <PasswordGate>{null}</PasswordGate>;
+  }
 
   return (
     <div className={styles.stage}>

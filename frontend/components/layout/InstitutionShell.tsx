@@ -15,6 +15,7 @@ import PasswordGate from './PasswordGate';
 import AgentChatPanel from './AgentChatPanel';
 import { ShellNotifications, ShellProfileMenu } from './shell-widgets';
 import { AppToaster } from '@/components/ui/toast';
+import { AppConfirmDialog } from '@/components/ui/confirm';
 import { authService } from '@/services/auth.service';
 import { institutionService, type GlobalSearchHit } from '@/services/institution.service';
 import { useAuthStore } from '@/store/auth-store';
@@ -709,6 +710,7 @@ export default function InstitutionShell({
       )}
 
       <AppToaster />
+      <AppConfirmDialog />
       <AgentChatPanel />
     </div>
   );
