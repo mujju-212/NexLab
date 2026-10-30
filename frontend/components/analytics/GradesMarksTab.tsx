@@ -635,7 +635,6 @@ export default function GradesMarksTab({
                   cursor: 'pointer',
                 }}
               >
-                <option value="">2028 (B.Tech)</option>
                 {batches.map(b => (
                   <option key={b.id} value={b.id}>
                     {b.name || b.year_name || 'Batch'}
@@ -820,12 +819,12 @@ export default function GradesMarksTab({
                 fontWeight: 700,
               }}
             >
-              ↑ {kpis?.gpa_delta_pct ?? 6.2}%
+              {kpis?.gpa_delta_pct != null ? `↑ ${kpis.gpa_delta_pct}%` : '—'}
             </div>
           </div>
 
           <div style={{ fontSize: '0.75rem', color: '#64748b', marginTop: 4, marginBottom: 12 }}>
-            +{kpis?.gpa_delta_value ?? '0.20'} vs previous period
+            {kpis?.gpa_delta_value != null ? `+${kpis.gpa_delta_value} vs previous period` : 'No previous-period comparison'}
           </div>
 
           {/* Smooth purple wave */}
@@ -897,7 +896,7 @@ export default function GradesMarksTab({
                 fontWeight: 700,
               }}
             >
-              ↑ {kpis?.pass_rate_delta_pct ?? 2.1}%
+              {kpis?.pass_rate_delta_pct != null ? `↑ ${kpis.pass_rate_delta_pct}%` : '—'}
             </div>
           </div>
 
@@ -976,7 +975,7 @@ export default function GradesMarksTab({
                 fontWeight: 700,
               }}
             >
-              ↑ {kpis?.submissions_delta_pct ?? 12.5}%
+              {kpis?.submissions_delta_pct != null ? `↑ ${kpis.submissions_delta_pct}%` : '—'}
             </div>
           </div>
 
@@ -1055,7 +1054,7 @@ export default function GradesMarksTab({
                 fontWeight: 700,
               }}
             >
-              ↑ {kpis?.at_risk_delta_pct ?? 4.8}%
+              {kpis?.at_risk_delta_pct != null ? `↑ ${kpis.at_risk_delta_pct}%` : '—'}
             </div>
           </div>
 

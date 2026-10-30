@@ -126,6 +126,28 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
 
   const subjectPerformance = dashboardData?.subject_performance || [];
 
+  // Bound the Subject Performance card: subjects WITH grades lead, the rest
+  // follow; the table scrolls instead of growing with every enrolled subject.
+  const sortedSubjectPerformance = useMemo(() => (
+    [...subjectPerformance].sort((a, b) => {
+      const aHas = a.avg_grade != null ? 0 : 1;
+      const bHas = b.avg_grade != null ? 0 : 1;
+      if (aHas !== bHas) return aHas - bHas;
+      return (b.avg_grade ?? -1) - (a.avg_grade ?? -1);
+    })
+  ), [subjectPerformance]);
+
+  // Trend needs at least two graded observations to draw a line — a single
+  // point renders a meaningless dot with a wall of empty legend entries.
+  const trendPointCount = useMemo(() => (
+    performanceTrend.overall.filter((v: number | null) => v != null).length +
+    performanceTrend.subjects.reduce((acc: number, s: any) =>
+      acc + (s.data || []).filter((v: number | null) => v != null).length, 0)
+  ), [performanceTrend]);
+  const trendSubjectsWithData = useMemo(() => (
+    performanceTrend.subjects.filter((s: any) => (s.data || []).some((v: number | null) => v != null))
+  ), [performanceTrend]);
+
   const conceptMastery = dashboardData?.concept_mastery || [];
 
   const attendanceDonut = dashboardData?.attendance_breakdown || {
@@ -876,7 +898,13 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
           </div>
 
           {/* Interactive Multi-Line SVG Chart */}
-          {performanceTrend.overall.some((value) => value != null) || performanceTrend.subjects.some((series) => series.data.some((value) => value != null)) ? renderMultiLineChart() : <div className={styles.chartContainer} style={{ display: 'grid', placeItems: 'center', color: '#64748b' }}>No graded observations are available for this trend period.</div>}
+          {trendPointCount >= 2
+            ? renderMultiLineChart()
+            : <div className={styles.chartContainer} style={{ display: 'grid', placeItems: 'center', color: '#64748b', minHeight: 220, textAlign: 'center', padding: '0 2rem' }}>
+                {trendPointCount === 1
+                  ? 'Only one graded observation is available so far — a trend needs at least two. Submit more graded work to build your trend line.'
+                  : 'No graded observations are available for this trend period.'}
+              </div>}
 
           {/* Color Legend (Clickable to isolate subject) */}
           <div className={styles.chartLegend}>
@@ -888,7 +916,7 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
               <span className={styles.legendDot} style={{ background: '#7c3aed' }} />
               <span>Overall</span>
             </div>
-            {performanceTrend.subjects.map((s, sIdx) => (
+            {trendSubjectsWithData.map((s, sIdx) => (
               <div
                 key={`legend-${s.code}-${sIdx}`}
                 className={styles.legendItem}
@@ -952,17 +980,18 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
             </div>
           </div>
 
-          <table className={styles.subjectTable}>
-            <thead>
-              <tr>
-                <th>Subject</th>
-                <th>Avg Grade</th>
-                <th>Completion</th>
-                <th>Trend</th>
-              </tr>
-            </thead>
-            <tbody>
-              {subjectPerformance.map((subj, sIdx) => (
+          <div style={{ maxHeight: 380, overflowY: 'auto' }}>
+            <table className={styles.subjectTable}>
+              <thead>
+                <tr>
+                  <th>Subject</th>
+                  <th>Avg Grade</th>
+                  <th>Completion</th>
+                  <th>Trend</th>
+                </tr>
+              </thead>
+              <tbody>
+                {sortedSubjectPerformance.map((subj, sIdx) => (
                 <tr
                   key={`subj-row-${(subj as any).id || subj.code}-${sIdx}`}
                   style={{
@@ -1023,6 +1052,10 @@ export const AcademicTab: React.FC<AcademicTabProps> = ({
               ))}
             </tbody>
           </table>
+          </div>
+          <div style={{ padding: '8px 14px', fontSize: '0.72rem', color: '#94a3b8' }}>
+            {sortedSubjectPerformance.filter(s => s.avg_grade != null).length} of {sortedSubjectPerformance.length} enrolled subjects have graded work
+          </div>
         </div>
       </div>
 

@@ -9,7 +9,7 @@
  * usually break. A manual fallback covers engines that refuse the command.
  */
 
-import { useCallback, useLayoutEffect, useMemo, useRef } from 'react';
+import { useCallback, useLayoutEffect, useMemo, useRef, memo } from 'react';
 import { highlight, resolveMode } from './highlight';
 import styles from './code-editor.module.css';
 
@@ -36,7 +36,7 @@ export interface CodeEditorProps {
   theme?: 'dark' | 'light';
 }
 
-export function CodeEditor({
+export const CodeEditor = memo(function CodeEditor({
   value,
   onChange,
   mode,
@@ -53,7 +53,13 @@ export function CodeEditor({
 
   const INDENT = ' '.repeat(tabSize);
   const html = useMemo(() => highlight(value, resolveMode(mode)), [value, mode]);
-  const lineCount = useMemo(() => value.split('\n').length, [value]);
+  const lineCount = useMemo(() => {
+    let count = 1;
+    for (let i = 0; i < value.length; i++) {
+      if (value.charCodeAt(i) === 10) count++;
+    }
+    return count;
+  }, [value]);
   // One text node beats N spans: the gutter re-renders on every keystroke.
   const gutter = useMemo(
     () => Array.from({ length: lineCount }, (_, i) => i + 1).join('\n'),
@@ -279,6 +285,6 @@ export function CodeEditor({
       </div>
     </div>
   );
-}
+});
 
 export default CodeEditor;

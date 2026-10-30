@@ -67,10 +67,6 @@ export function FilterBar({
   onSectionChange,
   batches = [
     { id: 'all', name: 'All Batches' },
-    { id: '2028', name: '2028 (B.Tech)' },
-    { id: '2027', name: '2027 (B.Tech)' },
-    { id: '2026', name: '2026 (B.Tech)' },
-    { id: '2025', name: '2025 (B.Tech)' },
   ],
   selectedBatch = 'all',
   onBatchChange,
@@ -270,7 +266,6 @@ export function FilterBar({
                 cursor: 'pointer',
               }}
             >
-              <option value="">2028 (B.Tech)</option>
               {batches.map(b => (
                 <option key={b.id} value={b.id}>
                   {b.name}
