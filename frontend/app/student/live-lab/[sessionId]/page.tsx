@@ -1111,6 +1111,9 @@ export default function LiveLabRoomPage() {
 
   const [gate,        setGate]        = useState<GateResult | null>(null);
   const [gateLoading, setGateLoading] = useState(true);
+  // Server-driven: screen share is only compulsory when the session actually
+  // proctors (focus ML or lockdown). Absent flag = legacy proctored session.
+  const screenShareRequired = gate?.screen_share_required !== false;
   const [gateError,   setGateError]   = useState('');
   // RULES OF HOOKS: must be declared with the other states, BEFORE any
   // early return (gateLoading / gateError) — a useState below the first
@@ -1339,8 +1342,9 @@ export default function LiveLabRoomPage() {
           emitScreenShareStopped } = useSocket({
     sessionId,
     // Only join the attendance/proctor socket after the required screen track
-    // has actually been published. The pre-join gate read is not attendance.
-    enabled: !!gate && joinStep === 'room' && screenShareReady,
+    // has actually been published (or when this session doesn't require one).
+    // The pre-join gate read is not attendance.
+    enabled: !!gate && joinStep === 'room' && (screenShareReady || !screenShareRequired),
     // The instructor ended the session: stop capturing the student's screen the
     // moment it is over (privacy), and drop the "LIVE" state in the header.
     onSessionEnded: useCallback(() => {
@@ -2019,8 +2023,10 @@ export default function LiveLabRoomPage() {
 
                 <h2 className={styles.permTitle}>We need your permission</h2>
                 <p className={styles.permDesc}>
-                  To ensure a smooth live lab experience, we need access to your camera and microphone — and your screen, which is required and stays on for the whole proctored session.
-                  You can revoke these permissions anytime from your browser settings.
+                  {screenShareRequired
+                    ? 'To ensure a smooth live lab experience, we need access to your camera and microphone — and your screen, which is required and stays on for the whole proctored session.'
+                    : 'To ensure a smooth live lab experience, allow your camera and microphone. This session runs without proctoring, so screen sharing is optional.'}
+                  {' '}You can revoke these permissions anytime from your browser settings.
                 </p>
 
                 <div className={styles.permPillList}>
@@ -2034,7 +2040,7 @@ export default function LiveLabRoomPage() {
                   </div>
                   <div className={styles.permMiniPill}>
                     <span className={styles.permMiniPillIcon}><Monitor size={14} /></span>
-                    <span>Share your screen — required</span>
+                    <span>Share your screen — {screenShareRequired ? 'required' : 'optional'}</span>
                   </div>
                 </div>
               </div>
@@ -2050,7 +2056,7 @@ export default function LiveLabRoomPage() {
                     <div className={styles.permDeviceInfo}>
                       <div className={styles.permDeviceTitleRow}>
                         <p className={styles.permDeviceTitle}>Camera Access</p>
-                        <span className={styles.requiredPill}>Required</span>
+                        <span className={styles.requiredPill}>{screenShareRequired ? 'Required' : 'Optional'}</span>
                       </div>
                       <p className={styles.permDeviceDesc}>Allows the instructor to see you during the session.</p>
                     </div>
@@ -2081,7 +2087,7 @@ export default function LiveLabRoomPage() {
                     <div className={styles.permDeviceInfo}>
                       <div className={styles.permDeviceTitleRow}>
                         <p className={styles.permDeviceTitle}>Microphone Access</p>
-                        <span className={styles.requiredPill}>Required</span>
+                        <span className={styles.requiredPill}>{screenShareRequired ? 'Required' : 'Optional'}</span>
                       </div>
                       <p className={styles.permDeviceDesc}>Lets you speak and participate in the session.</p>
                     </div>
@@ -2342,10 +2348,12 @@ export default function LiveLabRoomPage() {
                 language={language}
                 setLanguage={setLanguage}
                 mediaSignal={mediaSignal}
+                screenShareRequired={screenShareRequired}
                 sharePrompt={sharePrompt}
                 onShareFailed={() => {
                   setScreenShareReady(false);
-                  setSharePrompt('required');
+                  // Only nag when the session actually requires the share.
+                  if (screenShareRequired) setSharePrompt('required');
                 }}
                 onShareStarted={() => {
                   setScreenShareReady(true);
@@ -2354,7 +2362,7 @@ export default function LiveLabRoomPage() {
                 sessionEnded={sessionEnded}
                 onShareLost={() => {
                   setScreenShareReady(false);
-                  setSharePrompt('reshare');
+                  if (screenShareRequired) setSharePrompt('reshare');
                   // Tells the backend: high-severity proctor event + alert to the
                   // instructor + an automatic reshare prompt back to this student.
                   emitScreenShareStopped();
@@ -2407,6 +2415,8 @@ export default function LiveLabRoomPage() {
 // ══════════════════════════════════════════════════════════════════════════════
 
 interface StudentConferenceProps {
+  /** Whether this session proctors — drives the compulsory share overlay. */
+  screenShareRequired?: boolean;
   /** Why the compulsory screen-share overlay is showing, if it is. */
   sharePrompt?: 'instructor' | 'reshare' | 'required' | null;
   /** Called when the browser refused the screen-share request. */
@@ -2470,6 +2480,7 @@ function StudentLiveConference({
   language,
   setLanguage,
   mediaSignal,
+  screenShareRequired = true,
   sharePrompt,
   onShareFailed,
   onShareStarted,
@@ -2626,9 +2637,10 @@ function StudentLiveConference({
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [sessionEnded]);
 
-  // Ask once on entry — compulsory, so a refusal is surfaced, never swallowed.
+  // Ask once on entry — compulsory when the session proctors, so a refusal is
+  // surfaced, never swallowed. Proctoring-off sessions don't prompt at all.
   useEffect(() => {
-    if (!isScreenShareEnabled) requestShare();
+    if (screenShareRequired && !isScreenShareEnabled) requestShare();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -2688,11 +2700,11 @@ function StudentLiveConference({
     );
   }, [remoteParticipants]);
 
-  // Compulsory screen share: while it is off, a blocking overlay covers the room.
-  // The instructor cannot monitor a student who is not sharing, so there is no
-  // "continue anyway" — only a retry button.
+  // Compulsory screen share (only when the session proctors): while it is off,
+  // a blocking overlay covers the room. The instructor cannot monitor a student
+  // who is not sharing, so there is no "continue anyway" — only a retry button.
   const sharingLive = isScreenShareEnabled && !shareEnded;
-  const shareGate = !sharingLive && !sessionEnded ? (
+  const shareGate = screenShareRequired && !sharingLive && !sessionEnded ? (
     <div style={{
       position: 'fixed', inset: 0, zIndex: 100000,
       background: 'rgba(15,10,30,.92)', backdropFilter: 'blur(3px)',

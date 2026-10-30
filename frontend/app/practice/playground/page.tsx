@@ -1317,28 +1317,21 @@ export default function PlaygroundPage() {
                 {/* TAB 1: REAL WORKING STEP-THROUGH VISUALIZATION */}
                 {activeRightTab === 'visualization' && (
                   <div>
-                    {lang?.id === 'python' ? (
+                    {isBrowserLang ? (
+                      <div className={styles.nonPythonVizBox}>
+                        <AlertTriangle size={28} color="#c2410c" />
+                        <h4>Client-Side Language</h4>
+                        <p>Visualizer runs on backend execution languages (Python, C, C++, Java, JavaScript, C#, etc.).</p>
+                      </div>
+                    ) : (
                       <CodeVisualizer
                         code={code}
+                        language={lang?.id || 'python'}
+                        filename={lang?.filename || 'main.py'}
                         stdin={stdin}
                         embedded={true}
                         onExpand={() => setVizOpen(true)}
                       />
-                    ) : (
-                      <div className={styles.nonPythonVizBox}>
-                        <Eye size={28} color="#7c3aed" />
-                        <h4>Step-Through Execution Visualizer</h4>
-                        <p>
-                          Interactive line execution, variable tracking, and call stack tracing runs on <strong>Python 3</strong>.
-                        </p>
-                        <button
-                          className={styles.generateVizBtn}
-                          onClick={() => switchLanguage('python')}
-                          style={{ marginTop: 8 }}
-                        >
-                          <span>Switch to Python &amp; Visualize</span>
-                        </button>
-                      </div>
                     )}
                   </div>
                 )}
@@ -1621,10 +1614,16 @@ export default function PlaygroundPage() {
       )}
 
       {/* ═══════════════════════════════════════════════════════════════════
-          5. STEP-THROUGH VISUALIZER (PYTHON)
+          5. STEP-THROUGH VISUALIZER (ALL LANGUAGES)
           ═══════════════════════════════════════════════════════════════════ */}
-      {vizOpen && lang?.id === 'python' && !isBrowserLang && (
-        <CodeVisualizer code={code} stdin={stdin} onExit={() => setVizOpen(false)} />
+      {vizOpen && !isBrowserLang && (
+        <CodeVisualizer
+          code={code}
+          language={lang?.id || 'python'}
+          filename={lang?.filename || 'main.py'}
+          stdin={stdin}
+          onExit={() => setVizOpen(false)}
+        />
       )}
 
       {/* Toast notifications */}

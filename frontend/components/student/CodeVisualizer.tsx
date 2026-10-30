@@ -13,7 +13,7 @@
  *
  * Python-only (sys.settrace). Other languages keep the normal Run flow.
  */
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState, memo } from 'react';
 import {
   Play, Pause, SkipBack, SkipForward, ChevronLeft, ChevronRight,
   Loader2, AlertTriangle, Eye, X, ZoomIn, ZoomOut, Terminal, Boxes, MessageSquareText,
@@ -28,6 +28,7 @@ interface VizStep {
   out: string;                        // stdout produced since previous step
   scopes: VizScope[];                 // outermost → innermost live frames
   ret: string | null;                 // return value (event === 'return')
+  explanation?: string;               // human-readable step description
 }
 interface VizTrace { steps: VizStep[]; tail: string }
 
@@ -137,8 +138,9 @@ function parseTrace(stdout: string): VizTrace | null {
   }
 }
 
-/** Plain-English explanation for the current step (rule-based, offline). */
+/** Plain-English explanation for the current step (rule-based offline or from trace). */
 function explain(step: VizStep, lineText: string): string {
+  if (step.explanation) return step.explanation;
   const t = lineText.trim();
   const lookup = (name: string): string | undefined => {
     for (let s = step.scopes.length - 1; s >= 0; s--) {
@@ -154,33 +156,47 @@ function explain(step: VizStep, lineText: string): string {
     const name = step.scopes[step.scopes.length - 1]?.name || 'function';
     return `The function \`${name}\` returns ${step.ret ?? 'None'}.`;
   }
-  if (/input\s*\(/.test(t)) {
+  if (/input\s*\(/.test(t) || /cin\s*>>/.test(t) || /Scanner\b/.test(t) || /readline\b/.test(t)) {
     const m = t.match(/^(\w+)\s*=(?!=)/);
     return m
       ? `The value entered by the user, ${lookup(m[1]) ?? '…'}, is assigned to the variable \`${m[1]}\`.`
-      : 'The program reads a value from the user.';
+      : 'The program reads a value from standard input.';
   }
-  if (/^print\s*\(/.test(t)) return 'The program prints output to the console.';
-  const asg = t.match(/^(\w+)\s*=(?!=)/);
+  if (/^print\s*\(/.test(t) || /System\.out\.print/.test(t) || /cout\s*<</.test(t) || /printf\s*\(/.test(t) || /Console\.WriteLine/.test(t) || /console\.log/.test(t)) {
+    return 'The program prints output to the console.';
+  }
+  const asg = t.match(/^(?:(?:int|float|double|char|string|let|const|var)\s+)?(\w+)\s*=(?!=)/i);
   if (asg) return `The value ${lookup(asg[1]) ?? '…'} is assigned to the variable \`${asg[1]}\`.`;
-  if (/^for\s/.test(t)) return 'A loop iteration begins — the loop variable is updated.';
-  if (/^while\s/.test(t)) return 'The while-loop condition is evaluated.';
-  if (/^(if|elif)\b/.test(t)) return 'The condition is evaluated to decide which branch runs.';
-  if (/^else\s*:/.test(t)) return 'The else branch runs.';
+  if (/^for\s/.test(t) || /^for\s*\(/.test(t)) return 'A loop iteration begins — the loop variable is updated.';
+  if (/^while\s/.test(t) || /^while\s*\(/.test(t)) return 'The while-loop condition is evaluated.';
+  if (/^(if|elif|else\s+if)\b/.test(t)) return 'The condition is evaluated to decide which branch runs.';
+  if (/^else\b/.test(t)) return 'The else branch runs.';
   if (/^return\b/.test(t)) return 'The function returns a value to its caller.';
-  if (/^import\s|^from\s/.test(t)) return 'A module is imported.';
+  if (/^import\s|^from\s|^#include\b|^using\b/.test(t)) return 'Module or header import.';
   return `Execute: \`${t}\``;
 }
 
 const mono = 'ui-monospace, SFMono-Regular, Menlo, Consolas, monospace';
 
-export default function CodeVisualizer({ code, stdin, onExit, embedded = false, onExpand }: {
+interface CodeVisualizerProps {
   code: string;
+  language?: string;
+  filename?: string;
   stdin?: string;
   onExit?: () => void;
   embedded?: boolean;
   onExpand?: () => void;
-}) {
+}
+
+function CodeVisualizer({
+  code,
+  language = 'python',
+  filename,
+  stdin,
+  onExit,
+  embedded = false,
+  onExpand,
+}: CodeVisualizerProps) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [runError, setRunError] = useState('');
@@ -192,30 +208,62 @@ export default function CodeVisualizer({ code, stdin, onExit, embedded = false, 
 
   const run = useCallback(async () => {
     setLoading(true); setError(''); setRunError(''); setTrace(null); setIdx(0); setPlaying(false);
+    const langKey = (language || 'python').toLowerCase();
     try {
-      const res = await executionService.runPlayground({
-        code: buildTracedSource(code), language: 'python', stdin: stdin || undefined,
-      });
-      const t = parseTrace(res.stdout || '');
-      if (!t || t.steps.length === 0) {
-        setError(res.stderr || res.compile_output || res.status || 'Could not trace this program.');
-      } else {
-        setTrace(t);
-        // Program crashed part-way: keep the partial trace but flag the error so
-        // the student sees both where it stopped and why.
-        if (!res.success) {
-          const lastLine = (res.stderr || '').trim().split('\n').filter(Boolean).pop();
-          setRunError(lastLine || res.status || 'The program stopped early.');
+      if (langKey === 'python') {
+        // Fast path: native CPython sys.settrace in Docker sandbox
+        try {
+          const res = await executionService.runPlayground({
+            code: buildTracedSource(code), language: 'python', stdin: stdin || undefined,
+          });
+          const t = parseTrace(res.stdout || '');
+          if (t && t.steps && t.steps.length > 0) {
+            setTrace(t);
+            if (!res.success) {
+              const lastLine = (res.stderr || '').trim().split('\n').filter(Boolean).pop();
+              setRunError(lastLine || res.status || 'The program stopped early.');
+            }
+            return;
+          }
+        } catch {
+          // Native tracer failed or sandbox unavailable; gracefully proceed to universal tracer
         }
       }
+
+      // Universal execution tracer for C, C++, Java, JS, C#, Go, Kotlin, etc.
+      const res = await executionService.tracePlayground({
+        code,
+        language: langKey,
+        stdin: stdin || undefined,
+      });
+
+      if (res.error) {
+        setError(res.error);
+        return;
+      }
+
+      if (!res.steps || res.steps.length === 0) {
+        setError('Could not trace this program.');
+        return;
+      }
+
+      setTrace({
+        steps: res.steps,
+        tail: res.tail || '',
+      });
     } catch (e) {
       setError(e instanceof Error ? e.message : 'Visualize run failed.');
     } finally {
       setLoading(false);
     }
-  }, [code, stdin]);
+  }, [code, language, stdin]);
 
-  useEffect(() => { void run(); }, [run]);
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      void run();
+    }, embedded ? 600 : 0);
+    return () => clearTimeout(timer);
+  }, [run, embedded]);
 
   // Auto-play stepping
   useEffect(() => {
@@ -264,7 +312,7 @@ export default function CodeVisualizer({ code, stdin, onExit, embedded = false, 
         <span style={{ display: 'flex', alignItems: 'center', gap: 6, fontSize: embedded ? 12 : 13, fontWeight: 700, color: embedded ? '#c084fc' : '#5b21b6' }}>
           <Eye size={embedded ? 14 : 16} /> Visualizer
         </span>
-        {!embedded && <span style={{ fontSize: 11.5, color: '#9891a6' }}>step-through execution · Python</span>}
+        {!embedded && <span style={{ fontSize: 11.5, color: '#9891a6' }}>step-through execution · {(language || 'python').toUpperCase()}</span>}
         <div style={{ flex: 1 }} />
         {/* step controls */}
         <div style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -336,7 +384,7 @@ export default function CodeVisualizer({ code, stdin, onExit, embedded = false, 
           <div style={{ display: 'grid', gridTemplateColumns: embedded ? '1fr' : 'minmax(0,5fr) minmax(0,6fr)', gap: 10 }}>
             {/* ── Code with active-line highlight ── */}
             <div style={panel}>
-              <div style={head}><Terminal size={13} /> main.py</div>
+              <div style={head}><Terminal size={13} /> {filename || (language === 'python' ? 'main.py' : `main.${language || 'code'}`)}</div>
               <div style={{ maxHeight: embedded ? 200 : 340, overflow: 'auto', padding: '8px 0' }}>
                 {codeLines.map((ln, i) => {
                   const n = i + 1;
@@ -417,3 +465,5 @@ const ctlBtn: React.CSSProperties = {
   color: '#374151', display: 'flex', alignItems: 'center', justifyContent: 'center',
   cursor: 'pointer', flexShrink: 0,
 };
+
+export default memo(CodeVisualizer);

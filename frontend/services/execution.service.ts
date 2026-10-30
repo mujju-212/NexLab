@@ -16,6 +16,27 @@ export interface CompilerLanguage {
 }
 
 
+export interface VizScope {
+  name: string;
+  vars: Record<string, string>;
+}
+
+export interface VizStep {
+  line: number;
+  event: 'line' | 'call' | 'return';
+  out: string;
+  scopes: VizScope[];
+  ret: string | null;
+  explanation?: string;
+}
+
+export interface VizTraceResult {
+  steps: VizStep[];
+  tail?: string;
+  error?: string;
+  success?: boolean;
+}
+
 /** Flattened verdict returned by POST /api/execution/playground. */
 export interface PlaygroundResult {
   language: string;
@@ -127,6 +148,19 @@ export const executionService = {
   }): Promise<PlaygroundResult> {
     const { data } = await apiClient.post<PlaygroundResult>(
       '/execution/playground', payload, { timeout: 180_000 },
+    );
+    return data;
+  },
+
+  // ── Compiler: step-through execution trace ──────────────────────────────────
+  // POST /api/execution/trace
+  async tracePlayground(payload: {
+    code: string;
+    language: string;
+    stdin?: string;
+  }): Promise<VizTraceResult> {
+    const { data } = await apiClient.post<VizTraceResult>(
+      '/execution/trace', payload, { timeout: 60_000 },
     );
     return data;
   },
